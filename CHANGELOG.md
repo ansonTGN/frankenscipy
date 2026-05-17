@@ -14,23 +14,382 @@ License: MIT with OpenAI/Anthropic Rider
 
 ## [Unreleased] -- HEAD on main (workspace version 0.1.0)
 
-### Workspace crates (13 crates, ~66,000 lines of Rust source + ~25,000 lines of tests/benchmarks)
+### Workspace crates (19 crates, ~140,000 lines of Rust source plus ~370,000 additional lines of tests, harnesses, and conformance fixtures)
 
-| Crate | Lines | Purpose |
-|---|---|---|
-| `fsci-linalg` | ~5,400 | Dense/structured linear algebra with CASP solver selection |
-| `fsci-sparse` | ~6,300 | CSR/CSC/COO matrices, iterative solvers, graph algorithms |
-| `fsci-integrate` | ~4,900 | ODE (IVP + BVP), quadrature, cumulative rules |
-| `fsci-interpolate` | ~3,200 | Splines (cubic, PCHIP, Akima, BSpline), scattered-data griddata |
-| `fsci-opt` | ~8,400 | Minimizers (Nelder-Mead, BFGS, CG, Powell, L-BFGS-B, Newton-CG), root-finders, constraints |
-| `fsci-fft` | ~2,700 | Cooley-Tukey, Bluestein, real/complex/nD FFT, DCT/IDCT, Hilbert |
-| `fsci-signal` | ~6,100 | Filtering, spectral estimation, SOS, IIR/FIR design, find_peaks |
-| `fsci-spatial` | ~1,400 | KDTree, pairwise distances (pdist) |
-| `fsci-special` | ~9,500 | Gamma, beta, erf, Bessel, Airy, hypergeometric, zeta, elliptic, orthogonal polynomials |
-| `fsci-stats` | ~6,000 | Continuous + discrete distributions, hypothesis tests, descriptive stats, regression |
-| `fsci-arrayapi` | ~2,500 | Contract-first Array API backend with broadcast, indexing, reduction |
-| `fsci-conformance` | ~8,800 | Differential conformance harness, RaptorQ evidence packs, parity reports |
-| `fsci-runtime` | ~1,300 | CASP runtime, execution-path tracing, schema validation |
+| Crate | First commit | Lines | Purpose |
+|---|---|---|---|
+| `fsci-linalg` | 2026-02-13 | ~12,100 | Dense and structured linear algebra; CASP-driven solver selection; expm/logm/sqrtm/funm; Sylvester, Lyapunov, continuous and discrete algebraic Riccati |
+| `fsci-sparse` | 2026-02-13 | ~13,600 | CSR/CSC/COO/BSR/DIA/DOK/LIL formats; spsolve/splu/spilu; CG, GMRES, LGMRES, BiCGSTAB, MINRES, QMR, LSQR, LSMR; eigs/eigsh/svds; graph algorithms (Dijkstra, Bellman-Ford, MST, PageRank, RCM, centrality) |
+| `fsci-integrate` | 2026-02-13 | ~9,400 | `solve_ivp` (RK23/RK45/DOP853/BDF/Radau/LSODA), `odeint`, `solve_bvp`, `quad`, `dblquad`, `tplquad`, `nquad`, Gauss-Legendre, Romberg, Monte Carlo, QMC quadrature |
+| `fsci-interpolate` | 2026-03-14 | ~6,300 | `interp1d`, `CubicSpline`, `BSpline`, `Akima`, `PCHIP`, `CubicHermiteSpline`, `RegularGridInterpolator`, `griddata`, Krogh and barycentric interpolators, polynomial arithmetic |
+| `fsci-opt` | 2026-02-13 | ~15,100 | `minimize` (Nelder-Mead, BFGS, CG, Powell, L-BFGS-B, Newton-CG, TNC, COBYLA, SLSQP, trust-ncg/krylov/exact/constr, dogleg), `root` (brentq, brenth, ridder, toms748, newton, halley, broyden1/2, anderson, lm_root), `curve_fit`, `least_squares`, global (DE, basinhopping, dual annealing, SHGO, PSO, brute), LP/MILP, `linear_sum_assignment` |
+| `fsci-fft` | 2026-02-13 | ~5,600 | Cooley-Tukey mixed-radix, Bluestein for non-power-of-2, RFFT, n-D transforms, DCT/DST I-IV, Hilbert, FHT, plan cache with admission policy |
+| `fsci-signal` | 2026-03-15 | ~17,200 | Windows, filter design (Butter/Cheby1/Cheby2/Ellip/Bessel, ZPK forms, lp2lp/lp2hp/lp2bp/lp2bs), `firwin`/`firls`/`remez`, `lfilter`/`filtfilt`/SOS application, Welch/periodogram/coherence/CSD, `find_peaks`, Hilbert analytic signal, CWT, wavelets (Daub, Morlet, Ricker), `chirp`, `detrend`, MFCC/mel/chroma |
+| `fsci-spatial` | 2026-03-15 | ~5,600 | KDTree/cKDTree, `pdist`/`cdist`/`distance_matrix`, ConvexHull, Delaunay, Voronoi, HalfspaceIntersection, Hungarian linear assignment, directed Hausdorff |
+| `fsci-special` | 2026-02-13 | ~33,000 | Gamma (digamma/polygamma/pentagamma/factorialk), beta, erf, Bessel (j/y/i/k/hankel/spherical), Airy, hypergeometric (0F1/1F1/2F1 with CASP branch selection), elliptic (ellipk/e/j and Carlson RC/RF/RJ/RD/RG), zeta, dawsn, Struve, modified Struve, sph_harm, orthogonal polynomials (Legendre, Cheby T/U/C/S, Hermite, Laguerre, Jacobi, Gegenbauer, shifted variants), Voigt profile, log1pmx/powm1/cosm1 |
+| `fsci-stats` | 2026-03-14 | ~49,900 | 80+ continuous distributions and 15+ discrete distributions, each with PDF/CDF/SF/PPF/mean/var/skewness/kurtosis/entropy (closed-form where derivable, numerical otherwise); hypothesis tests (t-tests, KS, Shapiro, Mann-Whitney, Wilcoxon, ANOVA, chi-square); correlation (Pearson/Spearman/Kendall); regression; bootstrap; permutation tests; `gaussian_kde`; Box-Cox; QMC engines (Sobol, Halton, Latin Hypercube, discrepancy variants) |
+| `fsci-arrayapi` | 2026-02-13 | ~3,500 | Contract-first Array API backend (`backend.rs`, `broadcast`, `creation`, `indexing`, `audit`) with integration seams for linalg, opt, sparse |
+| `fsci-conformance` | 2026-02-13 | ~31,400 (lib + 7 bins) + 767 test files | 3-lane differential harness (self-check, SciPy-oracle, dispatch), RaptorQ evidence packs, parity reports, golden journey artifacts; binaries: `conformance_dashboard`, `e2e_orchestrator`, `fixture_regen`, `live_oracle_capture`, `benchmark_gate`, `raptorq_sidecar`, `tolerance_lint` |
+| `fsci-runtime` | 2026-02-13 | ~1,750 | CASP solver portfolio, conformal calibrator, loss matrix, evidence ledger, audit trail, strict vs hardened mode |
+| `fsci-cluster` | 2026-03-24 | ~3,200 | `kmeans` and `kmeans++`, DBSCAN, hierarchical linkage, dendrogram, `fcluster`, silhouette, Davies-Bouldin, Calinski-Harabasz |
+| `fsci-constants` | 2026-03-24 | ~960 | CODATA 2018 physical constants, SI prefixes, mathematical constants, unit conversions |
+| `fsci-ndimage` | 2026-03-23 | ~3,900 | `uniform_filter`, `gaussian_filter`, `median_filter`, `minimum_filter`, `maximum_filter`, `convolve`/`correlate`, morphology (erosion/dilation/opening/closing/binary), `label`, `find_objects`, distance transforms, `affine_transform`, `rotate`, `zoom`, `shift`, Sobel/Prewitt/Laplace edge detectors, histograms and extrema by label |
+| `fsci-io` | 2026-03-23 | ~5,300 | `savemat`/`loadmat` (MATLAB v4 and v5), `mmread`/`mmwrite` (Matrix Market), WAV read/write, NetCDF (simplified), IDL `readsav`, Fortran sequential unformatted reader |
+| `fsci-odr` | 2026-05-03 | ~1,300 | Orthogonal Distance Regression — `ODR` driver, `Model`, `Data`, `Output`; explicit/implicit models, weighted, multi-response |
+| `fsci-datasets` | 2026-05-03 | ~600 | Deterministic embedded fixtures matching SciPy shapes: `ascent`, `face` (RGB and gray), `electrocardiogram` |
+
+---
+
+## March 22 – May 16, 2026: V1 surface buildout and conformance saturation
+
+The window from the previous changelog cut (2026-03-21, 152 commits) through 2026-05-16
+added **3,164 commits** and closed **2,404 beads**. Six new crates landed
+(`fsci-cluster`, `fsci-constants`, `fsci-ndimage`, `fsci-io`, `fsci-odr`,
+`fsci-datasets`); the workspace grew from 13 crates and ~66,000 lines of Rust
+to 19 crates and ~140,000 lines. The dominant work patterns:
+
+- **SciPy-parity surface expansion.** Hundreds of distinct `scipy.*` functions
+  were ported across every domain crate: 60+ continuous and discrete
+  distributions in `fsci-stats`, the full Carlson elliptic family
+  (RC/RF/RJ/RD/RG) in `fsci-special`, the ZPK filter-transform family
+  (`lp2lp_zpk`/`lp2hp_zpk`/`lp2bp_zpk`/`lp2bs_zpk`/`bilinear_zpk`) and analog
+  prototypes (`buttap`, `cheb1ap`, `cheb2ap`, `ellipap`, `besselap`) in
+  `fsci-signal`, Daubechies wavelet coefficients, the four scratched-up Carlson
+  integrals, Krogh and barycentric polynomial interpolators in
+  `fsci-interpolate`, and full `ndimage` filter/morphology/measurement coverage.
+- **Conformance saturation.** The `fsci-conformance` test surface grew from a
+  few packets to **767 integration test files** organized into 17+ artifact
+  packets (`FSCI-P2C-001` through `FSCI-P2C-018`, plus legacy `P2C-001` through
+  `P2C-016`). Each function ported in the period received at least one parity,
+  property, or metamorphic harness — usually all three. The dominant commit
+  pattern in the period is `test(fsci-conformance): scipy parity for <symbol>`
+  paired with a beads close.
+- **Distribution moment closure.** Every concrete distribution in
+  `fsci-stats` (continuous and discrete) now ships explicit
+  `skewness()`/`kurtosis()`/`entropy()` implementations: closed-form where
+  derivable, numerical-helper-backed (Simpson on PDF, quantile-space Simpson,
+  raw-moment integrals, polygamma cumulants) where not, and documented
+  `f64::NAN` for heavy-tail families where moments diverge. Several wrong
+  formulas surfaced and were corrected during the push — notably
+  `GenHalfLogistic` mean/var, `TruncWeibullMin` Simpson endpoint bias (replaced
+  with a closed-form incomplete-gamma identity, ~370× faster), and
+  `HalfCauchy.mean/var` (now returns `+INFINITY` to match SciPy).
+- **CASP coverage.** Branch coverage tests were added for the runtime CASP
+  decision matrix (`runtime close_within_tol`, `decision_loss_matrix`
+  constants, `select_minimize_method`, sparse CASP iterative selector,
+  hypergeometric branch selector for `hyp1f1`/`hyp2f1`).
+- **Deadlock and concurrency fixes.** Three structural concurrency bugs in
+  long-running tests were fixed: `fsci-integrate adaptive_gk15`/`gk15_vec`
+  short-circuited on NaN/Inf integrands instead of spinning to the 2^limit
+  subdivision wall ([frankenscipy-t45u3](https://github.com/Dicklesworthstone/frankenscipy/commit/b1db88ac));
+  `fsci-sparse lgmres_inner` now increments `k` before breaking on lucky
+  breakdown so the outer loop terminates on identity-like operators
+  ([frankenscipy-3yrl6](https://github.com/Dicklesworthstone/frankenscipy/commit/c30a45ba));
+  the `fsci-fft` plan cache acquired a crate-private test lock so `plan.rs` and
+  `transforms.rs` tests no longer race
+  ([frankenscipy-lw3rl](https://github.com/Dicklesworthstone/frankenscipy/commit/826f02cf)).
+  The conformance writer for `parity_report.{json,raptorq.json,decode_proof.json}`
+  was also serialized through a process-global mutex
+  ([frankenscipy-prngc](https://github.com/Dicklesworthstone/frankenscipy/commits/main?after=)).
+- **Documentation and lint sweeps.** Math-notation doc comments across
+  `fsci-stats`/`fsci-signal`/`fsci-constants`/`fsci-fft` were wrapped in
+  backticks to silence rustdoc's broken-intra-doc-link and unclosed-HTML-tag
+  warnings; `excessive_precision` (40 literals) and `collapsible_if` (151
+  files) were swept clean. The workspace is **warning-free** across build,
+  test, fuzz, and doc surfaces as of 2026-05-16.
+- **Defect ledger.** Three open defects were filed and remain on the backlog
+  at cut: [`frankenscipy-r1vok`](https://github.com/Dicklesworthstone/frankenscipy/commit/e5f353b5)
+  (periodogram/welch O(N) normalization divergence),
+  [`frankenscipy-cw6k2`](https://github.com/Dicklesworthstone/frankenscipy/commit/a2c47604)
+  (iirnotch/iirpeak r approximation),
+  [`frankenscipy-ot7tm`](https://github.com/Dicklesworthstone/frankenscipy/commit/7d19a662)
+  (gausspulse √2 envelope drift).
+
+The following per-crate sections list the structural additions in this window.
+Earlier work (2026-02-13 through 2026-03-21) is preserved in the per-domain
+sections further below.
+
+### `fsci-cluster` (NEW, 2026-03-24)
+
+- KMeans (Lloyd's with kmeans++ initialization), DBSCAN, hierarchical
+  agglomerative linkage, dendrogram, `fcluster`, silhouette coefficient,
+  Davies-Bouldin and Calinski-Harabasz indices. SciPy-oracle parity harness in
+  `fsci-conformance` for linkage helpers, kmeans property tests, DBSCAN
+  property coverage.
+
+### `fsci-constants` (NEW, 2026-03-24)
+
+- CODATA 2018 physical constants, SI prefixes, mathematical constants
+  (`pi`, `e`, `euler_gamma`, etc.), and `convert_*` unit conversions. Full
+  SciPy parity surface; conformance harness `diff_constants_physical`,
+  `diff_constants_conversions`, `diff_constants_value_lookup`.
+
+### `fsci-ndimage` (NEW, 2026-03-23)
+
+- Convolution and correlation kernels, uniform/gaussian/median/min/max
+  filters, generic filter with closure-driven kernels, binary and grayscale
+  morphology (erosion, dilation, opening, closing, hit-or-miss), connected
+  component labeling (`label`, `find_objects`), Euclidean distance transform,
+  affine transform, rotate, zoom, shift, and Sobel/Prewitt/Laplace edge
+  detectors. Histograms and extrema indexed by label.
+
+### `fsci-io` (NEW, 2026-03-23)
+
+- `savemat`/`loadmat` for MATLAB v4 and v5, including compressed and struct
+  arrays. Matrix Market `mmread`/`mmwrite` for dense and sparse. WAV PCM and
+  IEEE-float read/write. Simplified NetCDF reader. IDL `.sav` reader. Fortran
+  sequential unformatted reader
+  ([frankenscipy-afvx9](https://github.com/Dicklesworthstone/frankenscipy/commit/1b2ac0eb)).
+
+### `fsci-odr` (NEW, 2026-05-03)
+
+- Orthogonal Distance Regression driver matching SciPy's `scipy.odr` API:
+  `ODR`, `Model`, `Data`, `Output`, with explicit and implicit models,
+  weighted fits, and multi-response support.
+
+### `fsci-datasets` (NEW, 2026-05-03)
+
+- Deterministic embedded sample fixtures matching SciPy shapes: `ascent()`,
+  `face(gray=…)`, `electrocardiogram()`. Used by examples, doctests, and
+  performance benchmarks.
+
+### `fsci-stats` distribution coverage push (Mar–May 2026)
+
+- **New distributions ported from SciPy** (selected highlights, full list in
+  beads `frankenscipy-*`):
+  `wrapcauchy`, `skewcauchy`, `skewnorm`, `exponpow`, `truncpareto`,
+  `truncexpon`, `truncweibull_min`, `truncnorm` refinements, `irwinhall`,
+  `rdist`, `recipinvgauss`, `kstwobign`, `kappa3`, `kappa4`, `burr` (Type III
+  and Type XII), `weibull_max`, `powerlognorm`, `boltzmann`, `planck`,
+  `yulesimon`, `zipfian`, `fisk` / `loglogistic`, `genlogistic`, `loggamma`,
+  `gennorm`, `halfgennorm`, `genextreme`, `genpareto`, `arcsine`,
+  `semicircular`, `cosine`, `anglit`, `hypsecant`, `crystalball`, `argus`,
+  `johnsonsu`, `johnsonsb`, `pearson3`, `exponnorm`, `fatiguelife`,
+  `inversegaussian`, `bradford`, `tukeylambda`, `rice`, `nakagami`, `levy_l`,
+  and more.
+- **Closed-form skewness and kurtosis** for ~50 continuous and ~10 discrete
+  distributions; numerical fallbacks (Simpson on PDF, quantile-space Simpson,
+  raw-moment integrals, polygamma cumulants) for the remainder.
+  Heavy-tail families (Alpha, etc.) document `NaN` explicitly when moments
+  diverge.
+- **Closed-form entropies** for ~60 continuous and ~10 discrete distributions
+  (`Beta`, `ChiSquared`, `Chi`, `F`, `StudentT`, `InverseGamma`, `GenPareto`,
+  `GenExtreme`, `Rayleigh`, `Maxwell`, `Levy`, `LevyLeft`, `Cauchy`,
+  `HalfCauchy`, `Pareto`, `Lomax`, `Erlang`, `Gilbrat`, `DoubleWeibull`,
+  `DoubleGamma`, `GenNorm`, `HalfGenNorm`, `RDist`, `Fisk`/`Loglogistic`,
+  `LogLaplace`, `GenHalfLogistic`, `Bradford`, `InvWeibull`, `PowerLaw`,
+  `WeibullMax`, `FrechetR`, `Loguniform`, `Gompertz`, `Moyal`,
+  `LaplaceAsymmetric`, `Nakagami`, `Trapezoid`, `GenLogistic`, `LogGamma`,
+  `Pearson3`, `BetaPrime`, `TruncExpon`, `TruncPareto`, `VonMises`,
+  `TruncNormal`, `SkewCauchy`, `WrapCauchy`, `IrwinHall`, …).
+- **Simpson-based entropy** for `PowerNorm`/`PowerLognorm`/`JohnsonSU`/`JohnsonSB`
+  /`ExponPow`/`ExponWeibull`/`KsTwoBign`/`TruncWeibullMin`/`Kappa3`/`Kappa4`
+  /`CrystalBall`/`Argus`/`FatigueLife`/`SkewNorm`/`FoldedNormal`/`FoldedCauchy`
+  /`Rice`/`TukeyLambda`/`NoncentralT`/`InverseGaussian`/`ExponNorm` and the
+  `Burr`/`Mielke`/`RecipInvGauss`/`Alpha` arctan-compactified family.
+- **Method-of-moments and MLE `fit()`** for ~30 distributions including
+  `Erlang`, `Chi`, `Rice`, `Nakagami`, `Fisk`, `Bradford`, `Gilbrat`,
+  `Gompertz`, `GenLogistic`, `GenNorm`, `HalfGenNorm`, `GenPareto`,
+  `LogGamma`, `InverseGamma`, `InverseGaussian`, `ExponNorm`, `Levy`,
+  `LevyLeft`, `LogLaplace`, `Loguniform`, `Anglit`, `CosineDistribution`,
+  `Moyal`, `TruncExpon`, `Pearson3` (skew estimator), and the six
+  parameterless distributions in one batch
+  ([frankenscipy-hv9kw](https://github.com/Dicklesworthstone/frankenscipy/commit/1539c4de)).
+- **`mode()` closed forms** for 27 continuous and 4 discrete distributions
+  ([frankenscipy-tlw2q](https://github.com/Dicklesworthstone/frankenscipy/commit/91bbb954),
+  [frankenscipy-rt24d](https://github.com/Dicklesworthstone/frankenscipy/commit/b8110d97),
+  [frankenscipy-ckykz](https://github.com/Dicklesworthstone/frankenscipy/commit/d353b4a9)).
+- **QMC engines**: full Latin Hypercube, Sobol, Halton; geometric
+  discrepancy, centered L2, mixture L2, wraparound L2, L2-star, update
+  rules, scaling
+  ([frankenscipy-e5j6p](https://github.com/Dicklesworthstone/frankenscipy/commit/637f6327),
+  [frankenscipy-aa2xz](https://github.com/Dicklesworthstone/frankenscipy/commit/0e5905f3)
+  + companions).
+- **Bug fixes** (representative):
+  - `GenHalfLogistic.mean/var` replaced (wrong `(ψ(1/c+1) + γ)/c` formula
+    that returned 3.0 at `c=0.5` outside the `[0, 2]` support) with Simpson
+    on the substitution `u = (1−cx)^{1/c}`
+    ([frankenscipy-snlpq adjacent](https://github.com/Dicklesworthstone/frankenscipy/commit/527bc55b)).
+  - `TruncWeibullMin.mean/var` quadrature replaced with closed-form
+    incomplete-gamma: `E[X^k] = e^{a^c}/s · Γ(k/c+1) · (P(k/c+1, b^c) − P(k/c+1, a^c))`,
+    ~370× faster and structurally exact
+    ([frankenscipy-b47bcc6e](https://github.com/Dicklesworthstone/frankenscipy/commit/b47bcc6e)).
+  - `HalfCauchy.mean/var` now returns `+INFINITY` to match SciPy
+    ([frankenscipy-59anq](https://github.com/Dicklesworthstone/frankenscipy/commit/aa1724bc)).
+  - `Burr3`, `RecipInvGauss`, `Kappa3`, `ExponPow`, `PowerLognorm`,
+    `TruncWeibullMin` all received closed-form or numerically integrated
+    mean/var replacements during the audit.
+
+### `fsci-special` expansion (Mar–May 2026)
+
+- **Carlson elliptic family** complete: `elliprc`, `elliprf`, `elliprd`,
+  `elliprg`, `elliprj`
+  ([frankenscipy-ewuqd cluster](https://github.com/Dicklesworthstone/frankenscipy/commit/2e995e3f)).
+- **Bessel-zero arrays**: `ai_zeros`, `bi_zeros`, `jn_zeros`, `yn_zeros`
+  for the first k positive zeros.
+- **Riccati-Bessel functions**: `riccati_jn` and `riccati_yn` value-and-derivative
+  arrays.
+- **Legendre arrays**: `lpn`/`lqn` (Legendre P/Q with derivatives), `lpmn`/`lqmn`
+  (associated Legendre arrays).
+- **Orthogonal polynomial roots/evaluations**: `roots_chebyc`, `roots_chebys`,
+  `roots_sh_legendre`, `roots_sh_chebyt`, `roots_sh_chebyu`, `eval_chebyc`,
+  `eval_chebys`, `eval_sh_jacobi`, `assoc_laguerre`.
+- **Accurate-near-zero variants**: `log1pmx`, `powm1`, `cosm1`.
+- **Profile / activation helpers**: `wofz_real`, `voigt_profile (γ=0)`,
+  `tanpi`, `tklmbda` (Tukey-lambda CDF), `factorialk`.
+- **Real-argument binomial**: `binom(n, k)` for real `n`
+  ([frankenscipy-tb3ph](https://github.com/Dicklesworthstone/frankenscipy/commit/e47e9cd9)).
+- **CASP branch selectors**: hypergeometric branch selection logic for
+  `hyp1f1` and `hyp2f1`
+  ([frankenscipy-d22cc0d1](https://github.com/Dicklesworthstone/frankenscipy/commit/d22cc0d1)).
+- **Kelvin functions** `ber`/`bei`/`ker`/`kei` with SciPy parity tests.
+- **Pentagamma** for LogGamma cumulants
+  ([frankenscipy-04b3d79d](https://github.com/Dicklesworthstone/frankenscipy/commit/04b3d79d)).
+
+### `fsci-signal` expansion (Mar–May 2026)
+
+- **Analog prototypes**: `buttap` (Butterworth) and `cheb1ap` (Chebyshev I);
+  the remaining Cheby II / Elliptic / Bessel prototypes are reachable via the
+  full `cheby2` / `ellip` / `bessel` design entry points rather than a
+  standalone `*ap` function.
+- **Filter-order helpers**: `buttord`, `cheb1ord`, `cheb2ord`, `ellipord`.
+- **Lowpass-to-X ZPK and BA transforms**: `lp2lp_zpk`/`lp2lp`,
+  `lp2hp_zpk`/`lp2hp`, `lp2bp_zpk`/`lp2bp`, `lp2bs_zpk`/`lp2bs`,
+  `bilinear_zpk`.
+- **Filter representation conversions**: `tf2zpk`, `zpk2tf`, `sos2tf`,
+  `freqz_zpk`, `group_delay`, `group_delay_from_ba`, `unique_roots`,
+  `normalize_filter`, `lfiltic`.
+- **Wavelets**: `daub` (Daubechies coefficients), `morlet2`, Ricker.
+- **Audio**: MFCC, mel filterbank, chroma feature extraction.
+- **Window helpers**: `kaiser_atten`, `kaiser_beta`, Taylor and exponential
+  windows, `general_hamming`.
+- **Filter design**: full `iirfilter` dispatcher covering all five IIR
+  families; `firls` FIR design.
+- **Signal generators / pulses**: `chirp`, `sawtooth`, `unit_impulse`,
+  `gauspuls`, `correlation_lags`.
+
+### `fsci-linalg` expansion (Mar–May 2026)
+
+- **Matrix equations**: discrete and continuous algebraic Riccati
+  equations (`solve_discrete_are`, `solve_continuous_are`); Lyapunov;
+  Sylvester.
+- **Banded specialists**: `solveh_banded` across multiple band storage
+  formats, `eig_banded`, `eigh_tridiagonal`.
+- **Decomposition reconstruction tests**: QZ, LDL, Schur+Hessenberg, QR
+  insert/delete/update with full SciPy parity.
+- **Subspace and polar**: `subspace_angles`, `polar`, `orth`, `null_space`,
+  refined with property-based reconstruction tests.
+- **Structural constructors**: `block_diag`, `bmat`, `vstack`, `hstack`,
+  `leslie`, `pascal`, `vander`, `hankel`, `helmert`, `random_spd`,
+  `random_matrix`, `mat_allclose`.
+- **Matrix functions** parity for `matrix_power`, `signm`.
+
+### `fsci-sparse` expansion (Mar–May 2026)
+
+- **Iterative solvers**: full Krylov suite covered by residual conformance —
+  CG, BiCG, BiCGSTAB, CGS, GMRES, LGMRES (with lucky-breakdown termination
+  fix), QMR, MINRES, LSQR, LSMR.
+- **Eigensolvers**: `eigs`/`eigsh`/`svds` with sorting and conjugation
+  properties verified.
+- **Graph algorithms**: `dijkstra`, `bellman_ford`, `connected_components`,
+  `minimum_spanning_tree`, `bfs_order`/`dfs_order`, `reverse_cuthill_mckee`,
+  `pagerank`, centrality measures, clustering/diameter/eccentricity.
+- **Format coverage**: `eye_rectangular` for non-square `eye`, diagonal
+  construction `diags`, Kronecker product, stack/block builders, elementwise
+  reductions, density/Frobenius/inner-product helpers, graph summary export.
+
+### `fsci-integrate` expansion (Mar–May 2026)
+
+- **Monte Carlo and QMC quadrature**: `monte_carlo_integrate`, `qmc_quad`.
+- **Romberg and N-d quadrature**: `romberg`, `romb_func`, `nquad`,
+  `quad_explain`, sample-form variants (`cumulative_trapezoid`,
+  `simpson`/`trapezoid`/`romb`/Newton-Cotes on sample sequences).
+- **`select_initial_step`** Hairer heuristic with full SciPy parity
+  coverage.
+- **`adaptive_gk15`/`adaptive_gk15_vec` deadlock fix** when the integrand
+  returns non-finite values.
+- **`odeint` closed-form parity** suite added in `fsci-conformance`.
+
+### `fsci-opt` expansion (Mar–May 2026)
+
+- **CASP `minimize` selector**: runtime algorithm selection for
+  unconstrained minimization
+  ([frankenscipy-0b5a2](https://github.com/Dicklesworthstone/frankenscipy/commit/638ad4d9)).
+- **Property tests** added for COBYLA, augmented Lagrangian, projected
+  gradient, simulated annealing, brute force + PSO, scalar bounded +
+  trisection, line_search_wolfe1/2, constrained DE, TNC/SLSQP/Newton-CG/
+  trust-constr, scalar root finders, `fsolve`, `lm_root`, `curve_fit`,
+  numerical gradient/Jacobian/Hessian, NNLS/isotonic.
+- **Hessian convenience**: `rosen_hess`, `rosen_hess_prod` SciPy parity.
+
+### `fsci-interpolate` expansion (Mar–May 2026)
+
+- **Cubic Hermite splines**: `CubicHermiteSpline` type and the
+  `cubic_hermite_interpolate` free function.
+- **Free-function interpolators matching `scipy.interpolate`**:
+  `pchip_interpolate`, `akima1d_interpolate`, `krogh_interpolate`,
+  `barycentric_interpolate`.
+- **B-spline least squares**: `make_lsq_spline` parity across `k=1/3/5`.
+- **Polynomial arithmetic helpers**: `polyfromroots`, polynomial value/
+  derivative/ratval, polynomial-root parity, `interpn` grid-interpolator
+  parity.
+
+### `fsci-fft` expansion (Mar–May 2026)
+
+- **n-D and DCT/DST n-D coverage**: `fftn`/`ifftn`, `rfftn`/`irfftn`,
+  `fft2`/`ifft2`, `rfft2`/`irfft2`, `dctn`/`idctn`, `dstn`/`idstn` —
+  all parity-verified.
+- **Hilbert analytic signal** SciPy parity for `fft::hilbert`.
+- **Plan-cache concurrency fix** ([frankenscipy-lw3rl](https://github.com/Dicklesworthstone/frankenscipy/commit/826f02cf)).
+- **`fast_len` helpers** for choosing optimal transform lengths.
+
+### `fsci-spatial` expansion (Mar–May 2026)
+
+- **KDTree predicates**: `query_pairs`, `count_neighbors`.
+- **Distance helpers**: `pdist_func`/`cdist_func`/`distance_matrix`,
+  weighted distances, distance-matrix validators.
+- **Convex hull and Voronoi** parity coverage for boundary cases.
+
+### `fsci-conformance` saturation (Mar–May 2026)
+
+- **3-lane harness** stabilized: self-check, oracle-backed
+  (`run_<family>_packet_with_oracle_capture`), and dispatch
+  (`run_differential_test`).
+- **Python oracles** for every domain: `scipy_{linalg,optimize,special,
+  stats,signal,fft,sparse,spatial,interpolate,ndimage,integrate,io,cluster,
+  constants,arrayapi}_oracle.py` — 15 oracle scripts wrapping reference
+  implementations.
+- **Artifact governance**: `parity_report.json`, `decode_proof.json`, and
+  RaptorQ systematic-encoding sidecars emitted per packet; writer
+  serialized via a process-global mutex
+  ([frankenscipy-prngc](https://github.com/Dicklesworthstone/frankenscipy/commit/8d3f64fe)).
+- **Packet coverage**: artifact directories exist for `FSCI-P2C-001`
+  through `FSCI-P2C-018` plus the legacy `P2C-001` through `P2C-016`
+  trees; over **767 integration test files** under
+  `crates/fsci-conformance/tests/`.
+
+### Workspace hygiene (Mar–May 2026)
+
+- **Warning-free across build, test, fuzz, doc** as of 2026-05-16
+  ([frankenscipy-ql8pu](https://github.com/Dicklesworthstone/frankenscipy/commit/bebe414e),
+  [frankenscipy-iznn6](https://github.com/Dicklesworthstone/frankenscipy/commit/b0d33ffe),
+  [frankenscipy-h3hnk](https://github.com/Dicklesworthstone/frankenscipy/commit/18e458d4),
+  [frankenscipy-cgjh3](https://github.com/Dicklesworthstone/frankenscipy/commit/269024f0),
+  [frankenscipy-fhh87](https://github.com/Dicklesworthstone/frankenscipy/commit/b50ffcc5),
+  [frankenscipy-xjan0](https://github.com/Dicklesworthstone/frankenscipy/commit/10f9f0f0),
+  [frankenscipy-zdkmb](https://github.com/Dicklesworthstone/frankenscipy/commit/2439e45c),
+  [frankenscipy-uu2hd](https://github.com/Dicklesworthstone/frankenscipy/commit/cdc22420),
+  [frankenscipy-zk3q8](https://github.com/Dicklesworthstone/frankenscipy/commit/88becfd1)).
+- **Clippy sweeps**: `excessive_precision`
+  ([frankenscipy-kgt26](https://github.com/Dicklesworthstone/frankenscipy/commit/b3d8bfe5), 40 literals)
+  and `collapsible_if`
+  ([frankenscipy-snlpq](https://github.com/Dicklesworthstone/frankenscipy/commit/297d7243), 151 files)
+  applied workspace-wide.
+- **Doc comment math wrap**: bracket-indexed math (`x[k]`, `[a,b]`,
+  `[[a,b],[c,d]]`, `[x]⁺`) and angle-bracketed generics/placeholders
+  (`Vec<Vec<f64>>`, `<path>`, `<file>`) wrapped in backticks across
+  `fsci-stats`, `fsci-signal`, `fsci-constants`, and `fsci-fft` to
+  silence rustdoc.
 
 ---
 
@@ -662,12 +1021,18 @@ These commits span multiple modules and fix numerical issues that do not belong 
 
 ## Statistics
 
-- **Total commits**: 152 (as of 2026-03-21)
-- **Rust source**: ~66,000 lines across 13 workspace crates
-- **Tests and benchmarks**: ~25,000 additional lines
+- **Total commits**: 3,331 (as of 2026-05-16, on `main`)
+- **Rust source**: ~140,000 lines (`crates/*/src/`) across 19 workspace crates
+- **Tests and harnesses**: ~370,000 additional lines under `crates/*/src/bin/`,
+  `crates/*/tests/`, and `crates/fsci-conformance/tests/` (~765 integration
+  test files in the conformance harness alone)
+- **Beads tracked**: 2,404 closed, 59 open as of 2026-05-16
 - **First commit**: 2026-02-13 ([55f1ee9](https://github.com/Dicklesworthstone/frankenscipy/commit/55f1ee94577f2b67e6242b93ac459998a47aa797))
 - **Crate creation timeline**:
   - 2026-02-13: 9 crates at initial commit (`fsci-linalg`, `fsci-sparse`, `fsci-integrate`, `fsci-opt`, `fsci-fft`, `fsci-special`, `fsci-arrayapi`, `fsci-conformance`, `fsci-runtime`)
   - 2026-03-14: `fsci-interpolate`, `fsci-stats`
   - 2026-03-15: `fsci-signal`, `fsci-spatial`
+  - 2026-03-23: `fsci-ndimage`, `fsci-io`
+  - 2026-03-24: `fsci-cluster`, `fsci-constants`
+  - 2026-05-03: `fsci-odr`, `fsci-datasets`
 - **No tagged releases yet** -- workspace version is `0.1.0`
