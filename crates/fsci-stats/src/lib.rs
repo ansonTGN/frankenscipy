@@ -453,6 +453,110 @@ fn sample_standardized_skewness(data: &[f64]) -> f64 {
     }
 }
 
+/// MLE for the shape parameter `c` of the standard Weibull distribution
+/// (scale = 1) on strictly positive data `y_i > 0`. Returns `Err(...)`
+/// if the data is empty, non-finite, non-positive, or numerically unable
+/// to bracket a finite root.
+///
+/// The MLE solves
+///   g(c) = 1/c + mean(ln y) − Σ y^c ln y / Σ y^c = 0,
+/// monotonically decreasing in `c`. We bracket a sign change on a
+/// logarithmically spaced grid of candidate shapes and refine with the
+/// secant method (no derivative table needed). Caller is responsible
+/// for any sign-mirror or absolute-value transform.
+fn fit_standard_weibull_shape_mle(
+    positive_data: &[f64],
+    distribution_label: &str,
+) -> Result<f64, FitError> {
+    let n = positive_data.len();
+    if n < 2 {
+        return Err(FitError::InsufficientData {
+            required: 2,
+            actual: n,
+        });
+    }
+    if let Some(&bad) = positive_data.iter().find(|&&y| !y.is_finite() || y <= 0.0) {
+        return Err(FitError::UnsupportedData(format!(
+            "{distribution_label} fit requires positive finite samples; got {bad}"
+        )));
+    }
+    let logs: Vec<f64> = positive_data.iter().map(|y| y.ln()).collect();
+    let log_mean = logs.iter().sum::<f64>() / n as f64;
+
+    // Score g(c) = 1/c + log_mean − Σ y^c ln y / Σ y^c.
+    let score = |c: f64| -> f64 {
+        // Compute Σ y^c and Σ y^c ln y in a numerically stable manner
+        // by anchoring the powers to the data max.
+        let cln_max = logs.iter().copied().fold(f64::NEG_INFINITY, f64::max) * c;
+        let mut s_w = 0.0_f64;
+        let mut s_w_log = 0.0_f64;
+        for (&ly, &y) in logs.iter().zip(positive_data.iter()) {
+            let w = (c * ly - cln_max).exp(); // = y^c / max(y)^c
+            s_w += w;
+            s_w_log += w * y.ln();
+        }
+        1.0 / c + log_mean - s_w_log / s_w
+    };
+
+    // Logarithmic search on c ∈ [1e-3, 1e3] for a sign change.
+    let candidates: Vec<f64> = (-30..=30).map(|k| 10.0_f64.powf(k as f64 / 10.0)).collect();
+    let mut lo = None::<(f64, f64)>;
+    let mut hi = None::<(f64, f64)>;
+    for &c in &candidates {
+        let g = score(c);
+        if !g.is_finite() {
+            continue;
+        }
+        if g > 0.0 {
+            lo = Some((c, g));
+        } else {
+            hi = Some((c, g));
+            break;
+        }
+    }
+    let ((mut a, mut ga), (mut b, mut gb)) = match (lo, hi) {
+        (Some(a), Some(b)) => (a, b),
+        _ => {
+            return Err(FitError::NonConvergent(format!(
+                "{distribution_label} MLE could not bracket a positive shape root"
+            )));
+        }
+    };
+
+    // Secant refinement, with bisection fallback when the secant step
+    // escapes the bracket.
+    for _ in 0..200 {
+        if (b - a).abs() < 1e-12 * a.abs().max(1e-12) {
+            break;
+        }
+        let mut c = b - gb * (b - a) / (gb - ga);
+        if !c.is_finite() || c <= a.min(b) || c >= a.max(b) {
+            c = 0.5 * (a + b);
+        }
+        let gc = score(c);
+        if !gc.is_finite() {
+            return Err(FitError::NonConvergent(format!(
+                "{distribution_label} MLE produced non-finite score at c={c}"
+            )));
+        }
+        if gc > 0.0 {
+            a = c;
+            ga = gc;
+        } else {
+            b = c;
+            gb = gc;
+        }
+    }
+    let c_hat = 0.5 * (a + b);
+    if c_hat.is_finite() && c_hat > 0.0 {
+        Ok(c_hat)
+    } else {
+        Err(FitError::NonConvergent(format!(
+            "{distribution_label} MLE did not converge to a positive shape"
+        )))
+    }
+}
+
 /// Generic inverse CDF via bisection search.
 fn ppf_bisection(cdf: impl Fn(f64) -> f64, q: f64, mean: f64, std: f64) -> f64 {
     // Initial bracket: start around mean ± 10*std
@@ -865,7 +969,8 @@ impl ContinuousDistribution for StudentT {
         let df = self.df;
         let half_df = df / 2.0;
         let half_dfp1 = (df + 1.0) / 2.0;
-        half_dfp1 * (fsci_special::digamma_scalar(half_dfp1) - fsci_special::digamma_scalar(half_df))
+        half_dfp1
+            * (fsci_special::digamma_scalar(half_dfp1) - fsci_special::digamma_scalar(half_df))
             + 0.5 * df.ln()
             + ln_gamma(half_df)
             + 0.5 * PI.ln()
@@ -1021,9 +1126,8 @@ fn nct_raw_moment(df: f64, nc: f64, k: u32) -> f64 {
         let z_moment = double_factorial_quotient(j);
         m_k += coef * nc.powi((k - 2 * j) as i32) * z_moment;
     }
-    let log_scale = (k as f64 * 0.5) * (df / 2.0).ln()
-        + ln_gamma((df - k as f64) / 2.0)
-        - ln_gamma(df / 2.0);
+    let log_scale =
+        (k as f64 * 0.5) * (df / 2.0).ln() + ln_gamma((df - k as f64) / 2.0) - ln_gamma(df / 2.0);
     log_scale.exp() * m_k
 }
 
@@ -1442,7 +1546,10 @@ impl ContinuousDistribution for ChiSquared {
     fn entropy(&self) -> f64 {
         // h(χ²(k)) = k/2 + ln(2·Γ(k/2)) + (1 − k/2)·ψ(k/2).
         let half_k = self.df / 2.0;
-        half_k + 2.0_f64.ln() + ln_gamma(half_k) + (1.0 - half_k) * fsci_special::digamma_scalar(half_k)
+        half_k
+            + 2.0_f64.ln()
+            + ln_gamma(half_k)
+            + (1.0 - half_k) * fsci_special::digamma_scalar(half_k)
     }
 
     fn fit(data: &[f64]) -> Self {
@@ -1879,9 +1986,8 @@ impl ContinuousDistribution for FDistribution {
         let d1 = self.dfn;
         let d2 = self.dfd;
         if d2 > 8.0 {
-            let num = 12.0
-                * (d1 * (5.0 * d2 - 22.0) * (d1 + d2 - 2.0)
-                    + (d2 - 4.0) * (d2 - 2.0).powi(2));
+            let num =
+                12.0 * (d1 * (5.0 * d2 - 22.0) * (d1 + d2 - 2.0) + (d2 - 4.0) * (d2 - 2.0).powi(2));
             let den = d1 * (d2 - 6.0) * (d2 - 8.0) * (d1 + d2 - 2.0);
             num / den
         } else {
@@ -1896,8 +2002,7 @@ impl ContinuousDistribution for FDistribution {
         //              + ((d1 + d2)/2) ψ((d1 + d2)/2).
         let (d1, d2) = (self.dfn, self.dfd);
         let log_beta = ln_gamma(d1 / 2.0) + ln_gamma(d2 / 2.0) - ln_gamma((d1 + d2) / 2.0);
-        (d2 / d1).ln() + log_beta
-            + (1.0 - d1 / 2.0) * fsci_special::digamma_scalar(d1 / 2.0)
+        (d2 / d1).ln() + log_beta + (1.0 - d1 / 2.0) * fsci_special::digamma_scalar(d1 / 2.0)
             - (1.0 + d2 / 2.0) * fsci_special::digamma_scalar(d2 / 2.0)
             + ((d1 + d2) / 2.0) * fsci_special::digamma_scalar((d1 + d2) / 2.0)
     }
@@ -2093,7 +2198,8 @@ impl ContinuousDistribution for BetaDist {
         //               + (a + b − 2) ψ(a + b).
         let (a, b) = (self.a, self.b);
         let log_beta = ln_gamma(a) + ln_gamma(b) - ln_gamma(a + b);
-        log_beta - (a - 1.0) * fsci_special::digamma_scalar(a)
+        log_beta
+            - (a - 1.0) * fsci_special::digamma_scalar(a)
             - (b - 1.0) * fsci_special::digamma_scalar(b)
             + (a + b - 2.0) * fsci_special::digamma_scalar(a + b)
     }
@@ -2641,6 +2747,33 @@ impl ContinuousDistribution for WeibullMax {
         } else {
             0.0
         }
+    }
+
+    fn try_fit(data: &[f64]) -> Result<Self, FitError> {
+        // WeibullMax has support (−∞, 0] with PDF c·(−x)^{c−1}·exp(−(−x)^c)
+        // and CDF exp(−(−x)^c). Setting y = −x maps to the standard
+        // Weibull (scale = 1) on positive reals, so MLE for shape c
+        // matches the standard-Weibull MLE on −data.
+        validate_finite_fit_data(data, 2, "WeibullMax")?;
+        if let Some(&bad) = data.iter().find(|&&x| x > 0.0) {
+            return Err(FitError::UnsupportedData(format!(
+                "WeibullMax support is (−∞, 0]; got {bad}"
+            )));
+        }
+        // Negate; reject x == 0 since the log-likelihood is −∞ there
+        // for c < 1 and the standard MLE assumes strictly positive y.
+        let mut negated: Vec<f64> = Vec::with_capacity(data.len());
+        for &x in data {
+            let y = -x;
+            if y <= 0.0 {
+                return Err(FitError::UnsupportedData(
+                    "WeibullMax fit requires every sample to be strictly negative".to_owned(),
+                ));
+            }
+            negated.push(y);
+        }
+        let c = fit_standard_weibull_shape_mle(&negated, "WeibullMax")?;
+        Ok(Self { c })
     }
 }
 
@@ -4638,7 +4771,9 @@ impl DiscreteDistribution for YuleSimon {
         for k in 1..=max_k {
             let p = self.pmf(k);
             if p <= 0.0 {
-                if k > 100 { break; }
+                if k > 100 {
+                    break;
+                }
                 continue;
             }
             h -= p * p.ln();
@@ -5093,9 +5228,7 @@ impl DiscreteDistribution for LogSeries {
         let m1 = p / (pm1 * r);
         let m2 = -p / (r * pm1 * pm1);
         let m3 = -p * (1.0 + p) / (r * omp.powi(3));
-        let m4 = -p
-            * (1.0 / (pm1 * pm1) - 6.0 * p / pm1.powi(3) + 6.0 * p * p / pm1.powi(4))
-            / r;
+        let m4 = -p * (1.0 / (pm1 * pm1) - 6.0 * p / pm1.powi(3) + 6.0 * p * p / pm1.powi(4)) / r;
         let var = m2 - m1 * m1;
         let mu4 = (-3.0_f64).mul_add(
             m1.powi(4),
@@ -6133,8 +6266,7 @@ impl ContinuousDistribution for Trapezoid {
         let w = self.d - self.c;
         let pdf_h = 2.0 / (1.0 + w);
         let ln_h = pdf_h.ln();
-        let std_entropy = pdf_h
-            * ((1.0_f64 - w) * (1.0 - 2.0 * ln_h) / 4.0 - w * ln_h);
+        let std_entropy = pdf_h * ((1.0_f64 - w) * (1.0 - 2.0 * ln_h) / 4.0 - w * ln_h);
         std_entropy + self.scale.ln()
     }
 
@@ -6575,8 +6707,7 @@ impl ContinuousDistribution for Pearson3 {
         }
         let alpha = 4.0 / (self.skew * self.skew);
         let scale = self.skew.abs() / 2.0;
-        alpha + ln_gamma(alpha) + (1.0 - alpha) * fsci_special::digamma_scalar(alpha)
-            + scale.ln()
+        alpha + ln_gamma(alpha) + (1.0 - alpha) * fsci_special::digamma_scalar(alpha) + scale.ln()
     }
 
     fn fit(data: &[f64]) -> Self {
@@ -6789,7 +6920,11 @@ impl PowerNorm {
         let fallback = 50.0;
         let raw_lo = self.ppf(eps);
         let raw_hi = self.ppf(1.0 - eps);
-        let lo = if raw_lo.is_finite() { raw_lo } else { -fallback };
+        let lo = if raw_lo.is_finite() {
+            raw_lo
+        } else {
+            -fallback
+        };
         let hi = if raw_hi.is_finite() { raw_hi } else { fallback };
         simpson_integrate_adaptive(
             |x| x.powi(order) * self.pdf(x),
@@ -7007,7 +7142,11 @@ impl ContinuousDistribution for PowerLognorm {
         let m1 = powerlognorm_moment(self.c, self.s, 1);
         let m2 = powerlognorm_moment(self.c, self.s, 2);
         let v = m2 - m1 * m1;
-        if v.is_finite() && v >= 0.0 { v } else { f64::NAN }
+        if v.is_finite() && v >= 0.0 {
+            v
+        } else {
+            f64::NAN
+        }
     }
 
     fn skewness(&self) -> f64 {
@@ -7686,8 +7825,7 @@ impl ContinuousDistribution for GenPareto {
         let m1 = 1.0 / (1.0 - c);
         let m2 = 2.0 / ((1.0 - c) * (1.0 - 2.0 * c));
         let m3 = 6.0 / ((1.0 - c) * (1.0 - 2.0 * c) * (1.0 - 3.0 * c));
-        let m4 =
-            24.0 / ((1.0 - c) * (1.0 - 2.0 * c) * (1.0 - 3.0 * c) * (1.0 - 4.0 * c));
+        let m4 = 24.0 / ((1.0 - c) * (1.0 - 2.0 * c) * (1.0 - 3.0 * c) * (1.0 - 4.0 * c));
         let var = m2 - m1 * m1;
         let mu4 = (-3.0_f64).mul_add(
             m1.powi(4),
@@ -8477,7 +8615,8 @@ impl ContinuousDistribution for Chi {
     fn entropy(&self) -> f64 {
         // h(Chi(k)) = ln Γ(k/2) + (k − ln 2 − (k − 1) ψ(k/2)) / 2.
         let k = self.df;
-        ln_gamma(k / 2.0) + 0.5 * (k - 2.0_f64.ln() - (k - 1.0) * fsci_special::digamma_scalar(k / 2.0))
+        ln_gamma(k / 2.0)
+            + 0.5 * (k - 2.0_f64.ln() - (k - 1.0) * fsci_special::digamma_scalar(k / 2.0))
     }
 
     fn mode(&self) -> f64 {
@@ -8584,8 +8723,8 @@ impl ContinuousDistribution for Rice {
         let w = self.b * self.b / 2.0;
         let z = w / 2.0;
         let damp = (-z).exp();
-        let l_half = damp
-            * ((1.0 + w) * fsci_special::i0_scalar(z) + w * fsci_special::i1_scalar(z));
+        let l_half =
+            damp * ((1.0 + w) * fsci_special::i0_scalar(z) + w * fsci_special::i1_scalar(z));
         (PI / 2.0).sqrt() * l_half
     }
 
@@ -8605,8 +8744,8 @@ impl ContinuousDistribution for Rice {
         let i0 = fsci_special::i0_scalar(z);
         let i1 = fsci_special::i1_scalar(z);
         let l_half = damp * ((1.0 + w) * i0 + w * i1);
-        let l_3half = (2.0 / 3.0) * damp
-            * (3.0_f64.mul_add(w, w.mul_add(w, 1.5)) * i0 + (2.0 + w) * w * i1);
+        let l_3half =
+            (2.0 / 3.0) * damp * (3.0_f64.mul_add(w, w.mul_add(w, 1.5)) * i0 + (2.0 + w) * w * i1);
         let m1 = (PI / 2.0).sqrt() * l_half;
         let m2 = 2.0 + self.b * self.b;
         let m3 = 3.0 * (PI / 2.0).sqrt() * l_3half;
@@ -8623,8 +8762,8 @@ impl ContinuousDistribution for Rice {
         let i0 = fsci_special::i0_scalar(z);
         let i1 = fsci_special::i1_scalar(z);
         let l_half = damp * ((1.0 + w) * i0 + w * i1);
-        let l_3half = (2.0 / 3.0) * damp
-            * (3.0_f64.mul_add(w, w.mul_add(w, 1.5)) * i0 + (2.0 + w) * w * i1);
+        let l_3half =
+            (2.0 / 3.0) * damp * (3.0_f64.mul_add(w, w.mul_add(w, 1.5)) * i0 + (2.0 + w) * w * i1);
         let m1 = (PI / 2.0).sqrt() * l_half;
         let m2 = 2.0 + self.b * self.b;
         let m3 = 3.0 * (PI / 2.0).sqrt() * l_3half;
@@ -8759,8 +8898,7 @@ impl ContinuousDistribution for Nakagami {
         //   h(Nakagami(ν)) = −ln 2 + ln Γ(ν) − (ν − 1/2) ψ(ν)
         //                  − (1/2) ln ν + ν.
         let nu = self.nu;
-        -2.0_f64.ln() + ln_gamma(nu) - (nu - 0.5) * fsci_special::digamma_scalar(nu)
-            - 0.5 * nu.ln()
+        -2.0_f64.ln() + ln_gamma(nu) - (nu - 0.5) * fsci_special::digamma_scalar(nu) - 0.5 * nu.ln()
             + nu
     }
 
@@ -9616,6 +9754,26 @@ impl ContinuousDistribution for DoubleWeibull {
             0.0
         }
     }
+
+    fn try_fit(data: &[f64]) -> Result<Self, FitError> {
+        // DoubleWeibull is symmetric around 0 with PDF (c/2)·|x|^{c−1}·
+        // exp(−|x|^c). The likelihood depends only on |x|, and |X|
+        // ~ Weibull(c, 1), so the shape MLE is the standard-Weibull
+        // shape MLE on the absolute values.
+        validate_finite_fit_data(data, 2, "DoubleWeibull")?;
+        let mut abs: Vec<f64> = Vec::with_capacity(data.len());
+        for &x in data {
+            let y = x.abs();
+            if y <= 0.0 {
+                return Err(FitError::UnsupportedData(
+                    "DoubleWeibull fit requires every sample to be nonzero".to_owned(),
+                ));
+            }
+            abs.push(y);
+        }
+        let c = fit_standard_weibull_shape_mle(&abs, "DoubleWeibull")?;
+        Ok(Self { c })
+    }
 }
 
 /// Double gamma distribution.
@@ -9693,7 +9851,9 @@ impl ContinuousDistribution for DoubleGamma {
         // DoubleGamma is the symmetric reflection of Gamma(a, 1):
         //   h(DoubleGamma(a)) = h(Gamma(a, 1)) + ln 2
         //                     = a + ln Γ(a) + (1 − a) ψ(a) + ln 2.
-        self.a + ln_gamma(self.a) + (1.0 - self.a) * fsci_special::digamma_scalar(self.a)
+        self.a
+            + ln_gamma(self.a)
+            + (1.0 - self.a) * fsci_special::digamma_scalar(self.a)
             + 2.0_f64.ln()
     }
 
@@ -9708,11 +9868,7 @@ impl ContinuousDistribution for DoubleGamma {
         // Gamma(a, 1) has mode at a − 1 for a ≥ 1; the dgamma symmetric
         // density therefore peaks at ±(a−1) for a > 1 and at the origin
         // for a ≤ 1 (where Gamma's pdf is monotone decreasing).
-        if self.a > 1.0 {
-            self.a - 1.0
-        } else {
-            0.0
-        }
+        if self.a > 1.0 { self.a - 1.0 } else { 0.0 }
     }
 
     fn fit(data: &[f64]) -> Self {
@@ -11195,7 +11351,11 @@ impl ContinuousDistribution for Burr3 {
         let m1 = self.d * ln_beta(self.d + 1.0 / self.c, 1.0 - 1.0 / self.c).exp();
         let m2 = self.d * ln_beta(self.d + 2.0 / self.c, 1.0 - 2.0 / self.c).exp();
         let v = m2 - m1 * m1;
-        if v.is_finite() && v >= 0.0 { v } else { f64::NAN }
+        if v.is_finite() && v >= 0.0 {
+            v
+        } else {
+            f64::NAN
+        }
     }
 
     fn skewness(&self) -> f64 {
@@ -11354,9 +11514,7 @@ impl ContinuousDistribution for Burr12 {
         }
         let (c, d) = (self.c, self.d);
         let lg_d1 = ln_gamma(d + 1.0);
-        let mk = |k: f64| {
-            (ln_gamma(d - k / c) + ln_gamma(1.0 + k / c) - lg_d1).exp() * d
-        };
+        let mk = |k: f64| (ln_gamma(d - k / c) + ln_gamma(1.0 + k / c) - lg_d1).exp() * d;
         let m1 = mk(1.0);
         let m2 = mk(2.0);
         let m3 = mk(3.0);
@@ -11371,9 +11529,7 @@ impl ContinuousDistribution for Burr12 {
         }
         let (c, d) = (self.c, self.d);
         let lg_d1 = ln_gamma(d + 1.0);
-        let mk = |k: f64| {
-            (ln_gamma(d - k / c) + ln_gamma(1.0 + k / c) - lg_d1).exp() * d
-        };
+        let mk = |k: f64| (ln_gamma(d - k / c) + ln_gamma(1.0 + k / c) - lg_d1).exp() * d;
         let m1 = mk(1.0);
         let m2 = mk(2.0);
         let m3 = mk(3.0);
@@ -12336,9 +12492,7 @@ impl ContinuousDistribution for GenLogistic {
         // gives U ~ Uniform(0,1) and ln(1+e^{−X}) = −ln U / c, so
         //   E[ln(1 + exp(−X))] = 1/c.
         // Therefore h = −ln c + ψ(c) + γ + 1 + 1/c.
-        -self.c.ln() + fsci_special::digamma_scalar(self.c) + EULER_MASCHERONI
-            + 1.0
-            + 1.0 / self.c
+        -self.c.ln() + fsci_special::digamma_scalar(self.c) + EULER_MASCHERONI + 1.0 + 1.0 / self.c
     }
 
     fn skewness(&self) -> f64 {
@@ -12497,6 +12651,30 @@ impl ContinuousDistribution for FrechetR {
             6.0_f64.mul_add(g1 * g1 * g2, 4.0_f64.mul_add(-g1 * g3, g4)),
         );
         mu4 / (var * var) - 3.0
+    }
+
+    fn try_fit(data: &[f64]) -> Result<Self, FitError> {
+        // FrechetR matches scipy's deprecated frechet_r alias of
+        // weibull_max: support (−∞, 0] with the same standard-Weibull
+        // pdf in y = −x. Re-use the shared MLE on negated data.
+        validate_finite_fit_data(data, 2, "FrechetR")?;
+        if let Some(&bad) = data.iter().find(|&&x| x > 0.0) {
+            return Err(FitError::UnsupportedData(format!(
+                "FrechetR support is (−∞, 0]; got {bad}"
+            )));
+        }
+        let mut negated: Vec<f64> = Vec::with_capacity(data.len());
+        for &x in data {
+            let y = -x;
+            if y <= 0.0 {
+                return Err(FitError::UnsupportedData(
+                    "FrechetR fit requires every sample to be strictly negative".to_owned(),
+                ));
+            }
+            negated.push(y);
+        }
+        let c = fit_standard_weibull_shape_mle(&negated, "FrechetR")?;
+        Ok(Self { c })
     }
 }
 
@@ -13036,7 +13214,11 @@ impl ContinuousDistribution for TruncWeibullMin {
         let m1 = trunc_weibull_min_moment(self.c, self.a, self.b, 1);
         let m2 = trunc_weibull_min_moment(self.c, self.a, self.b, 2);
         let v = m2 - m1 * m1;
-        if v.is_finite() && v >= 0.0 { v } else { f64::NAN }
+        if v.is_finite() && v >= 0.0 {
+            v
+        } else {
+            f64::NAN
+        }
     }
 
     fn skewness(&self) -> f64 {
@@ -13368,6 +13550,40 @@ impl ContinuousDistribution for IrwinHall {
                 sum * h / 3.0
             }
         }
+    }
+
+    fn try_fit(data: &[f64]) -> Result<Self, FitError> {
+        // IrwinHall(n) is the sum of n iid Uniform(0,1) variates.
+        // Closed-form MOM identity: Var(X) = n / 12, so we estimate
+        // n by rounding 12·Var to the nearest positive integer.
+        // We also require every observation to lie in [0, n_est] for
+        // the fitted distribution to be consistent with the data.
+        validate_finite_fit_data(data, 2, "IrwinHall")?;
+        let var = sample_variance(data);
+        if !var.is_finite() || var <= 0.0 {
+            return Err(FitError::NonConvergent(
+                "IrwinHall fit needs positive sample variance".to_owned(),
+            ));
+        }
+        let n_est_raw = (12.0 * var).round();
+        let n_est = if !n_est_raw.is_finite() || n_est_raw < 1.0 {
+            return Err(FitError::NonConvergent(
+                "IrwinHall MOM did not yield a positive integer n".to_owned(),
+            ));
+        } else if n_est_raw > u32::MAX as f64 {
+            return Err(FitError::NonConvergent(
+                "IrwinHall MOM yielded n exceeding u32 range".to_owned(),
+            ));
+        } else {
+            n_est_raw as u32
+        };
+        let nf = f64::from(n_est);
+        if data.iter().any(|&x| x < 0.0 || x > nf) {
+            return Err(FitError::UnsupportedData(format!(
+                "IrwinHall(n={n_est}) fit requires every sample in [0, {nf}]"
+            )));
+        }
+        Ok(Self { n: n_est })
     }
 }
 
@@ -14769,6 +14985,31 @@ impl ContinuousDistribution for LaplaceAsymmetric {
         // to standard Laplace's h = 1 + ln 2.
         1.0 + (self.kappa.mul_add(self.kappa, 1.0) / self.kappa).ln()
     }
+
+    fn try_fit(data: &[f64]) -> Result<Self, FitError> {
+        // Closed-form MOM matching the first moment to the type's own
+        // mean formula. LaplaceAsymmetric(κ) has mean = 1/κ − κ. Solving
+        // 1/κ − κ = m̄ for κ > 0 gives the unique positive root of
+        // κ² + m̄·κ − 1 = 0, i.e.
+        //   κ = (−m̄ + √(m̄² + 4)) / 2.
+        // (m̄ > 0 ⇒ κ < 1 ⇒ left-skewed; m̄ < 0 ⇒ κ > 1; m̄ = 0 ⇒ κ = 1
+        // collapses to the symmetric Laplace.)
+        validate_finite_fit_data(data, 1, "LaplaceAsymmetric")?;
+        let m = sample_mean(data);
+        if !m.is_finite() {
+            return Err(FitError::NonConvergent(
+                "LaplaceAsymmetric fit requires a finite sample mean".to_owned(),
+            ));
+        }
+        let kappa = 0.5 * ((m * m + 4.0).sqrt() - m);
+        if kappa.is_finite() && kappa > 0.0 {
+            Ok(Self { kappa })
+        } else {
+            Err(FitError::NonConvergent(
+                "LaplaceAsymmetric MOM did not yield a positive κ".to_owned(),
+            ))
+        }
+    }
 }
 
 /// Kappa 3-parameter distribution with shape `a > 0`.
@@ -14863,7 +15104,11 @@ impl ContinuousDistribution for Kappa3 {
         let m1 = kappa3_moment(self.a, 1);
         let m2 = kappa3_moment(self.a, 2);
         let v = m2 - m1 * m1;
-        if v.is_finite() && v >= 0.0 { v } else { f64::NAN }
+        if v.is_finite() && v >= 0.0 {
+            v
+        } else {
+            f64::NAN
+        }
     }
 
     fn skewness(&self) -> f64 {
@@ -15416,8 +15661,7 @@ impl CrystalBall {
                 };
                 let sign = if j % 2 == 0 { 1.0 } else { -1.0 };
                 let denom = m - f64::from(j) - 1.0;
-                s += cj * b.powi((k - j) as i32) * sign * y0.powf(f64::from(j) - m + 1.0)
-                    / denom;
+                s += cj * b.powi((k - j) as i32) * sign * y0.powf(f64::from(j) - m + 1.0) / denom;
             }
             a_coeff * s
         };
@@ -25948,6 +26192,48 @@ impl ContinuousDistribution for BetaPrime {
         );
         mu4 / (var * var) - 3.0
     }
+
+    fn try_fit(data: &[f64]) -> Result<Self, FitError> {
+        // If X ~ BetaPrime(a, b) then Y = X / (1 + X) ~ Beta(a, b).
+        // Closed-form MOM on Beta:
+        //   Var(Y) < mean(Y)·(1 − mean(Y))      (Beta admissibility)
+        //   a + b  = mean(Y)·(1 − mean(Y)) / Var(Y) − 1
+        //   a      = (a + b)·mean(Y)
+        //   b      = (a + b)·(1 − mean(Y))
+        // We require a, b > 0; the existing BetaPrime moment surface
+        // also relies on b > 4 for kurtosis/3 for skewness, but the
+        // distribution itself is well-defined for any b > 0.
+        validate_finite_fit_data(data, 2, "BetaPrime")?;
+        if let Some(&bad) = data.iter().find(|&&x| x <= 0.0) {
+            return Err(FitError::UnsupportedData(format!(
+                "BetaPrime support is (0, ∞); got {bad}"
+            )));
+        }
+        let y: Vec<f64> = data.iter().map(|&x| x / (1.0 + x)).collect();
+        let m = sample_mean(&y);
+        let v = sample_variance(&y);
+        if !m.is_finite() || !v.is_finite() || v <= 0.0 || m <= 0.0 || m >= 1.0 {
+            return Err(FitError::NonConvergent(
+                "BetaPrime MOM requires positive variance and mean ∈ (0, 1) of X/(1+X)".to_owned(),
+            ));
+        }
+        let bound = m * (1.0 - m);
+        if v >= bound {
+            return Err(FitError::NonConvergent(format!(
+                "BetaPrime MOM admissibility violated: Var(Y)={v} ≥ mean(Y)·(1−mean(Y))={bound}"
+            )));
+        }
+        let common = bound / v - 1.0;
+        let a = common * m;
+        let b = common * (1.0 - m);
+        if a > 0.0 && b > 0.0 && a.is_finite() && b.is_finite() {
+            Ok(Self { a, b })
+        } else {
+            Err(FitError::NonConvergent(
+                "BetaPrime MOM did not yield positive (a, b)".to_owned(),
+            ))
+        }
+    }
 }
 
 /// Exponential power distribution with shape `b`.
@@ -26036,7 +26322,11 @@ impl ContinuousDistribution for ExponPow {
         let m1 = exponpow_moment(self.b, 1);
         let m2 = exponpow_moment(self.b, 2);
         let v = m2 - m1 * m1;
-        if v.is_finite() && v >= 0.0 { v } else { f64::NAN }
+        if v.is_finite() && v >= 0.0 {
+            v
+        } else {
+            f64::NAN
+        }
     }
 
     fn skewness(&self) -> f64 {
@@ -26471,10 +26761,7 @@ impl ContinuousDistribution for FoldedNormal {
         let m1 = c.mul_add(erf_cs, 2.0 * phi_c);
         let m2 = c.mul_add(c, 1.0);
         let c3 = c * c * c;
-        let m3 = (3.0_f64.mul_add(c, c3)).mul_add(
-            erf_cs,
-            2.0 * (c.mul_add(c, 2.0)) * phi_c,
-        );
+        let m3 = (3.0_f64.mul_add(c, c3)).mul_add(erf_cs, 2.0 * (c.mul_add(c, 2.0)) * phi_c);
         let var = m2 - m1 * m1;
         let mu3 = 2.0_f64.mul_add(m1.powi(3), m3 - 3.0 * m1 * m2);
         mu3 / var.powf(1.5)
@@ -26488,10 +26775,7 @@ impl ContinuousDistribution for FoldedNormal {
         let m2 = c.mul_add(c, 1.0);
         let c2 = c * c;
         let c3 = c2 * c;
-        let m3 = (3.0_f64.mul_add(c, c3)).mul_add(
-            erf_cs,
-            2.0 * (c2 + 2.0) * phi_c,
-        );
+        let m3 = (3.0_f64.mul_add(c, c3)).mul_add(erf_cs, 2.0 * (c2 + 2.0) * phi_c);
         let m4 = 6.0_f64.mul_add(c2, c2.mul_add(c2, 3.0));
         let var = m2 - m1 * m1;
         let mu4 = (-3.0_f64).mul_add(
@@ -26521,6 +26805,70 @@ impl ContinuousDistribution for FoldedNormal {
             1e-10,
             8,
         )
+    }
+
+    fn try_fit(data: &[f64]) -> Result<Self, FitError> {
+        // Method-of-moments on the first absolute moment. For Y ~ N(c, 1)
+        // with c ≥ 0, the folded variable X = |Y| has
+        //   E[X] = c·(2·Φ(c) − 1) + 2·φ(c)
+        // which is monotonically increasing in c on [0, ∞) (derivative
+        // 2·Φ(c) − 1 ≥ 0). FoldedNormal(c) and FoldedNormal(−c) are the
+        // same distribution by symmetry, so we estimate c ≥ 0 and bisect.
+        validate_finite_fit_data(data, 1, "FoldedNormal")?;
+        if let Some(&bad) = data.iter().find(|&&x| x < 0.0) {
+            return Err(FitError::UnsupportedData(format!(
+                "FoldedNormal support is [0, ∞); got {bad}"
+            )));
+        }
+        let m1 = sample_mean(data);
+        if !m1.is_finite() || m1 < 0.0 {
+            return Err(FitError::NonConvergent(
+                "FoldedNormal fit requires a non-negative finite sample mean".to_owned(),
+            ));
+        }
+        // c = 0 yields E[X] = √(2/π); larger means correspond to
+        // larger c. Bisect on [0, 30] which covers any sample mean
+        // ≤ 30 + √(2/π) (well past any realistic application).
+        let inv_sqrt_2pi = 1.0 / (2.0 * PI).sqrt();
+        let expected = |c: f64| -> f64 {
+            c.mul_add(
+                2.0 * standard_normal_cdf(c) - 1.0,
+                2.0 * inv_sqrt_2pi * (-0.5 * c * c).exp(),
+            )
+        };
+        let baseline = expected(0.0);
+        if m1 <= baseline {
+            return Ok(Self { c: 0.0 });
+        }
+        let mut lo = 0.0_f64;
+        let mut hi = 1.0_f64;
+        while expected(hi) < m1 {
+            hi *= 2.0;
+            if hi > 1e6 {
+                return Err(FitError::NonConvergent(
+                    "FoldedNormal fit could not bracket c via E[|X|]".to_owned(),
+                ));
+            }
+        }
+        for _ in 0..200 {
+            let mid = 0.5 * (lo + hi);
+            if expected(mid) < m1 {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+            if hi - lo < 1e-12 {
+                break;
+            }
+        }
+        let c_hat = 0.5 * (lo + hi);
+        if c_hat.is_finite() && c_hat >= 0.0 {
+            Ok(Self { c: c_hat })
+        } else {
+            Err(FitError::NonConvergent(
+                "FoldedNormal MOM did not converge".to_owned(),
+            ))
+        }
     }
 }
 
@@ -28511,7 +28859,10 @@ mod tests {
                 g.skewness()
             );
             if wk.is_nan() {
-                assert!(g.kurtosis().is_nan(), "InverseGamma({a}).kurt should be NaN");
+                assert!(
+                    g.kurtosis().is_nan(),
+                    "InverseGamma({a}).kurt should be NaN"
+                );
             } else {
                 assert!(
                     (g.kurtosis() - wk).abs() < 1e-9,
@@ -28901,7 +29252,12 @@ mod tests {
         ];
         for &(c, scale, h) in &cases {
             let w = Weibull::new(c, scale);
-            assert_close(w.entropy(), h, 1e-8, &format!("Weibull({c},{scale}) entropy"));
+            assert_close(
+                w.entropy(),
+                h,
+                1e-8,
+                &format!("Weibull({c},{scale}) entropy"),
+            );
         }
     }
 
@@ -29515,7 +29871,12 @@ mod tests {
             (5.0, 0.675_643_157_0),
         ] {
             let v = VonMises { kappa, loc: 0.0 };
-            assert_close(v.entropy(), expected, 1e-9, &format!("VonMises({kappa}) entropy"));
+            assert_close(
+                v.entropy(),
+                expected,
+                1e-9,
+                &format!("VonMises({kappa}) entropy"),
+            );
         }
         // TruncNormal(a, b): ln(√(2πe)·Δ) + (a·φ(a) − b·φ(b))/(2Δ).
         for &(a, b, expected) in &[
@@ -29697,7 +30058,12 @@ mod tests {
             (3.0, 0.901_387_711_3),
             (5.0, 0.390_562_087_6),
         ] {
-            assert_close(Fisk::new(c).entropy(), expected, 1e-9, &format!("Fisk({c}) entropy"));
+            assert_close(
+                Fisk::new(c).entropy(),
+                expected,
+                1e-9,
+                &format!("Fisk({c}) entropy"),
+            );
             assert_close(
                 Loglogistic::new(c).entropy(),
                 expected,
@@ -29769,10 +30135,7 @@ mod tests {
             "HalfCauchy entropy",
         );
         // Levy / LevyLeft: (1 + 3γ + ln(16π·scale²))/2.
-        for &(scale, expected) in &[
-            (1.0_f64, 3.324_482_801_4),
-            (2.0, 4.017_629_982_0),
-        ] {
+        for &(scale, expected) in &[(1.0_f64, 3.324_482_801_4), (2.0, 4.017_629_982_0)] {
             assert_close(
                 Levy::new(0.0, scale).entropy(),
                 expected,
@@ -29842,10 +30205,7 @@ mod tests {
             );
         }
         // DoubleGamma(a) = Gamma(a, 1) entropy + ln 2.
-        for &(a, expected) in &[
-            (2.0_f64, 2.270_362_845_5),
-            (3.0, 2.540_725_690_9),
-        ] {
+        for &(a, expected) in &[(2.0_f64, 2.270_362_845_5), (3.0, 2.540_725_690_9)] {
             assert_close(
                 DoubleGamma::new(a).entropy(),
                 expected,
@@ -30511,14 +30871,29 @@ mod tests {
         // parameter pairs spanning positive, near-zero, and negative
         // skew (sign flips with sign of a).
         let cases = [
-            (1.25_f64, 2.5_f64, -0.642_757_668_866_944_2, 1.395_133_082_535_518_3),
+            (
+                1.25_f64,
+                2.5_f64,
+                -0.642_757_668_866_944_2,
+                1.395_133_082_535_518_3,
+            ),
             (0.5, 1.5, -0.999_035_241_982_614_8, 5.379_444_246_948_418),
             (-0.8, 3.0, 0.290_504_728_518_067_8, 0.643_586_700_228_836_4),
         ];
         for &(a, b, s, k) in &cases {
             let dist = JohnsonSU::new(a, b);
-            assert_close(dist.skewness(), s, 1e-12, &format!("JohnsonSU({a},{b}) skew"));
-            assert_close(dist.kurtosis(), k, 1e-11, &format!("JohnsonSU({a},{b}) kurt"));
+            assert_close(
+                dist.skewness(),
+                s,
+                1e-12,
+                &format!("JohnsonSU({a},{b}) skew"),
+            );
+            assert_close(
+                dist.kurtosis(),
+                k,
+                1e-11,
+                &format!("JohnsonSU({a},{b}) kurt"),
+            );
         }
     }
 
@@ -30589,7 +30964,12 @@ mod tests {
         // flips with sign of a (expit transform is symmetric in a),
         // anchored via three (a, b) pairs covering both directions.
         let cases = [
-            (0.5_f64, 1.5_f64, 0.220_040_342_793_470, -0.471_830_225_239_042),
+            (
+                0.5_f64,
+                1.5_f64,
+                0.220_040_342_793_470,
+                -0.471_830_225_239_042,
+            ),
             (-0.5, 1.5, -0.220_040_341_542_767, -0.471_825_405_121_920),
             (1.0, 2.0, 0.287_744_675_823_816, -0.225_821_619_348_619),
         ];
@@ -31277,14 +31657,29 @@ mod tests {
         // residual difference between our adaptive-Simpson quadrature
         // and scipy's own integrator.
         let cases = [
-            (2.0_f64, 1.5_f64, 0.863_150_517_466_189, 1.010_828_998_782_007),
+            (
+                2.0_f64,
+                1.5_f64,
+                0.863_150_517_466_189,
+                1.010_828_998_782_007,
+            ),
             (3.0, 2.5, 0.304_266_000_395_227, 0.081_143_291_135_782),
             (1.5, 3.0, 0.138_088_727_628_945, -0.154_442_811_758_873),
         ];
         for &(a, c, sk, ku) in &cases {
             let d = ExponWeibull::new(a, c);
-            assert_close(d.skewness(), sk, 1e-5, &format!("ExponWeibull({a},{c}) skew"));
-            assert_close(d.kurtosis(), ku, 1e-5, &format!("ExponWeibull({a},{c}) kurt"));
+            assert_close(
+                d.skewness(),
+                sk,
+                1e-5,
+                &format!("ExponWeibull({a},{c}) skew"),
+            );
+            assert_close(
+                d.kurtosis(),
+                ku,
+                1e-5,
+                &format!("ExponWeibull({a},{c}) kurt"),
+            );
         }
     }
 
@@ -31929,8 +32324,18 @@ mod tests {
         ];
         for &(c, a, b, sk, ku) in &cases {
             let d = TruncWeibullMin::new(c, a, b);
-            assert_close(d.skewness(), sk, 1e-9, &format!("TruncWeibullMin({c},{a},{b}) skew"));
-            assert_close(d.kurtosis(), ku, 1e-9, &format!("TruncWeibullMin({c},{a},{b}) kurt"));
+            assert_close(
+                d.skewness(),
+                sk,
+                1e-9,
+                &format!("TruncWeibullMin({c},{a},{b}) skew"),
+            );
+            assert_close(
+                d.kurtosis(),
+                ku,
+                1e-9,
+                &format!("TruncWeibullMin({c},{a},{b}) kurt"),
+            );
         }
     }
 
@@ -31939,10 +32344,7 @@ mod tests {
         // VonMises is circular; linear skew/kurt aren't well-defined.
         // scipy returns NaN, we match.
         for &kappa in &[0.5_f64, 1.0, 2.5, 5.0] {
-            let v = VonMises {
-                kappa,
-                loc: 0.0,
-            };
+            let v = VonMises { kappa, loc: 0.0 };
             assert!(v.skewness().is_nan(), "VonMises({kappa}) skew NaN");
             assert!(v.kurtosis().is_nan(), "VonMises({kappa}) kurt NaN");
         }
@@ -32013,24 +32415,9 @@ mod tests {
         // exact closed form π²/12 − (π/2)·ln²(2); skew/kurt use
         // Simpson over the pdf.
         let dist = KsTwoBign;
-        assert_close(
-            dist.var(),
-            0.067_773_204_0,
-            1e-8,
-            "KsTwoBign var",
-        );
-        assert_close(
-            dist.skewness(),
-            0.860_426_136_1,
-            1e-7,
-            "KsTwoBign skew",
-        );
-        assert_close(
-            dist.kurtosis(),
-            0.881_618_972_9,
-            1e-7,
-            "KsTwoBign kurt",
-        );
+        assert_close(dist.var(), 0.067_773_204_0, 1e-8, "KsTwoBign var");
+        assert_close(dist.skewness(), 0.860_426_136_1, 1e-7, "KsTwoBign skew");
+        assert_close(dist.kurtosis(), 0.881_618_972_9, 1e-7, "KsTwoBign kurt");
     }
 
     #[test]
@@ -32640,14 +33027,29 @@ mod tests {
         // k = b removable singularity collapsing to b·log(c)/(1−c^{−b}))
         // always finite on the bounded support [1, c] for any b > 1.
         let cases = [
-            (3.0_f64, 5.0_f64, 2.574_077_093_064_304, 8.316_072_819_947_255),
+            (
+                3.0_f64,
+                5.0_f64,
+                2.574_077_093_064_304,
+                8.316_072_819_947_255,
+            ),
             (2.5, 10.0, 3.681_629_038_739_022, 18.870_500_186_124_893),
             (1.5, 4.0, 1.292_786_253_135_568, 0.941_666_666_666_632),
         ];
         for &(b, c, sk, ku) in &cases {
             let d = TruncPareto::new(b, c);
-            assert_close(d.skewness(), sk, 1e-9, &format!("TruncPareto({b},{c}) skew"));
-            assert_close(d.kurtosis(), ku, 1e-8, &format!("TruncPareto({b},{c}) kurt"));
+            assert_close(
+                d.skewness(),
+                sk,
+                1e-9,
+                &format!("TruncPareto({b},{c}) skew"),
+            );
+            assert_close(
+                d.kurtosis(),
+                ku,
+                1e-8,
+                &format!("TruncPareto({b},{c}) kurt"),
+            );
         }
     }
 
@@ -33023,10 +33425,7 @@ mod tests {
                 (m - em).abs() < 1e-5,
                 "ExponPow({b}).mean = {m}, scipy {em}"
             );
-            assert!(
-                (v - ev).abs() < 1e-5,
-                "ExponPow({b}).var = {v}, scipy {ev}"
-            );
+            assert!((v - ev).abs() < 1e-5, "ExponPow({b}).var = {v}, scipy {ev}");
         }
     }
 
@@ -33118,18 +33517,8 @@ mod tests {
         // scipy.stats.lognorm(s=1, scale=1).stats(moments='sk'); Gilbrat
         // is the parameterless restriction so values are constants.
         let g = Gilbrat;
-        assert_close(
-            g.skewness(),
-            6.184_877_138_632_554,
-            1e-12,
-            "Gilbrat skew",
-        );
-        assert_close(
-            g.kurtosis(),
-            110.936_392_176_311_5,
-            1e-10,
-            "Gilbrat kurt",
-        );
+        assert_close(g.skewness(), 6.184_877_138_632_554, 1e-12, "Gilbrat skew");
+        assert_close(g.kurtosis(), 110.936_392_176_311_5, 1e-10, "Gilbrat kurt");
     }
 
     #[test]
@@ -33322,10 +33711,7 @@ mod tests {
                 (e.skewness() - 2.0 / kf.sqrt()).abs() < 1e-12,
                 "Erlang({k}).skew"
             );
-            assert!(
-                (e.kurtosis() - 6.0 / kf).abs() < 1e-12,
-                "Erlang({k}).kurt"
-            );
+            assert!((e.kurtosis() - 6.0 / kf).abs() < 1e-12, "Erlang({k}).kurt");
         }
 
         // Chi: anchored vs scipy.stats.chi.stats. df=3 is Maxwell.
@@ -35616,9 +36002,17 @@ mod tests {
         // its analytical expression; for the interior cases we also
         // verify pdf(mode) ≥ pdf(mode ± δ).
         let analytical: &[(&str, f64, f64)] = &[
-            ("Weibull(c=2)", Weibull::new(2.0, 1.0).mode(), std::f64::consts::FRAC_1_SQRT_2),
+            (
+                "Weibull(c=2)",
+                Weibull::new(2.0, 1.0).mode(),
+                std::f64::consts::FRAC_1_SQRT_2,
+            ),
             ("Weibull(c=0.5)", Weibull::new(0.5, 1.0).mode(), 0.0),
-            ("WeibullMax(c=2)", WeibullMax::new(2.0).mode(), -std::f64::consts::FRAC_1_SQRT_2),
+            (
+                "WeibullMax(c=2)",
+                WeibullMax::new(2.0).mode(),
+                -std::f64::consts::FRAC_1_SQRT_2,
+            ),
             ("Anglit", Anglit.mode(), 0.0),
             ("Bradford(c=0.5)", Bradford::new(0.5).mode(), 0.0),
             ("Bradford(c=2)", Bradford::new(2.0).mode(), 0.0),
@@ -35632,8 +36026,16 @@ mod tests {
             ("LevyLeft", LevyLeft::new(0.0, 1.0).mode(), -1.0 / 3.0),
             ("GenPareto(c=0.5)", GenPareto::new(0.5).mode(), 0.0),
             ("GenExtreme(c=0)", GenExtreme::new(0.0).mode(), 0.0),
-            ("GenExtreme(c=0.5)", GenExtreme::new(0.5).mode(), (1.5_f64.powf(-0.5) - 1.0) / 0.5),
-            ("FDist(10, 20)", FDistribution::new(10.0, 20.0).mode(), (10.0 - 2.0) / 10.0 * 20.0 / 22.0),
+            (
+                "GenExtreme(c=0.5)",
+                GenExtreme::new(0.5).mode(),
+                (1.5_f64.powf(-0.5) - 1.0) / 0.5,
+            ),
+            (
+                "FDist(10, 20)",
+                FDistribution::new(10.0, 20.0).mode(),
+                (10.0 - 2.0) / 10.0 * 20.0 / 22.0,
+            ),
             ("FDist(2, 20)", FDistribution::new(2.0, 20.0).mode(), 0.0),
         ];
         for &(name, got, want) in analytical {
@@ -35645,11 +36047,20 @@ mod tests {
         }
         // Local-maximum invariant for the interior modes.
         let interior: [(Box<dyn Fn(f64) -> f64>, f64); 5] = [
-            (Box::new(|x| Weibull::new(2.0, 1.0).pdf(x)) as Box<dyn Fn(f64) -> f64>, std::f64::consts::FRAC_1_SQRT_2),
+            (
+                Box::new(|x| Weibull::new(2.0, 1.0).pdf(x)) as Box<dyn Fn(f64) -> f64>,
+                std::f64::consts::FRAC_1_SQRT_2,
+            ),
             (Box::new(|x| Gilbrat.pdf(x)), (-1.0_f64).exp()),
             (Box::new(|x| Erlang::new(3, 1.0).pdf(x)), 2.0),
-            (Box::new(|x| FDistribution::new(10.0, 20.0).pdf(x)), 0.727_272_727_273),
-            (Box::new(|x| GenExtreme::new(0.5).pdf(x)), (1.5_f64.powf(-0.5) - 1.0) / 0.5),
+            (
+                Box::new(|x| FDistribution::new(10.0, 20.0).pdf(x)),
+                0.727_272_727_273,
+            ),
+            (
+                Box::new(|x| GenExtreme::new(0.5).pdf(x)),
+                (1.5_f64.powf(-0.5) - 1.0) / 0.5,
+            ),
         ];
         for (pdf_fn, peak) in interior {
             assert!(
@@ -35669,12 +36080,24 @@ mod tests {
             ("HypSecant", HypSecant.mode(), 0.0),
             ("VonMises(2)", VonMises::new(2.0, 0.0).mode(), 0.0),
             ("Lomax(2)", Lomax::new(2.0).mode(), 0.0),
-            ("Triangular(0.3)", Triangular::new(0.0, 0.3, 1.0).mode(), 0.3),
-            ("DoubleWeibull(2)", DoubleWeibull::new(2.0).mode(), std::f64::consts::FRAC_1_SQRT_2),
+            (
+                "Triangular(0.3)",
+                Triangular::new(0.0, 0.3, 1.0).mode(),
+                0.3,
+            ),
+            (
+                "DoubleWeibull(2)",
+                DoubleWeibull::new(2.0).mode(),
+                std::f64::consts::FRAC_1_SQRT_2,
+            ),
             ("DoubleGamma(2)", DoubleGamma::new(2.0).mode(), 1.0),
             ("Chi(5)", Chi::new(5.0).mode(), 2.0),
             ("Chi(0.5)", Chi::new(0.5).mode(), 0.0),
-            ("Nakagami(3)", Nakagami::new(3.0).mode(), ((3.0_f64 - 0.5) / 3.0).sqrt()),
+            (
+                "Nakagami(3)",
+                Nakagami::new(3.0).mode(),
+                ((3.0_f64 - 0.5) / 3.0).sqrt(),
+            ),
             ("Fisk(3)", Fisk::new(3.0).mode(), (0.5_f64).powf(1.0 / 3.0)),
             ("Loguniform(1,10)", Loguniform::new(1.0, 10.0).mode(), 1.0),
         ];
@@ -35687,10 +36110,19 @@ mod tests {
         }
         // Local-maximum invariant where the mode is interior.
         let interior_checks: [(Box<dyn Fn(f64) -> f64>, f64); 4] = [
-            (Box::new(|x| HypSecant.pdf(x)) as Box<dyn Fn(f64) -> f64>, 0.0),
-            (Box::new(|x| DoubleWeibull::new(2.0).pdf(x)), std::f64::consts::FRAC_1_SQRT_2),
+            (
+                Box::new(|x| HypSecant.pdf(x)) as Box<dyn Fn(f64) -> f64>,
+                0.0,
+            ),
+            (
+                Box::new(|x| DoubleWeibull::new(2.0).pdf(x)),
+                std::f64::consts::FRAC_1_SQRT_2,
+            ),
             (Box::new(|x| Chi::new(5.0).pdf(x)), 2.0),
-            (Box::new(|x| Nakagami::new(3.0).pdf(x)), ((3.0_f64 - 0.5) / 3.0).sqrt()),
+            (
+                Box::new(|x| Nakagami::new(3.0).pdf(x)),
+                ((3.0_f64 - 0.5) / 3.0).sqrt(),
+            ),
         ];
         for (pdf_fn, peak) in interior_checks {
             assert!(
@@ -40169,7 +40601,12 @@ mod tests {
         // scipy.stats.burr12(c,d).stats(moments='sk'). All three pairs
         // satisfy cd > 4, so both skew and kurt are finite.
         let cases = [
-            (3.0_f64, 2.0_f64, 1.589_129_215_278_277, 7.809_454_279_195_59),
+            (
+                3.0_f64,
+                2.0_f64,
+                1.589_129_215_278_277,
+                7.809_454_279_195_59,
+            ),
             (5.0, 2.5, 0.410_961_549_738_197, 0.835_278_120_074_757),
             (2.0, 5.0, 1.217_523_220_929_712, 2.831_776_827_387_073),
         ];
@@ -40933,7 +41370,12 @@ mod tests {
         // scipy.stats.mielke(k, s).stats(moments='sk'). Skew requires
         // s > 3; kurt requires s > 4. Cases span across that boundary.
         let cases = [
-            (5.0_f64, 4.5_f64, 3.198_748_863_494_355, 61.764_215_110_383_404),
+            (
+                5.0_f64,
+                4.5_f64,
+                3.198_748_863_494_355,
+                61.764_215_110_383_404,
+            ),
             (3.0, 6.0, 1.262_238_603_895_415, 7.043_925_294_973_457),
             (2.5, 8.0, 0.419_914_095_845_220, 1.432_921_786_764_215),
         ];
@@ -41026,8 +41468,18 @@ mod tests {
         ];
         for &(beta_param, m, sk, ku) in &cases {
             let d = CrystalBall::new(beta_param, m);
-            assert_close(d.skewness(), sk, 1e-9, &format!("CrystalBall({beta_param},{m}) skew"));
-            assert_close(d.kurtosis(), ku, 1e-8, &format!("CrystalBall({beta_param},{m}) kurt"));
+            assert_close(
+                d.skewness(),
+                sk,
+                1e-9,
+                &format!("CrystalBall({beta_param},{m}) skew"),
+            );
+            assert_close(
+                d.kurtosis(),
+                ku,
+                1e-8,
+                &format!("CrystalBall({beta_param},{m}) kurt"),
+            );
         }
     }
 
@@ -41219,8 +41671,18 @@ mod tests {
         ];
         for &(c, s, sk, ku) in &cases {
             let d = PowerLognorm::new(c, s);
-            assert_close(d.skewness(), sk, 1e-4, &format!("PowerLognorm({c},{s}) skew"));
-            assert_close(d.kurtosis(), ku, 1e-3, &format!("PowerLognorm({c},{s}) kurt"));
+            assert_close(
+                d.skewness(),
+                sk,
+                1e-4,
+                &format!("PowerLognorm({c},{s}) skew"),
+            );
+            assert_close(
+                d.kurtosis(),
+                ku,
+                1e-3,
+                &format!("PowerLognorm({c},{s}) kurt"),
+            );
         }
     }
 
@@ -41267,12 +41729,7 @@ mod tests {
             ),
             (2.0, -1.0, 0.735_758_882_342_884_7, 0.367_879_441_171_442_33),
             (3.0, -0.7, 1.043_168_170_993_506_6, 0.709_638_211_560_208_7),
-            (
-                0.5,
-                -2.0,
-                0.085_954_745_769_180_94,
-                0.243_116_734_434_214_2,
-            ),
+            (0.5, -2.0, 0.085_954_745_769_180_94, 0.243_116_734_434_214_2),
             (
                 5.0,
                 -0.3,
@@ -41471,7 +41928,12 @@ mod tests {
         // c > 4 so both skew and kurt are finite. Raw moments m_k =
         // d · B(d + k/c, 1 − k/c).
         let cases = [
-            (5.0_f64, 2.0_f64, 2.964_766_361_466_782, 34.483_069_539_933_94),
+            (
+                5.0_f64,
+                2.0_f64,
+                2.964_766_361_466_782,
+                34.483_069_539_933_94,
+            ),
             (7.5, 3.0, 1.948_701_031_719_438, 9.982_845_018_476_885),
             (10.0, 1.5, 1.233_176_967_477_12, 4.613_115_519_465_328),
         ];
@@ -41596,18 +42058,12 @@ mod tests {
             if em.is_nan() {
                 assert!(m.is_nan(), "Kappa3({a}).mean should be NaN, got {m}");
             } else {
-                assert!(
-                    (m - em).abs() < 1e-6,
-                    "Kappa3({a}).mean = {m}, scipy {em}"
-                );
+                assert!((m - em).abs() < 1e-6, "Kappa3({a}).mean = {m}, scipy {em}");
             }
             if ev.is_nan() {
                 assert!(v.is_nan(), "Kappa3({a}).var should be NaN, got {v}");
             } else {
-                assert!(
-                    (v - ev).abs() < 1e-6,
-                    "Kappa3({a}).var = {v}, scipy {ev}"
-                );
+                assert!((v - ev).abs() < 1e-6, "Kappa3({a}).var = {v}, scipy {ev}");
             }
         }
     }
@@ -41701,13 +42157,7 @@ mod tests {
                 0.636_408_646_558_830_8,
             ),
             (1.0, 5, 2, 0.086_128_544_436_268_7, 0.956_658_848_247_836_1),
-            (
-                0.5,
-                10,
-                5,
-                0.032_517_028_269_079_7,
-                0.956_658_848_247_836_1,
-            ),
+            (0.5, 10, 5, 0.032_517_028_269_079_7, 0.956_658_848_247_836_1),
             (2.0, 3, 1, 0.117_310_427_826_198_38, 0.984_123_760_023_533_2),
             (0.7, 7, 4, 0.030_842_349_319_207_42, 0.977_078_512_890_737_7),
         ];
@@ -41947,8 +42397,18 @@ mod tests {
         ];
         for &(lam, n, sk, ku) in &cases {
             let d = Boltzmann::new(lam, n);
-            assert_close(d.skewness(), sk, 1e-7, &format!("Boltzmann({lam},{n}) skew"));
-            assert_close(d.kurtosis(), ku, 1e-7, &format!("Boltzmann({lam},{n}) kurt"));
+            assert_close(
+                d.skewness(),
+                sk,
+                1e-7,
+                &format!("Boltzmann({lam},{n}) skew"),
+            );
+            assert_close(
+                d.kurtosis(),
+                ku,
+                1e-7,
+                &format!("Boltzmann({lam},{n}) kurt"),
+            );
         }
     }
 
@@ -42210,8 +42670,18 @@ mod tests {
         // GenExtreme / GenPareto respectively to inherit their tighter
         // closed forms.
         let dist = Kappa4::new(0.5, 0.5);
-        assert_close(dist.skewness(), 0.125_303_415_9, 1e-5, "Kappa4(0.5,0.5) skew");
-        assert_close(dist.kurtosis(), -0.819_952_774_5, 1e-4, "Kappa4(0.5,0.5) kurt");
+        assert_close(
+            dist.skewness(),
+            0.125_303_415_9,
+            1e-5,
+            "Kappa4(0.5,0.5) skew",
+        );
+        assert_close(
+            dist.kurtosis(),
+            -0.819_952_774_5,
+            1e-4,
+            "Kappa4(0.5,0.5) kurt",
+        );
     }
 
     #[test]
@@ -42472,10 +42942,7 @@ mod tests {
             let d = GenExtreme::new(c);
             let s = d.skewness();
             if !ws.is_nan() {
-                assert!(
-                    (s - ws).abs() < 1e-6,
-                    "GEV({c}).skew = {s}, scipy {ws}"
-                );
+                assert!((s - ws).abs() < 1e-6, "GEV({c}).skew = {s}, scipy {ws}");
             }
             if wk.is_nan() {
                 assert!(d.kurtosis().is_nan(), "GEV({c}).kurt should be NaN");
@@ -42660,7 +43127,12 @@ mod tests {
         // against scipy.stats.genpareto.entropy() at five values.
         for &c in &[0.1_f64, 0.0, -0.3, 0.5, -1.0] {
             let gp = GenPareto::new(c);
-            assert_close(gp.entropy(), 1.0 + c, 1e-15, &format!("GenPareto({c}) entropy"));
+            assert_close(
+                gp.entropy(),
+                1.0 + c,
+                1e-15,
+                &format!("GenPareto({c}) entropy"),
+            );
         }
     }
 
@@ -43264,14 +43736,29 @@ mod tests {
         // (0.1, 5.0) and (2.0, 100.0) cases — both at ratio 50 — give
         // identical values.
         let cases = [
-            (1.0_f64, 10.0_f64, 0.771_604_986_766_096, -0.546_529_582_810_115),
+            (
+                1.0_f64,
+                10.0_f64,
+                0.771_604_986_766_096,
+                -0.546_529_582_810_115,
+            ),
             (0.1, 5.0, 1.244_921_194_046_174, 0.506_230_587_523_249),
             (2.0, 100.0, 1.244_921_194_046_174, 0.506_230_587_523_246),
         ];
         for &(a, b, sk, ku) in &cases {
             let d = Loguniform::new(a, b);
-            assert_close(d.skewness(), sk, 1e-10, &format!("Loguniform({a},{b}) skew"));
-            assert_close(d.kurtosis(), ku, 1e-10, &format!("Loguniform({a},{b}) kurt"));
+            assert_close(
+                d.skewness(),
+                sk,
+                1e-10,
+                &format!("Loguniform({a},{b}) skew"),
+            );
+            assert_close(
+                d.kurtosis(),
+                ku,
+                1e-10,
+                &format!("Loguniform({a},{b}) kurt"),
+            );
         }
     }
 
@@ -45512,12 +45999,7 @@ mod tests {
         // scipy.stats.moyal.stats(moments='sk'): skew = 28√2 · ζ(3)/π³
         // ≈ 1.535; ex.kurt = 4 exactly.
         let m = Moyal;
-        assert_close(
-            m.skewness(),
-            1.535_141_590_722_906,
-            1e-12,
-            "Moyal skewness",
-        );
+        assert_close(m.skewness(), 1.535_141_590_722_906, 1e-12, "Moyal skewness");
         assert_close(m.kurtosis(), 4.0, 1e-12, "Moyal kurtosis");
     }
 
@@ -47525,5 +48007,265 @@ mod tests {
             max_d < 0.05,
             "KS statistic between fitted CDF and empirical should be <5%; got {max_d}"
         );
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // try_fit coverage for distributions that previously inherited
+    // the trait-default Err(FitError::NotImplemented). Each test draws
+    // a deterministic deciles sample from the known distribution and
+    // verifies the recovered parameter is within a tolerance keyed to
+    // the estimator's expected statistical accuracy.
+    // ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn try_fit_irwin_hall_recovers_n_via_variance_match() {
+        // Var(IrwinHall(n)) = n / 12, so a deciles draw should yield
+        // 12·Var ≈ n exactly for the closed-form MOM estimator.
+        for n_true in [2_u32, 5, 8, 12, 20] {
+            let dist = IrwinHall::new(n_true);
+            let samples: Vec<f64> = (1..=200)
+                .map(|k| dist.ppf((k as f64 - 0.5) / 200.0))
+                .collect();
+            let fitted = IrwinHall::try_fit(&samples).expect("fit");
+            assert!(
+                fitted.n.abs_diff(n_true) <= 1,
+                "IrwinHall recovered n={} from n_true={}",
+                fitted.n,
+                n_true
+            );
+        }
+    }
+
+    #[test]
+    fn try_fit_irwin_hall_rejects_unsupported_data() {
+        // Negative values cannot have come from IrwinHall (support ⊆ [0, n]).
+        let bad = vec![-0.5, 0.5, 1.5, 2.5];
+        assert!(matches!(
+            IrwinHall::try_fit(&bad),
+            Err(FitError::UnsupportedData(_))
+        ));
+        // Empty / singleton samples are rejected too.
+        assert!(matches!(
+            IrwinHall::try_fit(&[]),
+            Err(FitError::InsufficientData { .. })
+        ));
+        assert!(matches!(
+            IrwinHall::try_fit(&[1.0]),
+            Err(FitError::InsufficientData { .. })
+        ));
+    }
+
+    #[test]
+    fn try_fit_weibull_max_recovers_shape() {
+        // Deciles-sample reconstruction across the standard shape regime.
+        // The MLE on n=400 should land within ±5% of the true c.
+        for c_true in [0.5, 1.0, 1.5, 2.0, 3.5, 6.0] {
+            let dist = WeibullMax { c: c_true };
+            let samples: Vec<f64> = (1..=400)
+                .map(|k| dist.ppf((k as f64 - 0.5) / 400.0))
+                .collect();
+            let fitted = WeibullMax::try_fit(&samples).expect("fit");
+            assert!(
+                (fitted.c - c_true).abs() / c_true < 0.05,
+                "WeibullMax recovered c={} from c_true={}",
+                fitted.c,
+                c_true
+            );
+        }
+    }
+
+    #[test]
+    fn try_fit_weibull_max_rejects_positive_support() {
+        // Any x > 0 is outside the (−∞, 0] support of WeibullMax.
+        let bad = vec![-1.0, -0.5, 0.5, -0.3];
+        assert!(matches!(
+            WeibullMax::try_fit(&bad),
+            Err(FitError::UnsupportedData(_))
+        ));
+    }
+
+    #[test]
+    fn try_fit_frechet_r_recovers_shape() {
+        // FrechetR shares WeibullMax's PDF in this codebase, so the
+        // MLE on a FrechetR sample should also converge cleanly.
+        for c_true in [0.7, 1.0, 1.5, 2.0, 3.0] {
+            let dist = FrechetR { c: c_true };
+            let samples: Vec<f64> = (1..=400)
+                .map(|k| dist.ppf((k as f64 - 0.5) / 400.0))
+                .collect();
+            let fitted = FrechetR::try_fit(&samples).expect("fit");
+            assert!(
+                (fitted.c - c_true).abs() / c_true < 0.05,
+                "FrechetR recovered c={} from c_true={}",
+                fitted.c,
+                c_true
+            );
+        }
+    }
+
+    #[test]
+    fn try_fit_double_weibull_recovers_shape() {
+        // DoubleWeibull(c) is symmetric around 0; |X| ~ Weibull(c, 1).
+        for c_true in [0.6, 1.0, 1.5, 2.5, 4.0] {
+            let dist = DoubleWeibull { c: c_true };
+            let samples: Vec<f64> = (1..=400)
+                .map(|k| dist.ppf((k as f64 - 0.5) / 400.0))
+                .collect();
+            let fitted = DoubleWeibull::try_fit(&samples).expect("fit");
+            assert!(
+                (fitted.c - c_true).abs() / c_true < 0.05,
+                "DoubleWeibull recovered c={} from c_true={}",
+                fitted.c,
+                c_true
+            );
+        }
+    }
+
+    #[test]
+    fn try_fit_folded_normal_recovers_c_via_mean_match() {
+        // For c_true ≥ 0 the MOM estimator solves E[|X|] = sample mean
+        // exactly when the sample mean equals the population mean. The
+        // deciles sample makes the sample mean essentially the
+        // distribution mean, so we recover c to high precision.
+        for c_true in [0.0, 0.5, 1.0, 2.0, 4.0] {
+            let dist = FoldedNormal { c: c_true };
+            let samples: Vec<f64> = (1..=400)
+                .map(|k| dist.ppf((k as f64 - 0.5) / 400.0))
+                .collect();
+            let fitted = FoldedNormal::try_fit(&samples).expect("fit");
+            assert!(
+                (fitted.c - c_true).abs() < 0.02 + 0.02 * c_true,
+                "FoldedNormal recovered c={} from c_true={}",
+                fitted.c,
+                c_true
+            );
+        }
+    }
+
+    #[test]
+    fn try_fit_folded_normal_negative_data_rejected() {
+        let bad = vec![1.0, -0.1, 2.0];
+        assert!(matches!(
+            FoldedNormal::try_fit(&bad),
+            Err(FitError::UnsupportedData(_))
+        ));
+    }
+
+    #[test]
+    fn try_fit_beta_prime_recovers_shape_via_transformation() {
+        // The MOM estimator inverts X / (1 + X) ~ Beta(a, b) exactly
+        // when sample moments equal population moments. We test on a
+        // deciles sample and demand reasonable agreement on (a, b).
+        for (a_true, b_true) in [(2.0_f64, 5.0_f64), (1.5, 3.0), (3.0, 7.0)] {
+            let dist = BetaPrime {
+                a: a_true,
+                b: b_true,
+            };
+            let samples: Vec<f64> = (1..=600)
+                .map(|k| dist.ppf((k as f64 - 0.5) / 600.0))
+                .collect();
+            let fitted = BetaPrime::try_fit(&samples).expect("fit");
+            // Both shape parameters within ~15% (the transformation
+            // tail under deciles sampling preserves accuracy of a,
+            // and recovers b within similar bounds when b > 2).
+            assert!(
+                (fitted.a - a_true).abs() / a_true < 0.20
+                    && (fitted.b - b_true).abs() / b_true < 0.20,
+                "BetaPrime recovered (a={}, b={}) from (a_true={}, b_true={})",
+                fitted.a,
+                fitted.b,
+                a_true,
+                b_true
+            );
+        }
+    }
+
+    #[test]
+    fn try_fit_beta_prime_rejects_nonpositive_data() {
+        let bad = vec![0.5, -0.1, 1.0];
+        assert!(matches!(
+            BetaPrime::try_fit(&bad),
+            Err(FitError::UnsupportedData(_))
+        ));
+        let zero = vec![0.0, 1.0, 2.0];
+        assert!(matches!(
+            BetaPrime::try_fit(&zero),
+            Err(FitError::UnsupportedData(_))
+        ));
+    }
+
+    #[test]
+    fn try_fit_laplace_asymmetric_recovers_kappa_from_mean() {
+        // Closed-form MOM should recover κ exactly when the sample
+        // mean equals the population mean 1/κ − κ.
+        for kappa_true in [0.5_f64, 0.8, 1.0, 1.5, 2.0, 3.0] {
+            let dist = LaplaceAsymmetric { kappa: kappa_true };
+            let samples: Vec<f64> = (1..=600)
+                .map(|k| dist.ppf((k as f64 - 0.5) / 600.0))
+                .collect();
+            let fitted = LaplaceAsymmetric::try_fit(&samples).expect("fit");
+            assert!(
+                (fitted.kappa - kappa_true).abs() < 0.02 + 0.02 * kappa_true,
+                "LaplaceAsymmetric recovered κ={} from κ_true={}",
+                fitted.kappa,
+                kappa_true
+            );
+        }
+    }
+
+    #[test]
+    fn try_fit_laplace_asymmetric_symmetric_case() {
+        // Sample mean of zero should yield κ = 1 (the symmetric Laplace).
+        let samples = vec![-1.0, 1.0, -2.0, 2.0, -0.5, 0.5];
+        let fitted = LaplaceAsymmetric::try_fit(&samples).expect("fit");
+        assert!(
+            (fitted.kappa - 1.0).abs() < 1e-12,
+            "LaplaceAsymmetric on symmetric data should yield κ=1, got {}",
+            fitted.kappa
+        );
+    }
+
+    #[test]
+    fn try_fit_no_longer_returns_not_implemented_for_seven_distributions() {
+        // Regression guard: these distributions previously inherited the
+        // trait-default `Err(FitError::NotImplemented)`. After this change
+        // they all dispatch to their own MLE/MOM implementations.
+        let irwin = IrwinHall::new(3);
+        let irwin_samples: Vec<f64> = (1..=50)
+            .map(|k| irwin.ppf((k as f64 - 0.5) / 50.0))
+            .collect();
+        for result in [
+            WeibullMax::try_fit(&[-0.5, -1.0, -1.5, -2.0])
+                .map(|_| ())
+                .map_err(|e| matches!(e, FitError::NotImplemented { .. })),
+            FrechetR::try_fit(&[-0.5, -1.0, -1.5, -2.0])
+                .map(|_| ())
+                .map_err(|e| matches!(e, FitError::NotImplemented { .. })),
+            DoubleWeibull::try_fit(&[-1.0, 1.0, -2.0, 2.0])
+                .map(|_| ())
+                .map_err(|e| matches!(e, FitError::NotImplemented { .. })),
+            FoldedNormal::try_fit(&[0.5, 1.0, 1.5, 2.0])
+                .map(|_| ())
+                .map_err(|e| matches!(e, FitError::NotImplemented { .. })),
+            BetaPrime::try_fit(&[0.5, 1.0, 1.5, 2.0])
+                .map(|_| ())
+                .map_err(|e| matches!(e, FitError::NotImplemented { .. })),
+            LaplaceAsymmetric::try_fit(&[-1.0, 0.5, -0.5, 1.0])
+                .map(|_| ())
+                .map_err(|e| matches!(e, FitError::NotImplemented { .. })),
+            IrwinHall::try_fit(&irwin_samples)
+                .map(|_| ())
+                .map_err(|e| matches!(e, FitError::NotImplemented { .. })),
+        ] {
+            // We don't care whether the fit succeeds or fails for these
+            // hand-picked inputs — we only care that the failure mode
+            // is NEVER `NotImplemented` (a regression to the old stub).
+            if let Err(was_not_implemented) = result {
+                assert!(
+                    !was_not_implemented,
+                    "regression: try_fit returned NotImplemented for a distribution that now ships an explicit implementation"
+                );
+            }
+        }
     }
 }
