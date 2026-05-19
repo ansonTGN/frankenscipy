@@ -1,14 +1,15 @@
 #![forbid(unsafe_code)]
 //! Live scipy.interpolate parity for spline derivative/antiderivative
-//! operations: splder, splantider.
+//! operations: splder, splantider, splint.
 //!
 //! Resolves [frankenscipy-pq6k2]. Strategy: build the spline once via
 //! fsci.splrep(x, y, k, 0.0), pass the resulting tck to BOTH fsci and
 //! scipy's spline ops. Compare derived tck (knots, coefs) and
 //! evaluated outputs (antider compared after constant-shift removal).
 //!
-//! splint defect tracked in frankenscipy-05m2t and sproot defect in
-//! frankenscipy-5lyd8; both excluded from this harness.
+//! splint (definite integral) is covered here since the splantider
+//! indexing fix (frankenscipy-05m2t). sproot is still excluded —
+//! tracked in frankenscipy-5lyd8.
 //!
 //! Tolerances: 1e-9 abs for tck/values.
 
@@ -19,7 +20,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_interpolate::{splantider, splder, splev, splrep};
+use fsci_interpolate::{splantider, splder, splev, splint, splrep};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -364,17 +365,17 @@ fn diff_interpolate_spl_ops() {
             });
 
             // Evaluated derivative spline values
-            if let Some(ev_exp) = arm.der_eval.as_ref() {
-                if let Ok(ev) = splev(&case.eval, &(dt, dc, dk)) {
-                    let abs_d = vec_max_diff(&ev, ev_exp);
-                    max_overall = max_overall.max(abs_d);
-                    diffs.push(CaseDiff {
-                        case_id: format!("{}_splder_eval", case.case_id),
-                        op: "splder_eval".into(),
-                        abs_diff: abs_d,
-                        pass: abs_d <= VAL_TOL,
-                    });
-                }
+            if let Some(ev_exp) = arm.der_eval.as_ref()
+                && let Ok(ev) = splev(&case.eval, &(dt, dc, dk))
+            {
+                let abs_d = vec_max_diff(&ev, ev_exp);
+                max_overall = max_overall.max(abs_d);
+                diffs.push(CaseDiff {
+                    case_id: format!("{}_splder_eval", case.case_id),
+                    op: "splder_eval".into(),
+                    abs_diff: abs_d,
+                    pass: abs_d <= VAL_TOL,
+                });
             }
         }
 
@@ -397,34 +398,51 @@ fn diff_interpolate_spl_ops() {
                 pass: abs_d <= TCK_TOL,
             });
 
-            if let Some(ev_exp) = arm.anti_eval.as_ref() {
-                // Antiderivatives in scipy and fsci differ by an integration
-                // constant. Subtract the value at the first eval point so we
-                // compare shapes (slopes).
-                if let Ok(ev) = splev(&case.eval, &(at, ac, ak)) {
-                    if !ev.is_empty() && !ev_exp.is_empty() {
-                        let off_actual = ev[0];
-                        let off_expected = ev_exp[0];
-                        let shifted_actual: Vec<f64> =
-                            ev.iter().map(|v| v - off_actual).collect();
-                        let shifted_expected: Vec<f64> =
-                            ev_exp.iter().map(|v| v - off_expected).collect();
-                        let abs_d = vec_max_diff(&shifted_actual, &shifted_expected);
-                        max_overall = max_overall.max(abs_d);
-                        diffs.push(CaseDiff {
-                            case_id: format!("{}_splantider_eval_shifted", case.case_id),
-                            op: "splantider_eval".into(),
-                            abs_diff: abs_d,
-                            pass: abs_d <= VAL_TOL,
-                        });
-                    }
-                }
+            // Antiderivatives in scipy and fsci differ by an integration
+            // constant. Subtract the value at the first eval point so we
+            // compare shapes (slopes).
+            if let Some(ev_exp) = arm.anti_eval.as_ref()
+                && let Ok(ev) = splev(&case.eval, &(at, ac, ak))
+                && !ev.is_empty()
+                && !ev_exp.is_empty()
+            {
+                let off_actual = ev[0];
+                let off_expected = ev_exp[0];
+                let shifted_actual: Vec<f64> = ev.iter().map(|v| v - off_actual).collect();
+                let shifted_expected: Vec<f64> =
+                    ev_exp.iter().map(|v| v - off_expected).collect();
+                let abs_d = vec_max_diff(&shifted_actual, &shifted_expected);
+                max_overall = max_overall.max(abs_d);
+                diffs.push(CaseDiff {
+                    case_id: format!("{}_splantider_eval_shifted", case.case_id),
+                    op: "splantider_eval".into(),
+                    abs_diff: abs_d,
+                    pass: abs_d <= VAL_TOL,
+                });
             }
         }
 
-        // splint and sproot intentionally excluded — see defect beads
-        // frankenscipy-05m2t (splint) and frankenscipy-5lyd8 (sproot).
-        let _ = (case.integ_a, case.integ_b, case.do_sproot, &arm.splint_value, &arm.sproot);
+        // splint: definite integral over [integ_a, integ_b]
+        // (frankenscipy-05m2t — the splantider indexing fix restored parity).
+        if let Some(expected) = arm.splint_value
+            && let Ok(value) = splint(
+                case.integ_a,
+                case.integ_b,
+                &(tck.t.clone(), tck.c.clone(), tck.k),
+            )
+        {
+            let abs_d = (value - expected).abs();
+            max_overall = max_overall.max(abs_d);
+            diffs.push(CaseDiff {
+                case_id: format!("{}_splint", case.case_id),
+                op: "splint".into(),
+                abs_diff: abs_d,
+                pass: abs_d <= VAL_TOL,
+            });
+        }
+
+        // sproot remains excluded — tracked in frankenscipy-5lyd8.
+        let _ = (case.do_sproot, &arm.sproot);
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);
