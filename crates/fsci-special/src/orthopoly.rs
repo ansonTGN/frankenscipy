@@ -715,14 +715,15 @@ pub fn roots_chebyu(n: usize) -> (Vec<f64>, Vec<f64>) {
 /// this interval with weight `1 / sqrt(1 − x²/4)`.
 ///
 /// Roots: `x_k = 2 cos((2k+1)π / (2n))` for `k ∈ 0..n` (the T-roots scaled by 2).
-/// Weights: `π / n` (uniform), matching scipy.special.roots_chebyc.
+/// Weights: `2π / n` (uniform) — the weight function integrates to `2π` over
+/// `[-2, 2]`, matching scipy.special.roots_chebyc.
 #[must_use]
 pub fn roots_chebyc(n: usize) -> (Vec<f64>, Vec<f64>) {
     if n == 0 {
         return (Vec::new(), Vec::new());
     }
     let mut nodes = Vec::with_capacity(n);
-    let weights = vec![PI / n as f64; n];
+    let weights = vec![2.0 * PI / n as f64; n];
     for k in 0..n {
         let theta = PI * (2.0 * k as f64 + 1.0) / (2.0 * n as f64);
         nodes.push(2.0 * theta.cos());
@@ -736,7 +737,9 @@ pub fn roots_chebyc(n: usize) -> (Vec<f64>, Vec<f64>) {
 /// interval with weight `sqrt(1 − x²/4)`.
 ///
 /// Roots: `x_k = 2 cos((k+1)π / (n+1))` (the U-roots scaled by 2).
-/// Weights: `(π/(n+1)) · sin²((k+1)π/(n+1))`, matching scipy.special.roots_chebys.
+/// Weights: `(2π/(n+1)) · sin²((k+1)π/(n+1))` — twice the Chebyshev-U weight,
+/// since the `[-2, 2]` interval doubles the integral, matching
+/// scipy.special.roots_chebys.
 #[must_use]
 pub fn roots_chebys(n: usize) -> (Vec<f64>, Vec<f64>) {
     if n == 0 {
@@ -747,7 +750,7 @@ pub fn roots_chebys(n: usize) -> (Vec<f64>, Vec<f64>) {
     for k in 1..=n {
         let theta = PI * k as f64 / n1;
         let sin_theta = theta.sin();
-        let weight = PI / n1 * sin_theta * sin_theta;
+        let weight = 2.0 * PI / n1 * sin_theta * sin_theta;
         pairs.push((2.0 * theta.cos(), weight));
     }
     pairs.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -764,34 +767,44 @@ pub fn roots_chebys(n: usize) -> (Vec<f64>, Vec<f64>) {
 /// `[0, 1]`.
 #[must_use]
 pub fn roots_sh_legendre(n: usize) -> (Vec<f64>, Vec<f64>) {
-    shift_unit_to_zero_one(roots_legendre(n))
+    shift_unit_to_zero_one(roots_legendre(n), 0.5)
 }
 
 /// Compute Gauss-Chebyshev (first kind) quadrature on `[0, 1]` via the
 /// shifted polynomials `T*_n(x) = T_n(2x − 1)`.
 ///
-/// Matches `scipy.special.roots_sh_chebyt(n)`. Same shift-and-halve
-/// transformation as `roots_sh_legendre`.
+/// Matches `scipy.special.roots_sh_chebyt(n)`. The node shift is the same as
+/// `roots_sh_legendre`, but the Chebyshev-T weight function is unchanged
+/// under the change of variables (`weight_scale = 1`).
 #[must_use]
 pub fn roots_sh_chebyt(n: usize) -> (Vec<f64>, Vec<f64>) {
-    shift_unit_to_zero_one(roots_chebyt(n))
+    shift_unit_to_zero_one(roots_chebyt(n), 1.0)
 }
 
 /// Compute Gauss-Chebyshev (second kind) quadrature on `[0, 1]` via the
 /// shifted polynomials `U*_n(x) = U_n(2x − 1)`.
 ///
-/// Matches `scipy.special.roots_sh_chebyu(n)`.
+/// Matches `scipy.special.roots_sh_chebyu(n)`. The Chebyshev-U weight
+/// function picks up a factor of `1/4` under the change of variables.
 #[must_use]
 pub fn roots_sh_chebyu(n: usize) -> (Vec<f64>, Vec<f64>) {
-    shift_unit_to_zero_one(roots_chebyu(n))
+    shift_unit_to_zero_one(roots_chebyu(n), 0.25)
 }
 
 /// Map `(nodes, weights)` from the canonical `[-1, 1]` interval to the
-/// shifted `[0, 1]` interval. The node transformation is `x ↦ (1 + x) / 2`
-/// and weights scale by `1/2` to preserve the integral identity.
-fn shift_unit_to_zero_one((nodes, weights): (Vec<f64>, Vec<f64>)) -> (Vec<f64>, Vec<f64>) {
+/// shifted `[0, 1]` interval. The node transformation is `x ↦ (1 + x) / 2`.
+///
+/// `weight_scale` is the constant factor relating the canonical and shifted
+/// weight functions under that change of variables. It depends on the weight
+/// function, not just the Jacobian: `1/2` for the unit weight (shifted
+/// Legendre), `1` for the Chebyshev-T weight `1/√(x(1−x))`, and `1/4` for the
+/// Chebyshev-U weight `√(x(1−x))`.
+fn shift_unit_to_zero_one(
+    (nodes, weights): (Vec<f64>, Vec<f64>),
+    weight_scale: f64,
+) -> (Vec<f64>, Vec<f64>) {
     let shifted_nodes = nodes.into_iter().map(|x| 0.5 * (1.0 + x)).collect();
-    let shifted_weights = weights.into_iter().map(|w| 0.5 * w).collect();
+    let shifted_weights = weights.into_iter().map(|w| weight_scale * w).collect();
     (shifted_nodes, shifted_weights)
 }
 
@@ -2401,8 +2414,9 @@ mod tests {
         for x in &nodes {
             assert!(*x > 0.0 && *x < 1.0);
         }
-        // Shifted Chebyshev-T weights are π/(2n) (uniform π/n halved).
-        let expected = std::f64::consts::PI / (2.0 * n as f64);
+        // Shifted Chebyshev-T weights are uniform π/n: the Chebyshev-T
+        // weight function is invariant under the [-1,1]→[0,1] shift.
+        let expected = std::f64::consts::PI / n as f64;
         for w in &weights {
             assert!((w - expected).abs() < 1e-15);
         }
@@ -2435,8 +2449,8 @@ mod tests {
         for x in &nodes {
             assert!(*x > -2.0 && *x < 2.0, "node {x} outside (-2, 2)");
         }
-        // Uniform weights π / n.
-        let expected = std::f64::consts::PI / 5.0;
+        // Uniform weights 2π / n.
+        let expected = 2.0 * std::f64::consts::PI / 5.0;
         for w in &weights {
             assert!((w - expected).abs() < 1e-15);
         }
@@ -2458,14 +2472,15 @@ mod tests {
     }
 
     #[test]
-    fn roots_chebyc_weight_sum_equals_pi() {
-        // ∑ w_k = n · (π / n) = π for any n.
+    fn roots_chebyc_weight_sum_equals_two_pi() {
+        // ∑ w_k = n · (2π / n) = 2π for any n — the weight function
+        // 1/√(1−x²/4) integrates to 2π over [-2, 2].
         for n in 1..=8 {
             let (_, weights) = roots_chebyc(n);
             let sum: f64 = weights.iter().sum();
             assert!(
-                (sum - std::f64::consts::PI).abs() < 1e-13,
-                "n={n}: weight sum {sum} != π"
+                (sum - 2.0 * std::f64::consts::PI).abs() < 1e-13,
+                "n={n}: weight sum {sum} != 2π"
             );
         }
     }
@@ -2496,11 +2511,12 @@ mod tests {
                 "S-root {s} should be 2 × U-root {u}"
             );
         }
-        // S and U share the same weight formula (π/(n+1)) sin²(...).
+        // S weights are twice the U weights: the [-2, 2] interval doubles
+        // the integral of the weight function relative to [-1, 1].
         for (sw, uw) in s_weights.iter().zip(u_weights.iter()) {
             assert!(
-                (sw - uw).abs() < 1e-15,
-                "S weight {sw} should equal U weight {uw}"
+                (sw - 2.0 * uw).abs() < 1e-15,
+                "S weight {sw} should be 2 × U weight {uw}"
             );
         }
     }
@@ -2511,6 +2527,53 @@ mod tests {
         assert!(n.is_empty() && w.is_empty());
         let (n, w) = roots_chebys(0);
         assert!(n.is_empty() && w.is_empty());
+    }
+
+    #[test]
+    fn roots_cheby_scaled_weights_match_scipy() {
+        // Weights pinned against scipy.special for n = 5. fsci previously
+        // diverged by a constant scale factor (frankenscipy-s2qfz).
+        let check = |label: &str, got: &[f64], want: &[f64]| {
+            assert_eq!(got.len(), want.len(), "{label}: length");
+            for (i, (g, w)) in got.iter().zip(want.iter()).enumerate() {
+                assert!(
+                    (g - w).abs() < 1e-13,
+                    "{label}[{i}]: got {g}, want {w}"
+                );
+            }
+        };
+
+        let (_, w) = roots_chebyc(5);
+        check("chebyc", &w, &[1.256_637_061_435_917_2; 5]);
+
+        let (_, w) = roots_chebys(5);
+        check(
+            "chebys",
+            &w,
+            &[
+                0.261_799_387_799_149_35,
+                0.785_398_163_397_448_4,
+                1.047_197_551_196_597_6,
+                0.785_398_163_397_448_2,
+                0.261_799_387_799_149_35,
+            ],
+        );
+
+        let (_, w) = roots_sh_chebyt(5);
+        check("sh_chebyt", &w, &[0.628_318_530_717_958_6; 5]);
+
+        let (_, w) = roots_sh_chebyu(5);
+        check(
+            "sh_chebyu",
+            &w,
+            &[
+                0.032_724_923_474_893_66,
+                0.098_174_770_424_681_03,
+                0.130_899_693_899_574_68,
+                0.098_174_770_424_681_01,
+                0.032_724_923_474_893_66,
+            ],
+        );
     }
 
     #[test]

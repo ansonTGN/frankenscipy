@@ -96,10 +96,16 @@ fn emit_log(log: &DiffLog) {
 fn generate_query() -> OracleQuery {
     let mut points = Vec::new();
 
-    // 0-arg families that match scipy at the default tolerance.
-    // chebyc/chebys/sh_chebyt/sh_chebyu are excluded — fsci weights
-    // differ by a constant scale factor from scipy (filed defect).
-    for family in ["roots_chebyu", "roots_sh_legendre"] {
+    // 0-arg families that match scipy at the default tolerance,
+    // including the scaled Chebyshev variants (frankenscipy-s2qfz fixed).
+    for family in [
+        "roots_chebyu",
+        "roots_chebyc",
+        "roots_chebys",
+        "roots_sh_legendre",
+        "roots_sh_chebyt",
+        "roots_sh_chebyu",
+    ] {
         for n in [3_usize, 5, 8] {
             points.push(PointCase {
                 case_id: format!("{family}_n{n}"),
