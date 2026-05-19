@@ -106,9 +106,11 @@ fn generate_query() -> OracleQuery {
         });
     }
 
-    // zetac(s) for 0 < s < 1 diverges from scipy by ~5% (likely Euler-
-    // Maclaurin accuracy issue in the critical strip); excluded.
-    let zetac_xs = [2.0_f64, 3.0, 4.0, 5.0, 6.0, 1.5, 0.0, -1.0, -2.0, -3.0, 10.0];
+    // Covers s > 1, the critical strip 0 < s < 1 (Borwein eta evaluation,
+    // frankenscipy-kk4vu), s = 0, and the reflected region s < 0.
+    let zetac_xs = [
+        2.0_f64, 3.0, 4.0, 5.0, 6.0, 1.5, 0.9, 0.7, 0.5, 0.3, 0.1, 0.0, -1.0, -2.0, -3.0, 10.0,
+    ];
     for s in zetac_xs {
         points.push(PointCase {
             case_id: format!("zetac_{s}"),

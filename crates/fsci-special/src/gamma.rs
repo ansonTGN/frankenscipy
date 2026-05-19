@@ -1902,17 +1902,37 @@ fn zeta_positive(s: f64) -> f64 {
     crate::convenience::hurwitz_zeta(s, 1.0)
 }
 
-/// Dirichlet eta function η(s) = sum_{n=1}^∞ (-1)^{n+1} / n^s.
-/// Converges for s > 0. Uses Borwein's acceleration.
+/// Dirichlet eta function η(s) = Σ_{n≥1} (-1)^{n+1} / n^s, for s > 0.
+///
+/// Evaluated with Borwein's algorithm (P. Borwein, "An Efficient Algorithm
+/// for the Riemann Zeta Function", 2000). A naive partial sum of the
+/// alternating series converges far too slowly in the critical strip — its
+/// truncation error after `m` terms is ~½·m^{-s}, giving only ~1 digit at
+/// s = 0.5 for m = 100. Borwein's weighted partial sum instead converges
+/// geometrically, with error ~(3+√8)^{-n} ≈ 5.83^{-n}.
 fn dirichlet_eta(s: f64) -> f64 {
-    // Simple partial sum with enough terms for convergence
-    let n = 100;
-    let mut sum = 0.0;
-    for k in 1..=n {
-        let sign = if k % 2 == 1 { 1.0 } else { -1.0 };
-        sum += sign * (k as f64).powf(-s);
+    // d_k = n · Σ_{j=0}^{k} t_j,  with t_0 = 1/n and
+    // t_{j+1} = t_j · 4(n+j)(n-j) / ((2j+1)(2j+2)).
+    const N: usize = 32;
+    let nf = N as f64;
+    let mut d = [0.0_f64; N + 1];
+    let mut t = 1.0 / nf;
+    let mut cumulative = t;
+    d[0] = nf * cumulative;
+    for j in 0..N {
+        let jf = j as f64;
+        t *= 4.0 * (nf + jf) * (nf - jf) / ((2.0 * jf + 1.0) * (2.0 * jf + 2.0));
+        cumulative += t;
+        d[j + 1] = nf * cumulative;
     }
-    sum
+    let dn = d[N];
+    // η(s) = -1/d_n · Σ_{k=0}^{n-1} (-1)^k (d_k - d_n) / (k+1)^s.
+    let mut sum = 0.0;
+    for (k, &dk) in d.iter().take(N).enumerate() {
+        let sign = if k.is_multiple_of(2) { 1.0 } else { -1.0 };
+        sum += sign * (dk - dn) / ((k + 1) as f64).powf(s);
+    }
+    -sum / dn
 }
 
 /// Compute the Riemann zeta function complement: zetac(s) = zeta(s) - 1.
@@ -2902,6 +2922,26 @@ mod tests {
     fn zetac_pole() {
         // At s=1, zetac should return infinity
         assert!(zetac(1.0).is_infinite());
+    }
+
+    #[test]
+    fn zetac_critical_strip_matches_scipy() {
+        // 0 < s < 1: reference values from scipy.special.zetac. The naive
+        // alternating-series sum was ~5% off here; Borwein's acceleration
+        // restores full precision (frankenscipy-kk4vu).
+        for &(s, expected) in &[
+            (0.1_f64, -1.603_037_519_856_241_9),
+            (0.3, -1.904_559_257_253_984_2),
+            (0.5, -2.460_354_508_809_586_6),
+            (0.7, -3.778_388_445_553_696),
+            (0.9, -10.430_114_019_402_255),
+        ] {
+            let got = zetac(s);
+            assert!(
+                (got - expected).abs() < 1e-10,
+                "zetac({s}) = {got}, expected {expected}"
+            );
+        }
     }
 
     // ── Poisson distribution functions ────────────────────────────────
