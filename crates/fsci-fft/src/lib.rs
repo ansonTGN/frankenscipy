@@ -508,11 +508,94 @@ mod tests {
         let forward = fht(&input, dln, mu, 0.0, bias, &opts).expect("fht");
         let recovered = ifht(&forward, dln, mu, 0.0, bias, &opts).expect("ifht");
 
-        // Due to the nature of Hankel transforms, exact inversion requires
-        // specific conditions. Here we just check the output is reasonable.
+        // ifht is the exact inverse of fht for matching parameters.
         assert_eq!(recovered.len(), n);
-        for &v in &recovered {
-            assert!(v.is_finite(), "IFHT output should be finite");
+        for (i, (&r, &x)) in recovered.iter().zip(input.iter()).enumerate() {
+            assert!(
+                (r - x).abs() < 1e-9,
+                "ifht(fht(x)) mismatch at {i}: {r} vs {x}"
+            );
+        }
+    }
+
+    #[test]
+    fn fhtoffset_matches_scipy_reference() {
+        // Reference values from scipy.fft.fhtoffset(dln, mu, initial, bias).
+        for &(dln, mu, initial, bias, want) in &[
+            (0.5_f64, 0.0_f64, 0.0_f64, 0.0_f64, -0.157_875_391_166_816_93),
+            (0.1, 1.0, 0.0, 0.5, -0.003_149_364_650_484_187_8),
+            (0.3, 0.5, 0.1, 0.2, 0.223_900_341_282_366_97),
+            (0.05, 2.0, -1.0, 0.0, -1.010_002_184_090_538_4),
+        ] {
+            let got = fhtoffset(dln, mu, initial, bias);
+            assert!(
+                (got - want).abs() < 1e-12,
+                "fhtoffset({dln}, {mu}, {initial}, {bias}) = {got}, want {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn fht_matches_scipy_reference() {
+        // Reference values from scipy.fft.fht on a fixed 8-point input.
+        let a = [1.0_f64, 0.5, 0.25, 0.125, 0.06, 0.03, 0.015, 0.007];
+        let dln = 0.1;
+        let opts = FftOptions::default();
+        let cases: &[(f64, f64, f64, [f64; 8])] = &[
+            (
+                0.0,
+                0.0,
+                0.0,
+                [
+                    0.614_518_022_333_418_1,
+                    0.615_038_047_444_707_9,
+                    0.439_876_899_751_637_6,
+                    0.002_374_672_568_941_638,
+                    0.279_043_106_693_971_2,
+                    0.066_816_933_697_234_63,
+                    -0.366_114_500_530_648_53,
+                    0.335_446_818_040_737_56,
+                ],
+            ),
+            (
+                1.0,
+                0.2,
+                0.0,
+                [
+                    0.740_144_403_778_757,
+                    0.357_614_369_725_865,
+                    0.313_292_129_973_071_6,
+                    0.519_531_546_937_729_7,
+                    0.080_484_113_192_972_94,
+                    -0.441_037_244_455_451_45,
+                    0.189_585_709_779_738_93,
+                    0.227_384_971_067_316_34,
+                ],
+            ),
+            (
+                0.0,
+                0.0,
+                0.3,
+                [
+                    1.064_212_856_210_819,
+                    1.002_820_932_280_163_3,
+                    0.635_981_621_457_241_4,
+                    -0.503_058_453_856_779_9,
+                    0.396_182_659_318_834_95,
+                    -0.076_518_318_557_207_66,
+                    -1.237_588_568_577_655_8,
+                    0.403_259_721_259_078_6,
+                ],
+            ),
+        ];
+        for &(mu, offset, bias, want) in cases {
+            let got = fht(&a, dln, mu, offset, bias, &opts).expect("fht");
+            for (i, (&g, &w)) in got.iter().zip(want.iter()).enumerate() {
+                assert!(
+                    (g - w).abs() < 1e-9,
+                    "fht(mu={mu}, offset={offset}, bias={bias})[{i}] = {g}, want {w}"
+                );
+            }
         }
     }
 

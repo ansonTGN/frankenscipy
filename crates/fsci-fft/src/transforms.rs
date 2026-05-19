@@ -1606,38 +1606,21 @@ pub fn hilbert(input: &[f64], options: &FftOptions) -> Result<Vec<Complex64>, Ff
 /// * `initial` - Initial guess for the offset (default 0.0)
 /// * `bias` - Bias parameter (default 0.0)
 pub fn fhtoffset(dln: f64, mu: f64, initial: f64, bias: f64) -> f64 {
-    // The optimal offset minimizes |U_μ(q + offset)| where q = bias
-    // U_μ(x) = 2^x * Γ((μ+1+x)/2) / Γ((μ+1-x)/2)
-    // The zeros of U_μ are at x = -(μ+1+2n) for n=0,1,2,...
-    // We find the nearest zero to initial + bias
-
-    let q = bias;
-    let x0 = initial + q;
-
-    // Zeros of U_μ occur at -(μ+1+2n) for n = 0, 1, 2, ...
-    // Find integer n such that -(μ+1+2n) is closest to x0
-    // Solving: x0 ≈ -(μ+1+2n) => n ≈ (-x0 - μ - 1) / 2
-
-    let n_float = (-x0 - mu - 1.0) / 2.0;
-    let n = n_float.round().max(0.0) as i64;
-
-    // The zero is at -(μ+1+2n)
-    let zero = -(mu + 1.0 + 2.0 * n as f64);
-
-    // The offset is chosen so that initial + q lands on this zero
-    // offset + initial + q = zero
-    // offset = zero - initial - q = zero - x0
-    let offset = zero - x0;
-
-    // Adjust offset to be within (-dln/2, dln/2] for periodic boundary handling
-    // Actually the offset can be arbitrary, but we typically return the
-    // most natural one
-    let offset_mod = offset - dln * (offset / dln).floor();
-    if offset_mod > dln / 2.0 {
-        offset_mod - dln
-    } else {
-        offset_mod
-    }
+    // Low-ringing offset (Hamilton 2000): the offset nearest `initial` for
+    // which the FHT kernel U_μ has unit modulus at the Nyquist frequency,
+    // i.e. arg(U_μ) is a multiple of π there. With the kernel
+    //   U_μ(x) = 2^x · Γ((μ+1+x)/2) / Γ((μ+1−x)/2),
+    // the condition reduces to a fractional-part adjustment of the
+    // log-gamma phases. Faithful port of scipy.fft.fhtoffset.
+    use std::f64::consts::{LN_2, PI};
+    let (lnkr, q) = (initial, bias);
+    let xp = (mu + 1.0 + q) / 2.0;
+    let xm = (mu + 1.0 - q) / 2.0;
+    let y = PI / (2.0 * dln);
+    let zp = complex_ln_gamma((xp, y));
+    let zm = complex_ln_gamma((xm, y));
+    let arg = (LN_2 - lnkr) / dln + (zp.1 + zm.1) / PI;
+    lnkr + (arg - arg.round()) * dln
 }
 
 /// Fast Hankel Transform.
@@ -1670,33 +1653,27 @@ pub fn fht(
 
     let n = input.len();
 
-    // Compute the Hankel transform kernel coefficients u_m
-    // u_m = U_μ(bias + 2πim/(n·dln)) where U_μ is the low-ringing kernel
-    let u_coeffs = fht_kernel(n, dln, mu, offset, bias);
-
-    // FFT the input
-    let complex_input: Vec<Complex64> = input.iter().map(|&x| (x, 0.0)).collect();
-    let backend = resolve_backend(options.backend);
-    let a_fft = backend.transform_1d_unscaled(&complex_input, false);
-
-    // Multiply by kernel in Fourier space
-    let product: Vec<Complex64> = a_fft
-        .iter()
-        .zip(u_coeffs.iter())
-        .map(|(&a, &u)| complex_mul(a, u))
-        .collect();
-
-    // IFFT back
-    let mut result_complex = backend.transform_1d_unscaled(&product, true);
-
-    // Apply 1/N normalization
-    let inv_n = 1.0 / n as f64;
-    for v in &mut result_complex {
-        *v = complex_scale(*v, inv_n);
+    // Bias the input: a_q(r) = a(r) · (r/r_c)^{−q}.
+    let mut a = input.to_vec();
+    if bias != 0.0 {
+        let j_c = (n as f64 - 1.0) / 2.0;
+        for (j, v) in a.iter_mut().enumerate() {
+            *v *= (-bias * (j as f64 - j_c) * dln).exp();
+        }
     }
 
-    // Take real part (imaginary should be negligible)
-    Ok(result_complex.iter().map(|c| c.0).collect())
+    let u = fhtcoeff(n, dln, mu, offset, bias, false);
+    let mut out = fhtq(&a, &u, false, options)?;
+
+    // Un-bias the output: A(k) = A_q(k) · (k/k_c)^{−q} · (k_c·r_c)^{−q}.
+    if bias != 0.0 {
+        let j_c = (n as f64 - 1.0) / 2.0;
+        for (j, v) in out.iter_mut().enumerate() {
+            *v *= (-bias * ((j as f64 - j_c) * dln + offset)).exp();
+        }
+    }
+
+    Ok(out)
 }
 
 /// Inverse Fast Hankel Transform.
@@ -1723,105 +1700,140 @@ pub fn ifht(
     bias: f64,
     options: &FftOptions,
 ) -> Result<Vec<f64>, FftError> {
-    // The inverse FHT with parameters (dln, μ, offset, bias) is the
-    // forward FHT with parameters (dln, μ, -offset, -bias)
-    fht(input, dln, mu, -offset, -bias, options)
-}
+    ensure_non_empty(input.len())?;
+    validate_finite_real(input, options)?;
 
-/// Compute the Fast Hankel Transform kernel coefficients.
-///
-/// The kernel U_μ(q) is defined such that the Hankel transform
-/// becomes a convolution in log-space.
-fn fht_kernel(n: usize, dln: f64, mu: f64, offset: f64, bias: f64) -> Vec<Complex64> {
-    use std::f64::consts::PI;
+    let n = input.len();
 
-    let mut u_coeffs = Vec::with_capacity(n);
-
-    for m in 0..n {
-        // Frequency index (centered)
-        let m_shift = if m <= n / 2 {
-            m as f64
-        } else {
-            m as f64 - n as f64
-        };
-
-        // Argument for U_μ: q + 2πi·m / (n·dln)
-        let x_re = bias;
-        let x_im = 2.0 * PI * m_shift / (n as f64 * dln);
-
-        // Compute U_μ(x) = 2^x · Γ((μ+1+x)/2) / Γ((μ+1-x)/2)
-        // For complex x, we use the relation with sine:
-        // U_μ(x) = (2π)^(-x) · Γ(1-x) · sin(π(μ+x)/2) / Γ((μ+1-x)/2) · 2^(something)
-        //
-        // Actually use the simpler approximation for the discrete transform:
-        // U_m = exp(offset·(bias + 2πi·m/(n·dln))) · u_kernel(m)
-        //
-        // The low-ringing kernel in log-space:
-        let phase = offset * x_im;
-        let amp = 2.0_f64.powf(x_re) * u_mu_ratio(mu, x_re, x_im);
-        let exp_phase = (phase.cos(), phase.sin());
-        u_coeffs.push((amp * exp_phase.0, amp * exp_phase.1));
-    }
-
-    u_coeffs
-}
-
-/// Compute |Γ((μ+1+x)/2) / Γ((μ+1-x)/2)| for complex x = x_re + i·x_im.
-///
-/// Uses the reflection formula and asymptotic expansions.
-fn u_mu_ratio(mu: f64, x_re: f64, x_im: f64) -> f64 {
-    // For real x_im = 0, this is straightforward gamma ratio
-    // For complex, use |Γ(a+ib)/Γ(c+id)| approximation
-
-    if x_im.abs() < 1e-10 {
-        // Real case: use gamma function ratio
-        let arg_num = (mu + 1.0 + x_re) / 2.0;
-        let arg_den = (mu + 1.0 - x_re) / 2.0;
-
-        if arg_num > 0.0 && arg_den > 0.0 {
-            // Both arguments positive - use lgamma
-            (ln_gamma(arg_num) - ln_gamma(arg_den)).exp()
-        } else {
-            // Handle poles via reflection
-            1.0
+    // Bias the input array.
+    let mut big_a = input.to_vec();
+    if bias != 0.0 {
+        let j_c = (n as f64 - 1.0) / 2.0;
+        for (j, v) in big_a.iter_mut().enumerate() {
+            *v *= (bias * ((j as f64 - j_c) * dln + offset)).exp();
         }
-    } else {
-        // Complex case: use Stirling approximation for |Γ(a+ib)|
-        // |Γ(a+ib)| ≈ √(2π) · |b|^(a-0.5) · exp(-π|b|/2) for large |b|
-
-        let a1 = (mu + 1.0 + x_re) / 2.0;
-        let b1 = x_im / 2.0;
-        let a2 = (mu + 1.0 - x_re) / 2.0;
-        let b2 = -x_im / 2.0;
-
-        // For moderate |b|, use a more accurate approximation
-        let log_mag1 = log_gamma_magnitude(a1, b1);
-        let log_mag2 = log_gamma_magnitude(a2, b2);
-
-        (log_mag1 - log_mag2).exp()
     }
+
+    // The inverse transform divides by conj(u) instead of multiplying.
+    let u = fhtcoeff(n, dln, mu, offset, bias, true);
+    let mut out = fhtq(&big_a, &u, true, options)?;
+
+    // Un-bias the output: a(r) = a_q(r) · (r/r_c)^{q}.
+    if bias != 0.0 {
+        let j_c = (n as f64 - 1.0) / 2.0;
+        for (j, v) in out.iter_mut().enumerate() {
+            *v *= (bias * (j as f64 - j_c) * dln).exp();
+        }
+    }
+
+    Ok(out)
 }
 
-/// Approximate log|Γ(a + ib)| using Stirling's formula.
-fn log_gamma_magnitude(a: f64, b: f64) -> f64 {
-    use std::f64::consts::PI;
-
-    if b.abs() < 0.1 && a > 0.0 {
-        // Nearly real: use real lgamma
-        ln_gamma(a)
-    } else {
-        // Stirling approximation:
-        // log|Γ(z)| ≈ 0.5·log(2π) - 0.5·log|z| + Re(z - 0.5)·log|z| - Im(z)·arg(z) - Re(z)
-        let z_mag = (a * a + b * b).sqrt();
-        let z_arg = b.atan2(a);
-
-        0.5 * (2.0 * PI).ln() + (a - 0.5) * z_mag.ln() - b * z_arg - a
+/// Coefficient array for the fast Hankel transform (FFTLog, Hamilton 2000).
+///
+/// Returns `u` of length `n/2 + 1` (the `rfft` spectrum length) with
+///
+///   u_m = exp[ lnΓ(x₊ + i·yₘ) − lnΓ(x₋ + i·yₘ) + q·ln2
+///              + i·2·(ln2 − offset)·yₘ ],
+///
+/// where `x± = (μ + 1 ± q)/2`, `q = bias`, and `yₘ = π·m/(n·dln)`. The
+/// Nyquist coefficient is forced real for even `n`. Faithful port of
+/// scipy's `fhtcoeff`.
+fn fhtcoeff(n: usize, dln: f64, mu: f64, offset: f64, bias: f64, inverse: bool) -> Vec<Complex64> {
+    use std::f64::consts::{LN_2, PI};
+    let (lnkr, q) = (offset, bias);
+    let xp = (mu + 1.0 + q) / 2.0;
+    let xm = (mu + 1.0 - q) / 2.0;
+    let len = n / 2 + 1;
+    let mut u = Vec::with_capacity(len);
+    for m in 0..len {
+        let y = PI * m as f64 / (n as f64 * dln);
+        let lp = complex_ln_gamma((xp, y));
+        let lm = complex_ln_gamma((xm, y));
+        // exp() is 2πi-periodic in its imaginary part, so any principal-
+        // branch ambiguity in the log-gamma phases cancels here.
+        let re = lp.0 - lm.0 + LN_2 * q;
+        let im = lp.1 + lm.1 + 2.0 * (LN_2 - lnkr) * y;
+        u.push(complex_exp((re, im)));
     }
+    // For even-length transforms the Nyquist coefficient must be real.
+    if n.is_multiple_of(2)
+        && let Some(last) = u.last_mut()
+    {
+        last.1 = 0.0;
+    }
+    // u_0 = 2^q · Γ(x₊)/Γ(x₋); if the log form overflowed at a Γ pole,
+    // recover whether the true value is 0 (x₋ pole) or ∞ (x₊ pole).
+    if !u[0].0.is_finite() || !u[0].1.is_finite() {
+        let is_pole = |x: f64| x <= 0.0 && (x - x.round()).abs() < 1e-9;
+        u[0] = if is_pole(xm) {
+            (0.0, 0.0)
+        } else {
+            (f64::INFINITY, 0.0)
+        };
+    }
+    // A singular forward (resp. inverse) transform has u_0 = ∞ (resp. 0);
+    // scipy substitutes the opposite extreme so the rest still transforms.
+    if !inverse && u[0].0.is_infinite() {
+        u[0] = (0.0, 0.0);
+    } else if inverse && u[0] == (0.0, 0.0) {
+        u[0] = (f64::INFINITY, 0.0);
+    }
+    u
 }
 
-/// Natural log of gamma function for positive real arguments.
-fn ln_gamma(x: f64) -> f64 {
-    // Lanczos approximation coefficients
+/// Biased fast Hankel transform core: real FFT, kernel multiply, inverse
+/// real FFT, then reverse. Matches scipy's `_fhtq`.
+fn fhtq(
+    a: &[f64],
+    u: &[Complex64],
+    inverse: bool,
+    options: &FftOptions,
+) -> Result<Vec<f64>, FftError> {
+    let n = a.len();
+    let mut spectrum = rfft(a, options)?;
+    for (s, &uc) in spectrum.iter_mut().zip(u.iter()) {
+        *s = if inverse {
+            complex_div(*s, complex_conj(uc))
+        } else {
+            complex_mul(*s, uc)
+        };
+    }
+    let mut out = irfft(&spectrum, Some(n), options)?;
+    out.reverse();
+    Ok(out)
+}
+
+/// Complex division `lhs / rhs`.
+fn complex_div(lhs: Complex64, rhs: Complex64) -> Complex64 {
+    let denom = rhs.0 * rhs.0 + rhs.1 * rhs.1;
+    (
+        (lhs.0 * rhs.0 + lhs.1 * rhs.1) / denom,
+        (lhs.1 * rhs.0 - lhs.0 * rhs.1) / denom,
+    )
+}
+
+/// Complex exponential `exp(z)`.
+fn complex_exp(z: Complex64) -> Complex64 {
+    let r = z.0.exp();
+    (r * z.1.cos(), r * z.1.sin())
+}
+
+/// Principal-branch complex logarithm `ln(z)`.
+fn complex_ln(z: Complex64) -> Complex64 {
+    (0.5 * (z.0 * z.0 + z.1 * z.1).ln(), z.1.atan2(z.0))
+}
+
+/// Complex sine `sin(z)`.
+fn complex_sin(z: Complex64) -> Complex64 {
+    (z.0.sin() * z.1.cosh(), z.0.cos() * z.1.sinh())
+}
+
+/// Complex log-gamma `lnΓ(z)` via the Lanczos `g = 7` approximation, with
+/// the reflection formula for `Re(z) < 1/2`. The real part is the exact
+/// `ln|Γ|`; the imaginary part is correct modulo `2π`, which is all the
+/// FFTLog kernel and offset depend on.
+fn complex_ln_gamma(z: Complex64) -> Complex64 {
     const G: f64 = 7.0;
     const C: [f64; 9] = [
         0.999_999_999_999_809_9,
@@ -1834,19 +1846,30 @@ fn ln_gamma(x: f64) -> f64 {
         9.984_369_578_019_572e-6,
         1.505_632_735_149_311_6e-7,
     ];
-
-    if x < 0.5 {
-        // Reflection formula
+    if z.0 < 0.5 {
+        // Reflection: lnΓ(z) = ln(π) − ln(sin(πz)) − lnΓ(1 − z).
         let pi = std::f64::consts::PI;
-        pi.ln() - (pi * x).sin().ln() - ln_gamma(1.0 - x)
+        let sin_piz = complex_sin((pi * z.0, pi * z.1));
+        let ln_sin = complex_ln(sin_piz);
+        let refl = complex_ln_gamma((1.0 - z.0, -z.1));
+        (
+            pi.ln() - ln_sin.0 - refl.0,
+            -ln_sin.1 - refl.1,
+        )
     } else {
-        let x = x - 1.0;
-        let mut sum = C[0];
+        let zs = (z.0 - 1.0, z.1);
+        let mut sum: Complex64 = (C[0], 0.0);
         for (i, &c) in C.iter().enumerate().skip(1) {
-            sum += c / (x + i as f64);
+            sum = complex_add(sum, complex_div((c, 0.0), (zs.0 + i as f64, zs.1)));
         }
-        let t = x + G + 0.5;
-        0.5 * (2.0 * std::f64::consts::PI).ln() + (x + 0.5) * t.ln() - t + sum.ln()
+        let t = (zs.0 + G + 0.5, zs.1);
+        let half_ln_2pi = 0.5 * (2.0 * std::f64::consts::PI).ln();
+        // lnΓ(z) = ½·ln(2π) + (z − ½)·ln(t) − t + ln(sum).
+        let term2 = complex_mul((zs.0 + 0.5, zs.1), complex_ln(t));
+        complex_add(
+            complex_add((half_ln_2pi, 0.0), term2),
+            complex_add((-t.0, -t.1), complex_ln(sum)),
+        )
     }
 }
 
