@@ -1184,12 +1184,21 @@ pub fn sph_harm(m: i32, l: u32, theta: f64, phi: f64) -> Complex64 {
     // Associated Legendre at cos(phi) — Condon-Shortley phase included
     let plm = lpmv_nonneg_m(am, l, phi.cos());
 
+    // Negative orders: scipy uses Y_l^{-m} = (-1)^m · conj(Y_l^m). The
+    // normalization and Legendre factor here use |m|, so the (-1)^|m|
+    // sign for negative m must be reintroduced explicitly.
+    let sign = if m < 0 && !am.is_multiple_of(2) {
+        -1.0
+    } else {
+        1.0
+    };
+
     // Phase factor exp(i·m·θ)
     let angle = m as f64 * theta;
 
     Complex64 {
-        re: norm * plm * angle.cos(),
-        im: norm * plm * angle.sin(),
+        re: sign * norm * plm * angle.cos(),
+        im: sign * norm * plm * angle.sin(),
     }
 }
 
@@ -2013,6 +2022,26 @@ mod tests {
         let y11 = sph_harm_y(1, 1, 0.5, 1.0);
         assert_close(y11.re, -0.08949498165189648, 1e-12, "Y_1^1 re");
         assert_close(y11.im, -0.13938017574251232, 1e-12, "Y_1^1 im");
+    }
+
+    #[test]
+    fn sph_harm_y_negative_order_matches_scipy() {
+        // scipy.special.sph_harm_y applies Y_n^{-m} = (-1)^m·conj(Y_n^m);
+        // odd negative orders therefore flip sign relative to a plain
+        // conjugate. Reference values from scipy.special.sph_harm_y.
+        let cases: &[(u32, i32, f64, f64)] = &[
+            (1, -1, 0.089_494_981_651_896_48, -0.139_380_175_742_512_32),
+            (2, -1, 0.175_619_068_974_414_95, -0.273_510_494_617_455_9),
+            (2, -2, -0.036_947_463_710_166_74, -0.080_731_681_053_122_66),
+            (3, -1, 0.238_650_704_669_713_22, -0.371_676_450_946_947_1),
+            (3, -2, -0.085_787_030_722_668_29, -0.187_448_081_879_870_83),
+            (3, -3, -0.045_516_042_712_139_326, -0.006_488_154_543_036_636),
+        ];
+        for &(n, m, re, im) in cases {
+            let y = sph_harm_y(n, m, 0.5, 1.0);
+            assert_close(y.re, re, 1e-12, &format!("Y_{n}^{m} re"));
+            assert_close(y.im, im, 1e-12, &format!("Y_{n}^{m} im"));
+        }
     }
 
     // ── Shifted polynomial tests ─────────────────────────────────────

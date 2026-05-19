@@ -87,8 +87,9 @@ fn emit_log(log: &DiffLog) {
 
 fn generate_query() -> OracleQuery {
     use std::f64::consts::{FRAC_PI_2, FRAC_PI_4, PI};
-    // Negative m diverges from scipy (sign-convention mismatch tracked
-    // in defect bead frankenscipy-39e3y); restrict to m >= 0.
+    // Covers positive, zero, and negative orders m. Negative m exercises
+    // the Y_n^{-m} = (-1)^m·conj(Y_n^m) convention (frankenscipy-gojfp /
+    // frankenscipy-39e3y, fixed).
     let probes: &[(u32, i32, f64, f64)] = &[
         (0, 0, FRAC_PI_2, 0.0),
         (0, 0, FRAC_PI_4, PI / 3.0),
@@ -96,16 +97,25 @@ fn generate_query() -> OracleQuery {
         (1, 1, FRAC_PI_2, 0.0),
         (1, 0, FRAC_PI_4, 0.5),
         (1, 1, FRAC_PI_4, 0.5),
+        (1, -1, FRAC_PI_4, 0.5),
         (2, 0, FRAC_PI_4, 0.7),
         (2, 1, FRAC_PI_4, 0.7),
         (2, 2, FRAC_PI_4, 0.7),
+        (2, -1, FRAC_PI_4, 0.7),
+        (2, -2, FRAC_PI_4, 0.7),
         (3, 0, FRAC_PI_2, 1.0),
         (3, 2, FRAC_PI_2, 1.0),
         (3, 3, 0.3, 0.4),
+        (3, -1, FRAC_PI_2, 1.0),
+        (3, -2, 0.3, 0.4),
+        (3, -3, 0.3, 0.4),
         (4, 0, 0.6, 0.8),
         (4, 2, 0.6, 0.8),
+        (4, -3, 0.6, 0.8),
         (5, 3, 0.9, 1.2),
+        (5, -4, 0.9, 1.2),
         (6, 4, 1.2, 0.5),
+        (6, -5, 1.2, 0.5),
     ];
     let points: Vec<PointCase> = probes
         .iter()
