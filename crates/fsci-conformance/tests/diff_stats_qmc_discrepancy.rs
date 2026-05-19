@@ -104,11 +104,10 @@ fn generate_query() -> OracleQuery {
         ("10x2_scattered", &s_10x2, 10, 2),
     ];
 
-    // L2-star excluded — fsci diverges from scipy by what looks like
-    // a squared-vs-unsquared or normalization convention (filed defect).
-    // CD/WD/MD match exactly.
+    // CD/WD/MD and L2-star all match scipy (L2-star squared-vs-unsquared
+    // convention fixed in frankenscipy-krepi).
     for (label, sample, rows, cols) in samples {
-        for method in ["CD", "WD", "MD"] {
+        for method in ["CD", "WD", "MD", "L2-star"] {
             points.push(PointCase {
                 case_id: format!("{label}_{method}"),
                 method: (*method).into(),

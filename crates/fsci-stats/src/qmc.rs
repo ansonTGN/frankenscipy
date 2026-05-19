@@ -584,17 +584,19 @@ pub fn update_centered_discrepancy(
     Ok(leading - 2.0 / n_new_f * b_new + c_new / (n_new_f * n_new_f))
 }
 
-/// Compute the L2-star discrepancy SD²(P) of an `n × d` point set in
+/// Compute the L2-star discrepancy SD(P) of an `n × d` point set in
 /// `[0, 1)^d`, with `sample` row-major.
 ///
-/// Matches `scipy.stats.qmc.discrepancy(sample, method='L2-star')`. The
-/// closed form (Hickernell):
+/// Matches `scipy.stats.qmc.discrepancy(sample, method='L2-star')`, which
+/// returns the (non-squared) discrepancy — the square root of the
+/// Hickernell closed form:
 ///
 ///   SD² = (1/3)^d
 ///       − (2^(1−d) / N) Σ_i Π_k (1 − (xi^k)²)
 ///       + (1/N²) Σ_{i,j} Π_k (1 − max(xi^k, xj^k))
+///   SD  = √(SD²)
 ///
-/// SD² weights how well the design covers the lower-left orthants
+/// SD weights how well the design covers the lower-left orthants
 /// `[0, x]^d` and is the most common deterministic-sequence quality
 /// measure in the QMC literature.
 pub fn l2_star_discrepancy(sample: &[f64], dimension: usize) -> Result<f64, StatsError> {
@@ -611,7 +613,8 @@ pub fn l2_star_discrepancy(sample: &[f64], dimension: usize) -> Result<f64, Stat
     }
     let n = sample.len() / dimension;
     if n == 0 {
-        return Ok((1.0_f64 / 3.0).powi(dimension as i32));
+        // No points: SD² collapses to the leading (1/3)^d term.
+        return Ok((1.0_f64 / 3.0).powi(dimension as i32).sqrt());
     }
     for (idx, &v) in sample.iter().enumerate() {
         if !v.is_finite() || !(0.0..=1.0).contains(&v) {
@@ -646,7 +649,8 @@ pub fn l2_star_discrepancy(sample: &[f64], dimension: usize) -> Result<f64, Stat
         }
     }
     let n_f = n as f64;
-    Ok(leading - two_pow_one_minus_d / n_f * single + double / (n_f * n_f))
+    // scipy.stats.qmc.discrepancy returns the square root of the SD² form.
+    Ok((leading - two_pow_one_minus_d / n_f * single + double / (n_f * n_f)).sqrt())
 }
 
 /// Compute the wraparound L2 discrepancy WD²(P) of an `n × d` point set in
@@ -1484,10 +1488,10 @@ mod tests {
     }
 
     #[test]
-    fn l2_star_empty_sample_is_one_third_to_d() {
+    fn l2_star_empty_sample_is_sqrt_one_third_to_d() {
         for d in 1..=4 {
             let sd = l2_star_discrepancy(&[], d).unwrap();
-            let expected = (1.0_f64 / 3.0).powi(d as i32);
+            let expected = (1.0_f64 / 3.0).powi(d as i32).sqrt();
             assert!((sd - expected).abs() < 1e-15, "d={d}: got {sd}");
         }
     }
@@ -1495,15 +1499,16 @@ mod tests {
     #[test]
     fn l2_star_metamorphic_single_corner_point() {
         // For n=1 at the corner (0,…,0), the single product Π (1 - 0²) = 1
-        // and the double product Π (1 - max(0,0)) = 1.
-        // SD² = (1/3)^d − 2^(1−d) + 1.
+        // and the double product Π (1 - max(0,0)) = 1, so
+        // SD² = (1/3)^d − 2^(1−d) + 1 and scipy returns SD = √(SD²).
         for d in 1..=4 {
             let sample = vec![0.0_f64; d];
             let sd = l2_star_discrepancy(&sample, d).unwrap();
-            let expected = (1.0_f64 / 3.0).powi(d as i32) - 2.0_f64.powi(1 - d as i32) + 1.0;
+            let sd2 = (1.0_f64 / 3.0).powi(d as i32) - 2.0_f64.powi(1 - d as i32) + 1.0;
+            let expected = sd2.sqrt();
             assert!(
                 (sd - expected).abs() < 1e-13,
-                "d={d}: SD²={sd}, expected={expected}"
+                "d={d}: SD={sd}, expected={expected}"
             );
         }
     }
@@ -1514,14 +1519,14 @@ mod tests {
         let d = 2;
         let mut h = HaltonSampler::new(d).unwrap();
         let halton = h.sample(n);
-        // All-zeros design: every point at the lower-left corner. SD² is
+        // All-zeros design: every point at the lower-left corner. SD is
         // dominated by huge contributions (single sum=N, double sum=N²).
         let clustered = vec![0.0_f64; n * d];
         let sd_halton = l2_star_discrepancy(&halton, d).unwrap();
         let sd_cluster = l2_star_discrepancy(&clustered, d).unwrap();
         assert!(
             sd_halton < sd_cluster,
-            "Halton SD²={sd_halton} should beat corner-clustered SD²={sd_cluster}"
+            "Halton SD={sd_halton} should beat corner-clustered SD={sd_cluster}"
         );
     }
 
