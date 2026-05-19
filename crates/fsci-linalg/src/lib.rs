@@ -6436,26 +6436,68 @@ pub fn fiedler(a: &[f64]) -> Vec<Vec<f64>> {
     f
 }
 
-/// Companion matrix from polynomial coefficients (alternate entry point).
+/// Fiedler companion matrix from polynomial coefficients.
 ///
-/// Given coefficients [a₀, a₁, ..., aₙ] of p(x) = a₀xⁿ + a₁xⁿ⁻¹ + ... + aₙ,
-/// returns the (n×n) companion matrix whose eigenvalues are the polynomial roots.
+/// Given coefficients `[a₀, a₁, …, aₙ]` of
+/// `p(x) = a₀·xⁿ + a₁·xⁿ⁻¹ + … + aₙ` in descending order with a nonzero
+/// leading coefficient, returns the `(n×n)` pentadiagonal Fiedler companion
+/// matrix whose eigenvalues coincide with the roots of `p`. When the leading
+/// coefficient is not 1, the coefficients are rescaled to monic form before
+/// construction.
+///
+/// Unlike [`companion`], which builds the standard Frobenius companion
+/// matrix, this is Fiedler's pentadiagonal construction (M. Fiedler, "A note
+/// on companion matrices", *Linear Algebra and its Applications*, 2003); the
+/// two matrices are different shapes that share the same characteristic
+/// polynomial.
+///
+/// Edge cases match `scipy.linalg.fiedler_companion`: fewer than two
+/// coefficients yields an empty matrix; exactly two yields the `1×1` matrix
+/// `[[-a₁/a₀]]`.
+///
+/// Matches `scipy.linalg.fiedler_companion`.
 pub fn fiedler_companion(a: &[f64]) -> Vec<Vec<f64>> {
-    let n = a.len();
-    if n < 2 {
-        return vec![vec![]];
+    if a.len() < 2 {
+        return Vec::new();
     }
-    let m = n - 1;
-    let mut c = vec![vec![0.0; m]; m];
+    // Rescale to a monic polynomial: a ← a / a[0].
+    let lead = a[0];
+    let a: Vec<f64> = a.iter().map(|&coeff| coeff / lead).collect();
 
-    // First row: -a[1..] / a[0]
-    for j in 0..m {
-        c[0][j] = -a[j + 1] / a[0];
+    if a.len() == 2 {
+        return vec![vec![-a[1]]];
     }
-    // Sub-diagonal: 1s
-    for i in 1..m {
-        c[i][i - 1] = 1.0;
+
+    let n = a.len() - 1;
+    let mut c = vec![vec![0.0; n]; n];
+
+    // Outer subdiagonal band: alternating unit entries.
+    for (i, j) in (3..n).step_by(2).zip((1..n - 2).step_by(2)) {
+        c[i][j] = 1.0;
     }
+    // Inner subdiagonal band: scaled odd-index coefficients.
+    for ((i, j), k) in (2..n)
+        .step_by(2)
+        .zip((1..n - 1).step_by(2))
+        .zip((3..=n).step_by(2))
+    {
+        c[i][j] = -a[k];
+    }
+    // Outer superdiagonal band: alternating unit entries.
+    for (i, j) in (0..n - 2).step_by(2).zip((2..n).step_by(2)) {
+        c[i][j] = 1.0;
+    }
+    // Inner superdiagonal band: scaled even-index coefficients.
+    for ((i, j), k) in (0..n - 1)
+        .step_by(2)
+        .zip((1..n).step_by(2))
+        .zip((2..=n).step_by(2))
+    {
+        c[i][j] = -a[k];
+    }
+    // Top-left corner and the first subdiagonal entry.
+    c[0][0] = -a[1];
+    c[1][0] = 1.0;
 
     c
 }
@@ -10091,6 +10133,45 @@ mod tests {
         assert_eq!(f[0][2], 1.0); // |1-2|
         assert_eq!(f[1][0], 3.0);
         assert_eq!(f[1][2], 2.0); // |4-2|
+    }
+
+    #[test]
+    fn fiedler_companion_pentadiagonal() {
+        // p(x) = x^4 - 3x^3 + 2x^2 + 5x - 1 — matches scipy.linalg.fiedler_companion.
+        let c = fiedler_companion(&[1.0, -3.0, 2.0, 5.0, -1.0]);
+        assert_eq!(
+            c,
+            vec![
+                vec![3.0, -2.0, 1.0, 0.0],
+                vec![1.0, 0.0, 0.0, 0.0],
+                vec![0.0, -5.0, 0.0, 1.0],
+                vec![0.0, 1.0, 0.0, 0.0],
+            ]
+        );
+    }
+
+    #[test]
+    fn fiedler_companion_non_monic_rescales() {
+        // Non-monic leading coefficient is normalized before construction:
+        // [2, -4, 6, -8] ≡ monic [1, -2, 3, -4].
+        let c = fiedler_companion(&[2.0, -4.0, 6.0, -8.0]);
+        assert_eq!(
+            c,
+            vec![
+                vec![2.0, -3.0, 1.0],
+                vec![1.0, 0.0, 0.0],
+                vec![0.0, 4.0, 0.0],
+            ]
+        );
+    }
+
+    #[test]
+    fn fiedler_companion_edge_cases() {
+        // Fewer than two coefficients → empty matrix.
+        assert!(fiedler_companion(&[]).is_empty());
+        assert!(fiedler_companion(&[3.0]).is_empty());
+        // Exactly two coefficients → 1×1 matrix [[-a₁/a₀]].
+        assert_eq!(fiedler_companion(&[2.0, 6.0]), vec![vec![-3.0]]);
     }
 
     #[test]

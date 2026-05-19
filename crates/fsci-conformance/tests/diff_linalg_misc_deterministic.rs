@@ -2,9 +2,7 @@
 //! Live SciPy differential coverage for the closed-form / deterministic
 //! linalg primitives not yet covered by diff_linalg_*:
 //!   - `fiedler(a)`                    vs `scipy.linalg.fiedler(a)`
-//!   (fiedler_companion deliberately excluded — fsci's impl is a
-//!    standard Frobenius companion, not Fiedler's pentadiagonal
-//!    construction. Tracked separately via bead frankenscipy-al8mi.)
+//!   - `fiedler_companion(a)`          vs `scipy.linalg.fiedler_companion(a)`
 //!   - `dft_matrix(n)`                 vs `scipy.linalg.dft(n) / sqrt(n)` (fsci normalizes)
 //!   - `convolution_matrix(h, n, mode)` vs `scipy.linalg.convolution_matrix`
 //!   - `bandwidth(a)`                  vs `scipy.linalg.bandwidth(a)`
@@ -17,11 +15,9 @@
 //! DFT — we divide on the python side to match fsci's scaling).
 //!
 //! Scope notes:
-//!  * fiedler_companion deliberately excluded: fsci's impl is a
-//!    standard Frobenius companion matrix while scipy implements
-//!    Fiedler's pentadiagonal construction; these are different
-//!    matrices that happen to share the same characteristic polynomial.
-//!    Tracked in bead frankenscipy-al8mi.
+//!  * fiedler_companion: fsci builds Fiedler's pentadiagonal construction
+//!    (monic-rescaled), bit-exact against scipy.linalg.fiedler_companion
+//!    including non-monic leading coefficients. Resolves frankenscipy-al8mi.
 //!  * bandwidth: scipy returns an unexpected (0, 1) for a 3×5 matrix
 //!    whose nonzero pattern has j-i ∈ {0, 1, 2}; harness restricts to
 //!    square matrices where fsci and scipy agree.
@@ -134,9 +130,26 @@ fn generate_query() -> OracleQuery {
         });
     }
 
-    // fiedler_companion intentionally excluded: fsci's impl is a
-    // standard Frobenius companion matrix, not the pentadiagonal Fiedler
-    // construction scipy implements. Tracked in bead frankenscipy-al8mi.
+    // fiedler_companion: take 1-D polynomial coefficients (descending order).
+    // Includes non-monic leading coefficients to exercise the monic rescale.
+    let fiedler_companion_inputs: &[(&str, Vec<f64>)] = &[
+        ("len3_monic", vec![1.0, 2.0, 3.0]),
+        ("len4_nonmonic", vec![2.0, -4.0, 6.0, -8.0]),
+        ("len5_nonmonic_mixed", vec![3.5, -1.0, 2.0, 4.0, 0.5]),
+        ("len6_monic", vec![1.0, -3.0, 2.0, 5.0, -1.0, 7.0]),
+        ("len7_nonmonic", vec![2.0, 1.0, -3.0, 4.0, -5.0, 6.0, -7.0]),
+        ("len2_nonmonic", vec![2.0, 6.0]),
+    ];
+    for (label, v) in fiedler_companion_inputs {
+        points.push(PointCase {
+            case_id: format!("fiedler_companion_{label}"),
+            op: "fiedler_companion".into(),
+            vec1d: v.clone(),
+            mat2d: vec![],
+            n: 0,
+            mode: "".into(),
+        });
+    }
 
     // dft_matrix: scalar n.
     for &n in &[2usize, 3, 4, 5, 8] {
