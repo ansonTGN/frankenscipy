@@ -5,10 +5,10 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 pub use fsci_runtime::SyncSharedAuditLedger;
-use fsci_runtime::{AuditAction, AuditEvent, AuditLedger, RuntimeMode, casp_now_unix_ms};
+use fsci_runtime::{casp_now_unix_ms, AuditAction, AuditEvent, AuditLedger, RuntimeMode};
 
 use crate::plan::{
-    PlanFingerprint, PlanKey, PlanMetadata, PlanningStrategy, lookup_shared_plan, store_shared_plan,
+    lookup_shared_plan, store_shared_plan, PlanFingerprint, PlanKey, PlanMetadata, PlanningStrategy,
 };
 use crate::{Normalization, TransformKind};
 
@@ -2791,7 +2791,7 @@ fn is_fast_len(mut n: usize) -> bool {
 /// Matches `scipy.fft.hfft(x, n)`.
 ///
 /// Takes a half-spectrum (like rfft output) and produces a real-valued full signal.
-/// This is essentially irfft scaled differently — hfft(x, n) = n * irfft(x, n).
+/// This is essentially irfft scaled differently — hfft(x, n) = n * irfft(conj(x), n).
 pub fn hfft(
     input: &[Complex64],
     n: Option<usize>,
@@ -2876,7 +2876,8 @@ fn hfft_impl(
             input.len().saturating_sub(1).saturating_mul(2)
         }
     });
-    let mut result = irfft_impl(input, Some(out_len), options, audit_ledger)?;
+    let conjugated: Vec<Complex64> = input.iter().copied().map(complex_conj).collect();
+    let mut result = irfft_impl(&conjugated, Some(out_len), options, audit_ledger)?;
     let scale = out_len as f64;
     for v in &mut result {
         *v *= scale;
@@ -2903,7 +2904,7 @@ fn ihfft_impl(
     let scale = 1.0 / in_len as f64;
     for c in &mut result {
         c.0 *= scale;
-        c.1 *= scale;
+        c.1 *= -scale;
     }
 
     Ok(result)
@@ -2914,13 +2915,13 @@ mod tests {
     use fsci_runtime::{AuditAction, RuntimeMode};
 
     use super::{
-        FftError, FftOptions, TransformKind, WorkerPolicy, dct, dct_iv, dctn, dst_ii, dst_iii,
-        estimate_fft_flops, fft, fft_with_audit, fft2, fftn, hfft, idct, idctn, ifft, ifft2, irfft,
-        irfft2, irfftn, is_fast_len, next_fast_len, prev_fast_len, rfft, rfft_with_audit, rfft2,
-        rfftn, sync_audit_ledger, take_transform_traces,
+        dct, dct_iv, dctn, dst_ii, dst_iii, estimate_fft_flops, fft, fft2, fft_with_audit, fftn,
+        hfft, idct, idctn, ifft, ifft2, irfft, irfft2, irfftn, is_fast_len, next_fast_len,
+        prev_fast_len, rfft, rfft2, rfft_with_audit, rfftn, sync_audit_ledger,
+        take_transform_traces, FftError, FftOptions, TransformKind, WorkerPolicy,
     };
-    use crate::Normalization;
     use crate::plan::{clear_shared_plan_cache, shared_cache_test_lock};
+    use crate::Normalization;
 
     fn assert_close(actual: f64, expected: f64, tol: f64) {
         assert!((actual - expected).abs() <= tol, "{actual} !~= {expected}");
@@ -3106,10 +3107,7 @@ mod tests {
         // ⌊N/2⌋+1 bins of fft(x as complex). Pin across multiple N.
         for n in [4_usize, 8, 16, 32, 13] {
             let real_input: Vec<f64> = (0..n).map(|i| (i as f64).sin()).collect();
-            let complex_input: Vec<(f64, f64)> = real_input
-                .iter()
-                .map(|&v| (v, 0.0))
-                .collect();
+            let complex_input: Vec<(f64, f64)> = real_input.iter().map(|&v| (v, 0.0)).collect();
             let opts = FftOptions::default();
             let r = rfft(&real_input, &opts).expect("rfft");
             let c = fft(&complex_input, &opts).expect("fft");
@@ -3118,7 +3116,10 @@ mod tests {
                 assert!(
                     (r[k].0 - c[k].0).abs() < 1e-10 && (r[k].1 - c[k].1).abs() < 1e-10,
                     "N={n}, k={k}: rfft = ({}, {}), fft = ({}, {})",
-                    r[k].0, r[k].1, c[k].0, c[k].1
+                    r[k].0,
+                    r[k].1,
+                    c[k].0,
+                    c[k].1
                 );
             }
         }
@@ -3269,9 +3270,9 @@ mod tests {
         let y = dct(&input, &opts).expect("dct");
         let pi = std::f64::consts::PI;
         let expected: [f64; 4] = [
-            2.0 * (0.0_f64).cos(),    // 2.0
-            2.0 * (pi / 8.0).cos(),    // ~1.8478
-            2.0 * (pi / 4.0).cos(),    // √2
+            2.0 * (0.0_f64).cos(),        // 2.0
+            2.0 * (pi / 8.0).cos(),       // ~1.8478
+            2.0 * (pi / 4.0).cos(),       // √2
             2.0 * (3.0 * pi / 8.0).cos(), // ~0.7654
         ];
         for (i, (got, want)) in y.iter().zip(expected.iter()).enumerate() {
@@ -3756,11 +3757,15 @@ mod tests {
 
     #[test]
     fn hfft_rfft_inverse() {
-        // hfft = n * irfft, so hfft(rfft(x), n) / n = x
+        // hfft = n * irfft(conj(x), n), so hfft(conj(rfft(x)), n) / n = x.
         let opts = FftOptions::default();
         let x = vec![1.0, 2.0, 3.0, 4.0];
         let n = x.len();
-        let spectrum = rfft(&x, &opts).expect("rfft");
+        let spectrum = rfft(&x, &opts)
+            .expect("rfft")
+            .into_iter()
+            .map(|(re, im)| (re, -im))
+            .collect::<Vec<_>>();
         let recovered = hfft(&spectrum, Some(n), &opts).expect("hfft");
         for (i, (&a, &b)) in x.iter().zip(recovered.iter()).enumerate() {
             let b_scaled = b / n as f64;

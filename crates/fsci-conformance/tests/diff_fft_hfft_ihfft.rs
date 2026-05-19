@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 //! Live numpy formula parity for fsci_fft::{hfft, ihfft}.
 //!
-//! Resolves [frankenscipy-fx4af].
-//! fsci defines:
-//!   hfft(x, n)  = n * irfft(x, n)
-//!   ihfft(x, n) = rfft(pad_to_n(x)) / n
+//! Resolves [frankenscipy-fx4af] and [frankenscipy-34q3f].
+//! SciPy defines:
+//!   hfft(x, n)  = n * irfft(conj(x), n)
+//!   ihfft(x, n) = conj(rfft(pad_to_n(x))) / n
 //! Both checked against numpy formulas at 1e-10 abs.
 
 use std::collections::HashMap;
@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_fft::{Complex64, FftOptions, hfft, ihfft};
+use fsci_fft::{hfft, ihfft, Complex64, FftOptions};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-005";
@@ -118,7 +118,11 @@ fn generate_query() -> OracleQuery {
     let spec_n16: Vec<f64> = (0..9)
         .flat_map(|k| {
             let re = (k as f64) * 0.1 + 0.5;
-            let im = if k == 0 || k == 8 { 0.0 } else { (k as f64) * 0.05 };
+            let im = if k == 0 || k == 8 {
+                0.0
+            } else {
+                (k as f64) * 0.05
+            };
             vec![re, im]
         })
         .collect();
@@ -200,8 +204,8 @@ for case in q["hfft"]:
     try:
         re = packed[0::2]; im = packed[1::2]
         x = np.array([complex(r, i) for r, i in zip(re, im)])
-        # Formula: fsci.hfft(x, n) == n * np.fft.irfft(x, n)
-        y = n * np.fft.irfft(x, n)
+        # Formula: scipy.fft.hfft(x, n) == n * np.fft.irfft(conj(x), n)
+        y = n * np.fft.irfft(np.conj(x), n)
         hfft_out.append({"case_id": cid, "values": finite_or_none(y.tolist())})
     except Exception:
         hfft_out.append({"case_id": cid, "values": None})
@@ -212,11 +216,11 @@ for case in q["ihfft"]:
     x = np.array(case["x"], dtype=float)
     n = int(case["n"])
     try:
-        # Formula: fsci.ihfft(x, n) == np.fft.rfft(pad_to_n(x)) / n
+        # Formula: scipy.fft.ihfft(x, n) == conj(np.fft.rfft(pad_to_n(x))) / n
         padded = np.zeros(n, dtype=float)
         copy_len = min(len(x), n)
         padded[:copy_len] = x[:copy_len]
-        y = np.fft.rfft(padded) / n
+        y = np.conj(np.fft.rfft(padded)) / n
         packed = []
         for c in y.tolist():
             packed.append(float(c.real))
@@ -361,7 +365,7 @@ fn diff_fft_hfft_ihfft() {
 
     let log = DiffLog {
         test_id: "diff_fft_hfft_ihfft".into(),
-        category: "fsci_fft::hfft + ihfft vs numpy formula".into(),
+        category: "fsci_fft::hfft + ihfft vs scipy-convention numpy formula".into(),
         case_count: diffs.len(),
         max_abs_diff: max_overall,
         pass: all_pass,
@@ -373,10 +377,7 @@ fn diff_fft_hfft_ihfft() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 
