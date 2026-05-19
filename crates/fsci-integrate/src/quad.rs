@@ -1300,7 +1300,15 @@ where
     // distorting the integral. Resolves [frankenscipy-vetrv].
     let inner_error: RefCell<Option<IntegrateValidationError>> = RefCell::new(None);
 
-    let result = nquad_inner(&func, ranges, &options, &args, &total_neval, &inner_error, 0)?;
+    let result = nquad_inner(
+        &func,
+        ranges,
+        &options,
+        &args,
+        &total_neval,
+        &inner_error,
+        0,
+    )?;
 
     if let Some(err) = inner_error.into_inner() {
         return Err(err);
@@ -1362,7 +1370,15 @@ where
         let result = quad(
             |x| {
                 args.borrow_mut()[dim] = x;
-                match nquad_inner(func, ranges, options, args, total_neval, inner_error, dim + 1) {
+                match nquad_inner(
+                    func,
+                    ranges,
+                    options,
+                    args,
+                    total_neval,
+                    inner_error,
+                    dim + 1,
+                ) {
                     Ok(v) => v,
                     Err(e) => {
                         let mut slot = inner_error.borrow_mut();
@@ -1987,42 +2003,35 @@ pub fn cumulative_simpson(y: &[f64], x: &[f64]) -> Result<Vec<f64>, IntegrateVal
         return cumulative_trapezoid(y, x);
     }
 
-    let mut result = Vec::with_capacity(n - 1);
-    let mut cumsum = 0.0;
-
-    let first_h0 = x[1] - x[0];
-    let first_h1 = x[2] - x[1];
-    if !(first_h0.is_finite() && first_h1.is_finite() && first_h0 > 0.0 && first_h1 > 0.0) {
-        return Err(IntegrateValidationError::QuadInvalidBounds {
-            detail: "x must be finite and strictly increasing".to_string(),
-        });
-    }
-
-    let mut interval_integrals = Vec::with_capacity(n - 1);
-    interval_integrals.push(cumulative_simpson_left_interval(
-        y[0], y[1], y[2], first_h0, first_h1,
-    ));
-    interval_integrals.push(cumulative_simpson_right_interval(
-        y[0], y[1], y[2], first_h0, first_h1,
-    ));
-
-    for i in 3..n {
-        let h_prev = x[i - 1] - x[i - 2];
-        let h_curr = x[i] - x[i - 1];
-        if !(h_prev.is_finite() && h_curr.is_finite() && h_prev > 0.0 && h_curr > 0.0) {
+    let mut dx = Vec::with_capacity(n - 1);
+    for points in x.windows(2) {
+        let h = points[1] - points[0];
+        if !(h.is_finite() && h > 0.0) {
             return Err(IntegrateValidationError::QuadInvalidBounds {
                 detail: "x must be finite and strictly increasing".to_string(),
             });
         }
-        interval_integrals.push(cumulative_simpson_right_interval(
-            y[i - 2],
-            y[i - 1],
-            y[i],
-            h_prev,
-            h_curr,
-        ));
+        dx.push(h);
     }
 
+    let mut result = Vec::with_capacity(n - 1);
+    let mut interval_integrals = vec![0.0; n - 1];
+
+    for i in (0..(n - 2)).step_by(2) {
+        let h0 = dx[i];
+        let h1 = dx[i + 1];
+        interval_integrals[i] = cumulative_simpson_left_interval(y[i], y[i + 1], y[i + 2], h0, h1);
+        interval_integrals[i + 1] =
+            cumulative_simpson_right_interval(y[i], y[i + 1], y[i + 2], h0, h1);
+    }
+
+    if n.is_multiple_of(2) {
+        let i = n - 3;
+        interval_integrals[n - 2] =
+            cumulative_simpson_right_interval(y[i], y[i + 1], y[i + 2], dx[i], dx[i + 1]);
+    }
+
+    let mut cumsum = 0.0;
     for value in interval_integrals {
         cumsum += value;
         result.push(cumsum);
@@ -3303,7 +3312,11 @@ mod tests {
     fn quad_vec_rejects_inconsistent_output_shape() {
         let err = quad_vec(
             |x| {
-                if x < 0.5 { vec![x] } else { vec![x, x * x] }
+                if x < 0.5 {
+                    vec![x]
+                } else {
+                    vec![x, x * x]
+                }
             },
             0.0,
             1.0,
@@ -3936,6 +3949,49 @@ mod tests {
     }
 
     #[test]
+    fn cumulative_simpson_matches_scipy_nonuniform_cubic() {
+        let x = vec![0.0, 0.2, 0.5, 1.1, 1.4, 2.0, 2.7, 3.5];
+        let y: Vec<f64> = x.iter().map(|&xi| xi * xi * xi + 2.0 * xi).collect();
+        let result = cumulative_simpson(&y, &x).unwrap();
+        let expected = [
+            0.039_866_666_666_666_66,
+            0.266_666_666_666_666_6,
+            1.555_466_666_666_667,
+            2.903_216_666_666_666_3,
+            7.946_816_666_666_668,
+            20.577_150_000_000_007,
+            49.860_616_666_666_67,
+        ];
+        for (got, want) in result.iter().zip(expected) {
+            assert!((got - want).abs() < 1e-12, "got {got}, expected {want}");
+        }
+    }
+
+    #[test]
+    fn cumulative_simpson_matches_scipy_uniform_sine() {
+        let x: Vec<f64> = (0..=10)
+            .map(|i| (i as f64) * std::f64::consts::PI / 10.0)
+            .collect();
+        let y: Vec<f64> = x.iter().map(|&xi| xi.sin()).collect();
+        let result = cumulative_simpson(&y, &x).unwrap();
+        let expected = [
+            0.049_332_186_036_761_73,
+            0.190_993_463_598_046_28,
+            0.412_475_894_906_144_34,
+            0.691_020_842_926_797_3,
+            1.000_054_758_657_502_2,
+            1.309_088_674_388_206_9,
+            1.587_633_622_408_859_9,
+            1.809_116_053_716_958,
+            1.950_777_331_278_242_6,
+            2.000_109_517_315_004_3,
+        ];
+        for (got, want) in result.iter().zip(expected) {
+            assert!((got - want).abs() < 1e-12, "got {got}, expected {want}");
+        }
+    }
+
+    #[test]
     fn cumulative_simpson_two_points_falls_back_to_trapezoid() {
         let x = vec![0.0, 2.0];
         let y = vec![1.0, 3.0];
@@ -4020,11 +4076,7 @@ mod tests {
         // Case A (NaN propagation): integrand returns NaN unconditionally.
         // Inner quad returns Ok(NaN); the post-loop finiteness guard
         // surfaces this as a typed error.
-        let r = nquad(
-            |_args| f64::NAN,
-            &[(0.0, 1.0), (0.0, 1.0)],
-            opts,
-        );
+        let r = nquad(|_args| f64::NAN, &[(0.0, 1.0), (0.0, 1.0)], opts);
         assert!(
             r.is_err(),
             "nquad must surface NaN-propagation as Err, got {r:?}"

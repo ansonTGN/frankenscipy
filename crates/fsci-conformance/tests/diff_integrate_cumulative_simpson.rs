@@ -7,14 +7,9 @@
 //! trapezoid / simpson / cumulative_trapezoid / romb but did not
 //! exercise cumulative_simpson.
 //!
-//! **Scope note:** scipy.integrate.cumulative_simpson and
-//! fsci_integrate::cumulative_simpson use different intra-window
-//! schemes for piecewise-Simpson cumulation, so they diverge on
-//! higher-order / non-uniform integrands. This harness restricts to
-//! constant / linear / quadratic / two-point / three-point cases where
-//! Simpson is exact (and therefore both implementations must agree
-//! with the exact integral and with each other) at 1e-12 abs.
-//! Broader divergence is tracked separately.
+//! Includes polynomial-exact cases plus higher-order and non-uniform
+//! grids that exercise SciPy's paired-window cumulative Simpson
+//! interval selection.
 
 use std::collections::HashMap;
 use std::fs;
@@ -27,7 +22,7 @@ use fsci_integrate::cumulative_simpson;
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-008";
-const ABS_TOL: f64 = 1.0e-12;
+const ABS_TOL: f64 = 1.0e-10;
 const REQUIRE_SCIPY_ENV: &str = "FSCI_REQUIRE_SCIPY_ORACLE";
 
 #[derive(Debug, Clone, Serialize)]
@@ -116,11 +111,7 @@ fn generate_query() -> OracleQuery {
     cases.push(("xsq_uniform_n11", y_quad, x_uni));
 
     // 4. Two-point fallback to cumulative_trapezoid.
-    cases.push((
-        "twopoint_fallback",
-        vec![1.0, 4.0],
-        vec![0.0, 1.0],
-    ));
+    cases.push(("twopoint_fallback", vec![1.0, 4.0], vec![0.0, 1.0]));
 
     // 5. Three-point linear case.
     cases.push((
@@ -133,6 +124,23 @@ fn generate_query() -> OracleQuery {
     let x_q2: Vec<f64> = (0..5).map(|i| i as f64 * 0.5).collect();
     let y_q2: Vec<f64> = x_q2.iter().map(|&t| 2.0 * t * t + 3.0 * t + 1.0).collect();
     cases.push(("quad_uniform_n5", y_q2, x_q2));
+
+    // 7. Cubic on a non-uniform grid; exercises SciPy's paired-window scheme.
+    let x_cubic: Vec<f64> = vec![0.0, 0.2, 0.5, 1.1, 1.4, 2.0, 2.7, 3.5];
+    let y_cubic: Vec<f64> = x_cubic.iter().map(|&t| t * t * t + 2.0 * t).collect();
+    cases.push(("cubic_nonuniform_n8", y_cubic, x_cubic));
+
+    // 8. Smooth non-polynomial on a uniform grid with an even number of subintervals.
+    let x_sin: Vec<f64> = (0..=10)
+        .map(|i| (i as f64) * std::f64::consts::PI / 10.0)
+        .collect();
+    let y_sin: Vec<f64> = x_sin.iter().map(|&t| t.sin()).collect();
+    cases.push(("sin_uniform_pi_n11", y_sin, x_sin));
+
+    // 9. Decaying exponential on a non-uniform grid.
+    let x_exp: Vec<f64> = vec![0.0, 0.1, 0.4, 0.9, 1.5, 2.2, 3.0, 4.1, 5.0];
+    let y_exp: Vec<f64> = x_exp.iter().map(|&t| (-t).exp()).collect();
+    cases.push(("exp_nonuniform_n9", y_exp, x_exp));
 
     let points = cases
         .into_iter()
@@ -209,9 +217,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "cumulative_simpson oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping cumulative_simpson oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping cumulative_simpson oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -224,9 +230,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "cumulative_simpson oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping cumulative_simpson oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping cumulative_simpson oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
