@@ -3203,63 +3203,105 @@ pub fn interp2d(
         + f11 * tx * ty)
 }
 
+/// Number of meaningful B-spline coefficients for a tck.
+///
+/// FITPACK's knot/coefficient relationship is `len(t) = m + k + 1`, where `m`
+/// is the number of basis functions. SciPy zero-pads `c` to `len(t)`, while
+/// FrankenSciPy's own tck is "tight" (`len(c) == m`). Deriving `m` from the
+/// knot vector lets the spline calculus routines accept either convention.
+fn tck_n_coeffs(t: &[f64], k: usize) -> Result<usize, InterpError> {
+    t.len()
+        .checked_sub(k + 1)
+        .filter(|&m| m >= 1)
+        .ok_or_else(|| InterpError::InvalidArgument {
+            detail: format!(
+                "invalid tck: knot length {} too short for degree {k}",
+                t.len()
+            ),
+        })
+}
+
 /// Compute the derivative of a B-spline.
 ///
-/// Returns new knots and coefficients for the derivative spline.
+/// Returns new knots and coefficients for the derivative spline. Accepts both
+/// the FrankenSciPy "tight" tck convention (`len(c) == len(t) - k - 1`) and
+/// SciPy's zero-padded convention (`len(c) == len(t)`); only the
+/// `len(t) - k - 1` meaningful coefficients are consulted, and the returned
+/// tck uses the tight convention.
+///
 /// Matches `scipy.interpolate.splder`.
 pub fn splder(
     tck: &(Vec<f64>, Vec<f64>, usize),
 ) -> Result<(Vec<f64>, Vec<f64>, usize), InterpError> {
     let (t, c, k) = tck;
-    if *k == 0 {
+    let k = *k;
+    if k == 0 {
         return Err(InterpError::InvalidArgument {
             detail: "cannot differentiate degree-0 spline".to_string(),
         });
     }
 
-    let n = c.len();
-    let new_k = k - 1;
+    let m = tck_n_coeffs(t, k)?;
+    if c.len() < m {
+        return Err(InterpError::InvalidArgument {
+            detail: format!("invalid tck: {} coefficients, {m} required", c.len()),
+        });
+    }
 
-    // Derivative coefficients: c'_i = k * (c_{i+1} - c_i) / (t_{i+k+1} - t_{i+1})
-    let mut new_c = Vec::with_capacity(n - 1);
-    for i in 0..n - 1 {
+    // Derivative coefficients: c'_i = k * (c_{i+1} - c_i) / (t_{i+k+1} - t_{i+1}).
+    let mut new_c = Vec::with_capacity(m - 1);
+    for i in 0..m - 1 {
         let dt = t[i + k + 1] - t[i + 1];
         if dt.abs() > 1e-15 {
-            new_c.push(*k as f64 * (c[i + 1] - c[i]) / dt);
+            new_c.push(k as f64 * (c[i + 1] - c[i]) / dt);
         } else {
             new_c.push(0.0);
         }
     }
 
-    // Remove one knot from each end
+    // Remove one knot from each end.
     let new_t = t[1..t.len() - 1].to_vec();
 
-    Ok((new_t, new_c, new_k))
+    Ok((new_t, new_c, k - 1))
 }
 
 /// Compute the antiderivative (integral) of a B-spline.
+///
+/// Accepts both the FrankenSciPy "tight" tck convention
+/// (`len(c) == len(t) - k - 1`) and SciPy's zero-padded convention
+/// (`len(c) == len(t)`); only the `len(t) - k - 1` meaningful coefficients
+/// are consulted, and the returned tck uses the tight convention. The
+/// integration constant is fixed at zero.
 ///
 /// Matches `scipy.interpolate.splantider`.
 pub fn splantider(
     tck: &(Vec<f64>, Vec<f64>, usize),
 ) -> Result<(Vec<f64>, Vec<f64>, usize), InterpError> {
     let (t, c, k) = tck;
-    let n = c.len();
-    let new_k = k + 1;
+    let k = *k;
+    let m = tck_n_coeffs(t, k)?;
+    if c.len() < m {
+        return Err(InterpError::InvalidArgument {
+            detail: format!("invalid tck: {} coefficients, {m} required", c.len()),
+        });
+    }
 
-    // Antiderivative coefficients
-    let mut new_c = vec![0.0]; // integration constant = 0
-    for i in 0..n {
-        let dt = t[i + k + 1] - t[i + 1];
+    // Antiderivative coefficients (cumulative): c'_0 = 0 (integration
+    // constant), c'_{i+1} = c'_i + c_i * (t_{i+k+1} - t_i) / (k + 1).
+    let mut new_c = Vec::with_capacity(m + 1);
+    new_c.push(0.0);
+    for i in 0..m {
+        let dt = t[i + k + 1] - t[i];
         new_c.push(new_c[i] + c[i] * dt / (k + 1) as f64);
     }
 
-    // Add one knot at each end (repeat boundary knots)
-    let mut new_t = vec![t[0]];
+    // Add one knot at each end (repeat boundary knots).
+    let mut new_t = Vec::with_capacity(t.len() + 2);
+    new_t.push(t[0]);
     new_t.extend_from_slice(t);
     new_t.push(t[t.len() - 1]);
 
-    Ok((new_t, new_c, new_k))
+    Ok((new_t, new_c, k + 1))
 }
 
 /// Compute the definite integral of a B-spline.
@@ -6291,5 +6333,94 @@ mod tests {
 
         let r = lagrange(&[0.0_f64], &[42.0]).unwrap();
         assert_eq!(r, vec![42.0]);
+    }
+
+    /// Hand-built degree-2 B-spline as a pair of tck variants that differ
+    /// only in how `c` is sized: the `tight` form carries the `m = 5`
+    /// meaningful coefficients, the `padded` form zero-pads to `len(t) = 8`
+    /// like a SciPy/FITPACK tck. Spline calculus must accept both.
+    fn quadratic_bspline_tcks() -> Vec<(Vec<f64>, Vec<f64>, usize)> {
+        let t = vec![0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 3.0, 3.0];
+        let c = vec![1.0, 2.0, 3.0, 1.0, 0.0];
+        let mut c_padded = c.clone();
+        c_padded.resize(t.len(), 0.0);
+        vec![(t.clone(), c, 2), (t, c_padded, 2)]
+    }
+
+    #[test]
+    fn splantider_matches_scipy_and_accepts_padded_tck() {
+        // Golden values from scipy.interpolate.splantider on the exact tck.
+        let expected_c = [
+            0.0,
+            1.0 / 3.0,
+            5.0 / 3.0,
+            14.0 / 3.0,
+            16.0 / 3.0,
+            16.0 / 3.0,
+        ];
+        let expected_t = [
+            0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 3.0, 3.0, 3.0,
+        ];
+        // The padded (SciPy-shaped) tck must not panic — this is the bug fix.
+        for tck in &quadratic_bspline_tcks() {
+            let (at, ac, ak) = splantider(tck).unwrap();
+            assert_eq!(ak, 3, "antiderivative degree is k + 1");
+            assert_eq!(at.len(), expected_t.len());
+            for (got, want) in at.iter().zip(expected_t.iter()) {
+                assert!((got - want).abs() < 1e-12, "knot {got} != {want}");
+            }
+            // Output uses the tight convention: len(c) == len(t) - k - 1.
+            assert_eq!(ac.len(), at.len() - ak - 1);
+            assert_eq!(ac.len(), expected_c.len());
+            for (got, want) in ac.iter().zip(expected_c.iter()) {
+                assert!((got - want).abs() < 1e-12, "coeff {got} != {want}");
+            }
+        }
+    }
+
+    #[test]
+    fn splder_matches_scipy_and_accepts_padded_tck() {
+        // Golden values from scipy.interpolate.splder on the exact tck.
+        let expected_c = [2.0, 1.0, -2.0, -2.0];
+        let expected_t = [0.0, 0.0, 1.0, 2.0, 3.0, 3.0];
+        for tck in &quadratic_bspline_tcks() {
+            let (dt, dc, dk) = splder(tck).unwrap();
+            assert_eq!(dk, 1, "derivative degree is k - 1");
+            assert_eq!(dt, expected_t);
+            assert_eq!(dc.len(), dt.len() - dk - 1);
+            assert_eq!(dc, expected_c);
+        }
+    }
+
+    #[test]
+    fn splint_matches_scipy_on_padded_tck() {
+        // Golden definite integrals from scipy.interpolate.splint.
+        let cases = [
+            (0.0, 3.0, 16.0 / 3.0),
+            (0.5, 2.5, 4.354_166_666_666_667),
+            (1.0, 2.0, 2.5),
+            (0.0, 1.5, 3.145_833_333_333_333_5),
+        ];
+        for tck in &quadratic_bspline_tcks() {
+            for &(a, b, want) in &cases {
+                let got = splint(a, b, tck).unwrap();
+                assert!(
+                    (got - want).abs() < 1e-12,
+                    "splint({a}, {b}) = {got}, expected {want}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn spline_calculus_rejects_degenerate_tck() {
+        // Knot vector too short to define any basis function.
+        let short = (vec![0.0, 1.0, 2.0], vec![1.0], 3);
+        assert!(splantider(&short).is_err());
+        assert!(splder(&short).is_err());
+        // Fewer coefficients than the knot vector implies.
+        let starved = (vec![0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 3.0, 3.0], vec![1.0], 2);
+        assert!(splantider(&starved).is_err());
+        assert!(splder(&starved).is_err());
     }
 }
