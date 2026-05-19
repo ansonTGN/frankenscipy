@@ -101,7 +101,7 @@ fn flatten_table(table: &[Vec<f64>]) -> Vec<f64> {
 fn generate_query() -> OracleQuery {
     let mut points = Vec::new();
     let xs = [-0.7, -0.3, 0.0, 0.2, 0.5, 0.8, 0.95];
-    let dims: &[(u32, u32)] = &[(0, 3), (1, 3), (2, 4), (3, 5)];
+    let dims: &[(u32, u32)] = &[(0, 3), (1, 3), (2, 4), (3, 5), (4, 5)];
     for &(m_max, n_max) in dims {
         for &x in &xs {
             points.push(Case {
