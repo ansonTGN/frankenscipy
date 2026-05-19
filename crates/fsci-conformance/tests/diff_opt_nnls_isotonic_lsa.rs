@@ -6,11 +6,10 @@
 //!
 //! - `nnls(A, b)`: non-negative least squares. Compare x at 1e-8 abs
 //!   and residual ||b - Ax||₂ at 1e-10 abs.
-//! - `isotonic_regression(y, w)`: scipy PAVA. fsci's PAVA has a
-//!   defect (frankenscipy-mmut4) where merged-block members past
-//!   the second slot don't get updated to the pooled value, so
-//!   the function diverges by up to 1.15 abs from scipy. Restrict
-//!   probes to inputs that produce at most one pool step.
+//! - `isotonic_regression(y, w)`: scipy PAVA. Probes cover the full
+//!   Pool Adjacent Violators Algorithm — strictly-decreasing inputs,
+//!   multi-step pooling, and weighted pooling — at 1e-12 abs
+//!   (frankenscipy-7tq6y, fixed).
 //! - `linear_sum_assignment(cost)`: Hungarian. The assignment can
 //!   be non-unique under ties, so compare the TOTAL COST (which
 //!   IS unique for any optimal assignment) at 1e-12 abs.
@@ -156,14 +155,30 @@ fn generate_query() -> OracleQuery {
         });
     }
 
-    // isotonic_regression probes — limited to inputs that produce
-    // at most one pool step (fsci defect mmut4: PAVA only updates
-    // first two members of a merged block, so multi-pool inputs
-    // diverge by up to 1.15 abs from scipy).
+    // isotonic_regression probes covering the full PAVA: monotone and
+    // constant pass-throughs, strictly-decreasing and multi-step inputs
+    // whose pooling propagates across the whole block, and weighted
+    // pooling. (fsci defect frankenscipy-7tq6y, fixed.)
     let y_data = vec![
         ("monotone", vec![1.0_f64, 2.0, 3.0, 4.0, 5.0], vec![]),
         ("constant", vec![2.0; 6], vec![]),
         ("single_violation", vec![1.0, 3.0, 2.5, 4.0, 5.0], vec![]),
+        ("strictly_decreasing", vec![5.0, 4.0, 3.0, 2.0, 1.0], vec![]),
+        (
+            "multi_pool",
+            vec![1.5, 1.0, 4.0, 6.0, 5.7, 5.0, 7.8, 9.0, 7.5, 9.5, 9.0],
+            vec![],
+        ),
+        (
+            "weighted_pool",
+            vec![3.0, 1.0, 2.0, 0.5, 1.5],
+            vec![1.0, 2.0, 1.0, 1.0, 1.0],
+        ),
+        (
+            "weighted_decreasing",
+            vec![4.0, 4.0, 2.0, 2.0],
+            vec![3.0, 1.0, 1.0, 3.0],
+        ),
     ];
     for (label, y, w) in &y_data {
         points.push(Case {

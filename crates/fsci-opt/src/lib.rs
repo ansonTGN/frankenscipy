@@ -2798,9 +2798,24 @@ fn solve_small_system(a: &[Vec<f64>], b: &[f64]) -> Vec<f64> {
     x
 }
 
-/// Isotonic regression: fit a non-decreasing function.
+/// A pooled block of adjacent points produced by the PAVA stack.
+struct IsotonicBlock {
+    /// Number of original points the block spans.
+    count: usize,
+    /// Sum of case weights over the block.
+    weight: f64,
+    /// Weight-weighted sum of responses over the block.
+    weighted_sum: f64,
+}
+
+/// Isotonic regression: fit a non-decreasing least-squares function.
 ///
-/// Matches `sklearn.isotonic.IsotonicRegression` (simplified).
+/// Minimizes `Σ wᵢ(yᵢ − xᵢ)²` subject to `x` being non-decreasing, via the
+/// Pool Adjacent Violators Algorithm (PAVA). Matches
+/// `scipy.optimize.isotonic_regression` (the `increasing=True` case).
+///
+/// `weights` must be strictly positive and the same length as `y`; violating
+/// either, or a non-finite entry in `y`/`weights`, yields a `NaN` vector.
 pub fn isotonic_regression(y: &[f64], weights: Option<&[f64]>) -> Vec<f64> {
     let n = y.len();
     if n == 0 {
@@ -2811,7 +2826,8 @@ pub fn isotonic_regression(y: &[f64], weights: Option<&[f64]>) -> Vec<f64> {
     }
 
     let w: Vec<f64> = if let Some(wts) = weights {
-        if wts.len() != n || wts.iter().any(|v| !v.is_finite() || *v < 0.0) {
+        // SciPy requires strictly-positive case weights.
+        if wts.len() != n || wts.iter().any(|v| !v.is_finite() || *v <= 0.0) {
             return vec![f64::NAN; n];
         }
         wts.to_vec()
@@ -2819,37 +2835,39 @@ pub fn isotonic_regression(y: &[f64], weights: Option<&[f64]>) -> Vec<f64> {
         vec![1.0; n]
     };
 
-    // Pool Adjacent Violators Algorithm (PAVA)
-    let mut result = y.to_vec();
-    let mut block_weights = w.clone();
-
-    let mut i = 0;
-    while i < n - 1 {
-        if result[i] > result[i + 1] {
-            // Pool blocks i and i+1
-            let total_w = block_weights[i] + block_weights[i + 1];
-            let pooled =
-                (result[i] * block_weights[i] + result[i + 1] * block_weights[i + 1]) / total_w;
-            result[i] = pooled;
-            result[i + 1] = pooled;
-            block_weights[i] = total_w;
-            block_weights[i + 1] = total_w;
-
-            // Check backwards
-            while i > 0 && result[i - 1] > result[i] {
-                let total_w = block_weights[i - 1] + block_weights[i];
-                let pooled =
-                    (result[i - 1] * block_weights[i - 1] + result[i] * block_weights[i]) / total_w;
-                result[i - 1] = pooled;
-                result[i] = pooled;
-                block_weights[i - 1] = total_w;
-                block_weights[i] = total_w;
-                i -= 1;
+    // Pool Adjacent Violators Algorithm (Busing 2022): scan left to right,
+    // maintaining a stack of blocks whose means are strictly increasing. Each
+    // new point starts a singleton block and is merged into the block to its
+    // left as long as the left block's mean exceeds it — a downward
+    // violation. Means are compared by cross-multiplication (all weights are
+    // strictly positive) to avoid division until the final expansion.
+    let mut blocks: Vec<IsotonicBlock> = Vec::with_capacity(n);
+    for i in 0..n {
+        let mut block = IsotonicBlock {
+            count: 1,
+            weight: w[i],
+            weighted_sum: w[i] * y[i],
+        };
+        while let Some(prev) = blocks.last() {
+            // prev.mean > block.mean  ⇔  prev.wsum·block.w > block.wsum·prev.w
+            if prev.weighted_sum * block.weight > block.weighted_sum * prev.weight {
+                let prev = blocks.pop().expect("last() returned Some");
+                block.count += prev.count;
+                block.weight += prev.weight;
+                block.weighted_sum += prev.weighted_sum;
+            } else {
+                break;
             }
         }
-        i += 1;
+        blocks.push(block);
     }
 
+    // Expand each block's weighted mean back across the points it spans.
+    let mut result = Vec::with_capacity(n);
+    for block in &blocks {
+        let mean = block.weighted_sum / block.weight;
+        result.resize(result.len() + block.count, mean);
+    }
     result
 }
 
@@ -3961,7 +3979,8 @@ mod tests {
         LinearConstraint, MilpOptions, MilpProblem, MinimizeOptions, NonlinearConstraint,
         OptimizeMethod, RootOptions, approx_fprime, basinhopping, check_grad, cobyla, derivative,
         differential_evolution, differential_evolution_constrained, dual_annealing,
-        gradient_descent, hessian, jacobian, linear_sum_assignment, linprog, milp, nnls,
+        gradient_descent, hessian, isotonic_regression, jacobian, linear_sum_assignment, linprog,
+        milp, nnls,
         projected_gradient_descent, pso, rosen, rosen_der, rosen_hess, rosen_hess_prod, shgo,
     };
 
@@ -5124,5 +5143,69 @@ mod tests {
         // Single element input should return 0
         assert_eq!(rosen(&[1.0]), 0.0);
         assert_eq!(rosen_der(&[1.0]), vec![0.0]);
+    }
+
+    fn assert_close(got: &[f64], want: &[f64]) {
+        assert_eq!(got.len(), want.len(), "length mismatch");
+        for (i, (g, w)) in got.iter().zip(want.iter()).enumerate() {
+            assert!((g - w).abs() < 1e-12, "index {i}: got {g}, want {w}");
+        }
+    }
+
+    #[test]
+    fn isotonic_regression_strictly_decreasing_pools_to_global_mean() {
+        // A fully decreasing input pools into a single block — every PAVA
+        // merge must propagate across the whole block, not just two cells.
+        // scipy.optimize.isotonic_regression([5,4,3,2,1]).x == [3,3,3,3,3]
+        let r = isotonic_regression(&[5.0, 4.0, 3.0, 2.0, 1.0], None);
+        assert_close(&r, &[3.0, 3.0, 3.0, 3.0, 3.0]);
+    }
+
+    #[test]
+    fn isotonic_regression_weighted_multi_pool() {
+        // Weighted PAVA: scipy gives an all-1.5 fit for this input.
+        let y = [3.0, 1.0, 2.0, 0.5, 1.5];
+        let w = [1.0, 2.0, 1.0, 1.0, 1.0];
+        let r = isotonic_regression(&y, Some(&w));
+        assert_close(&r, &[1.5, 1.5, 1.5, 1.5, 1.5]);
+
+        // Weights bias the pooled mean: scipy gives an all-3.0 fit here.
+        let r2 = isotonic_regression(&[4.0, 4.0, 2.0, 2.0], Some(&[3.0, 1.0, 1.0, 3.0]));
+        assert_close(&r2, &[3.0, 3.0, 3.0, 3.0]);
+    }
+
+    #[test]
+    fn isotonic_regression_already_monotone_is_identity() {
+        let r = isotonic_regression(&[1.0, 2.0, 3.0], None);
+        assert_close(&r, &[1.0, 2.0, 3.0]);
+        // Mixed input with one isolated violation, scipy reference values.
+        let r2 = isotonic_regression(
+            &[1.5, 1.0, 4.0, 6.0, 5.7, 5.0, 7.8, 9.0, 7.5, 9.5, 9.0],
+            None,
+        );
+        assert_close(
+            &r2,
+            &[
+                1.25, 1.25, 4.0, 5.566_666_666_666_666, 5.566_666_666_666_666,
+                5.566_666_666_666_666, 7.8, 8.25, 8.25, 9.25, 9.25,
+            ],
+        );
+    }
+
+    #[test]
+    fn isotonic_regression_rejects_invalid_weights() {
+        // Non-positive weights are invalid (scipy requires strictly positive).
+        assert!(isotonic_regression(&[1.0, 2.0], Some(&[1.0, 0.0]))
+            .iter()
+            .all(|v| v.is_nan()));
+        assert!(isotonic_regression(&[1.0, 2.0], Some(&[1.0, -1.0]))
+            .iter()
+            .all(|v| v.is_nan()));
+        // Mismatched weight length is invalid.
+        assert!(isotonic_regression(&[1.0, 2.0], Some(&[1.0]))
+            .iter()
+            .all(|v| v.is_nan()));
+        // Empty input returns empty.
+        assert!(isotonic_regression(&[], None).is_empty());
     }
 }
