@@ -202,10 +202,17 @@ fn diff_linalg_qz_reconstruct() {
             pass: q_d <= ABS_TOL,
         });
 
-        // Z orthogonality is intentionally NOT checked here — fsci_linalg.qz
-        // returns a non-orthogonal Z (filed separately as defect). The
-        // reconstruction invariants Qᵀ A Z ≈ AA / Qᵀ B Z ≈ BB are still
-        // exact, so those plus Q-orthogonality form the harness.
+        // Z orthogonal (frankenscipy-uvrcc: qz now returns orthogonal Z).
+        let zt = transpose(&res.z);
+        let zzt = matmul(&res.z, &zt);
+        let z_d = identity_diff(&zzt);
+        max_overall = max_overall.max(z_d);
+        diffs.push(CaseDiff {
+            case_id: format!("z_ortho_{label}"),
+            op: "qz_z_ortho".into(),
+            abs_diff: z_d,
+            pass: z_d <= ABS_TOL,
+        });
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

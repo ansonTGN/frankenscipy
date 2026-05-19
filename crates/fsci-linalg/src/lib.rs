@@ -4174,10 +4174,35 @@ pub fn qz(a: &[Vec<f64>], b: &[Vec<f64>], options: DecompOptions) -> Result<QzRe
         .solve(&identity)
         .ok_or(LinalgError::SingularMatrix)?;
 
+    // Real Schur of A·B⁻¹ = Q·T·Qᵀ gives the orthogonal Q and a real
+    // quasi-upper-triangular T.
     let schur_decomp = (&a_mat * &b_inv).schur();
-    let (q_mat, t_mat) = schur_decomp.unpack();
-    let z_mat = &b_inv * &q_mat;
-    let bb_mat = q_mat.transpose() * &b_mat * &z_mat;
+    let (q_mat, _t_mat) = schur_decomp.unpack();
+
+    // Choose an orthogonal Z that upper-triangularizes Qᵀ·B. Writing
+    // C = Qᵀ·B, an RQ factorization C = R·Zᵀ yields BB = Qᵀ·B·Z = R
+    // (upper-triangular) and AA = Qᵀ·A·Z = T·R (quasi-upper-triangular),
+    // with both Q and Z orthogonal — unlike the previous Z = B⁻¹·Q,
+    // which was not orthogonal.
+    let c_mat = q_mat.transpose() * &b_mat;
+    let mut z_mat = qz_orthogonal_z(&c_mat);
+
+    let mut aa_mat = q_mat.transpose() * &a_mat * &z_mat;
+    let mut bb_mat = q_mat.transpose() * &b_mat * &z_mat;
+
+    // LAPACK's generalized Schur form normalizes BB to a non-negative
+    // diagonal. Flip the sign of any Z column whose BB diagonal entry is
+    // negative; this keeps Z orthogonal and AA/BB (quasi-)triangular, and
+    // makes qz(A, I) return BB = I as scipy.linalg.qz does.
+    for j in 0..ar {
+        if bb_mat[(j, j)] < 0.0 {
+            for i in 0..ar {
+                z_mat[(i, j)] = -z_mat[(i, j)];
+                aa_mat[(i, j)] = -aa_mat[(i, j)];
+                bb_mat[(i, j)] = -bb_mat[(i, j)];
+            }
+        }
+    }
 
     emit_trace(LinalgTrace {
         operation: "qz",
@@ -4191,9 +4216,35 @@ pub fn qz(a: &[Vec<f64>], b: &[Vec<f64>], options: DecompOptions) -> Result<QzRe
     Ok(QzResult {
         q: rows_from_dmatrix(&q_mat),
         z: rows_from_dmatrix(&z_mat),
-        aa: rows_from_dmatrix(&t_mat),
+        aa: rows_from_dmatrix(&aa_mat),
         bb: rows_from_dmatrix(&bb_mat),
     })
+}
+
+/// Orthogonal `Z` such that `C·Z` is upper-triangular — the orthogonal
+/// factor of the RQ decomposition `C = R·Zᵀ`.
+///
+/// Built from a QR factorization of the row-reversed transpose: with `J`
+/// the exchange matrix, `(J·C)ᵀ = Q₂·R₂` gives `C = (J·R₂ᵀ·J)·(Q₂·J)ᵀ`,
+/// so `Z = Q₂·J` (the columns of `Q₂` reversed) is orthogonal.
+fn qz_orthogonal_z(c: &DMatrix<f64>) -> DMatrix<f64> {
+    let n = c.nrows();
+    // Row-reverse C, then transpose.
+    let mut jc_t = DMatrix::<f64>::zeros(n, n);
+    for i in 0..n {
+        for j in 0..n {
+            jc_t[(i, j)] = c[(n - 1 - j, i)];
+        }
+    }
+    let q2 = jc_t.qr().q();
+    // Z = Q₂·J: reverse the columns of Q₂.
+    let mut z = DMatrix::<f64>::zeros(n, n);
+    for i in 0..n {
+        for j in 0..n {
+            z[(i, j)] = q2[(i, n - 1 - j)];
+        }
+    }
+    z
 }
 
 fn ordqz_selected(alpha: f64, beta: f64, sort: OrdQzSort) -> bool {
@@ -9499,6 +9550,35 @@ mod tests {
                     result.aa[i][j].abs() < 1e-10,
                     "AA must be quasi-upper triangular"
                 );
+            }
+        }
+    }
+
+    /// Q and Z returned by `qz` must both be orthogonal — `M·Mᵀ = I` —
+    /// across diagonal, SPD, and triangular fixtures (frankenscipy-uvrcc).
+    #[test]
+    fn qz_q_and_z_are_orthogonal() {
+        let diag_a = vec![vec![3.0, 0.0, 0.0], vec![0.0, 5.0, 0.0], vec![0.0, 0.0, 1.0]];
+        let diag_b = vec![vec![2.0, 0.0, 0.0], vec![0.0, 4.0, 0.0], vec![0.0, 0.0, 3.0]];
+        let spd_a = vec![vec![6.0, 1.0, 2.0], vec![1.0, 5.0, 1.0], vec![2.0, 1.0, 7.0]];
+        let spd_b = vec![vec![3.0, 1.0, 0.0], vec![1.0, 4.0, 1.0], vec![0.0, 1.0, 5.0]];
+        let gen_a = vec![vec![4.0, 2.0], vec![1.0, 3.0]];
+        let gen_b = vec![vec![2.0, 0.0], vec![0.5, 1.5]];
+        let fixtures = [(&gen_a, &gen_b), (&diag_a, &diag_b), (&spd_a, &spd_b)];
+        for (a, b) in fixtures {
+            let result = qz(a, b, DecompOptions::default()).expect("qz works");
+            let n = a.len();
+            for mat in [&result.q, &result.z] {
+                for i in 0..n {
+                    for j in 0..n {
+                        let dot: f64 = (0..n).map(|k| mat[i][k] * mat[j][k]).sum();
+                        let expected = if i == j { 1.0 } else { 0.0 };
+                        assert!(
+                            (dot - expected).abs() < 1e-10,
+                            "row {i}·row {j} = {dot}, expected {expected}"
+                        );
+                    }
+                }
             }
         }
     }
