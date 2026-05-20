@@ -3300,12 +3300,12 @@ fn binom_coeff(n: usize, k: usize) -> f64 {
 /// Returns n_samples of the response to a unit impulse.
 /// Matches `scipy.signal.dimpulse` (simplified).
 pub fn impulse_response(b: &[f64], a: &[f64], n_samples: usize) -> Result<Vec<f64>, SignalError> {
-    let tf_num = normalize_discrete_tf_numerator(b, a)?;
+    validate_discrete_tf(b, a)?;
     let mut impulse = vec![0.0; n_samples];
     if !impulse.is_empty() {
         impulse[0] = 1.0;
     }
-    lfilter(&tf_num, a, &impulse, None)
+    lfilter(b, a, &impulse, None)
 }
 
 /// Compute the step response of a digital filter.
@@ -3313,12 +3313,20 @@ pub fn impulse_response(b: &[f64], a: &[f64], n_samples: usize) -> Result<Vec<f6
 /// Returns n_samples of the response to a unit step.
 /// Matches `scipy.signal.dstep` (simplified).
 pub fn step_response(b: &[f64], a: &[f64], n_samples: usize) -> Result<Vec<f64>, SignalError> {
-    let tf_num = normalize_discrete_tf_numerator(b, a)?;
+    validate_discrete_tf(b, a)?;
     let step = vec![1.0; n_samples];
-    lfilter(&tf_num, a, &step, None)
+    lfilter(b, a, &step, None)
 }
 
-fn normalize_discrete_tf_numerator(b: &[f64], a: &[f64]) -> Result<Vec<f64>, SignalError> {
+/// Validate a discrete transfer function `H(z) = B(z)/A(z)` for the
+/// response routines: both polynomials must be non-empty and the numerator
+/// order must not exceed the denominator order.
+///
+/// The numerator is **not** padded — `lfilter` applies `b` directly (as
+/// `scipy.signal.lfilter` does, padding internally with trailing zeros).
+/// Padding `b` with leading zeros here would inject a spurious sample
+/// delay into the response.
+fn validate_discrete_tf(b: &[f64], a: &[f64]) -> Result<(), SignalError> {
     if b.is_empty() || a.is_empty() {
         return Err(SignalError::InvalidArgument(
             "b and a must be non-empty".to_string(),
@@ -3330,10 +3338,7 @@ fn normalize_discrete_tf_numerator(b: &[f64], a: &[f64]) -> Result<Vec<f64>, Sig
                 .to_string(),
         ));
     }
-
-    let mut padded = vec![0.0; a.len() - b.len()];
-    padded.extend_from_slice(b);
-    Ok(padded)
+    Ok(())
 }
 
 /// Compute the group delay of a digital filter at specified frequencies.
@@ -11962,17 +11967,26 @@ mod tests {
 
     #[test]
     fn impulse_response_matches_scipy_transfer_function_convention() {
+        // scipy.signal.lfilter([1], [1, -0.5], impulse): no leading delay.
         let response = impulse_response(&[1.0], &[1.0, -0.5], 6).expect("impulse response");
-        let expected = [0.0, 1.0, 0.5, 0.25, 0.125, 0.0625];
+        let expected = [1.0, 0.5, 0.25, 0.125, 0.0625, 0.03125];
         for (got, want) in response.iter().zip(expected.iter()) {
+            assert!((got - want).abs() < 1e-12, "got {got}, want {want}");
+        }
+
+        // H(z) = 0.2 / (1 − 0.8 z⁻¹): the n=0 sample is 0.2, not delayed.
+        let geo = impulse_response(&[0.2], &[1.0, -0.8], 6).expect("impulse response");
+        let geo_expected = [0.2, 0.16, 0.128, 0.1024, 0.08192, 0.065536];
+        for (got, want) in geo.iter().zip(geo_expected.iter()) {
             assert!((got - want).abs() < 1e-12, "got {got}, want {want}");
         }
     }
 
     #[test]
     fn step_response_matches_scipy_transfer_function_convention() {
+        // scipy.signal.lfilter([1], [1, -0.5], ones): no leading delay.
         let response = step_response(&[1.0], &[1.0, -0.5], 6).expect("step response");
-        let expected = [0.0, 1.0, 1.5, 1.75, 1.875, 1.9375];
+        let expected = [1.0, 1.5, 1.75, 1.875, 1.9375, 1.96875];
         for (got, want) in response.iter().zip(expected.iter()) {
             assert!((got - want).abs() < 1e-12, "got {got}, want {want}");
         }

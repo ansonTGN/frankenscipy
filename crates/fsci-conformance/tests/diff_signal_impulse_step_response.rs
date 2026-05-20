@@ -89,13 +89,15 @@ fn emit_log(log: &DiffLog) {
 }
 
 fn generate_query() -> OracleQuery {
-    // fsci pads b with LEADING zeros when len(b) < len(a) (defect xw68h),
-    // injecting a sample delay vs scipy. Restrict to filters with
-    // len(b) == len(a) where the padding is a no-op.
+    // Includes filters with len(b) < len(a): impulse/step_response now
+    // apply b directly (no leading-zero delay) — frankenscipy-xw68h.
     let filters: Vec<(&str, Vec<f64>, Vec<f64>)> = vec![
         ("moving_avg_3", vec![1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0], vec![1.0, 0.0, 0.0]),
         ("biquad_lp", vec![0.04, 0.08, 0.04], vec![1.0, -1.4, 0.6]),
         ("fir_5tap", vec![0.1, 0.2, 0.4, 0.2, 0.1], vec![1.0, 0.0, 0.0, 0.0, 0.0]),
+        ("one_pole", vec![0.2], vec![1.0, -0.8]),
+        ("two_pole_scalar_num", vec![0.5], vec![1.0, -0.3, 0.1]),
+        ("first_order_lp", vec![0.1, 0.1], vec![1.0, -0.8]),
     ];
     let mut points = Vec::new();
     for (label, b, a) in &filters {
