@@ -2051,13 +2051,15 @@ pub fn argrelextrema(x: &[f64], order: usize, greater: bool) -> Vec<usize> {
     }
 }
 
-/// Compute the vector strength of a set of events at a given period.
+/// Compute the vector strength and phase of a set of events at a period.
 ///
-/// Returns (strength, pvalue).
-/// Matches `scipy.signal.vectorstrength`.
+/// Returns `(strength, phase)`: each event is mapped to a unit vector
+/// `exp(i·2π·t/period)`; `strength = |mean|` measures synchronization
+/// (1.0 perfect, 0.0 none) and `phase = angle(mean)` (radians) is the angle
+/// the events cluster around. Matches `scipy.signal.vectorstrength`.
 pub fn vectorstrength(events: &[f64], period: f64) -> (f64, f64) {
     if events.is_empty() || period <= 0.0 || !period.is_finite() {
-        return (0.0, 1.0);
+        return (0.0, 0.0);
     }
 
     let two_pi = 2.0 * std::f64::consts::PI;
@@ -2078,12 +2080,11 @@ pub fn vectorstrength(events: &[f64], period: f64) -> (f64, f64) {
         cos_sum += c;
     }
 
-    let r = (sin_sum * sin_sum + cos_sum * cos_sum).sqrt() / n;
+    // strength = |mean(exp(i·θ))|, phase = angle(mean(exp(i·θ))).
+    let strength = (sin_sum * sin_sum + cos_sum * cos_sum).sqrt() / n;
+    let phase = sin_sum.atan2(cos_sum);
 
-    // Rayleigh test p-value
-    let pvalue = (-n * r * r).exp();
-
-    (r, pvalue.clamp(0.0, 1.0))
+    (strength, phase)
 }
 
 /// 1D order filter: select the k-th smallest value in each window.
@@ -13574,32 +13575,48 @@ mod tests {
 
         fn naive_vectorstrength(events: &[f64], period: f64) -> (f64, f64) {
             if events.is_empty() || period <= 0.0 || !period.is_finite() {
-                return (0.0, 1.0);
+                return (0.0, 0.0);
             }
             let two_pi = 2.0 * std::f64::consts::PI;
             let n = events.len() as f64;
             let sin_sum: f64 = events.iter().map(|&t| (two_pi * t / period).sin()).sum();
             let cos_sum: f64 = events.iter().map(|&t| (two_pi * t / period).cos()).sum();
             let r = (sin_sum * sin_sum + cos_sum * cos_sum).sqrt() / n;
-            let p = (-n * r * r).exp();
-            (r, p.clamp(0.0, 1.0))
+            let phase = sin_sum.atan2(cos_sum);
+            (r, phase)
         }
 
         let events: Vec<f64> = (0..50)
             .map(|i| (i as f64 * 0.13).sin().abs() * 5.0 + (i as f64 * 0.07))
             .collect();
         for &period in &[0.5_f64, 1.0, 2.5, 7.0] {
-            let (r_opt, p_opt) = vectorstrength(&events, period);
-            let (r_nav, p_nav) = naive_vectorstrength(&events, period);
+            let (r_opt, phase_opt) = vectorstrength(&events, period);
+            let (r_nav, phase_nav) = naive_vectorstrength(&events, period);
             assert!(
                 (r_opt - r_nav).abs() < 1e-12,
-                "r mismatch at period={period}: opt={r_opt}, naive={r_nav}"
+                "strength mismatch at period={period}: opt={r_opt}, naive={r_nav}"
             );
             assert!(
-                (p_opt - p_nav).abs() < 1e-12,
-                "pvalue mismatch at period={period}: opt={p_opt}, naive={p_nav}"
+                (phase_opt - phase_nav).abs() < 1e-12,
+                "phase mismatch at period={period}: opt={phase_opt}, naive={phase_nav}"
             );
         }
+    }
+
+    #[test]
+    fn vectorstrength_matches_scipy_reference() {
+        // scipy.signal.vectorstrength([0.1,0.5,1.1,1.5,2.1,2.5], 1.0):
+        // events cluster at two phases, mean vector angle ≈ 1.8853 rad.
+        let (strength, phase) =
+            vectorstrength(&[0.1, 0.5, 1.1, 1.5, 2.1, 2.5], 1.0);
+        assert!(
+            (strength - 0.309_016_994_374_947_6).abs() < 1e-12,
+            "strength = {strength}"
+        );
+        assert!(
+            (phase - 1.884_955_592_153_875_9).abs() < 1e-12,
+            "phase = {phase}"
+        );
     }
 
     #[test]

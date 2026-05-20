@@ -113,9 +113,30 @@ fn emit_log(log: &DiffLog) {
 }
 
 fn generate_query() -> OracleQuery {
-    // vectorstrength excluded — fsci phase convention diverges from
-    // scipy by ~π/2 (filed separately as defect).
-    let vs: Vec<VsCase> = vec![];
+    // vectorstrength: (strength, phase) — phase now returned as the mean
+    // unit-vector angle, matching scipy (frankenscipy-db4pr).
+    let vs: Vec<VsCase> = vec![
+        VsCase {
+            case_id: "vs_two_cluster".into(),
+            events: vec![0.1, 0.5, 1.1, 1.5, 2.1, 2.5],
+            period: 1.0,
+        },
+        VsCase {
+            case_id: "vs_tight".into(),
+            events: vec![0.2, 0.21, 0.19, 0.205, 0.195],
+            period: 1.0,
+        },
+        VsCase {
+            case_id: "vs_irregular".into(),
+            events: vec![0.3, 1.7, 2.9, 4.1, 5.05, 6.2, 7.8],
+            period: 3.0,
+        },
+        VsCase {
+            case_id: "vs_moderate".into(),
+            events: vec![0.4, 0.6, 0.55, 1.45, 1.5, 2.4, 2.6],
+            period: 1.0,
+        },
+    ];
 
     let env = vec![
         EnvCase {
