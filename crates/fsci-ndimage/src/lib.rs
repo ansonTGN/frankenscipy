@@ -50,6 +50,101 @@ fn gaussian_kernel_radius(sigma: f64) -> usize {
     (DEFAULT_GAUSSIAN_TRUNCATE * sigma + 0.5) as usize
 }
 
+/// Computes a 1-D Gaussian convolution kernel for the `order`-th derivative.
+///
+/// Mirrors `scipy.ndimage._filters._gaussian_kernel1d`: builds the normalized
+/// Gaussian `phi(x)`, then for `order > 0` multiplies by the polynomial `q(x)`
+/// produced by differentiating `q(x) * phi(x)` `order` times. Each derivative
+/// maps `q -> q' + q * p'` with `p'(x) = -x / sigma^2`; `Q_deriv` applies that
+/// operator to the polynomial coefficients of `q` (superdiagonal `D` for `q'`,
+/// subdiagonal `P` for `q * p'`).
+fn gaussian_kernel1d(sigma: f64, order: usize, radius: usize) -> Vec<f64> {
+    let sigma2 = sigma * sigma;
+    let n = 2 * radius + 1;
+    let mut phi_x: Vec<f64> = (0..n)
+        .map(|i| {
+            let x = i as f64 - radius as f64;
+            (-0.5 / sigma2 * x * x).exp()
+        })
+        .collect();
+    let sum: f64 = phi_x.iter().sum();
+    for v in &mut phi_x {
+        *v /= sum;
+    }
+    if order == 0 {
+        return phi_x;
+    }
+
+    let mut q = vec![0.0; order + 1];
+    q[0] = 1.0;
+    for _ in 0..order {
+        let mut next = vec![0.0; order + 1];
+        for r in 0..=order {
+            let mut val = 0.0;
+            if r < order {
+                val += (r as f64 + 1.0) * q[r + 1];
+            }
+            if r >= 1 {
+                val += -q[r - 1] / sigma2;
+            }
+            next[r] = val;
+        }
+        q = next;
+    }
+
+    // kernel[i] = (sum_e x_i^e * q[e]) * phi(x_i)
+    (0..n)
+        .map(|i| {
+            let x = i as f64 - radius as f64;
+            let mut poly = 0.0;
+            let mut x_pow = 1.0;
+            for &coeff in &q {
+                poly += x_pow * coeff;
+                x_pow *= x;
+            }
+            poly * phi_x[i]
+        })
+        .collect()
+}
+
+/// Apply a 1-D Gaussian (or its `order`-th derivative) along a single axis.
+///
+/// Mirrors `scipy.ndimage.gaussian_filter1d`. scipy reverses the kernel and
+/// calls `correlate1d`; `convolve` here already flips the kernel, so passing
+/// the non-reversed kernel to `convolve` yields the identical result.
+fn gaussian_filter1d_axis(
+    input: &NdArray,
+    sigma: f64,
+    axis: usize,
+    order: usize,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let radius = gaussian_kernel_radius(sigma);
+    let kernel_1d = gaussian_kernel1d(sigma, order, radius);
+    let mut kernel_shape = vec![1usize; input.ndim()];
+    kernel_shape[axis] = kernel_1d.len();
+    let kernel = NdArray::new(kernel_1d, kernel_shape)?;
+    convolve(input, &kernel, mode, cval)
+}
+
+/// Apply `gaussian_filter1d` sequentially along every axis, using the matching
+/// derivative `orders[axis]` per axis. Mirrors `scipy.ndimage.gaussian_filter`
+/// invoked with an `order` sequence.
+fn gaussian_filter_with_orders(
+    input: &NdArray,
+    sigma: f64,
+    orders: &[usize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let mut current = input.clone();
+    for (axis, &order) in orders.iter().enumerate() {
+        current = gaussian_filter1d_axis(&current, sigma, axis, order, mode, cval)?;
+    }
+    Ok(current)
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // N-D Array Helper
 // ══════════════════════════════════════════════════════════════════════
@@ -722,25 +817,7 @@ pub fn gaussian_filter(
     let mut current = input.clone();
 
     for axis in 0..input.ndim() {
-        let radius = gaussian_kernel_radius(sigma);
-        let ksize = 2 * radius + 1;
-        let mut kernel_1d = vec![0.0; ksize];
-        let mut total = 0.0;
-        for (i, value) in kernel_1d.iter_mut().enumerate() {
-            let x = i as f64 - radius as f64;
-            let g = (-x * x / (2.0 * sigma * sigma)).exp();
-            *value = g;
-            total += g;
-        }
-        for v in &mut kernel_1d {
-            *v /= total;
-        }
-
-        // Build N-D kernel that is 1D along `axis`
-        let mut kernel_shape = vec![1usize; input.ndim()];
-        kernel_shape[axis] = ksize;
-        let kernel = NdArray::new(kernel_1d, kernel_shape)?;
-        current = convolve(&current, &kernel, mode, cval)?;
+        current = gaussian_filter1d_axis(&current, sigma, axis, 0, mode, cval)?;
     }
 
     Ok(current)
@@ -1185,15 +1262,39 @@ pub fn laplace(input: &NdArray, mode: BoundaryMode, cval: f64) -> Result<NdArray
 
 /// Gaussian Laplace (LoG) filter.
 ///
-/// Matches `scipy.ndimage.gaussian_laplace`.
+/// Matches `scipy.ndimage.gaussian_laplace`: the sum, over each axis, of a
+/// Gaussian filter applied with derivative order 2 along that axis (and order 0
+/// along the others) — i.e. an analytic second-derivative-of-Gaussian filter,
+/// not a finite-difference Laplacian stencil applied after blurring.
 pub fn gaussian_laplace(
     input: &NdArray,
     sigma: f64,
     mode: BoundaryMode,
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
-    let smoothed = gaussian_filter(input, sigma, mode, cval)?;
-    laplace(&smoothed, mode, cval)
+    if !sigma.is_finite() || sigma <= 0.0 {
+        return Err(NdimageError::InvalidArgument(
+            "sigma must be positive".to_string(),
+        ));
+    }
+    if input.size() == 0 {
+        return Err(NdimageError::EmptyInput);
+    }
+    let ndim = input.ndim();
+    if ndim == 0 {
+        return Ok(input.clone());
+    }
+
+    let mut result = NdArray::zeros(input.shape.clone());
+    for axis in 0..ndim {
+        let mut orders = vec![0usize; ndim];
+        orders[axis] = 2;
+        let deriv2 = gaussian_filter_with_orders(input, sigma, &orders, mode, cval)?;
+        for (r, d) in result.data.iter_mut().zip(&deriv2.data) {
+            *r += d;
+        }
+    }
+    Ok(result)
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -2042,20 +2143,36 @@ pub fn rotate(
 
 /// Gaussian gradient magnitude.
 ///
-/// Matches `scipy.ndimage.gaussian_gradient_magnitude`.
+/// Matches `scipy.ndimage.gaussian_gradient_magnitude`: the square root of the
+/// sum, over each axis, of the squared Gaussian filter applied with derivative
+/// order 1 along that axis (analytic first-derivative-of-Gaussian convolution),
+/// not a Sobel operator applied after blurring.
 pub fn gaussian_gradient_magnitude(
     input: &NdArray,
     sigma: f64,
     mode: BoundaryMode,
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
-    let smoothed = gaussian_filter(input, sigma, mode, cval)?;
-    let mut result = NdArray::zeros(input.shape.clone());
+    if !sigma.is_finite() || sigma <= 0.0 {
+        return Err(NdimageError::InvalidArgument(
+            "sigma must be positive".to_string(),
+        ));
+    }
+    if input.size() == 0 {
+        return Err(NdimageError::EmptyInput);
+    }
+    let ndim = input.ndim();
+    if ndim == 0 {
+        return Ok(input.clone());
+    }
 
-    for axis in 0..input.ndim() {
-        let grad = sobel(&smoothed, axis, mode, cval)?;
-        for i in 0..result.data.len() {
-            result.data[i] += grad.data[i] * grad.data[i];
+    let mut result = NdArray::zeros(input.shape.clone());
+    for axis in 0..ndim {
+        let mut orders = vec![0usize; ndim];
+        orders[axis] = 1;
+        let deriv = gaussian_filter_with_orders(input, sigma, &orders, mode, cval)?;
+        for (r, d) in result.data.iter_mut().zip(&deriv.data) {
+            *r += d * d;
         }
     }
 
@@ -2227,23 +2344,7 @@ pub fn gaussian_filter_multi_sigma(
         if sigma <= 0.0 {
             continue;
         }
-        let radius = gaussian_kernel_radius(sigma);
-        let ksize = 2 * radius + 1;
-        let mut kernel_1d = vec![0.0; ksize];
-        let mut total = 0.0;
-        for (i, value) in kernel_1d.iter_mut().enumerate() {
-            let x = i as f64 - radius as f64;
-            let g = (-x * x / (2.0 * sigma * sigma)).exp();
-            *value = g;
-            total += g;
-        }
-        for v in &mut kernel_1d {
-            *v /= total;
-        }
-        let mut kernel_shape = vec![1usize; input.ndim()];
-        kernel_shape[axis] = ksize;
-        let kernel = NdArray::new(kernel_1d, kernel_shape)?;
-        current = convolve(&current, &kernel, mode, cval)?;
+        current = gaussian_filter1d_axis(&current, sigma, axis, 0, mode, cval)?;
     }
 
     Ok(current)
@@ -3228,6 +3329,217 @@ mod tests {
         assert_eq!(gaussian_kernel_radius(1.0), 4);
         assert_eq!(gaussian_kernel_radius(1.3), 5);
         assert_eq!(gaussian_kernel_radius(2.0), 8);
+    }
+
+    #[test]
+    fn gaussian_kernel1d_order0_matches_scipy() {
+        // scipy.ndimage._filters._gaussian_kernel1d(1.0, 0, 4)
+        let expect = [
+            1.338306246147e-04,
+            4.431861620031e-03,
+            5.399112742070e-02,
+            2.419714456566e-01,
+            3.989434693561e-01,
+            2.419714456566e-01,
+            5.399112742070e-02,
+            4.431861620031e-03,
+            1.338306246147e-04,
+        ];
+        let got = gaussian_kernel1d(1.0, 0, 4);
+        assert_eq!(got.len(), expect.len());
+        for (g, e) in got.iter().zip(&expect) {
+            assert!((g - e).abs() < 1e-12, "order0 kernel mismatch: {g} vs {e}");
+        }
+        // Order-0 kernel is a normalized probability density.
+        assert!((got.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn gaussian_kernel1d_order1_matches_scipy() {
+        // scipy.ndimage._filters._gaussian_kernel1d(1.0, 1, 4)
+        let expect = [
+            5.353224984590e-04,
+            1.329558486009e-02,
+            1.079822548414e-01,
+            2.419714456566e-01,
+            0.0,
+            -2.419714456566e-01,
+            -1.079822548414e-01,
+            -1.329558486009e-02,
+            -5.353224984590e-04,
+        ];
+        let got = gaussian_kernel1d(1.0, 1, 4);
+        for (g, e) in got.iter().zip(&expect) {
+            assert!((g - e).abs() < 1e-12, "order1 kernel mismatch: {g} vs {e}");
+        }
+        // First-derivative kernel is antisymmetric and sums to zero.
+        assert!(got.iter().sum::<f64>().abs() < 1e-15);
+    }
+
+    #[test]
+    fn gaussian_kernel1d_order2_matches_scipy() {
+        // scipy.ndimage._filters._gaussian_kernel1d(1.0, 2, 4)
+        let expect = [
+            2.007459369221e-03,
+            3.545489296025e-02,
+            1.619733822621e-01,
+            0.0,
+            -3.989434693561e-01,
+            0.0,
+            1.619733822621e-01,
+            3.545489296025e-02,
+            2.007459369221e-03,
+        ];
+        let got = gaussian_kernel1d(1.0, 2, 4);
+        for (g, e) in got.iter().zip(&expect) {
+            assert!((g - e).abs() < 1e-12, "order2 kernel mismatch: {g} vs {e}");
+        }
+    }
+
+    #[test]
+    fn gaussian_laplace_matches_scipy_1d() {
+        let input = NdArray::new(vec![1., 2., 3., 4., 5., 4., 3., 2., 1.], vec![9]).unwrap();
+        // scipy.ndimage.gaussian_laplace(x, 1.0, mode='reflect')
+        let expect = [
+            6.771748269992e-01,
+            2.742164389047e-01,
+            -3.767835284826e-02,
+            -4.760916339030e-01,
+            -8.770425626284e-01,
+            -4.760916339030e-01,
+            -3.767835284826e-02,
+            2.742164389047e-01,
+            6.771748269992e-01,
+        ];
+        let got = gaussian_laplace(&input, 1.0, BoundaryMode::Reflect, 0.0).unwrap();
+        for (g, e) in got.data.iter().zip(&expect) {
+            assert!((g - e).abs() < 1e-9, "gaussian_laplace mismatch: {g} vs {e}");
+        }
+    }
+
+    #[test]
+    fn gaussian_laplace_matches_scipy_1d_constant() {
+        let input = NdArray::new(vec![1., 2., 3., 4., 5., 4., 3., 2., 1.], vec![9]).unwrap();
+        // scipy.ndimage.gaussian_laplace(x, 0.5, mode='constant', cval=0.0)
+        let expect = [
+            -5.439686612904e-01,
+            -1.119601132509e+00,
+            -1.679401698764e+00,
+            -2.270866074947e+00,
+            -5.417148978497e+00,
+            -2.270866074947e+00,
+            -1.679401698764e+00,
+            -1.119601132509e+00,
+            -5.439686612904e-01,
+        ];
+        let got = gaussian_laplace(&input, 0.5, BoundaryMode::Constant, 0.0).unwrap();
+        for (g, e) in got.data.iter().zip(&expect) {
+            assert!((g - e).abs() < 1e-9, "gaussian_laplace mismatch: {g} vs {e}");
+        }
+    }
+
+    #[test]
+    fn gaussian_gradient_magnitude_matches_scipy_1d() {
+        let input = NdArray::new(vec![1., 2., 3., 4., 5., 4., 3., 2., 1.], vec![9]).unwrap();
+        // scipy.ndimage.gaussian_gradient_magnitude(x, 1.0, mode='reflect')
+        let expect = [
+            3.637846078566e-01,
+            8.483117329162e-01,
+            9.562939877576e-01,
+            7.270338932147e-01,
+            0.0,
+            7.270338932147e-01,
+            9.562939877576e-01,
+            8.483117329162e-01,
+            3.637846078566e-01,
+        ];
+        let got = gaussian_gradient_magnitude(&input, 1.0, BoundaryMode::Reflect, 0.0).unwrap();
+        for (g, e) in got.data.iter().zip(&expect) {
+            assert!((g - e).abs() < 1e-9, "ggm mismatch: {g} vs {e}");
+        }
+    }
+
+    #[test]
+    fn gaussian_laplace_matches_scipy_2d() {
+        let input = NdArray::new((0..25).map(f64::from).collect(), vec![5, 5]).unwrap();
+        // scipy.ndimage.gaussian_laplace(arange(25).reshape(5,5), 1.0, mode='reflect')
+        let expect = [
+            4.063296480899e+00,
+            3.662299415825e+00,
+            3.385792400058e+00,
+            3.109285384290e+00,
+            2.708288319216e+00,
+            2.058311155528e+00,
+            1.657314090454e+00,
+            1.380807074687e+00,
+            1.104300058919e+00,
+            7.033029938450e-01,
+            6.757760766913e-01,
+            2.747790116171e-01,
+            -1.728004150291e-03,
+            -2.782350199177e-01,
+            -6.792320849919e-01,
+            -7.067590021456e-01,
+            -1.107756067220e+00,
+            -1.384263082987e+00,
+            -1.660770098755e+00,
+            -2.061767163829e+00,
+            -2.711744327517e+00,
+            -3.112741392591e+00,
+            -3.389248408358e+00,
+            -3.665755424126e+00,
+            -4.066752489200e+00,
+        ];
+        let got = gaussian_laplace(&input, 1.0, BoundaryMode::Reflect, 0.0).unwrap();
+        for (g, e) in got.data.iter().zip(&expect) {
+            assert!((g - e).abs() < 1e-9, "gaussian_laplace 2d mismatch: {g} vs {e}");
+        }
+    }
+
+    #[test]
+    fn gaussian_gradient_magnitude_matches_scipy_2d() {
+        let input = NdArray::new((0..25).map(f64::from).collect(), vec![5, 5]).unwrap();
+        // scipy.ndimage.gaussian_gradient_magnitude(arange(25).reshape(5,5), 2.0, mode='nearest')
+        let expect = [
+            2.444455642001e+00,
+            2.479023961763e+00,
+            2.495143329202e+00,
+            2.479023961763e+00,
+            2.444455642001e+00,
+            3.198479922999e+00,
+            3.224976005354e+00,
+            3.237383305291e+00,
+            3.224976005354e+00,
+            3.198479922999e+00,
+            3.497825692402e+00,
+            3.522070554619e+00,
+            3.533434790961e+00,
+            3.522070554619e+00,
+            3.497825692402e+00,
+            3.198479922999e+00,
+            3.224976005354e+00,
+            3.237383305291e+00,
+            3.224976005354e+00,
+            3.198479922999e+00,
+            2.444455642001e+00,
+            2.479023961763e+00,
+            2.495143329202e+00,
+            2.479023961763e+00,
+            2.444455642001e+00,
+        ];
+        let got = gaussian_gradient_magnitude(&input, 2.0, BoundaryMode::Nearest, 0.0).unwrap();
+        for (g, e) in got.data.iter().zip(&expect) {
+            assert!((g - e).abs() < 1e-9, "ggm 2d mismatch: {g} vs {e}");
+        }
+    }
+
+    #[test]
+    fn gaussian_gradient_magnitude_constant_is_zero() {
+        let input = NdArray::new(vec![7.0; 25], vec![5, 5]).unwrap();
+        let got = gaussian_gradient_magnitude(&input, 1.5, BoundaryMode::Reflect, 0.0).unwrap();
+        for &v in &got.data {
+            assert!(v.abs() < 1e-12, "ggm of constant should be zero, got {v}");
+        }
     }
 
     #[test]
