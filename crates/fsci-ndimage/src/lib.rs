@@ -2426,6 +2426,52 @@ pub fn gradient_magnitude(input: &NdArray) -> Result<NdArray, NdimageError> {
     Ok(result)
 }
 
+/// Apply a `size`-wide reduction filter along a single axis.
+///
+/// The window spans only `axis` (width `size`, centered with offset
+/// `size / 2`); every other axis is untouched.
+fn filter1d_axis<F>(
+    input: &NdArray,
+    size: usize,
+    axis: usize,
+    mode: BoundaryMode,
+    cval: f64,
+    reduce: F,
+) -> Result<NdArray, NdimageError>
+where
+    F: Fn(&[f64]) -> f64,
+{
+    if axis >= input.ndim() {
+        return Err(NdimageError::InvalidArgument(format!(
+            "axis {axis} out of range for {}-dimensional input",
+            input.ndim()
+        )));
+    }
+    if size == 0 {
+        return Err(NdimageError::InvalidArgument(
+            "filter size must be positive".to_string(),
+        ));
+    }
+    if input.size() == 0 {
+        return Err(NdimageError::EmptyInput);
+    }
+
+    let offset = size as i64 / 2;
+    let mut output = NdArray::zeros(input.shape.clone());
+    let mut window = Vec::with_capacity(size);
+    for flat_out in 0..input.size() {
+        let out_idx = input.unravel(flat_out);
+        let mut in_idx: Vec<i64> = out_idx.iter().map(|&i| i as i64).collect();
+        window.clear();
+        for k in 0..size as i64 {
+            in_idx[axis] = out_idx[axis] as i64 + k - offset;
+            window.push(input.get_boundary(&in_idx, mode, cval));
+        }
+        output.data[flat_out] = reduce(&window);
+    }
+    Ok(output)
+}
+
 /// Apply a maximum filter along a single axis.
 ///
 /// Matches `scipy.ndimage.maximum_filter1d`.
@@ -2436,30 +2482,18 @@ pub fn maximum_filter1d(
     mode: BoundaryMode,
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
-    if axis >= input.ndim() {
-        return Err(NdimageError::InvalidArgument(format!(
-            "axis {axis} out of range",
-        )));
-    }
-    // Build a structuring element along the specified axis
-    generic_filter(
-        input,
-        |neighborhood| {
-            neighborhood
-                .iter()
-                .cloned()
-                .fold(f64::NEG_INFINITY, |a: f64, b: f64| {
-                    if a.is_nan() || b.is_nan() {
-                        f64::NAN
-                    } else {
-                        a.max(b)
-                    }
-                })
-        },
-        size,
-        mode,
-        cval,
-    )
+    filter1d_axis(input, size, axis, mode, cval, |window| {
+        window
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, |a: f64, b: f64| {
+                if a.is_nan() || b.is_nan() {
+                    f64::NAN
+                } else {
+                    a.max(b)
+                }
+            })
+    })
 }
 
 /// Apply a minimum filter along a single axis.
@@ -2472,29 +2506,15 @@ pub fn minimum_filter1d(
     mode: BoundaryMode,
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
-    if axis >= input.ndim() {
-        return Err(NdimageError::InvalidArgument(format!(
-            "axis {axis} out of range",
-        )));
-    }
-    generic_filter(
-        input,
-        |neighborhood| {
-            neighborhood
-                .iter()
-                .cloned()
-                .fold(f64::INFINITY, |a: f64, b: f64| {
-                    if a.is_nan() || b.is_nan() {
-                        f64::NAN
-                    } else {
-                        a.min(b)
-                    }
-                })
-        },
-        size,
-        mode,
-        cval,
-    )
+    filter1d_axis(input, size, axis, mode, cval, |window| {
+        window.iter().copied().fold(f64::INFINITY, |a: f64, b: f64| {
+            if a.is_nan() || b.is_nan() {
+                f64::NAN
+            } else {
+                a.min(b)
+            }
+        })
+    })
 }
 
 /// Generate a structuring element (cross/diamond shape).
@@ -4024,6 +4044,40 @@ mod tests {
         for (g, e) in id_out.data.iter().zip(&input.data) {
             assert!((g - e).abs() < 1e-9, "affine identity: {g} vs {e}");
         }
+    }
+
+    #[test]
+    fn max_min_filter1d_match_scipy() {
+        // scipy.ndimage.maximum_filter1d / minimum_filter1d filter ONLY along
+        // `axis` (a size-wide window, 1 on every other axis) — not an N-D box.
+        let a3 = NdArray::new((0..9).map(f64::from).collect(), vec![3, 3]).unwrap();
+
+        // axis 0, reflect.
+        let mx = maximum_filter1d(&a3, 3, 0, BoundaryMode::Reflect, 0.0).unwrap();
+        assert_eq!(mx.data, vec![3., 4., 5., 6., 7., 8., 6., 7., 8.]);
+        let mn = minimum_filter1d(&a3, 3, 0, BoundaryMode::Reflect, 0.0).unwrap();
+        assert_eq!(mn.data, vec![0., 1., 2., 0., 1., 2., 3., 4., 5.]);
+
+        // axis 1, reflect.
+        let mx = maximum_filter1d(&a3, 3, 1, BoundaryMode::Reflect, 0.0).unwrap();
+        assert_eq!(mx.data, vec![1., 2., 2., 4., 5., 5., 7., 8., 8.]);
+        let mn = minimum_filter1d(&a3, 3, 1, BoundaryMode::Reflect, 0.0).unwrap();
+        assert_eq!(mn.data, vec![0., 0., 1., 3., 3., 4., 6., 6., 7.]);
+
+        // axis 1, constant cval=0.
+        let mn = minimum_filter1d(&a3, 3, 1, BoundaryMode::Constant, 0.0).unwrap();
+        assert_eq!(mn.data, vec![0., 0., 0., 0., 3., 0., 0., 6., 0.]);
+
+        // Rectangular 4x5, axis 0, reflect.
+        let a45 = NdArray::new((0..20).map(f64::from).collect(), vec![4, 5]).unwrap();
+        let mx = maximum_filter1d(&a45, 3, 0, BoundaryMode::Reflect, 0.0).unwrap();
+        assert_eq!(
+            mx.data,
+            vec![
+                5., 6., 7., 8., 9., 10., 11., 12., 13., 14., 15., 16., 17., 18., 19., 15., 16.,
+                17., 18., 19.,
+            ]
+        );
     }
 
     #[test]
