@@ -6704,7 +6704,13 @@ pub fn welch(
     let mut start = 0;
     while start + nperseg <= x.len() {
         let segment = &x[start..start + nperseg];
-        let seg_result = periodogram(segment, fs, Some(&win_coeffs))?;
+        // scipy.signal.welch defaults to detrend='constant': remove each
+        // segment's mean before the periodogram. Without it the DC and
+        // low-frequency bins of a non-zero-mean signal (e.g. a ramp) are
+        // hugely inflated.
+        let mean = segment.iter().sum::<f64>() / nperseg as f64;
+        let detrended: Vec<f64> = segment.iter().map(|&v| v - mean).collect();
+        let seg_result = periodogram(&detrended, fs, Some(&win_coeffs))?;
 
         for (avg, &val) in avg_psd.iter_mut().zip(seg_result.psd.iter()) {
             *avg += val;
@@ -8879,15 +8885,21 @@ pub fn csd_with_scaling(
     let mut start = 0;
 
     while start + nperseg <= x.len() {
-        let wx: Vec<f64> = x[start..start + nperseg]
+        let xs = &x[start..start + nperseg];
+        let ys = &y[start..start + nperseg];
+        // scipy.signal.csd defaults to detrend='constant': remove each
+        // segment's mean before windowing.
+        let xmean = xs.iter().sum::<f64>() / nperseg as f64;
+        let ymean = ys.iter().sum::<f64>() / nperseg as f64;
+        let wx: Vec<f64> = xs
             .iter()
             .zip(&win_coeffs)
-            .map(|(&xi, &wi)| xi * wi)
+            .map(|(&xi, &wi)| (xi - xmean) * wi)
             .collect();
-        let wy: Vec<f64> = y[start..start + nperseg]
+        let wy: Vec<f64> = ys
             .iter()
             .zip(&win_coeffs)
-            .map(|(&yi, &wi)| yi * wi)
+            .map(|(&yi, &wi)| (yi - ymean) * wi)
             .collect();
 
         let sx = fsci_fft::rfft(&wx, &opts)
@@ -12224,6 +12236,30 @@ mod tests {
             (peak_freq - 50.0).abs() < 5.0,
             "peak at {peak_freq} Hz, expected ~50 Hz"
         );
+    }
+
+    #[test]
+    fn welch_matches_scipy_detrend_constant() {
+        // scipy.signal.welch defaults to detrend='constant'. On a ramp the
+        // per-segment mean dominates, so omitting it inflated the PSD by
+        // thousands (frankenscipy-gmysl).
+        let x: Vec<f64> = (0..64).map(|i| i as f64).collect();
+        let result = welch(&x, 1.0, Some("hann"), Some(16), Some(8)).expect("welch");
+        let expected = [
+            2.666_666_666_666_666_5,
+            79.168_949_150_563_39,
+            3.833_042_305_749_054_4,
+            0.236_323_620_258_148_65,
+            0.036_205_198_234_783_22,
+            0.008_082_135_137_255_544,
+            0.001_993_194_212_531_567,
+            0.000_358_124_894_072_232_57,
+        ];
+        assert_eq!(result.psd.len(), 9);
+        for (got, want) in result.psd.iter().zip(expected.iter()) {
+            assert!((got - want).abs() < 1e-9, "welch PSD: {got} != {want}");
+        }
+        assert!(result.psd[8].abs() < 1e-9, "Nyquist bin ~0");
     }
 
     #[test]
