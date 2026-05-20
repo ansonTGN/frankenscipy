@@ -4081,6 +4081,61 @@ mod tests {
     }
 
     #[test]
+    fn rotate_nonsquare_reshape_false_matches_scipy() {
+        // scipy.ndimage.rotate(arange(20).reshape(4,5), angle, reshape=False).
+        // Rectangular inputs at 90/270 deg map to half-integer source coords,
+        // which exercises the spline interpolation; (angle, order, expected).
+        let input = NdArray::new((0..20).map(f64::from).collect(), vec![4, 5]).unwrap();
+        let cases: [(f64, usize, [f64; 20]); 4] = [
+            (
+                90.0,
+                1,
+                [
+                    0., 6., 11., 16., 0., 0., 5., 10., 15., 0., 0., 4., 9., 14., 0., 0., 3., 8.,
+                    13., 0.,
+                ],
+            ),
+            (
+                90.0,
+                3,
+                [
+                    0.0, 5.410714285714, 11.16071428571, 16.91071428571, 0.0, 0.0,
+                    4.196428571429, 9.946428571429, 15.69642857143, 0.0, 0.0, 3.303571428571,
+                    9.053571428571, 14.80357142857, 0.0, 0.0, 2.089285714286, 7.839285714286,
+                    13.58928571429, 0.0,
+                ],
+            ),
+            (
+                270.0,
+                1,
+                [
+                    0., 13., 8., 3., 0., 0., 14., 9., 4., 0., 0., 15., 10., 5., 0., 0., 16., 11.,
+                    6., 0.,
+                ],
+            ),
+            (
+                270.0,
+                3,
+                [
+                    0.0, 13.58928571429, 7.839285714286, 2.089285714286, 0.0, 0.0,
+                    14.80357142857, 9.053571428571, 3.303571428571, 0.0, 0.0, 15.69642857143,
+                    9.946428571429, 4.196428571429, 0.0, 0.0, 16.91071428571, 11.16071428571,
+                    5.410714285714, 0.0,
+                ],
+            ),
+        ];
+        for (angle, order, expected) in cases {
+            let out = rotate(&input, angle, false, order, BoundaryMode::Constant, 0.0).unwrap();
+            for (g, e) in out.data.iter().zip(&expected) {
+                assert!(
+                    (g - e).abs() < 1e-9,
+                    "rotate {angle} order={order}: {g} vs {e}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn map_coordinates_order_three_hits_sample_points_exactly() {
         let input = NdArray::new(vec![1.0, 2.0, 3.0, 4.0], vec![2, 2]).unwrap();
         let result = map_coordinates(
