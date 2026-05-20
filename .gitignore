@@ -178,3 +178,8 @@ crates/fsci-special/src/bin/
 .beads/*.repair_candidate_*
 .beads/*.bak-corrupt
 .beads_recovery/
+
+# Stale rch cargo target dirs — created by concurrent `rch` cargo invocations.
+.rch-target/
+.rch-target-*/
+.rch-deploy-root/
