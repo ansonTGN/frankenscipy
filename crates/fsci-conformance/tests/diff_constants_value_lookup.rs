@@ -29,6 +29,7 @@ struct PointCase {
 #[derive(Debug, Clone, Serialize)]
 struct OracleQuery {
     points: Vec<PointCase>,
+    finds: Vec<FindCase>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -40,6 +41,29 @@ struct PointArm {
 #[derive(Debug, Clone, Deserialize)]
 struct OracleResult {
     points: Vec<PointArm>,
+    finds: Vec<FindArm>,
+}
+
+#[derive(Debug, Clone)]
+struct FindExpectation {
+    case_id: &'static str,
+    query: &'static str,
+    fsci_name: &'static str,
+    scipy_key: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct FindCase {
+    case_id: String,
+    query: String,
+    scipy_key: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct FindArm {
+    case_id: String,
+    found: bool,
+    value: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -85,26 +109,58 @@ fn emit_log(log: &DiffLog) {
 /// (case_id, fsci_key, scipy_key) for paired lookups.
 fn key_pairs() -> Vec<(&'static str, &'static str, &'static str)> {
     vec![
-        ("speed_of_light", "speed of light", "speed of light in vacuum"),
+        (
+            "speed_of_light",
+            "speed of light",
+            "speed of light in vacuum",
+        ),
         ("planck", "planck", "Planck constant"),
         ("hbar", "hbar", "reduced Planck constant"),
-        ("g_grav", "gravitational constant", "Newtonian constant of gravitation"),
-        ("elementary_charge", "elementary charge", "elementary charge"),
+        (
+            "g_grav",
+            "gravitational constant",
+            "Newtonian constant of gravitation",
+        ),
+        (
+            "elementary_charge",
+            "elementary charge",
+            "elementary charge",
+        ),
         ("gas_constant", "gas constant", "molar gas constant"),
         ("avogadro", "avogadro", "Avogadro constant"),
         ("boltzmann", "boltzmann", "Boltzmann constant"),
-        ("stefan_boltzmann", "stefan-boltzmann", "Stefan-Boltzmann constant"),
+        (
+            "stefan_boltzmann",
+            "stefan-boltzmann",
+            "Stefan-Boltzmann constant",
+        ),
         ("wien", "wien", "Wien wavelength displacement law constant"),
         ("electron_mass", "electron mass", "electron mass"),
         ("proton_mass", "proton mass", "proton mass"),
         ("neutron_mass", "neutron mass", "neutron mass"),
         ("rydberg", "rydberg", "Rydberg constant"),
-        ("fine_structure", "fine-structure", "fine-structure constant"),
+        (
+            "fine_structure",
+            "fine-structure",
+            "fine-structure constant",
+        ),
         ("bohr_radius", "bohr radius", "Bohr radius"),
         ("faraday", "faraday constant", "Faraday constant"),
-        ("electron_g_factor", "electron g factor", "electron g factor"),
-        ("thomson_cross_section", "thomson cross section", "Thomson cross section"),
-        ("characteristic_impedance_of_vacuum", "characteristic impedance of vacuum", "characteristic impedance of vacuum"),
+        (
+            "electron_g_factor",
+            "electron g factor",
+            "electron g factor",
+        ),
+        (
+            "thomson_cross_section",
+            "thomson cross section",
+            "Thomson cross section",
+        ),
+        (
+            "characteristic_impedance_of_vacuum",
+            "characteristic impedance of vacuum",
+            "characteristic impedance of vacuum",
+        ),
     ]
 }
 
@@ -118,19 +174,74 @@ fn generate_query() -> OracleQuery {
                 scipy_key: (*sk).into(),
             })
             .collect(),
+        finds: Vec::new(),
     }
+}
+
+fn find_expectations() -> Vec<FindExpectation> {
+    vec![
+        FindExpectation {
+            case_id: "find_faraday",
+            query: "Faraday",
+            fsci_name: "Faraday constant",
+            scipy_key: "Faraday constant",
+        },
+        FindExpectation {
+            case_id: "find_muon_g_factor",
+            query: "g factor",
+            fsci_name: "muon g factor",
+            scipy_key: "muon g factor",
+        },
+        FindExpectation {
+            case_id: "find_thomson_cross_section",
+            query: "cross section",
+            fsci_name: "Thomson cross section",
+            scipy_key: "Thomson cross section",
+        },
+        FindExpectation {
+            case_id: "find_vacuum_impedance",
+            query: "impedance",
+            fsci_name: "characteristic impedance of vacuum",
+            scipy_key: "characteristic impedance of vacuum",
+        },
+        FindExpectation {
+            case_id: "find_alpha_mass_mev",
+            query: "mass energy equivalent in MeV",
+            fsci_name: "alpha particle mass energy equivalent in MeV",
+            scipy_key: "alpha particle mass energy equivalent in MeV",
+        },
+        FindExpectation {
+            case_id: "find_proton_compton_wavelength",
+            query: "Compton wavelength",
+            fsci_name: "proton Compton wavelength",
+            scipy_key: "proton Compton wavelength",
+        },
+        FindExpectation {
+            case_id: "find_tau_electron_ratio",
+            query: "tau-electron",
+            fsci_name: "tau-electron mass ratio",
+            scipy_key: "tau-electron mass ratio",
+        },
+        FindExpectation {
+            case_id: "find_wien_wavelength",
+            query: "Wien",
+            fsci_name: "Wien wavelength displacement law constant",
+            scipy_key: "Wien wavelength displacement law constant",
+        },
+    ]
 }
 
 fn scipy_oracle_or_skip(query: &OracleQuery) -> Option<OracleResult> {
     let script = r#"
 import json
 import math
+import os
 import sys
 from scipy import constants
 
-q = json.load(sys.stdin)
+q = json.loads(os.environ["FSCI_ORACLE_QUERY"])
 points = []
-for case in q["points"]:
+for case in q.get("points", []):
     cid = case["case_id"]; sk = case["scipy_key"]
     try:
         v = float(constants.value(sk))
@@ -140,12 +251,25 @@ for case in q["points"]:
             points.append({"case_id": cid, "value": v})
     except Exception:
         points.append({"case_id": cid, "value": None})
-print(json.dumps({"points": points}))
+
+finds = []
+for case in q.get("finds", []):
+    cid = case["case_id"]; query = case["query"]; sk = case["scipy_key"]
+    try:
+        names = constants.find(query, disp=False)
+        found = sk in names
+        v = float(constants.value(sk)) if found else None
+        if v is not None and not math.isfinite(v):
+            v = None
+        finds.append({"case_id": cid, "found": found, "value": v})
+    except Exception:
+        finds.append({"case_id": cid, "found": False, "value": None})
+print(json.dumps({"points": points, "finds": finds}))
 "#;
     let query_json = serde_json::to_string(query).expect("serialize value_lookup query");
     let mut child = match Command::new("python3")
-        .arg("-c")
-        .arg(script)
+        .arg("-")
+        .env("FSCI_ORACLE_QUERY", query_json)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -162,21 +286,24 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open value_lookup oracle stdin");
-        if let Err(err) = stdin.write_all(query_json.as_bytes()) {
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open value_lookup oracle stdin");
+        if let Err(err) = stdin.write_all(script.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
-                "value_lookup oracle stdin write failed: {err}; stderr: {stderr}"
+                "value_lookup oracle script write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping value_lookup oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping value_lookup oracle: script write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for value_lookup oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for value_lookup oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -259,6 +386,95 @@ fn diff_constants_value_lookup() {
     assert!(
         all_pass,
         "value_lookup conformance failed: {} cases, max_rel_diff={}",
+        diffs.len(),
+        max_overall
+    );
+}
+
+#[test]
+fn diff_constants_find_queries_include_scipy_values() {
+    let expectations = find_expectations();
+    let query = OracleQuery {
+        points: Vec::new(),
+        finds: expectations
+            .iter()
+            .map(|case| FindCase {
+                case_id: case.case_id.into(),
+                query: case.query.into(),
+                scipy_key: case.scipy_key.into(),
+            })
+            .collect(),
+    };
+    let Some(oracle) = scipy_oracle_or_skip(&query) else {
+        return;
+    };
+    assert_eq!(oracle.finds.len(), query.finds.len());
+
+    let pmap: HashMap<String, FindArm> = oracle
+        .finds
+        .into_iter()
+        .map(|d| (d.case_id.clone(), d))
+        .collect();
+
+    let start = Instant::now();
+    let mut diffs = Vec::new();
+    let mut max_overall = 0.0_f64;
+
+    for case in &expectations {
+        let scipy_arm = pmap.get(case.case_id).expect("validated find oracle");
+        let fsci_v = fc::find(case.query)
+            .into_iter()
+            .find(|(name, _)| *name == case.fsci_name)
+            .map(|(_, value)| value);
+        let pass = if let (true, Some(scipy_v), Some(fsci_v)) =
+            (scipy_arm.found, scipy_arm.value, fsci_v)
+        {
+            let rel_diff = if scipy_v.abs() > 0.0 {
+                (fsci_v - scipy_v).abs() / scipy_v.abs()
+            } else {
+                (fsci_v - scipy_v).abs()
+            };
+            max_overall = max_overall.max(rel_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.into(),
+                rel_diff,
+                pass: rel_diff <= REL_TOL,
+            });
+            true
+        } else {
+            diffs.push(CaseDiff {
+                case_id: case.case_id.into(),
+                rel_diff: f64::INFINITY,
+                pass: false,
+            });
+            false
+        };
+
+        if !pass {
+            eprintln!(
+                "find() mismatch: {} query={:?} fsci_name={:?} scipy_key={:?}",
+                case.case_id, case.query, case.fsci_name, case.scipy_key
+            );
+        }
+    }
+
+    let all_pass = diffs.iter().all(|d| d.pass);
+
+    let log = DiffLog {
+        test_id: "diff_constants_find_queries".into(),
+        category: "scipy.constants.find() query membership and value lookup".into(),
+        case_count: diffs.len(),
+        max_rel_diff: max_overall,
+        pass: all_pass,
+        timestamp_ms: timestamp_ms(),
+        duration_ns: start.elapsed().as_nanos(),
+        cases: diffs.clone(),
+    };
+    emit_log(&log);
+
+    assert!(
+        all_pass,
+        "constants.find conformance failed: {} cases, max_rel_diff={}",
         diffs.len(),
         max_overall
     );
