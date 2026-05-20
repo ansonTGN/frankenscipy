@@ -4361,29 +4361,18 @@ pub fn iirnotch(w0: f64, q: f64) -> Result<BaCoeffs, SignalError> {
         ));
     }
 
-    // Digital frequency: ω₀ = π·w0 (w0 is normalized to [0,1] where 1 = Nyquist)
+    // Orfanidis notch design (Introduction to Signal Processing, §11.3.4),
+    // matching scipy.signal.iirnotch. With the −3 dB reference gain
+    // gb = 1/√2, the notch bandwidth parameter reduces to β = tan(bw/2),
+    // where bw = π·w0/Q and ω₀ = π·w0 are the radian bandwidth and centre.
     let omega0 = std::f64::consts::PI * w0;
     let bw = omega0 / q;
-    let r = (1.0 - bw / 2.0).max(0.0);
+    let beta = (bw / 2.0).tan();
+    let gain = 1.0 / (1.0 + beta);
     let cos_w0 = omega0.cos();
-
-    // Numerator: zeros on unit circle at e^(±jω₀)
-    // b = [1, -2cos(ω₀), 1] (normalized for unity gain at DC/Nyquist)
-    let b0 = 1.0;
-    let b1 = -2.0 * cos_w0;
-    let b2 = 1.0;
-
-    // Denominator: poles inside unit circle at r·e^(±jω₀)
-    // a = [1, -2r·cos(ω₀), r²]
-    let a0 = 1.0;
-    let a1 = -2.0 * r * cos_w0;
-    let a2 = r * r;
-
-    // Normalize for unity passband gain
-    let gain = (a0 + a1 + a2) / (b0 + b1 + b2);
     Ok(BaCoeffs {
-        b: vec![b0 * gain, b1 * gain, b2 * gain],
-        a: vec![a0, a1, a2],
+        b: vec![gain, -2.0 * gain * cos_w0, gain],
+        a: vec![1.0, -2.0 * gain * cos_w0, 2.0 * gain - 1.0],
     })
 }
 
@@ -4410,19 +4399,18 @@ pub fn iirpeak(w0: f64, q: f64) -> Result<BaCoeffs, SignalError> {
         ));
     }
 
+    // Orfanidis peak design (§11.3.19), matching scipy.signal.iirpeak.
+    // It shares the notch's denominator; with gb = 1/√2 the peak's
+    // bandwidth parameter is also β = tan(bw/2).
     let omega0 = std::f64::consts::PI * w0;
     let bw = omega0 / q;
-    let r = (1.0 - bw / 2.0).max(0.0);
+    let beta = (bw / 2.0).tan();
+    let gain = 1.0 / (1.0 + beta);
     let cos_w0 = omega0.cos();
-
-    // Peak filter: poles on unit circle, zeros inside
-    // b = [1-r², 0, -(1-r²)] / 2 (normalized to unity gain at w0)
-    // a = [1, -2r·cos(ω₀), r²]
-    let gain_factor = (1.0 - r * r) / 2.0;
-    let b = vec![gain_factor, 0.0, -gain_factor];
-    let a = vec![1.0, -2.0 * r * cos_w0, r * r];
-
-    Ok(BaCoeffs { b, a })
+    Ok(BaCoeffs {
+        b: vec![1.0 - gain, 0.0, -(1.0 - gain)],
+        a: vec![1.0, -2.0 * gain * cos_w0, 2.0 * gain - 1.0],
+    })
 }
 
 /// General IIR filter design dispatcher.
@@ -15114,6 +15102,44 @@ mod tests {
             "peak should boost target: peak={}, pass={}",
             result.h_mag[peak_idx],
             result.h_mag[pass_idx]
+        );
+    }
+
+    #[test]
+    fn iirnotch_iirpeak_match_scipy_orfanidis_design() {
+        // Reference coefficients from scipy.signal.iirnotch / iirpeak.
+        let check = |label: &str, got: &[f64], want: &[f64]| {
+            for (g, w) in got.iter().zip(want.iter()) {
+                assert!((g - w).abs() < 1e-12, "{label}: {g} != {w}");
+            }
+        };
+
+        let notch = iirnotch(0.25, 5.0).expect("iirnotch");
+        check(
+            "notch_b",
+            &notch.b,
+            &[0.927_040_342_731_733_3, -1.311_033_025_558_219_7, 0.927_040_342_731_733_3],
+        );
+        check(
+            "notch_a",
+            &notch.a,
+            &[1.0, -1.311_033_025_558_219_7, 0.854_080_685_463_466_6],
+        );
+
+        let peak = iirpeak(0.25, 5.0).expect("iirpeak");
+        check(
+            "peak_b",
+            &peak.b,
+            &[0.072_959_657_268_266_7, 0.0, -0.072_959_657_268_266_7],
+        );
+        // notch and peak share the same denominator.
+        check("peak_a", &peak.a, &notch.a);
+
+        let notch2 = iirnotch(0.1, 2.0).expect("iirnotch");
+        check(
+            "notch2_b",
+            &notch2.b,
+            &[0.927_040_342_731_733_3, -1.763_335_517_647_015, 0.927_040_342_731_733_3],
         );
     }
 
