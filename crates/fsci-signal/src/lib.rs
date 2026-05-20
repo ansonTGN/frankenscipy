@@ -14619,6 +14619,46 @@ mod tests {
     }
 
     #[test]
+    fn coherence_matches_scipy_reference() {
+        // Reference from scipy.signal.coherence on a deterministic pair;
+        // segment detrending is what makes this match (frankenscipy-99796).
+        let t: Vec<f64> = (0..128).map(|i| i as f64).collect();
+        let two_pi = 2.0 * std::f64::consts::PI;
+        let x: Vec<f64> = t
+            .iter()
+            .map(|&ti| (two_pi * 0.05 * ti).sin() + 0.3 * (two_pi * 0.12 * ti).sin())
+            .collect();
+        let y: Vec<f64> = t
+            .iter()
+            .map(|&ti| (two_pi * 0.05 * ti + 0.4).sin() + 0.2 * (two_pi * 0.2 * ti).cos())
+            .collect();
+        let res = coherence(&x, &y, 1.0, Some("hann"), Some(32), Some(16)).expect("coherence");
+        let expected = [
+            0.889_512_272_728_282_6,
+            0.996_328_204_830_709,
+            0.999_844_081_266_168,
+            0.520_709_174_940_172_1,
+            0.071_355_251_232_624_26,
+            0.000_655_644_145_912_068,
+            0.003_532_586_161_921_147,
+            0.020_103_108_823_145_855,
+            0.026_697_794_025_142_27,
+            0.032_370_660_466_563_27,
+            0.066_011_014_700_144_13,
+            0.125_198_219_945_407_95,
+            0.190_532_023_194_400_35,
+            0.249_559_884_818_350_56,
+            0.301_401_819_028_724,
+            0.352_704_769_074_946_86,
+            0.385_832_951_504_589_3,
+        ];
+        assert_eq!(res.coherence.len(), expected.len());
+        for (got, want) in res.coherence.iter().zip(expected.iter()) {
+            assert!((got - want).abs() < 1e-9, "coherence {got} != {want}");
+        }
+    }
+
+    #[test]
     fn coherence_range_zero_to_one() {
         let fs = 100.0;
         let n = 512;

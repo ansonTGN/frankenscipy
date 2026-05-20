@@ -123,9 +123,9 @@ fn synth_x(n: usize, fs: f64, freqs: &[f64], seed: u64) -> Vec<f64> {
 
 fn generate_query() -> OracleQuery {
     let mut points = Vec::new();
-    // coherence probes restricted to autocoherence (x == y), where
-    // both sides give 1.0 across all bins. Cross-coherence diverges
-    // by ~0.63 abs (defect 99796).
+    // coherence probes: autocoherence (x == y ≡ 1) plus cross-coherence
+    // on distinct deterministic signals (frankenscipy-99796 — fixed by
+    // per-segment detrending in csd).
     let fs = 1000.0_f64;
     let x_b = synth_x(2048, fs, &[100.0, 250.0], 0xfeed);
     let y_b = x_b.clone();
@@ -146,6 +146,27 @@ fn generate_query() -> OracleQuery {
         op: "coh".into(),
         x: x_c2,
         y: y_c2,
+        fs,
+        nperseg: 256,
+        noverlap: 128,
+        window: "hann".into(),
+    });
+    // Cross-coherence: x and y are distinct deterministic signals.
+    points.push(Case {
+        case_id: "coh_cross".into(),
+        op: "coh".into(),
+        x: synth_x(2048, fs, &[100.0, 250.0], 0xfeed),
+        y: synth_x(2048, fs, &[100.0, 310.0], 0x1234),
+        fs,
+        nperseg: 512,
+        noverlap: 256,
+        window: "hann".into(),
+    });
+    points.push(Case {
+        case_id: "coh_cross_alt".into(),
+        op: "coh".into(),
+        x: synth_x(1024, fs, &[80.0, 200.0], 0xbeef),
+        y: synth_x(1024, fs, &[80.0, 200.0, 410.0], 0xc0de),
         fs,
         nperseg: 256,
         noverlap: 128,
