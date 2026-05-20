@@ -1,14 +1,14 @@
 #![forbid(unsafe_code)]
-//! Property-based coverage for fsci_ndimage::affine_transform.
+//! Coverage for fsci_ndimage::affine_transform.
 //!
-//! Resolves [frankenscipy-0s069]. fsci's affine_transform uses a 2×3
-//! matrix and an internally-inverted mapping (output coord → input
-//! coord), so direct scipy parity is brittle in the general case
-//! (scipy.ndimage.affine_transform inverts the matrix internally too,
-//! but treats matrix as the OUTPUT→INPUT mapping while fsci accepts
-//! INPUT→OUTPUT and inverts). Property-based invariants stay clean:
+//! Resolves [frankenscipy-0s069] and [frankenscipy-nplp5]. fsci's
+//! affine_transform takes a 2×3 matrix and now treats it exactly as
+//! scipy.ndimage.affine_transform does: the matrix is the OUTPUT→INPUT
+//! mapping applied directly (input location = matrix @ output + offset),
+//! with no internal inversion. Direct scipy parity therefore holds:
 //!   * Identity matrix returns input unchanged (order ∈ {0, 1})
-//!   * Singular matrix (det ≈ 0) returns the all-zero array
+//!   * General matrix matches scipy reference values (order ∈ {1, 3},
+//!     mode ∈ {constant, reflect})
 //!   * Error: order > 5
 //!   * Error: input.ndim != 2
 
@@ -100,17 +100,97 @@ fn diff_ndimage_affine_transform_properties() {
         }
     }
 
-    // === 2. Singular matrix (det=0) → all zeros ===
+    // === 2. General matrix matches scipy.ndimage.affine_transform ===
+    // matrix = [[0.8, 0.1, 0.5], [-0.2, 1.1, -0.3]] (linear part + offset
+    // column). Reference values from scipy.ndimage.affine_transform on the
+    // same sin-texture 5×5 image.
     {
-        let singular: [[f64; 3]; 2] = [[1.0, 1.0, 0.0], [1.0, 1.0, 0.0]];
-        let result = affine_transform(&arr, &singular, 1, BoundaryMode::Constant, 0.0)
-            .expect("singular");
-        let all_zero = result.data.iter().all(|&v| v == 0.0);
-        check(
-            "singular_matrix_returns_zeros",
-            result.shape == arr.shape && all_zero,
-            format!("shape={:?} all_zero={}", result.shape, all_zero),
-        );
+        let matrix: [[f64; 3]; 2] = [[0.8, 0.1, 0.5], [-0.2, 1.1, -0.3]];
+        // (order, mode, tol, expected). order<=1 and order=3 constant are
+        // bit-exact via the cardinal B-spline path; order=3 reflect routes
+        // through the de Boor interpolating spline and agrees with scipy only
+        // to ~1e-5 (tracked for follow-up).
+        let references: [(usize, BoundaryMode, f64, [f64; 25]); 4] = [
+            (
+                1,
+                BoundaryMode::Constant,
+                ABS_TOL,
+                [
+                    0.000000000000e+00, 2.008036304347e-01, 6.650969071061e+00,
+                    8.197105989107e+00, 0.000000000000e+00, 0.000000000000e+00,
+                    -6.577724325852e+00, -1.497660674610e+00, 5.064449943337e+00,
+                    7.944470650796e+00, 0.000000000000e+00, -5.261247238375e+00,
+                    -7.251922148746e+00, -3.115779049884e+00, 3.495465663835e+00,
+                    0.000000000000e+00, 4.626496087927e+00, -3.826560568877e+00,
+                    -7.705465045180e+00, -4.731583279153e+00, 0.000000000000e+00,
+                    8.604137686135e+00, 6.413691759594e+00, -1.763251282674e+00,
+                    0.000000000000e+00,
+                ],
+            ),
+            (
+                3,
+                BoundaryMode::Constant,
+                ABS_TOL,
+                [
+                    0.000000000000e+00, 1.006998652486e+00, 7.892645468516e+00,
+                    8.333880986305e+00, 0.000000000000e+00, 0.000000000000e+00,
+                    -9.335527003762e+00, -2.140018754972e+00, 7.412471008392e+00,
+                    9.788554050012e+00, 0.000000000000e+00, -4.819961508003e+00,
+                    -1.047813467035e+01, -5.231924638274e+00, 5.843354866869e+00,
+                    0.000000000000e+00, 5.890788219480e+00, -4.385238177278e+00,
+                    -9.324349225853e+00, -5.170924704727e+00, 0.000000000000e+00,
+                    9.111265243496e+00, 7.671378145616e+00, -2.175945364439e+00,
+                    0.000000000000e+00,
+                ],
+            ),
+            (
+                1,
+                BoundaryMode::Reflect,
+                ABS_TOL,
+                [
+                    -4.794621373316e+00, 2.008036304347e-01, 6.650969071061e+00,
+                    8.197105989107e+00, 2.952263871868e+00, -8.344533255310e+00,
+                    -6.577724325852e+00, -1.497660674610e+00, 5.064449943337e+00,
+                    7.944470650796e+00, -4.245902157847e+00, -5.261247238375e+00,
+                    -7.251922148746e+00, -3.115779049884e+00, 3.495465663835e+00,
+                    5.308569450525e+00, 4.626496087927e+00, -3.826560568877e+00,
+                    -7.705465045180e+00, -4.731583279153e+00, 8.006620199984e+00,
+                    8.604137686135e+00, 6.413691759594e+00, -1.763251282674e+00,
+                    -8.640277915246e+00,
+                ],
+            ),
+            (
+                3,
+                BoundaryMode::Reflect,
+                1.0e-4,
+                [
+                    -6.370564537739e+00, 3.221833936293e-01, 7.829940240048e+00,
+                    8.826398229861e+00, 2.445676381848e+00, -1.051377959630e+01,
+                    -8.913804179475e+00, -2.109795446830e+00, 7.115075623034e+00,
+                    9.624431251211e+00, -3.249894236676e+00, -5.775240237524e+00,
+                    -1.008914888377e+01, -4.807834235735e+00, 4.727963036077e+00,
+                    6.190333023064e+00, 5.061460587515e+00, -4.440078012997e+00,
+                    -9.582387542220e+00, -5.626796613973e+00, 8.943740103206e+00,
+                    9.127318301507e+00, 7.010309896721e+00, -2.153725559542e+00,
+                    -9.402332586797e+00,
+                ],
+            ),
+        ];
+        for (order, mode, tol, expected) in references {
+            let result = affine_transform(&arr, &matrix, order, mode, 0.0)
+                .expect("general affine");
+            let max_diff = result
+                .data
+                .iter()
+                .zip(expected.iter())
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0_f64, f64::max);
+            check(
+                &format!("scipy_parity_order{order}_{mode:?}"),
+                result.shape == arr.shape && max_diff <= tol,
+                format!("max_diff={max_diff}"),
+            );
+        }
     }
 
     // === 3. Error: order > 5 ===

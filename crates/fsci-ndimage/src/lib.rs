@@ -488,13 +488,24 @@ fn prefilter_spline_coefficients(
     order: usize,
     mode: BoundaryMode,
 ) -> Result<SplinePrefilter, NdimageError> {
+    let ndim = input.ndim();
     if order <= 1 {
+        // Order <= 1 has no spline coefficients to solve — the samples ARE the
+        // coefficients. But linear interpolation under `reflect` needs support
+        // beyond [0, len-1] near a boundary (a coord folded to e.g. -0.3 spans
+        // indices -1 and 0). Pad the array with the reflected values so the
+        // support always lands in range, mirroring the order>=2 path.
+        if order == 1 && mode == BoundaryMode::Reflect {
+            return Ok(SplinePrefilter {
+                coeffs: pad_array_mode(input, SPLINE_NEAREST_PAD, mode)?,
+                coord_offsets: vec![SPLINE_NEAREST_PAD as f64; ndim],
+            });
+        }
         return Ok(SplinePrefilter {
             coeffs: input.clone(),
-            coord_offsets: vec![0.0; input.ndim()],
+            coord_offsets: vec![0.0; ndim],
         });
     }
-    let ndim = input.ndim();
     let (mut current, coord_offsets) =
         if matches!(mode, BoundaryMode::Nearest | BoundaryMode::Reflect) {
             (
@@ -642,7 +653,14 @@ fn sample_interpolated(
             }
         };
         let effective_order = order.min(coeff_len.saturating_sub(1));
-        if mode == BoundaryMode::Wrap && effective_order == 3 {
+        // Constant and Wrap order-3 share `cubic_constant_wrap_coefficients`,
+        // which produces *cardinal* cubic B-spline coefficients with mirror
+        // boundary symmetry (scipy's constant-mode spline filter is mirror-
+        // based). They must be reconstructed with the cardinal cubic B-spline
+        // kernel and a mirror index fold — not the de Boor knot basis used by
+        // the Nearest/Reflect path, whose `make_interp_spline` coefficients are
+        // a different representation.
+        if matches!(mode, BoundaryMode::Wrap | BoundaryMode::Constant) && effective_order == 3 {
             let base = spline_coord.floor() as isize - 1;
             let t = spline_coord - spline_coord.floor();
             let omt = 1.0 - t;
@@ -2689,26 +2707,17 @@ pub fn affine_transform(
     let rows = input.shape[0];
     let cols = input.shape[1];
 
-    // Invert the transformation to map output → input
-    let det = matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0];
-    if det.abs() < 1e-15 {
-        return Ok(NdArray::zeros(input.shape.clone()));
-    }
-
-    let inv = [
-        [matrix[1][1] / det, -matrix[0][1] / det],
-        [-matrix[1][0] / det, matrix[0][0] / det],
-    ];
-    let inv_tx = -(inv[0][0] * matrix[0][2] + inv[0][1] * matrix[1][2]);
-    let inv_ty = -(inv[1][0] * matrix[0][2] + inv[1][1] * matrix[1][2]);
-
+    // scipy.ndimage.affine_transform maps each OUTPUT index `o` directly to the
+    // INPUT location `matrix @ o + offset` — the matrix is already the
+    // output->input map and is NOT inverted. With a 2x3 matrix the final column
+    // holds the offset and the leading 2x2 block is the linear part.
     let spline = prefilter_spline_coefficients(input, order, mode)?;
     let mut output = NdArray::zeros(input.shape.clone());
 
     for r in 0..rows {
         for c in 0..cols {
-            let src_r = inv[0][0] * r as f64 + inv[0][1] * c as f64 + inv_tx;
-            let src_c = inv[1][0] * r as f64 + inv[1][1] * c as f64 + inv_ty;
+            let src_r = matrix[0][0] * r as f64 + matrix[0][1] * c as f64 + matrix[0][2];
+            let src_c = matrix[1][0] * r as f64 + matrix[1][1] * c as f64 + matrix[1][2];
             let value = sample_interpolated(
                 input,
                 &spline.coeffs,
@@ -3936,6 +3945,84 @@ mod tests {
         let result = rotate(&input, 360.0, false, 3, BoundaryMode::Nearest, 0.0).unwrap();
         for (got, want) in result.data.iter().zip(input.data.iter()) {
             assert!((got - want).abs() < 1e-8, "got {got}, want {want}");
+        }
+    }
+
+    #[test]
+    fn affine_transform_matches_scipy() {
+        // scipy.ndimage.affine_transform applies the matrix directly as the
+        // output->input map (no internal inversion); the 2x3 matrix's last
+        // column is the offset.
+        let input = NdArray::new((0..25).map(f64::from).collect(), vec![5, 5]).unwrap();
+        let matrix = [[0.8, 0.1, 0.5], [-0.2, 1.1, -0.3]];
+
+        // Reference values from scipy.ndimage.affine_transform on the same
+        // arange(25).reshape(5,5) image: (order, mode, tol, expected).
+        // order<=1 and order=3 constant are bit-exact (cardinal B-spline
+        // path); order=3 reflect routes through the de Boor interpolating
+        // spline, which agrees with scipy only to ~1e-5 (see frankenscipy
+        // follow-up for making that path exact).
+        let references: [(usize, BoundaryMode, f64, [f64; 25]); 4] = [
+            (
+                1,
+                BoundaryMode::Constant,
+                1e-9,
+                [
+                    0.0, 3.8, 5.4, 7.0, 0.0, 0.0, 7.6, 9.2, 10.8, 12.4, 0.0, 11.4, 13.0, 14.6,
+                    16.2, 0.0, 15.2, 16.8, 18.4, 20.0, 0.0, 19.0, 20.6, 22.2, 0.0,
+                ],
+            ),
+            (
+                3,
+                BoundaryMode::Constant,
+                1e-9,
+                [
+                    0.0, 3.045714285714, 4.889142857143, 6.657142857143, 0.0, 0.0,
+                    7.737142857143, 9.506857142857, 10.99885714286, 12.67857142857, 0.0,
+                    11.09142857143, 12.85857142857, 14.30514285714, 16.09714285714, 0.0,
+                    15.06285714286, 17.01171428571, 18.69485714286, 20.68571428571, 0.0,
+                    19.68571428571, 21.04228571429, 22.17257142857, 0.0,
+                ],
+            ),
+            (
+                1,
+                BoundaryMode::Reflect,
+                1e-9,
+                [
+                    2.5, 3.8, 5.4, 7.0, 8.5, 6.5, 7.6, 9.2, 10.8, 12.4, 10.5, 11.4, 13.0, 14.6,
+                    16.2, 14.5, 15.2, 16.8, 18.4, 20.0, 18.6, 19.0, 20.6, 22.2, 23.3,
+                ],
+            ),
+            (
+                3,
+                BoundaryMode::Reflect,
+                1e-4,
+                [
+                    2.071312652477, 3.522103918644, 5.211788632913, 6.873683576956,
+                    8.497631252012, 6.436047805932, 7.650524974355, 9.313053236502,
+                    10.87326342174, 12.50263186751, 10.34130828363, 11.28631180975,
+                    12.94789529848, 14.49136816267, 16.16210518486, 14.39814861670,
+                    15.14946641848, 16.87800090509, 18.50863134397, 20.25263168215,
+                    18.87314778636, 19.25262023910, 20.76294794134, 22.18989448276,
+                    23.62289481757,
+                ],
+            ),
+        ];
+        for (order, mode, tol, expected) in references {
+            let got = affine_transform(&input, &matrix, order, mode, 0.0).unwrap();
+            for (g, e) in got.data.iter().zip(&expected) {
+                assert!(
+                    (g - e).abs() < tol,
+                    "affine order={order} {mode:?}: {g} vs {e}"
+                );
+            }
+        }
+
+        // Identity maps every pixel to itself.
+        let identity = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
+        let id_out = affine_transform(&input, &identity, 1, BoundaryMode::Constant, 0.0).unwrap();
+        for (g, e) in id_out.data.iter().zip(&input.data) {
+            assert!((g - e).abs() < 1e-9, "affine identity: {g} vs {e}");
         }
     }
 
