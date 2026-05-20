@@ -1075,7 +1075,8 @@ pub fn lombscargle(
 ///
 /// Returns the samples of a Gaussian-modulated sinusoid:
 ///   y(t) = exp(-a t²) cos(2π fc t)
-/// where a = (π fc bw)² / (-2 ln(bwr)) and bwr is the reference level (-6dB default).
+/// where a = (π fc bw)² / (-4 ln(ref)), ref = 10^(bwr/20), and the
+/// fractional-bandwidth reference level is bwr = -6 dB.
 ///
 /// Matches `scipy.signal.gausspulse(t, fc, bw)`.
 pub fn gausspulse(t: &[f64], fc: f64, bw: f64) -> Vec<f64> {
@@ -1084,7 +1085,9 @@ pub fn gausspulse(t: &[f64], fc: f64, bw: f64) -> Vec<f64> {
     }
     let bwr = -6.0; // reference level in dB
     let ref_level = 10.0_f64.powf(bwr / 20.0);
-    let a = -(std::f64::consts::PI * fc * bw).powi(2) / (2.0 * ref_level.ln());
+    // scipy solves g(fc·bw/2) = ref for the Gaussian width: the envelope
+    // factor is a = (π·fc·bw)² / (−4·ln ref), not (−2·ln ref).
+    let a = -(std::f64::consts::PI * fc * bw).powi(2) / (4.0 * ref_level.ln());
 
     t.iter()
         .map(|&ti| {
@@ -15630,6 +15633,23 @@ mod tests {
         let t = [-1.0, 0.0, 1.0];
         let y = gausspulse(&t, 0.0, 0.5);
         assert_eq!(y, vec![1.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn gausspulse_matches_scipy_reference() {
+        // Reference values from scipy.signal.gausspulse. The Gaussian width
+        // uses a = (π·fc·bw)²/(−4·ln ref) — frankenscipy-88iwj.
+        let t = [0.0, 0.05, 0.1, 0.2];
+        for &(fc, bw, want) in &[
+            (5.0_f64, 0.5_f64, [1.0, 0.0, -0.799_918_398, 0.409_432_905]),
+            (10.0, 0.3, [1.0, -0.922_776_332, 0.725_079_768, 0.276_403_253]),
+            (1.0, 0.8, [1.0, 0.945_636_648, 0.790_732_379, 0.282_013_486]),
+        ] {
+            let y = gausspulse(&t, fc, bw);
+            for (got, w) in y.iter().zip(want.iter()) {
+                assert!((got - w).abs() < 1e-8, "fc={fc} bw={bw}: {got} != {w}");
+            }
+        }
     }
 
     #[test]
