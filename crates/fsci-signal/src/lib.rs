@@ -6890,75 +6890,56 @@ pub fn firwin2(
         ));
     }
 
-    // Interpolate the desired frequency response to n_fft points
-    let n_fft = if numtaps % 2 == 1 {
-        numtaps
-    } else {
-        numtaps + 1
-    };
-    let n_half = n_fft / 2 + 1;
+    // A Type-II filter (even numtaps) cannot realize a nonzero gain at the
+    // Nyquist frequency.
+    if numtaps.is_multiple_of(2) && gain[gain.len() - 1] != 0.0 {
+        return Err(SignalError::InvalidArgument(
+            "even numtaps requires zero gain at the Nyquist frequency".to_string(),
+        ));
+    }
 
-    // Linearly interpolate gain at uniform frequency grid
-    let mut h_desired = vec![0.0; n_half];
-    for (k, h_val) in h_desired.iter_mut().enumerate() {
-        let f_k = k as f64 / (n_half - 1) as f64;
-        // Find the interval in freq containing f_k
+    // scipy.signal.firwin2: oversample the frequency grid to
+    // nfreqs = 1 + 2^⌈log2(numtaps)⌉, interpolate the desired gain there,
+    // apply the linear-phase ramp shift = exp(−(numtaps−1)/2·iπ·x) so the
+    // first `numtaps` samples of the inverse real FFT are the causal taps,
+    // then window. (The previous code under-sampled the grid, used a
+    // circular shift instead of a phase ramp, and DC-normalized the taps —
+    // none of which scipy does.)
+    let nfreqs = 1 + numtaps.next_power_of_two();
+    let n_out = 2 * (nfreqs - 1);
+    let half = (numtaps as f64 - 1.0) / 2.0;
+
+    let mut spectrum: Vec<fsci_fft::Complex64> = Vec::with_capacity(nfreqs);
+    for k in 0..nfreqs {
+        let x = k as f64 / (nfreqs - 1) as f64;
+        // Piecewise-linear interpolation of (freq, gain) at x ∈ [0, 1].
         let mut seg = 0;
-        while seg + 1 < freq.len() - 1 && freq[seg + 1] < f_k {
+        while seg + 2 < freq.len() && freq[seg + 1] < x {
             seg += 1;
         }
-        let t = if (freq[seg + 1] - freq[seg]).abs() > 1e-15 {
-            (f_k - freq[seg]) / (freq[seg + 1] - freq[seg])
+        let span = freq[seg + 1] - freq[seg];
+        let t = if span.abs() > 1e-15 {
+            ((x - freq[seg]) / span).clamp(0.0, 1.0)
         } else {
             0.0
         };
-        *h_val = gain[seg] + t * (gain[seg + 1] - gain[seg]);
+        let fx = gain[seg] + t * (gain[seg + 1] - gain[seg]);
+        let theta = half * std::f64::consts::PI * x;
+        spectrum.push((fx * theta.cos(), -fx * theta.sin()));
     }
 
-    // Construct symmetric spectrum and do inverse FFT
-    let mut spectrum = vec![0.0; n_fft];
-    for (k, &val) in h_desired.iter().enumerate() {
-        spectrum[k] = val;
-    }
-    // Mirror for negative frequencies
-    for k in 1..n_half - 1 {
-        if n_fft - k < n_fft {
-            spectrum[n_fft - k] = spectrum[k];
-        }
-    }
+    // Inverse real FFT; the leading `numtaps` samples are the filter taps.
+    let opts = fsci_fft::FftOptions::default();
+    let out_full = fsci_fft::irfft(&spectrum, Some(n_out), &opts)
+        .map_err(|e| SignalError::InvalidArgument(format!("firwin2 irfft failed: {e:?}")))?;
 
-    // Inverse DFT to get impulse response
-    let mut h = vec![0.0; n_fft];
-    let nf = n_fft as f64;
-    for (n, hn) in h.iter_mut().enumerate() {
-        for (k, &sk) in spectrum.iter().enumerate() {
-            *hn += sk * (2.0 * std::f64::consts::PI * n as f64 * k as f64 / nf).cos();
-        }
-        *hn /= nf;
-    }
-
-    // Shift to center (circular shift by n_fft/2)
-    let shift = n_fft / 2;
-    let mut h_shifted = vec![0.0; n_fft];
-    for (i, val) in h.iter().enumerate() {
-        h_shifted[(i + shift) % n_fft] = *val;
-    }
-
-    // Truncate to numtaps
-    let h_out: Vec<f64> = h_shifted[..numtaps].to_vec();
-
-    // Apply window
+    // Apply the (symmetric) design window — scipy get_window(fftbins=False).
     let win = make_window(numtaps, window);
-    let mut result: Vec<f64> = h_out.iter().zip(win.iter()).map(|(&h, &w)| h * w).collect();
-
-    // Normalize
-    let sum: f64 = result.iter().sum();
-    if sum.abs() > 1e-15 && gain[0].abs() > 1e-15 {
-        let target_gain = gain[0];
-        for r in &mut result {
-            *r *= target_gain / sum;
-        }
-    }
+    let result: Vec<f64> = out_full[..numtaps]
+        .iter()
+        .zip(win.iter())
+        .map(|(&h, &w)| h * w)
+        .collect();
 
     Ok(result)
 }
@@ -13070,6 +13051,48 @@ mod tests {
         // DC gain should be ~1
         let dc_gain: f64 = h.iter().sum();
         assert!((dc_gain - 1.0).abs() < 0.15, "firwin2 DC gain: {dc_gain}");
+    }
+
+    #[test]
+    fn firwin2_matches_scipy_reference() {
+        // Reference taps from scipy.signal.firwin2 (frankenscipy-3fumb).
+        let lp = firwin2(
+            51,
+            &[0.0, 0.3, 0.5, 1.0],
+            &[1.0, 1.0, 0.0, 0.0],
+            FirWindow::Hamming,
+        )
+        .expect("firwin2 lp");
+        // Centre taps and symmetry (linear-phase Type-I filter).
+        for (got, want) in lp[24..27]
+            .iter()
+            .zip([0.296_698_542_674, 0.399_902_343_75, 0.296_698_542_674].iter())
+        {
+            assert!((got - want).abs() < 1e-9, "lp tap {got} != {want}");
+        }
+
+        let bp = firwin2(
+            33,
+            &[0.0, 0.3, 0.6, 1.0],
+            &[0.0, 1.0, 1.0, 0.0],
+            FirWindow::Hamming,
+        )
+        .expect("firwin2 bp");
+        for (got, want) in bp[14..19].iter().zip(
+            [
+                -0.217_298_916_851,
+                0.035_483_625_869,
+                0.649_861_653_646,
+                0.035_483_625_869,
+                -0.217_298_916_851,
+            ]
+            .iter(),
+        ) {
+            assert!((got - want).abs() < 1e-9, "bp tap {got} != {want}");
+        }
+
+        // Even numtaps with nonzero Nyquist gain is rejected (Type II).
+        assert!(firwin2(32, &[0.0, 1.0], &[1.0, 1.0], FirWindow::Hamming).is_err());
     }
 
     #[test]
