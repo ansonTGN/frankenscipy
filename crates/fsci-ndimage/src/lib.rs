@@ -456,53 +456,103 @@ fn cubic_constant_wrap_coefficients(line: &[f64]) -> Vec<f64> {
     rhs
 }
 
-/// Exact cubic (order-3) B-spline prefilter coefficients for the half-sample
-/// `reflect` boundary.
+/// Cardinal B-spline `beta^order(x)` for `order` in 1..=5.
 ///
-/// The interpolation condition `s[i] = (1/6)c[i-1] + (2/3)c[i] + (1/6)c[i+1]`
-/// is solved exactly by a tridiagonal system. For the half-sample-reflect
-/// boundary the coefficient sequence inherits the sample sequence's symmetry
-/// about index `-0.5`, so `c[-1] = c[0]` (and `c[n] = c[n-1]`); substituting
-/// that into the first/last rows collapses the `(1/6, 2/3, 1/6)` stencil to
-/// `(5/6, 1/6)`. This direct solve is the *exact* infinite-reflect cubic
-/// spline — no truncated geometric-series initial condition. scipy's
-/// `_spline_filter1d` uses a horizon-truncated recursive filter that converges
-/// to this same value (to within f64 precision once the axis is more than a
-/// few dozen samples long). It is also the per-line prefilter for `nearest`
-/// after the input has been edge-padded.
-fn cubic_reflect_coefficients(line: &[f64]) -> Vec<f64> {
+/// Evaluated by the order-raising recurrence
+/// `beta^d(x) = [ (x + (d+1)/2) beta^(d-1)(x+1/2)
+///              + ((d+1)/2 - x) beta^(d-1)(x-1/2) ] / d`
+/// starting from the *continuous* triangle `beta^1`. Recurring up from the box
+/// `beta^0` instead would be fragile: `beta^0` is discontinuous, so a
+/// coordinate a hair off a half-integer (e.g. `2^-54`, as produced by exact
+/// affine arithmetic) lands inside/outside the box and yields `1.0` where the
+/// correct half-sample value is `0.5`. `beta^1` is Lipschitz, so a tiny
+/// perturbation of the argument only perturbs the result by the same order.
+/// Every term is non-negative inside the support — no catastrophic
+/// cancellation, accurate to a few ulp even for quintic splines.
+fn cardinal_bspline(order: usize, x: f64) -> f64 {
+    // beta^1 (triangle) sampled at the offsets x + 0.5*m, m = -order ..= order.
+    let span = order as isize;
+    let mut vals: Vec<f64> = (-span..=span)
+        .map(|m| {
+            let t = (x + 0.5 * m as f64).abs();
+            (1.0 - t).max(0.0)
+        })
+        .collect();
+    for d in 2..=order {
+        let n = d as f64;
+        let half = (n + 1.0) / 2.0;
+        let mut next = vec![0.0; vals.len()];
+        for idx in 1..vals.len() - 1 {
+            let m = idx as isize - span;
+            let arg = x + 0.5 * m as f64;
+            next[idx] = ((arg + half) * vals[idx + 1] + (half - arg) * vals[idx - 1]) / n;
+        }
+        vals = next;
+    }
+    vals[span as usize]
+}
+
+/// IIR poles of the order-`order` B-spline interpolation prefilter (the roots
+/// of the symbol of `beta^order` sampled on the integers), `order` in 2..=5.
+fn bspline_reflect_poles(order: usize) -> Vec<f64> {
+    match order {
+        2 => vec![8.0_f64.sqrt() - 3.0],
+        3 => vec![3.0_f64.sqrt() - 2.0],
+        4 => vec![
+            (664.0 - 438976.0_f64.sqrt()).sqrt() + 304.0_f64.sqrt() - 19.0,
+            (664.0 + 438976.0_f64.sqrt()).sqrt() - 304.0_f64.sqrt() - 19.0,
+        ],
+        5 => vec![
+            (67.5 - 4436.25_f64.sqrt()).sqrt() + 26.25_f64.sqrt() - 6.5,
+            (67.5 + 4436.25_f64.sqrt()).sqrt() - 26.25_f64.sqrt() - 6.5,
+        ],
+        _ => Vec::new(),
+    }
+}
+
+/// Exact B-spline prefilter coefficients for the half-sample `reflect`
+/// boundary, orders 2..=5.
+///
+/// Runs the Unser/Thévenaz recursive IIR filter — gain, then a causal and an
+/// anticausal pass per pole — with the *exact* closed-form reflect boundary
+/// initial conditions: the causal initial coefficient sums the full geometric
+/// series of the reflect-extended (period `2n`) signal, `c[0] += S*z/(1-z^2n)`,
+/// and the anticausal initial coefficient is `c[n-1] *= z/(z-1)`. No truncated
+/// horizon. For orders 4 and 5 the two poles are applied in sequence; each
+/// pass preserves the reflect symmetry so the same exact init is correct for
+/// the second pole. Also serves as the per-line prefilter for `nearest` once
+/// the input has been edge-padded.
+fn bspline_reflect_coefficients(line: &[f64], order: usize) -> Vec<f64> {
     let n = line.len();
     if n <= 1 {
         return line.to_vec();
     }
-    let mut diag: Vec<f64> = vec![2.0 / 3.0; n];
-    let mut rhs: Vec<f64> = line.to_vec();
-    let mut lower: Vec<f64> = vec![0.0; n];
-    let mut upper: Vec<f64> = vec![0.0; n];
-    // Boundary rows: (1/6)c[-1] + (2/3)c[0] + (1/6)c[1] with c[-1]=c[0]
-    // gives (5/6)c[0] + (1/6)c[1]; symmetric at the far end.
-    diag[0] = 5.0 / 6.0;
-    upper[0] = 1.0 / 6.0;
-    diag[n - 1] = 5.0 / 6.0;
-    lower[n - 1] = 1.0 / 6.0;
-    for i in 1..n.saturating_sub(1) {
-        lower[i] = 1.0 / 6.0;
-        diag[i] = 2.0 / 3.0;
-        upper[i] = 1.0 / 6.0;
+    let poles = bspline_reflect_poles(order);
+    let mut gain = 1.0;
+    for &z in &poles {
+        gain *= (1.0 - z) * (1.0 - 1.0 / z);
     }
-    for i in 1..n {
-        if diag[i - 1].abs() < 1e-18 {
-            continue;
+    let mut c: Vec<f64> = line.iter().map(|&v| v * gain).collect();
+    for &z in &poles {
+        // Exact causal initial coefficient for the reflect-extended signal.
+        let z_n = z.powi(n as i32);
+        let mut z_i = z;
+        let mut sum = c[0] + z_n * c[n - 1];
+        for i in 1..n {
+            sum += z_i * (c[i] + z_n * c[n - 1 - i]);
+            z_i *= z;
         }
-        let w = lower[i] / diag[i - 1];
-        diag[i] -= w * upper[i - 1];
-        rhs[i] -= w * rhs[i - 1];
+        c[0] += sum * z / (1.0 - z_n * z_n);
+        for i in 1..n {
+            c[i] += z * c[i - 1];
+        }
+        // Exact anticausal initial coefficient.
+        c[n - 1] *= z / (z - 1.0);
+        for i in (0..n - 1).rev() {
+            c[i] = z * (c[i + 1] - c[i]);
+        }
     }
-    rhs[n - 1] /= diag[n - 1];
-    for i in (0..n - 1).rev() {
-        rhs[i] = (rhs[i] - upper[i] * rhs[i + 1]) / diag[i];
-    }
-    rhs
+    c
 }
 
 fn pad_array_mode(
@@ -555,14 +605,16 @@ fn prefilter_spline_coefficients(
             coord_offsets: vec![0.0; ndim],
         });
     }
-    // Order-3 reflect is solved exactly and in-place by
-    // `cubic_reflect_coefficients` (the exact half-sample-reflect cubic spline).
-    // Order-3 nearest mirrors scipy: pad with edge values by SPLINE_NEAREST_PAD,
-    // then run that same exact reflect prefilter on the padded lines. Orders
-    // 2/4/5 reflect/nearest (and order-3 reflect on arrays too short for a
-    // cubic stencil) still use the padded de Boor path.
-    let exact_reflect =
-        order == 3 && mode == BoundaryMode::Reflect && input.shape.iter().all(|&s| s >= 4);
+    // Orders 2..=5 reflect are solved exactly and in-place by the recursive
+    // `bspline_reflect_coefficients` (exact half-sample-reflect B-spline).
+    // The matching `nearest` mode mirrors scipy: edge-pad by SPLINE_NEAREST_PAD,
+    // then run that same exact reflect prefilter on the padded lines. Reflect
+    // on an axis too short for the order's stencil falls back to the padded
+    // de Boor path.
+    let bspline_reflect = matches!(order, 2..=5);
+    let exact_reflect = bspline_reflect
+        && mode == BoundaryMode::Reflect
+        && input.shape.iter().all(|&s| s > order);
     let pad_input =
         matches!(mode, BoundaryMode::Nearest | BoundaryMode::Reflect) && !exact_reflect;
     let (mut current, coord_offsets) = if pad_input {
@@ -606,9 +658,11 @@ fn prefilter_spline_coefficients(
                 (3, BoundaryMode::Constant | BoundaryMode::Wrap) => {
                     cubic_constant_wrap_coefficients(&line)
                 }
-                (3, BoundaryMode::Nearest) => cubic_reflect_coefficients(&line),
-                (3, BoundaryMode::Reflect) if exact_reflect => {
-                    cubic_reflect_coefficients(&line)
+                (_, BoundaryMode::Nearest) if bspline_reflect => {
+                    bspline_reflect_coefficients(&line, order)
+                }
+                (_, BoundaryMode::Reflect) if exact_reflect => {
+                    bspline_reflect_coefficients(&line, order)
                 }
                 _ => spline_coefficients_for_line(&line, order)?,
             };
@@ -742,23 +796,20 @@ fn sample_interpolated(
             bases.push(support);
             continue;
         }
-        // Reflect / Nearest order-3: reconstruct from the cubic_reflect
-        // coefficients with the cardinal cubic B-spline kernel. scipy folds the
-        // support TAPS, not the coordinate, so the lookup coordinate is used
-        // directly (offset by SPLINE_NEAREST_PAD for the edge-padded `nearest`
-        // case) and each tap index is mapped back through the boundary rule —
-        // half-sample mirror for reflect, edge-clamp for nearest. The padded
-        // de Boor fallback for short reflect axes has coord_offsets > 0 and is
-        // excluded here so it keeps using the de Boor evaluator.
-        let cardinal_reflect_nearest = effective_order == 3
+        // Reflect / Nearest orders 2..=5: reconstruct from the exact
+        // `bspline_reflect_coefficients` with the cardinal B-spline kernel.
+        // scipy folds the support TAPS, not the coordinate, so the lookup
+        // coordinate is used directly (offset by SPLINE_NEAREST_PAD for the
+        // edge-padded `nearest` case) and each tap index is mapped back through
+        // the boundary rule — half-sample mirror for reflect, edge-clamp for
+        // nearest. The padded de Boor fallback for short reflect axes has
+        // coord_offsets > 0 and is excluded here so it keeps the de Boor path.
+        let cardinal_reflect_nearest = effective_order == order
+            && matches!(order, 2..=5)
             && ((mode == BoundaryMode::Reflect && coord_offsets[axis] == 0.0)
                 || mode == BoundaryMode::Nearest);
         if cardinal_reflect_nearest {
             let cc = coord + coord_offsets[axis];
-            let floor = cc.floor();
-            let base = floor as isize - 1;
-            let t = cc - floor;
-            let omt = 1.0 - t;
             let len = coeff_len as isize;
             let fold = |i: isize| -> usize {
                 match mode {
@@ -773,18 +824,15 @@ fn sample_interpolated(
                     }
                 }
             };
-            let support = vec![
-                (fold(base), omt * omt * omt / 6.0),
-                (
-                    fold(base + 1),
-                    (3.0 * t * t * t - 6.0 * t * t + 4.0) / 6.0,
-                ),
-                (
-                    fold(base + 2),
-                    (-3.0 * t * t * t + 3.0 * t * t + 3.0 * t + 1.0) / 6.0,
-                ),
-                (fold(base + 3), t * t * t / 6.0),
-            ];
+            let floor = cc.floor() as isize;
+            let span = order as isize;
+            let mut support = Vec::with_capacity(2 * order + 1);
+            for k in (floor - span)..=(floor + span) {
+                let weight = cardinal_bspline(order, cc - k as f64);
+                if weight != 0.0 {
+                    support.push((fold(k), weight));
+                }
+            }
             bases.push(support);
             continue;
         }
@@ -4335,6 +4383,149 @@ mod tests {
         let got = affine_transform(&img, &matrix, 3, BoundaryMode::Nearest, 0.0).unwrap();
         for (g, e) in got.data.iter().zip(&aff_near) {
             assert!((g - e).abs() < TOL, "affine nearest: {g} vs {e}");
+        }
+    }
+
+    #[test]
+    fn spline_orders_2_4_5_reflect_nearest_match_scipy_golden() {
+        // Golden artifact: order-2/4/5 spline interpolation under reflect and
+        // nearest, verified bit-exact (< 1e-12) against scipy.ndimage.shift.
+        const TOL: f64 = 1e-12;
+
+        // 24-sample signal — long enough that scipy's horizon-truncated
+        // reflect prefilter agrees with the exact reflect spline.
+        let reflect_sig: Vec<f64> = vec![
+            0.3, 0.5254971787363237, 0.5408057557229191, 0.635795154994567,
+            0.9073737420479793, 1.1218983591130598, 0.9605329581387094, 0.3810003087672637,
+            -0.3017020476460769, -0.7092777890824606, -0.755474785911513, -0.683640240436719,
+            -0.7543994215437057, -0.9320889866700686, -0.9171525129384751, -0.4901346154497399,
+            0.21127233132626663, 0.7907645539468529, 0.9680644073934838, 0.8294796607067128,
+            0.6893699987049906, 0.7208919079549805, 0.7636074874743252, 0.5187033633516349,
+        ];
+        // 20-sample signal for nearest (scipy edge-pads then prefilters).
+        let nearest_sig: Vec<f64> = vec![
+            3.0, 6.659085290854023, 7.733103563999704, 7.262733439989361, 6.402699019254376,
+            5.352334042747226, 3.3152787084265762, -0.5082563677459531, -5.742971009482519,
+            -10.505933637858343, -12.322633532285415, -9.722976713580003, -3.377144701355263,
+            4.093988896839788, 9.568169743690905, 11.164761757677065, 9.11413039759255,
+            5.2310787849920235, 1.4770673813308624, -1.28493841798744,
+        ];
+
+        // (order, shift, reflect_expected[24], nearest_expected[20])
+        let reflect_cases: [(usize, f64, [f64; 24]); 6] = [
+            (2, 0.5, [
+                0.26148308720278246, 0.4155507383916525, 0.5472011973925972, 0.5664538150897354,
+                0.7604795549389343, 1.0433444434468437, 1.09654218902416, 0.7071276914152734,
+                0.026824730108091693, -0.5508830275790764, -0.7654459115477829, -0.7154518031101201,
+                -0.6983033751844239, -0.8468865937050349, -0.9663306954404633, -0.7520952320863598,
+                -0.15024642559423818, 0.5381246491578959, 0.929646071739341, 0.9193147657674041,
+                0.74464160605702, 0.688234235537289, 0.7670006073591302, 0.6477597020251524,
+            ]),
+            (2, -0.37, [
+                0.3780968923876382, 0.55004707350839, 0.5567027348546525, 0.7227376085775954,
+                1.0090429004084585, 1.113130943496916, 0.7843065594109809, 0.12160861701575015,
+                -0.49372903854689265, -0.7606764023822605, -0.7287487672977672, -0.6900200942581103,
+                -0.8193391026409322, -0.9623302689796851, -0.8061576943691924, -0.24611398750032565,
+                0.45647795796202273, 0.9044804339423547, 0.940375232004542, 0.7662187840164019,
+                0.6833216657503591, 0.7537183567179542, 0.6886982650692292, 0.47859265329190565,
+            ]),
+            (4, 0.5, [
+                0.24919710286198923, 0.4210244727263792, 0.5524281034476087, 0.5602266698366776,
+                0.7592912141355752, 1.0438683473422665, 1.1003630566341693, 0.7094684774167466,
+                0.025503727675793522, -0.5544978018281325, -0.7674151045724874, -0.7137523113281415,
+                -0.6949508843909721, -0.8457354387839149, -0.9688133468477396, -0.7556590938567713,
+                -0.15104338293567277, 0.5408374075539142, 0.9332702314723473, 0.9191833468382019,
+                0.7432418789219479, 0.6819812577573401, 0.7734287692536976, 0.6536480506760897,
+            ]),
+            (4, -0.37, [
+                0.3869529341080939, 0.5523304004529634, 0.5499485827935139, 0.7236393917242437,
+                1.0119800113189061, 1.1170115675786068, 0.7839958190189207, 0.1174707972542666,
+                -0.4976674323370129, -0.7605187702755805, -0.7251160523592382, -0.6872301772854028,
+                -0.8206614372669139, -0.9663613020780203, -0.8083726625442841, -0.24377069109259103,
+                0.46112959985545743, 0.9070523141560112, 0.937816217926544, 0.763427599299972,
+                0.6791291174592256, 0.7621964050599042, 0.6894720825029287, 0.4654505812331833,
+            ]),
+            (5, 0.5, [
+                0.24664420183516106, 0.4225212997266592, 0.5528012064287837, 0.5591957745312407,
+                0.7598435317911724, 1.0435143378614826, 1.100718716223185, 0.7094658229233732,
+                0.025493853573514993, -0.554673693440588, -0.7674842359598136, -0.7136784807659607,
+                -0.6947950173637502, -0.8456848730447002, -0.9689022894220467, -0.7558335020671808,
+                -0.15102415968874833, 0.54084205720131, 0.9336389967679087, 0.9187634898419974,
+                0.743848977053193, 0.6808670364500307, 0.7738768938002417, 0.6552941151329906,
+            ]),
+            (5, -0.37, [
+                0.3887104336475638, 0.5523483633366845, 0.5490039930189293, 0.7242224945828809,
+                1.0117050291181455, 1.1173694128105638, 0.783923750904463, 0.11739358978258295,
+                -0.497837122526764, -0.760515821762791, -0.7249843007003728, -0.6870949028912255,
+                -0.8206862478588601, -0.9665005790472293, -0.808509601008641, -0.24368011714684484,
+                0.46119264644791735, 0.9073455158365293, 0.9373781680623959, 0.7639226336515214,
+                0.6781161253053056, 0.7629494473761906, 0.690543922427542, 0.46281529288662704,
+            ]),
+        ];
+        let nearest_cases: [(usize, f64, [f64; 20]); 6] = [
+            (2, 0.5, [
+                2.702782168545731, 4.7323124708063045, 7.539684170032537, 7.59833792841338,
+                6.853636275443444, 5.941574255900906, 4.517050437157529, 1.626574125849127,
+                -3.0484058295297993, -8.341048657584219, -11.90092081432834, -11.567695137020781,
+                -6.875349347008646, 0.41930555933159286, 7.226892772957188, 10.867972365048056,
+                10.496999042226356, 7.265602002672257, 3.290225672078391, -0.17437136985106116,
+            ]),
+            (2, -0.37, [
+                4.143855124090996, 7.411370394557743, 7.664948393508871, 6.9670715336683084,
+                6.062446732562023, 4.757893548963193, 2.112480257859293, -2.348975284726245,
+                -7.674830569641832, -11.61228831717209, -11.87717295688152, -7.7122123026463765,
+                -0.5964627366132293, 6.464456949352444, 10.630213515905218, 10.763407261040815,
+                7.79101585332909, 3.785836417357385, 0.23944528575002455, -1.5144466683392535,
+            ]),
+            (4, 0.5, [
+                2.6306032753377897, 4.697677989716788, 7.6402814064148314, 7.545366113966397,
+                6.862294863414422, 5.9281809547987425, 4.525437316966706, 1.6393818602944958,
+                -3.0367250821189504, -8.34239817893728, -11.915925475875854, -11.587814629608703,
+                -6.887227531241737, 0.4227348301443286, 7.24463922503075, 10.88318185549883,
+                10.51233129984018, 7.241531466614057, 3.313945117527742, -0.20634453768157623,
+            ]),
+            (4, -0.37, [
+                4.162142563509179, 7.497026260222897, 7.602893110891612, 6.975955770303944,
+                6.055591973804203, 4.772478754215038, 2.121701266176032, -2.3521289394036264,
+                -7.69463788238694, -11.63716593410173, -11.890714552701453, -7.703612968518502,
+                -0.5700891403689989, 6.494366064096208, 10.642371222821803, 10.762808027340544,
+                7.75581615791813, 3.8007888645719055, 0.19652586496626542, -1.508641460236482,
+            ]),
+            (5, 0.5, [
+                2.617324371623272, 4.690581905217046, 7.6620204610085985, 7.525044246696608,
+                6.874675819576095, 5.9209275253562055, 4.5291241625419305, 1.6380438152728438,
+                -3.0355217064381708, -8.342752526750935, -11.916013984915796, -11.588518485130257,
+                -6.88716496823088, 0.42215713803932103, 7.2464605870211765, 10.8808616974449,
+                10.517502421146744, 7.233213623388482, 3.3227201112356703, -0.21129098372014327,
+            ]),
+            (5, -0.37, [
+                4.1610753206808875, 7.5146000230372225, 7.583725393528469, 6.987998134141277,
+                6.048632205806019, 4.776376928836171, 2.120389642875675, -2.3511217898395307,
+                -7.695294262733125, -11.637447867735148, -11.891319351908553, -7.703307768605489,
+                -0.5702480314364181, 6.496092676469299, 10.640308006662673, 10.7670381892709,
+                7.748081030883152, 3.8095536403517665, 0.19015282605698844, -1.50938219040037,
+            ]),
+        ];
+
+        let refl_arr = NdArray::new(reflect_sig, vec![24]).unwrap();
+        for (order, sh, expected) in reflect_cases {
+            let got = shift(&refl_arr, &[sh], order, BoundaryMode::Reflect, 0.0).unwrap();
+            for (g, e) in got.data.iter().zip(&expected) {
+                assert!(
+                    (g - e).abs() < TOL,
+                    "reflect order={order} shift={sh}: {g} vs {e}"
+                );
+            }
+        }
+        let near_arr = NdArray::new(nearest_sig, vec![20]).unwrap();
+        for (order, sh, expected) in nearest_cases {
+            let got = shift(&near_arr, &[sh], order, BoundaryMode::Nearest, 0.0).unwrap();
+            for (g, e) in got.data.iter().zip(&expected) {
+                assert!(
+                    (g - e).abs() < TOL,
+                    "nearest order={order} shift={sh}: {g} vs {e}"
+                );
+            }
         }
     }
 
