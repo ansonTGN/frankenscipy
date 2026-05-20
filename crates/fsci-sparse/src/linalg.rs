@@ -2258,6 +2258,9 @@ pub fn qmr(
 
     let mut delta;
     let mut epsilon_prev = 0.0;
+    // theta_{n-1} and the accumulated QMR solution-update direction d_n.
+    let mut theta = 0.0;
+    let mut d_upd = vec![0.0; n];
 
     for iteration in 0..max_iter {
         // Check for breakdown
@@ -2331,29 +2334,33 @@ pub fn qmr(
         // beta = epsilon / delta
         let beta = epsilon / delta;
 
-        // Update v_tilde = A*v - beta*v_tilde/rho
-        let av = csr_matvec(a, &v);
+        // Advance the coupled two-term Lanczos recurrences:
+        //   v~_{n+1} = A p_n - beta v_n,   w~_{n+1} = A^T q_n - beta w_n
+        // where p_n = d, q_n = s and v_n = v, w_n = w. `ad = A d` is already
+        // computed above; the v-recurrence must use A*p_n (not A*v_n) and the
+        // w-recurrence A^T*q_n (not A^T*w_n).
+        let ats = csr_matvec(&at, &s);
         for i in 0..n {
-            v_tilde[i] = av[i] - beta * v_tilde[i] / rho;
-        }
-
-        // Update w_tilde = A^T*w - beta*w_tilde/xi
-        let atw = csr_matvec(&at, &w);
-        for i in 0..n {
-            w_tilde[i] = atw[i] - beta * w_tilde[i] / xi;
+            v_tilde[i] = ad[i] - beta * v[i];
+            w_tilde[i] = ats[i] - beta * w[i];
         }
 
         let rho_new = vec_norm(&v_tilde);
         let xi_new = vec_norm(&w_tilde);
 
-        // QMR update using Givens rotation
+        // QMR update using a Givens rotation.
         let theta_new = rho_new / (gamma * beta.abs());
         let gamma_new = 1.0 / (1.0 + theta_new * theta_new).sqrt();
         let eta_new = -eta * rho * gamma_new * gamma_new / (beta * gamma * gamma);
 
-        // Update solution
+        // Quasi-minimal-residual solution update: the search direction
+        // accumulates d_n = eta_n p_n + (theta_{n-1} gamma_n)^2 d_{n-1}, then
+        // x_n = x_{n-1} + d_n. (theta starts at 0, so the first step is just
+        // eta_1 p_1.)
+        let smoothing = (theta * gamma_new).powi(2);
         for i in 0..n {
-            x[i] += eta_new * d[i];
+            d_upd[i] = eta_new * d[i] + smoothing * d_upd[i];
+            x[i] += d_upd[i];
         }
 
         // Check convergence
@@ -2379,6 +2386,7 @@ pub fn qmr(
         gamma = gamma_new;
         eta = eta_new;
         epsilon_prev = epsilon;
+        theta = theta_new;
     }
 
     let final_r = b
@@ -6127,6 +6135,59 @@ mod tests {
             "QMR residual should be reasonable: {} after {} iterations",
             result.residual_norm,
             result.iterations
+        );
+    }
+
+    #[test]
+    fn qmr_converges_on_spd_tridiagonal() {
+        // The bead's reproduction case: SPD A = tridiag(-1, 4, -1), size 6.
+        // QMR previously stalled here (relative residual ~0.018) because the
+        // Lanczos recurrences used A*v_n / A^T*w_n instead of A*p_n / A^T*q_n,
+        // and the solution update omitted the QMR smoothing term.
+        let n = 6;
+        let mut vals = Vec::new();
+        let mut rows = Vec::new();
+        let mut cols = Vec::new();
+        for i in 0..n {
+            vals.push(4.0);
+            rows.push(i);
+            cols.push(i);
+            if i + 1 < n {
+                vals.push(-1.0);
+                rows.push(i);
+                cols.push(i + 1);
+                vals.push(-1.0);
+                rows.push(i + 1);
+                cols.push(i);
+            }
+        }
+        let a = CooMatrix::from_triplets(Shape2D::new(n, n), vals, rows, cols, false)
+            .expect("coo")
+            .to_csr()
+            .expect("csr");
+        let b = vec![1.0, 2.0, 3.0, 3.0, 2.0, 1.0];
+        let opts = IterativeSolveOptions {
+            tol: 1e-8,
+            max_iter: Some(500),
+            ..Default::default()
+        };
+        let result = qmr(&a, &b, None, opts).expect("qmr works");
+        assert!(
+            result.converged,
+            "QMR must converge on SPD tridiagonal: residual={} after {} iters",
+            result.residual_norm, result.iterations
+        );
+        // Verify the true residual ||A x - b|| independently.
+        let ax = csr_matvec(&a, &result.solution);
+        let true_res: f64 = ax
+            .iter()
+            .zip(&b)
+            .map(|(&axi, &bi)| (axi - bi).powi(2))
+            .sum::<f64>()
+            .sqrt();
+        assert!(
+            true_res < 1e-6,
+            "true residual ||Ax-b|| too large: {true_res}"
         );
     }
 
