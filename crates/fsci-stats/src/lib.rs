@@ -20552,6 +20552,32 @@ pub fn trimmed_std(data: &[f64], proportiontocut: f64, ddof: usize) -> f64 {
     variance.sqrt()
 }
 
+/// Variance of trimmed data.
+///
+/// Computes the variance after trimming a proportion of elements
+/// from each end of the sorted data.
+///
+/// # Arguments
+/// * `data` — Input array
+/// * `proportiontocut` — Fraction to trim from each end (0.0 to 0.5)
+/// * `ddof` — Delta degrees of freedom (default: 1 for sample variance)
+///
+/// # Returns
+/// Variance of the trimmed data
+pub fn trimmed_var(data: &[f64], proportiontocut: f64, ddof: usize) -> f64 {
+    if data.is_empty() || data.iter().any(|v| v.is_nan()) {
+        return f64::NAN;
+    }
+
+    let trimmed = trimboth(data, proportiontocut);
+    if trimmed.len() <= ddof {
+        return f64::NAN;
+    }
+
+    let mean = trimmed.iter().sum::<f64>() / trimmed.len() as f64;
+    trimmed.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (trimmed.len() - ddof) as f64
+}
+
 /// Trim a proportion of elements from both ends of a sorted array.
 ///
 /// Slices off the given proportion from **each** end of the sorted input array,
@@ -40110,6 +40136,30 @@ mod tests {
     #[test]
     fn trimmed_std_empty_returns_nan() {
         assert!(trimmed_std(&[], 0.1, 1).is_nan());
+    }
+
+    // ── trimmed_var tests ────────────────────────────────────────────
+
+    #[test]
+    fn trimmed_var_basic() {
+        let data = [1.0, 2.0, 3.0, 4.0, 5.0, 100.0];
+        let result = trimmed_var(&data, 0.16667, 1);
+        assert!(result > 0.0, "trimmed_var should be positive");
+        // Without outlier 100, variance should be much lower
+        assert!(result < 50.0, "trimmed_var should exclude outlier effect");
+    }
+
+    #[test]
+    fn trimmed_var_equals_std_squared() {
+        let data: Vec<f64> = (1..=20).map(|x| x as f64).collect();
+        let var = trimmed_var(&data, 0.1, 1);
+        let std = trimmed_std(&data, 0.1, 1);
+        assert_close(var, std * std, 1e-10, "var should equal std^2");
+    }
+
+    #[test]
+    fn trimmed_var_empty_returns_nan() {
+        assert!(trimmed_var(&[], 0.1, 1).is_nan());
     }
 
     #[test]
