@@ -4898,6 +4898,112 @@ pub fn spline_filter1d(
     Ok(result)
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// Watershed Transform
+// ══════════════════════════════════════════════════════════════════════
+
+/// Watershed transform using Image Foresting Transform.
+///
+/// Matches `scipy.ndimage.watershed_ift`. Expands marker regions to fill
+/// watershed basins based on the input (typically gradient) image.
+///
+/// # Arguments
+/// * `input` - Input array (typically gradient magnitude)
+/// * `markers` - Array with initial marked regions (positive integers)
+/// * `structure` - Optional connectivity structure (default: 3x3x... cross)
+///
+/// # Returns
+/// Labeled array where each pixel is assigned to a marker region.
+pub fn watershed_ift(
+    input: &NdArray,
+    markers: &NdArray,
+    structure: Option<&NdArray>,
+) -> Result<NdArray, NdimageError> {
+    if input.shape != markers.shape {
+        return Err(NdimageError::DimensionMismatch(
+            "input and markers must have the same shape".to_string(),
+        ));
+    }
+
+    let ndim = input.ndim();
+    let default_struct = generate_binary_structure(ndim, 1);
+    let struct_arr = structure.unwrap_or(&default_struct);
+
+    let struct_offsets = compute_structure_offsets(&input.shape, &struct_arr.shape, &struct_arr.data);
+
+    let mut output = markers.data.clone();
+    let mut costs: Vec<f64> = vec![f64::INFINITY; input.size()];
+    let mut queue: std::collections::BinaryHeap<std::cmp::Reverse<(i64, usize)>> =
+        std::collections::BinaryHeap::new();
+
+    for (idx, &m) in markers.data.iter().enumerate() {
+        if m > 0.0 {
+            costs[idx] = 0.0;
+            queue.push(std::cmp::Reverse((0, idx)));
+        }
+    }
+
+    while let Some(std::cmp::Reverse((cost_scaled, idx))) = queue.pop() {
+        let current_cost = cost_scaled as f64 / 1000.0;
+        if current_cost > costs[idx] {
+            continue;
+        }
+
+        for &offset in &struct_offsets {
+            let neighbor = idx as i64 + offset;
+            if neighbor < 0 || neighbor >= input.size() as i64 {
+                continue;
+            }
+            let neighbor_idx = neighbor as usize;
+
+            let new_cost = current_cost.max(input.data[neighbor_idx]);
+            if new_cost < costs[neighbor_idx] {
+                costs[neighbor_idx] = new_cost;
+                output[neighbor_idx] = output[idx];
+                queue.push(std::cmp::Reverse(((new_cost * 1000.0) as i64, neighbor_idx)));
+            }
+        }
+    }
+
+    Ok(NdArray::new(output, input.shape.clone()).unwrap())
+}
+
+fn compute_structure_offsets(shape: &[usize], struct_shape: &[usize], struct_data: &[f64]) -> Vec<i64> {
+    let ndim = shape.len();
+    let mut offsets = Vec::new();
+    let center: Vec<usize> = struct_shape.iter().map(|&s| s / 2).collect();
+
+    let struct_size: usize = struct_shape.iter().product();
+    for struct_idx in 0..struct_size {
+        if struct_data[struct_idx] == 0.0 {
+            continue;
+        }
+
+        let mut struct_coords = Vec::with_capacity(ndim);
+        let mut remaining = struct_idx;
+        for &s in struct_shape.iter().rev() {
+            struct_coords.push(remaining % s);
+            remaining /= s;
+        }
+        struct_coords.reverse();
+
+        if struct_coords == center {
+            continue;
+        }
+
+        let mut offset: i64 = 0;
+        let mut stride: i64 = 1;
+        for d in (0..ndim).rev() {
+            let delta = struct_coords[d] as i64 - center[d] as i64;
+            offset += delta * stride;
+            stride *= shape[d] as i64;
+        }
+        offsets.push(offset);
+    }
+
+    offsets
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
