@@ -31172,6 +31172,66 @@ pub fn brier_score(y_true: &[f64], y_pred: &[f64]) -> f64 {
         / y_true.len() as f64
 }
 
+/// Expected Calibration Error - weighted average of bin calibration errors.
+/// n_bins specifies the number of equal-width bins.
+pub fn expected_calibration_error(y_true: &[f64], y_pred: &[f64], n_bins: usize) -> f64 {
+    if y_true.len() != y_pred.len() || y_true.is_empty() || n_bins == 0 {
+        return f64::NAN;
+    }
+    let n = y_true.len() as f64;
+    let bin_width = 1.0 / n_bins as f64;
+    let mut ece = 0.0;
+
+    for b in 0..n_bins {
+        let lo = b as f64 * bin_width;
+        let hi = if b == n_bins - 1 { 1.0 + 1e-10 } else { (b + 1) as f64 * bin_width };
+
+        let (bin_sum_pred, bin_sum_true, bin_count) = y_pred
+            .iter()
+            .zip(y_true.iter())
+            .filter(|(p, _)| **p >= lo && **p < hi)
+            .fold((0.0, 0.0, 0usize), |(sp, st, c), (p, t)| {
+                (sp + *p, st + *t, c + 1)
+            });
+
+        if bin_count > 0 {
+            let avg_pred = bin_sum_pred / bin_count as f64;
+            let avg_true = bin_sum_true / bin_count as f64;
+            ece += bin_count as f64 * (avg_pred - avg_true).abs();
+        }
+    }
+    ece / n
+}
+
+/// Maximum Calibration Error - maximum bin calibration error.
+pub fn max_calibration_error(y_true: &[f64], y_pred: &[f64], n_bins: usize) -> f64 {
+    if y_true.len() != y_pred.len() || y_true.is_empty() || n_bins == 0 {
+        return f64::NAN;
+    }
+    let bin_width = 1.0 / n_bins as f64;
+    let mut mce = 0.0f64;
+
+    for b in 0..n_bins {
+        let lo = b as f64 * bin_width;
+        let hi = if b == n_bins - 1 { 1.0 + 1e-10 } else { (b + 1) as f64 * bin_width };
+
+        let (bin_sum_pred, bin_sum_true, bin_count) = y_pred
+            .iter()
+            .zip(y_true.iter())
+            .filter(|(p, _)| **p >= lo && **p < hi)
+            .fold((0.0, 0.0, 0usize), |(sp, st, c), (p, t)| {
+                (sp + *p, st + *t, c + 1)
+            });
+
+        if bin_count > 0 {
+            let avg_pred = bin_sum_pred / bin_count as f64;
+            let avg_true = bin_sum_true / bin_count as f64;
+            mce = mce.max((avg_pred - avg_true).abs());
+        }
+    }
+    mce
+}
+
 /// Compute the log-likelihood for a normal distribution.
 pub fn norm_loglikelihood(data: &[f64], mu: f64, sigma: f64) -> f64 {
     let n = data.len() as f64;
