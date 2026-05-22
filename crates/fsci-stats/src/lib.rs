@@ -31940,6 +31940,82 @@ pub fn odds_ratio(table: &[[usize; 2]; 2]) -> f64 {
     (a * d) / denom
 }
 
+/// Compute the odds ratio with confidence interval from a 2x2 contingency table.
+///
+/// Uses Woolf's method (log-transform with normal approximation).
+///
+/// # Arguments
+/// * `table` - 2x2 contingency table [[a,b],[c,d]]
+/// * `confidence` - Confidence level (e.g., 0.95)
+///
+/// # Returns
+/// (odds_ratio, lower_ci, upper_ci)
+pub fn odds_ratio_ci(table: &[[usize; 2]; 2], confidence: f64) -> (f64, f64, f64) {
+    let a = table[0][0] as f64;
+    let b = table[0][1] as f64;
+    let c = table[1][0] as f64;
+    let d = table[1][1] as f64;
+
+    if a == 0.0 || b == 0.0 || c == 0.0 || d == 0.0 {
+        return (odds_ratio(table), f64::NAN, f64::NAN);
+    }
+
+    let or = (a * d) / (b * c);
+    let log_or = or.ln();
+    let se_log_or = (1.0 / a + 1.0 / b + 1.0 / c + 1.0 / d).sqrt();
+
+    let alpha = 1.0 - confidence;
+    let z = standard_normal_ppf(1.0 - alpha / 2.0);
+
+    let lower = (log_or - z * se_log_or).exp();
+    let upper = (log_or + z * se_log_or).exp();
+
+    (or, lower, upper)
+}
+
+/// Compute the relative risk with confidence interval from a 2x2 contingency table.
+///
+/// Uses log-transform with normal approximation.
+///
+/// # Arguments
+/// * `table` - 2x2 contingency table [[exposed_case, exposed_nocase], [unexposed_case, unexposed_nocase]]
+/// * `confidence` - Confidence level (e.g., 0.95)
+///
+/// # Returns
+/// (relative_risk, lower_ci, upper_ci)
+pub fn relative_risk_ci(table: &[[usize; 2]; 2], confidence: f64) -> (f64, f64, f64) {
+    let a = table[0][0] as f64;
+    let b = table[0][1] as f64;
+    let c = table[1][0] as f64;
+    let d = table[1][1] as f64;
+
+    let n1 = a + b;
+    let n0 = c + d;
+
+    if a == 0.0 || n1 == 0.0 || n0 == 0.0 {
+        return (relative_risk(table), f64::NAN, f64::NAN);
+    }
+
+    let p1 = a / n1;
+    let p0 = c / n0;
+
+    if p0 == 0.0 {
+        return (f64::INFINITY, f64::NAN, f64::NAN);
+    }
+
+    let rr = p1 / p0;
+    let log_rr = rr.ln();
+    let se_log_rr = ((1.0 - p1) / (a) + (1.0 - p0) / (c)).sqrt();
+
+    let alpha = 1.0 - confidence;
+    let z = standard_normal_ppf(1.0 - alpha / 2.0);
+
+    let lower = (log_rr - z * se_log_rr).exp();
+    let upper = (log_rr + z * se_log_rr).exp();
+
+    (rr, lower, upper)
+}
+
 /// Compute the Phi coefficient from a 2x2 contingency table.
 ///
 /// φ = (ad - bc) / sqrt((a+b)(c+d)(a+c)(b+d))
