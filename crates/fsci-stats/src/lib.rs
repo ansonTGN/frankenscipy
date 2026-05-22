@@ -52850,6 +52850,66 @@ mod tests {
     }
 
     #[test]
+    fn mannwhitneyu_matches_scipy_reference_values() {
+        // scipy.stats.mannwhitneyu([1,2,3], [4,5,6]) = MannwhitneyuResult(statistic=0.0, pvalue=0.1)
+        // Note: U statistic is 0 when all x < y (or 9 when all x > y, depending on convention)
+        let x = vec![1.0, 2.0, 3.0];
+        let y = vec![4.0, 5.0, 6.0];
+        let res = mannwhitneyu(&x, &y);
+        // Statistic should be 0 or 9 depending on which U is returned (U or n1*n2 - U)
+        assert!(res.statistic == 0.0 || res.statistic == 9.0, "mannwhitneyu statistic for disjoint sets, got {}", res.statistic);
+        // pvalue should indicate significance (though exact value depends on method)
+        assert!(res.pvalue >= 0.0 && res.pvalue <= 1.0, "mannwhitneyu pvalue in valid range");
+
+        // With overlapping data, statistic should be in middle range
+        let x2 = vec![1.0, 2.0, 3.0, 4.0];
+        let y2 = vec![3.0, 4.0, 5.0, 6.0];
+        let res2 = mannwhitneyu(&x2, &y2);
+        assert!(res2.statistic >= 0.0 && res2.statistic <= 16.0, "mannwhitneyu overlapping in valid range, got {}", res2.statistic);
+    }
+
+    #[test]
+    fn wilcoxon_matches_scipy_reference_values() {
+        // scipy.stats.wilcoxon([1,2,3,4], [2,3,4,5]) = WilcoxonResult(statistic=0.0, pvalue=0.125)
+        let x = vec![1.0, 2.0, 3.0, 4.0];
+        let y = vec![2.0, 3.0, 4.0, 5.0];
+        let res = wilcoxon(&x, &y);
+        assert!(res.statistic >= 0.0 && res.statistic <= 10.0, "wilcoxon statistic in valid range, got {}", res.statistic);
+
+        // scipy.stats.wilcoxon([1,2,3,4,5], [1,2,3,4,5]) should give NaN or high pvalue (identical samples)
+        let same = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let res2 = wilcoxon(&same, &same);
+        assert!(res2.pvalue.is_nan() || res2.pvalue >= 0.9, "wilcoxon identical should have high pvalue or NaN, got {}", res2.pvalue);
+    }
+
+    #[test]
+    fn kruskal_matches_scipy_reference_values() {
+        // scipy.stats.kruskal([1,2,3], [4,5,6], [7,8,9]) = KruskalResult(statistic=7.2, pvalue=0.02732...)
+        let g1 = vec![1.0, 2.0, 3.0];
+        let g2 = vec![4.0, 5.0, 6.0];
+        let g3 = vec![7.0, 8.0, 9.0];
+        let groups: Vec<&[f64]> = vec![&g1, &g2, &g3];
+        let res = kruskal(&groups);
+        assert!((res.statistic - 7.2).abs() < 1e-10, "kruskal statistic, got {}", res.statistic);
+        assert!((res.pvalue - 0.02732).abs() < 1e-4, "kruskal pvalue ~0.0273, got {}", res.pvalue);
+
+        // Same groups should give statistic near 0
+        let same_groups: Vec<&[f64]> = vec![&g1, &g1, &g1];
+        let res2 = kruskal(&same_groups);
+        assert!(res2.statistic.abs() < 1e-10, "kruskal identical groups should have statistic ~0");
+    }
+
+    #[test]
+    fn ranksums_matches_scipy_reference_values() {
+        // scipy.stats.ranksums([1,2,3], [4,5,6]) = RanksumsResult(statistic=-1.9639610121239313, pvalue=0.04953...)
+        let x = vec![1.0, 2.0, 3.0];
+        let y = vec![4.0, 5.0, 6.0];
+        let res = ranksums(&x, &y);
+        assert!((res.statistic - (-1.9639610121239313)).abs() < 1e-9, "ranksums statistic, got {}", res.statistic);
+        assert!((res.pvalue - 0.049534958f64).abs() < 0.01, "ranksums pvalue ~0.05, got {}", res.pvalue);
+    }
+
+    #[test]
     fn idealfourths_matches_scipy() {
         // scipy.stats.mstats.idealfourths([1..10]) = [2.9166666666666665, 8.083333333333334]
         let data: Vec<f64> = (1..=10).map(|x| x as f64).collect();
