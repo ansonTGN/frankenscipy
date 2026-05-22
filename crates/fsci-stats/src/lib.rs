@@ -17905,6 +17905,150 @@ pub fn directional_stats(data: &[[f64; 2]], normalize: bool) -> DirectionalStats
     }
 }
 
+/// V-test for circular uniformity against a specified mean direction.
+///
+/// Tests whether circular data has a specified mean direction vs uniformity.
+/// This is a modification of the Rayleigh test that is more powerful when
+/// the alternative hypothesis specifies a mean direction.
+///
+/// # Arguments
+/// * `samples` - Circular data in radians
+/// * `mu` - The expected mean direction under the alternative hypothesis (radians)
+///
+/// # Returns
+/// A tuple (statistic, pvalue) where statistic is the V-statistic and
+/// pvalue is the one-sided p-value for the alternative of concentration around mu.
+pub fn vtest(samples: &[f64], mu: f64) -> (f64, f64) {
+    let n = samples.len();
+    if n < 2 {
+        return (f64::NAN, f64::NAN);
+    }
+    let nf = n as f64;
+
+    let sum_cos: f64 = samples.iter().map(|&x| (x - mu).cos()).sum();
+    let sum_sin: f64 = samples.iter().map(|&x| (x - mu).sin()).sum();
+
+    let r_bar = ((sum_cos * sum_cos + sum_sin * sum_sin) / (nf * nf)).sqrt();
+    let v = r_bar * (sum_cos / nf).signum() * (nf).sqrt();
+
+    let u = v * (2.0 / nf).sqrt();
+    let pvalue = 1.0 - Normal::new(0.0, 1.0).cdf(u);
+
+    (v, pvalue.clamp(0.0, 1.0))
+}
+
+/// Kuiper's test for circular uniformity.
+///
+/// Tests whether circular data comes from a uniform distribution on the circle.
+/// This is an alternative to the Rayleigh test that is equally sensitive to
+/// departures from uniformity in all directions.
+///
+/// # Arguments
+/// * `samples` - Circular data in radians, will be normalized to [0, 2π)
+///
+/// # Returns
+/// A tuple (statistic, pvalue) where statistic is Kuiper's V statistic
+/// and pvalue is approximated from the asymptotic distribution.
+pub fn kuipertest(samples: &[f64]) -> (f64, f64) {
+    let n = samples.len();
+    if n < 2 {
+        return (f64::NAN, f64::NAN);
+    }
+    let nf = n as f64;
+
+    let mut normalized: Vec<f64> = samples
+        .iter()
+        .map(|&x| {
+            let x_mod = x % (2.0 * PI);
+            if x_mod < 0.0 { x_mod + 2.0 * PI } else { x_mod }
+        })
+        .collect();
+    normalized.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut d_plus = 0.0f64;
+    let mut d_minus = 0.0f64;
+
+    for (i, &x) in normalized.iter().enumerate() {
+        let cdf = x / (2.0 * PI);
+        let ecdf_before = i as f64 / nf;
+        let ecdf_after = (i + 1) as f64 / nf;
+
+        d_plus = d_plus.max(ecdf_after - cdf);
+        d_minus = d_minus.max(cdf - ecdf_before);
+    }
+
+    let v = d_plus + d_minus;
+    let v_star = v * (nf.sqrt() + 0.155 + 0.24 / nf.sqrt());
+
+    let pvalue = kuiper_pvalue(v_star);
+
+    (v, pvalue.clamp(0.0, 1.0))
+}
+
+fn kuiper_pvalue(v_star: f64) -> f64 {
+    if v_star < 0.4 {
+        return 1.0;
+    }
+    let mut sum = 0.0;
+    for k in 1..=100 {
+        let kf = k as f64;
+        let term = (4.0 * kf * kf * v_star * v_star - 1.0) * (-2.0 * kf * kf * v_star * v_star).exp();
+        sum += 2.0 * term;
+    }
+    sum.clamp(0.0, 1.0)
+}
+
+/// Rao's spacing test for circular uniformity.
+///
+/// Tests whether circular data comes from a uniform distribution based on
+/// the spacing between adjacent observations. Sensitive to clustering.
+///
+/// # Arguments
+/// * `samples` - Circular data in radians
+///
+/// # Returns
+/// A tuple (statistic, pvalue) where statistic is Rao's U statistic
+/// and pvalue is approximated using the large-sample distribution.
+pub fn rao_spacing_test(samples: &[f64]) -> (f64, f64) {
+    let n = samples.len();
+    if n < 4 {
+        return (f64::NAN, f64::NAN);
+    }
+    let nf = n as f64;
+
+    let mut normalized: Vec<f64> = samples
+        .iter()
+        .map(|&x| {
+            let x_mod = x % (2.0 * PI);
+            if x_mod < 0.0 { x_mod + 2.0 * PI } else { x_mod }
+        })
+        .collect();
+    normalized.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let expected_spacing = 2.0 * PI / nf;
+    let mut spacings = Vec::with_capacity(n);
+
+    for i in 0..n {
+        let next = (i + 1) % n;
+        let spacing = if next == 0 {
+            (2.0 * PI - normalized[i]) + normalized[0]
+        } else {
+            normalized[next] - normalized[i]
+        };
+        spacings.push(spacing);
+    }
+
+    let u: f64 = spacings.iter().map(|&s| (s - expected_spacing).abs()).sum::<f64>() / 2.0;
+    let u_degrees = u * 180.0 / PI;
+
+    let mean_u = (nf - 1.0) * (2.0 * PI / nf) * 0.5;
+    let var_u = (nf - 1.0) * (4.0 - PI * PI / 3.0) / nf;
+    let z = (u - mean_u) / var_u.sqrt();
+    let pvalue = 1.0 - Normal::new(0.0, 1.0).cdf(z);
+
+    (u_degrees, pvalue.clamp(0.0, 1.0))
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Statistical Tests
 // ══════════════════════════════════════════════════════════════════════
