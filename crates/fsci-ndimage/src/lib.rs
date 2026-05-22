@@ -1400,6 +1400,24 @@ pub fn median_filter(
     median_filter_with_origins(input, size, &origins, mode, cval)
 }
 
+/// Median filter over a SciPy-style signed axes subset.
+///
+/// `axes=[]` matches SciPy's empty-axes identity behavior.
+pub fn median_filter_axes(
+    input: &NdArray,
+    size: usize,
+    axes: &[isize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let axes = normalize_signed_axes(axes, input.ndim())?;
+    if axes.is_empty() {
+        return Ok(input.clone());
+    }
+    let kernel_total = filter_footprint_size(axes.len(), size)?;
+    rank_filter_index_usize_axes(input, size, &axes, mode, cval, kernel_total / 2)
+}
+
 /// Median filter with SciPy `origin` semantics.
 ///
 /// SciPy selects the element at rank `len / 2` from each sorted neighborhood,
@@ -7257,6 +7275,53 @@ mod tests {
         assert!(
             median_filter_with_origins(&input, 3, &[-1, 0], BoundaryMode::Reflect, 0.0).is_err()
         );
+    }
+
+    #[test]
+    fn median_filter_axes_matches_scipy_subset_fixtures() {
+        let input = NdArray::new(vec![4.0, 1.0, 7.0, 2.0, 9.0, 3.0], vec![2, 3]).unwrap();
+
+        // scipy.ndimage.median_filter(input, 2, mode='constant', cval=-10.0, axes=(-1,))
+        let last_axis = [4.0, 4.0, 7.0, 2.0, 9.0, 9.0];
+        // scipy.ndimage.median_filter(input, 2, mode='constant', cval=-10.0, axes=(-2,))
+        let first_axis = [4.0, 1.0, 7.0, 4.0, 9.0, 7.0];
+        // scipy.ndimage.median_filter(input, 2, mode='constant', cval=-10.0, axes=(-2, -1))
+        let all_axes = [-10.0, 1.0, 1.0, 2.0, 4.0, 7.0];
+
+        assert_eq!(
+            median_filter_axes(&input, 2, &[-1], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            last_axis
+        );
+        assert_eq!(
+            median_filter_axes(&input, 2, &[-2], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            first_axis
+        );
+        assert_eq!(
+            median_filter_axes(&input, 2, &[-2, -1], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            all_axes
+        );
+        assert_eq!(
+            median_filter_axes(&input, 0, &[], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            input.data
+        );
+    }
+
+    #[test]
+    fn median_filter_axes_rejects_duplicate_and_out_of_range_axes() {
+        let input = NdArray::new(vec![1.0; 6], vec![2, 3]).unwrap();
+
+        assert!(median_filter_axes(&input, 2, &[1, -1], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(median_filter_axes(&input, 2, &[2], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(median_filter_axes(&input, 2, &[-3], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(median_filter_axes(&input, 0, &[-1], BoundaryMode::Reflect, 0.0).is_err());
     }
 
     #[test]
