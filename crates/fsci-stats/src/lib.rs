@@ -17395,6 +17395,47 @@ pub fn std_weighted(data: &[f64], weights: &[f64]) -> f64 {
     var_weighted(data, weights).sqrt()
 }
 
+/// Compute the sample covariance between two arrays.
+///
+/// cov(x, y) = Σ((x - mean_x)(y - mean_y)) / (n - 1)
+pub fn cov(x: &[f64], y: &[f64]) -> f64 {
+    if x.len() != y.len() || x.len() < 2 {
+        return f64::NAN;
+    }
+    let n = x.len() as f64;
+    let mean_x: f64 = x.iter().sum::<f64>() / n;
+    let mean_y: f64 = y.iter().sum::<f64>() / n;
+    x.iter()
+        .zip(y)
+        .map(|(&xi, &yi)| (xi - mean_x) * (yi - mean_y))
+        .sum::<f64>()
+        / (n - 1.0)
+}
+
+/// Compute the weighted covariance between two arrays.
+///
+/// cov_w(x, y) = Σ(w·(x - mean_x)(y - mean_y)) / Σw
+pub fn cov_weighted(x: &[f64], y: &[f64], weights: &[f64]) -> f64 {
+    if x.len() != y.len() || x.len() != weights.len() || x.len() < 2 {
+        return f64::NAN;
+    }
+    if weights.iter().any(|&w| !w.is_finite() || w < 0.0) {
+        return f64::NAN;
+    }
+    let total_w: f64 = weights.iter().sum();
+    if total_w <= 0.0 {
+        return f64::NAN;
+    }
+    let mean_x: f64 = x.iter().zip(weights).map(|(&xi, &w)| w * xi).sum::<f64>() / total_w;
+    let mean_y: f64 = y.iter().zip(weights).map(|(&yi, &w)| w * yi).sum::<f64>() / total_w;
+    x.iter()
+        .zip(y)
+        .zip(weights)
+        .map(|((&xi, &yi), &w)| w * (xi - mean_x) * (yi - mean_y))
+        .sum::<f64>()
+        / total_w
+}
+
 /// Compute the weighted geometric mean.
 ///
 /// G_w = exp(Σ(w·ln(x)) / Σw)
