@@ -55793,6 +55793,14 @@ mod tests {
     }
 
     #[test]
+    fn test_sokalsneath_distance_identical() {
+        let u = vec![1.0, 1.0, 0.0, 0.0];
+        let v = vec![1.0, 1.0, 0.0, 0.0];
+        let d = sokalsneath_distance(&u, &v);
+        assert!(d.abs() < 1e-10, "Sokal-Sneath distance of identical vectors should be 0, got {}", d);
+    }
+
+    #[test]
     fn test_kulsinski_distance_identical() {
         let u = vec![1.0, 1.0, 1.0, 1.0];
         let v = vec![1.0, 1.0, 1.0, 1.0];
