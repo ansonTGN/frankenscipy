@@ -246,12 +246,12 @@ pub use hyper::{
     select_hypergeometric_branch,
 };
 pub use orthopoly::{
-    eval_chebyt, eval_chebyu, eval_gegenbauer, eval_genlaguerre, eval_hermite, eval_hermitenorm,
-    eval_jacobi, eval_laguerre, eval_legendre, eval_sh_chebyt, eval_sh_chebyu, eval_sh_legendre,
-    lpmn, lpmv, lpn, lqmn, lqn, roots_chebyc, roots_chebys, roots_chebyt, roots_chebyu,
-    roots_gegenbauer, roots_genlaguerre, roots_hermite, roots_hermitenorm, roots_jacobi,
-    roots_laguerre, roots_legendre, roots_sh_chebyt, roots_sh_chebyu, roots_sh_legendre, sph_harm,
-    sph_harm_y,
+    assoc_laguerre, eval_chebyc, eval_chebys, eval_chebyt, eval_chebyu, eval_gegenbauer,
+    eval_genlaguerre, eval_hermite, eval_hermitenorm, eval_jacobi, eval_laguerre, eval_legendre,
+    eval_sh_chebyt, eval_sh_chebyu, eval_sh_jacobi, eval_sh_legendre, lpmn, lpmv, lpn, lqmn, lqn,
+    roots_chebyc, roots_chebys, roots_chebyt, roots_chebyu, roots_gegenbauer, roots_genlaguerre,
+    roots_hermite, roots_hermitenorm, roots_jacobi, roots_laguerre, roots_legendre,
+    roots_sh_chebyt, roots_sh_chebyu, roots_sh_jacobi, roots_sh_legendre, sph_harm, sph_harm_y,
 };
 pub use types::{
     Complex64, DispatchPlan, DispatchStep, KernelRegime, SpecialError, SpecialErrorKind,
@@ -300,6 +300,28 @@ mod tests {
 
         let j1_zero = j1(&zero, RuntimeMode::Strict).expect("j1(0) should evaluate");
         assert_real_scalar_close(j1_zero, 0.0, 1e-8);
+    }
+
+    #[test]
+    fn root_namespace_exports_orthopoly_extras() {
+        let assoc = assoc_laguerre(0.5, 3, 1.25);
+        let assoc_via = eval_genlaguerre(3, 1.25, 0.5);
+        assert!((assoc - assoc_via).abs() < 1e-12);
+
+        assert!((eval_chebyc(3, 1.5) - (1.5_f64.powi(3) - 3.0 * 1.5)).abs() < 1e-12);
+        assert!((eval_chebys(3, 1.5) - (1.5_f64.powi(3) - 2.0 * 1.5)).abs() < 1e-12);
+
+        let shifted = eval_sh_jacobi(4, 0.5, 1.25, 0.3);
+        let via = eval_jacobi(4, -0.75, 0.25, -0.4);
+        assert!((shifted - via).abs() < 1e-12);
+
+        let (shifted_nodes, shifted_weights) = roots_sh_jacobi(3, 0.5, 1.25);
+        let (jacobi_nodes, jacobi_weights) = roots_jacobi(3, -0.75, 0.25);
+        let scale = 2.0_f64.powf(-0.5);
+        for i in 0..3 {
+            assert!((shifted_nodes[i] - 0.5 * (1.0 + jacobi_nodes[i])).abs() < 1e-12);
+            assert!((shifted_weights[i] - scale * jacobi_weights[i]).abs() < 1e-12);
+        }
     }
 
     #[test]

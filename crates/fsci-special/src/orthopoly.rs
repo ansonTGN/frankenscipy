@@ -791,6 +791,27 @@ pub fn roots_sh_chebyu(n: usize) -> (Vec<f64>, Vec<f64>) {
     shift_unit_to_zero_one(roots_chebyu(n), 0.25)
 }
 
+/// Compute shifted Gauss-Jacobi quadrature nodes and weights on `[0, 1]`.
+///
+/// Matches `scipy.special.roots_sh_jacobi(n, p, q)`. SciPy's shifted
+/// parameters map to standard Jacobi as `alpha = p - q`, `beta = q - 1`.
+/// Nodes are shifted from `[-1, 1]` to `[0, 1]`; weights are scaled by
+/// `2^-p` for the transformed weight `(1 - x)^(p - q) x^(q - 1)`.
+#[must_use]
+pub fn roots_sh_jacobi(n: usize, p: f64, q: f64) -> (Vec<f64>, Vec<f64>) {
+    if !p.is_finite() || !q.is_finite() {
+        return invalid_quadrature(n);
+    }
+
+    let alpha = p - q;
+    let beta = q - 1.0;
+    if alpha <= -1.0 || beta <= -1.0 {
+        return invalid_quadrature(n);
+    }
+
+    shift_unit_to_zero_one(roots_jacobi(n, alpha, beta), 2.0_f64.powf(-p))
+}
+
 /// Map `(nodes, weights)` from the canonical `[-1, 1]` interval to the
 /// shifted `[0, 1]` interval. The node transformation is `x ↦ (1 + x) / 2`.
 ///
@@ -2646,6 +2667,25 @@ mod tests {
                 (direct - via).abs() < 1e-12,
                 "eval_sh_jacobi({n}, {p}, {q}, {x}) = {direct} via eval_jacobi = {via}"
             );
+        }
+    }
+
+    #[test]
+    fn roots_sh_jacobi_matches_shifted_jacobi_relation() {
+        for &(n, p, q) in &[(3_usize, 0.5_f64, 1.25_f64), (5, 1.5, 0.75), (8, 2.0, 2.0)] {
+            let (shifted_nodes, shifted_weights) = roots_sh_jacobi(n, p, q);
+            let (jacobi_nodes, jacobi_weights) = roots_jacobi(n, p - q, q - 1.0);
+            let scale = 2.0_f64.powf(-p);
+            for i in 0..n {
+                assert!(
+                    (shifted_nodes[i] - 0.5 * (1.0 + jacobi_nodes[i])).abs() < 1e-12,
+                    "roots_sh_jacobi node {i} for n={n}, p={p}, q={q}"
+                );
+                assert!(
+                    (shifted_weights[i] - scale * jacobi_weights[i]).abs() < 1e-12,
+                    "roots_sh_jacobi weight {i} for n={n}, p={p}, q={q}"
+                );
+            }
         }
     }
 

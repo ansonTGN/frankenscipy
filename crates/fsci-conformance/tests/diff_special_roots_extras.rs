@@ -2,7 +2,7 @@
 //! Live SciPy differential coverage for Gauss-quadrature root/weight
 //! variants not covered by diff_special_roots_quadrature:
 //! roots_chebyu, roots_chebyc, roots_chebys, roots_sh_legendre,
-//! roots_sh_chebyt, roots_sh_chebyu, roots_genlaguerre,
+//! roots_sh_chebyt, roots_sh_chebyu, roots_sh_jacobi, roots_genlaguerre,
 //! roots_gegenbauer, roots_jacobi.
 //!
 //! Resolves [frankenscipy-lhrxe]. 1e-10 abs.
@@ -16,7 +16,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use fsci_special::{
     roots_chebyc, roots_chebys, roots_chebyu, roots_gegenbauer, roots_genlaguerre, roots_jacobi,
-    roots_sh_chebyt, roots_sh_chebyu, roots_sh_legendre,
+    roots_sh_chebyt, roots_sh_chebyu, roots_sh_jacobi, roots_sh_legendre,
 };
 use serde::{Deserialize, Serialize};
 
@@ -29,9 +29,9 @@ struct PointCase {
     case_id: String,
     family: String,
     n: usize,
-    /// Only meaningful for genlaguerre, gegenbauer, jacobi.
+    /// Meaningful for genlaguerre, gegenbauer, jacobi; stores p for sh_jacobi.
     alpha: f64,
-    /// Only meaningful for jacobi.
+    /// Meaningful for jacobi; stores q for sh_jacobi.
     beta: f64,
 }
 
@@ -156,6 +156,19 @@ fn generate_query() -> OracleQuery {
         }
     }
 
+    // shifted jacobi(n, p, q) — p-q > -1 and q > 0
+    for n in [3_usize, 5, 8] {
+        for (p, q) in [(0.5_f64, 1.25), (1.5, 0.75), (2.0, 2.0)] {
+            points.push(PointCase {
+                case_id: format!("roots_sh_jacobi_n{n}_p{p}_q{q}"),
+                family: "roots_sh_jacobi".into(),
+                n,
+                alpha: p,
+                beta: q,
+            });
+        }
+    }
+
     OracleQuery { points }
 }
 
@@ -175,7 +188,7 @@ def finite_vec_or_none(arr):
         flat.append(float(v))
     return flat
 
-q = json.load(sys.stdin)
+q = json.loads(sys.argv[1])
 points = []
 for case in q["points"]:
     cid = case["case_id"]; family = case["family"]
@@ -183,7 +196,7 @@ for case in q["points"]:
     alpha = float(case["alpha"]); beta = float(case["beta"])
     try:
         fn = getattr(special, family)
-        if family == "roots_jacobi":
+        if family == "roots_jacobi" or family == "roots_sh_jacobi":
             nodes, weights = fn(n, alpha, beta)
         elif family in ("roots_genlaguerre", "roots_gegenbauer"):
             nodes, weights = fn(n, alpha)
@@ -203,8 +216,8 @@ print(json.dumps({"points": points}))
 "#;
     let query_json = serde_json::to_string(query).expect("serialize roots_extras query");
     let mut child = match Command::new("python3")
-        .arg("-c")
-        .arg(script)
+        .arg("-")
+        .arg(&query_json)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -224,15 +237,15 @@ print(json.dumps({"points": points}))
         let stdin = child
             .stdin
             .as_mut()
-            .expect("open roots_extras oracle stdin");
-        if let Err(err) = stdin.write_all(query_json.as_bytes()) {
+            .expect("open roots_extras oracle script stdin");
+        if let Err(err) = stdin.write_all(script.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
-                "roots_extras oracle stdin write failed: {err}; stderr: {stderr}"
+                "roots_extras oracle script write failed: {err}; stderr: {stderr}"
             );
-            eprintln!("skipping roots_extras oracle: stdin write failed ({err})\n{stderr}");
+            eprintln!("skipping roots_extras oracle: script write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -301,6 +314,7 @@ fn diff_special_roots_extras() {
             "roots_genlaguerre" => roots_genlaguerre(case.n, case.alpha),
             "roots_gegenbauer" => roots_gegenbauer(case.n, case.alpha),
             "roots_jacobi" => roots_jacobi(case.n, case.alpha, case.beta),
+            "roots_sh_jacobi" => roots_sh_jacobi(case.n, case.alpha, case.beta),
             _ => continue,
         };
         let (nodes, weights) = sort_pairs(n_raw, w_raw);
