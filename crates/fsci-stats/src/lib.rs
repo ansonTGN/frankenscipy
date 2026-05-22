@@ -58323,4 +58323,75 @@ mod tests {
         assert!(high > 5.5, "bootstrap CI high should be > mean, got {high}");
         assert!(low > 0.0 && high < 11.0, "bootstrap CI should be within data range");
     }
+
+    #[test]
+    fn shapiro_matches_scipy_reference_values() {
+        let data: Vec<f64> = vec![0.1, 0.5, -0.3, 0.2, -0.1, 0.4, -0.2, 0.0, 0.3, -0.4];
+        let result = shapiro(&data);
+        assert!(
+            (result.statistic - 0.9701646110856056).abs() < 1e-6,
+            "shapiro statistic got {}, expected 0.970",
+            result.statistic
+        );
+        assert!(
+            (result.pvalue - 0.8923673061902978).abs() < 0.01,
+            "shapiro pvalue got {}, expected ~0.89",
+            result.pvalue
+        );
+    }
+
+    #[test]
+    fn kstest_returns_valid_results() {
+        let data: Vec<f64> = vec![0.1, 0.5, -0.3, 0.2, -0.1, 0.4, -0.2, 0.0, 0.3, -0.4];
+        fn norm_cdf(x: f64) -> f64 {
+            0.5 * (1.0 + fsci_special::erf_scalar(x / std::f64::consts::SQRT_2))
+        }
+        let result = kstest(&data, KstestTarget::Cdf(norm_cdf));
+        assert!(
+            result.statistic > 0.0 && result.statistic < 1.0,
+            "kstest statistic should be in (0,1), got {}",
+            result.statistic
+        );
+        assert!(
+            result.pvalue >= 0.0 && result.pvalue <= 1.0,
+            "kstest pvalue should be in [0,1], got {}",
+            result.pvalue
+        );
+    }
+
+    #[test]
+    fn anderson_returns_valid_results() {
+        let data: Vec<f64> = vec![0.1, 0.5, -0.3, 0.2, -0.1, 0.4, -0.2, 0.0, 0.3, -0.4];
+        let result = anderson(&data, "norm");
+        assert!(
+            result.statistic > 0.0,
+            "anderson statistic should be positive, got {}",
+            result.statistic
+        );
+        assert_eq!(
+            result.critical_values.len(),
+            5,
+            "anderson should return 5 critical values"
+        );
+        assert_eq!(
+            result.significance_level.len(),
+            5,
+            "anderson should return 5 significance levels"
+        );
+    }
+
+    #[test]
+    fn kurtosistest_returns_valid_results() {
+        let data: Vec<f64> = (0..100).map(|i| (i as f64 * 0.1).sin()).collect();
+        let result = kurtosistest(&data, None, None).expect("kurtosistest should succeed");
+        assert!(
+            result.statistic.is_finite(),
+            "kurtosistest statistic should be finite"
+        );
+        assert!(
+            result.pvalue >= 0.0 && result.pvalue <= 1.0,
+            "kurtosistest pvalue should be in [0,1], got {}",
+            result.pvalue
+        );
+    }
 }
