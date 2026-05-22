@@ -20,7 +20,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use fsci_runtime::RuntimeMode;
 use fsci_special::types::SpecialTensor;
-use fsci_special::wright_bessel;
+use fsci_special::{log_wright_bessel, wright_bessel};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -104,6 +104,16 @@ fn fsci_eval(a: f64, b: f64, x: f64) -> Option<f64> {
     }
 }
 
+fn fsci_log_eval(a: f64, b: f64, x: f64) -> Option<f64> {
+    let pa = SpecialTensor::RealScalar(a);
+    let pb = SpecialTensor::RealScalar(b);
+    let px = SpecialTensor::RealScalar(x);
+    match log_wright_bessel(&pa, &pb, &px, RuntimeMode::Strict) {
+        Ok(SpecialTensor::RealScalar(v)) => Some(v),
+        _ => None,
+    }
+}
+
 fn generate_query() -> OracleQuery {
     // (a, b, x) tuples. Both a and b ≥ 0 in scipy; x ∈ ℝ but
     // most well-defined for a, b > 0.
@@ -151,7 +161,7 @@ def finite_or_none(v):
         return None
     return v if math.isfinite(v) else None
 
-q = json.load(sys.stdin)
+q = json.loads(sys.argv[1])
 points = []
 for case in q["points"]:
     cid = case["case_id"]
@@ -166,8 +176,8 @@ print(json.dumps({"points": points}))
 
     let query_json = serde_json::to_string(query).expect("serialize wright_bessel query");
     let mut child = match Command::new("python3")
-        .arg("-c")
-        .arg(script)
+        .arg("-")
+        .arg(query_json)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -188,14 +198,14 @@ print(json.dumps({"points": points}))
             .stdin
             .as_mut()
             .expect("open wright_bessel oracle stdin");
-        if let Err(err) = stdin.write_all(query_json.as_bytes()) {
+        if let Err(err) = stdin.write_all(script.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
-                "wright_bessel oracle stdin write failed: {err}; stderr: {stderr}"
+                "wright_bessel oracle script write failed: {err}; stderr: {stderr}"
             );
-            eprintln!("skipping wright_bessel oracle: stdin write failed ({err})\n{stderr}");
+            eprintln!("skipping wright_bessel oracle: script write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -213,6 +223,84 @@ print(json.dumps({"points": points}))
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
     Some(serde_json::from_str(&stdout).expect("parse wright_bessel oracle JSON"))
+}
+
+fn scipy_log_oracle_or_skip(query: &OracleQuery) -> Option<OracleResult> {
+    let script = r#"
+import json
+import math
+import sys
+from scipy import special
+
+def finite_or_none(v):
+    try:
+        v = float(v)
+    except Exception:
+        return None
+    return v if math.isfinite(v) else None
+
+q = json.loads(sys.argv[1])
+points = []
+for case in q["points"]:
+    cid = case["case_id"]
+    a = float(case["a"]); b = float(case["b"]); x = float(case["x"])
+    try:
+        value = special.log_wright_bessel(a, b, x)
+        points.append({"case_id": cid, "value": finite_or_none(value)})
+    except Exception:
+        points.append({"case_id": cid, "value": None})
+print(json.dumps({"points": points}))
+"#;
+
+    let query_json = serde_json::to_string(query).expect("serialize log_wright_bessel query");
+    let mut child = match Command::new("python3")
+        .arg("-")
+        .arg(query_json)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            assert!(
+                std::env::var(REQUIRE_SCIPY_ENV).is_err(),
+                "failed to spawn python3 for log_wright_bessel oracle: {e}"
+            );
+            eprintln!("skipping log_wright_bessel oracle: python3 not available ({e})");
+            return None;
+        }
+    };
+    {
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open log_wright_bessel oracle stdin");
+        if let Err(err) = stdin.write_all(script.as_bytes()) {
+            let output = child.wait_with_output().expect("wait for failed oracle");
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                std::env::var(REQUIRE_SCIPY_ENV).is_err(),
+                "log_wright_bessel oracle script write failed: {err}; stderr: {stderr}"
+            );
+            eprintln!("skipping log_wright_bessel oracle: script write failed ({err})\n{stderr}");
+            return None;
+        }
+    }
+    let output = child
+        .wait_with_output()
+        .expect("wait for log_wright_bessel oracle");
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            std::env::var(REQUIRE_SCIPY_ENV).is_err(),
+            "log_wright_bessel oracle failed: {stderr}"
+        );
+        eprintln!("skipping log_wright_bessel oracle: scipy not available\n{stderr}");
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Some(serde_json::from_str(&stdout).expect("parse log_wright_bessel oracle JSON"))
 }
 
 #[test]
@@ -282,6 +370,79 @@ fn diff_special_wright_bessel() {
     assert!(
         all_pass,
         "scipy.special.wright_bessel conformance failed: {} cases, max_abs={} max_rel={}",
+        diffs.len(),
+        max_abs_overall,
+        max_rel_overall
+    );
+}
+
+#[test]
+fn diff_special_log_wright_bessel() {
+    let query = generate_query();
+    let Some(oracle) = scipy_log_oracle_or_skip(&query) else {
+        return;
+    };
+    assert_eq!(oracle.points.len(), query.points.len());
+
+    let pmap: HashMap<String, PointArm> = oracle
+        .points
+        .into_iter()
+        .map(|r| (r.case_id.clone(), r))
+        .collect();
+
+    let start = Instant::now();
+    let mut diffs = Vec::new();
+    let mut max_abs_overall = 0.0_f64;
+    let mut max_rel_overall = 0.0_f64;
+
+    for case in &query.points {
+        let oracle = pmap.get(&case.case_id).expect("validated oracle");
+        if let Some(scipy_v) = oracle.value
+            && let Some(rust_v) = fsci_log_eval(case.a, case.b, case.x)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            let scale = scipy_v.abs().max(1.0);
+            let rel_diff = abs_diff / scale;
+            max_abs_overall = max_abs_overall.max(abs_diff);
+            max_rel_overall = max_rel_overall.max(rel_diff);
+            let pass = abs_diff <= ABS_TOL || abs_diff <= REL_TOL * scale;
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                abs_diff,
+                rel_diff,
+                pass,
+            });
+        }
+    }
+
+    let all_pass = diffs.iter().all(|d| d.pass);
+
+    let log = DiffLog {
+        test_id: "diff_special_log_wright_bessel".into(),
+        category: "scipy.special.log_wright_bessel".into(),
+        case_count: diffs.len(),
+        max_abs_diff: max_abs_overall,
+        max_rel_diff: max_rel_overall,
+        pass: all_pass,
+        timestamp_ms: timestamp_ms(),
+        duration_ns: start.elapsed().as_nanos(),
+        cases: diffs.clone(),
+    };
+
+    emit_log(&log);
+
+    for d in &diffs {
+        if !d.pass {
+            eprintln!(
+                "log_wright_bessel mismatch: {} abs={} rel={}",
+                d.case_id, d.abs_diff, d.rel_diff
+            );
+        }
+    }
+
+    assert!(
+        all_pass,
+        "scipy.special.log_wright_bessel conformance failed: {} cases, max_abs={} max_rel={}",
         diffs.len(),
         max_abs_overall,
         max_rel_overall

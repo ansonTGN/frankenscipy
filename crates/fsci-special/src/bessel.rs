@@ -479,6 +479,21 @@ pub fn wright_bessel(
     })
 }
 
+/// Logarithm of Wright's generalized Bessel function.
+///
+/// Matches `scipy.special.log_wright_bessel(a, b, x)` on SciPy's supported
+/// nonnegative real domain while evaluating directly in log space.
+pub fn log_wright_bessel(
+    a: &SpecialTensor,
+    b: &SpecialTensor,
+    x: &SpecialTensor,
+    mode: RuntimeMode,
+) -> SpecialResult {
+    map_real_ternary("log_wright_bessel", a, b, x, mode, |av, bv, xv| {
+        log_wright_bessel_scalar(av, bv, xv, mode)
+    })
+}
+
 /// Derivative of the Bessel function `J_v(z)`.
 ///
 /// Matches `scipy.special.jvp(v, z, n)` for real-valued inputs. The derivative
@@ -2145,13 +2160,38 @@ fn wright_bessel_scalar(a: f64, b: f64, x: f64, mode: RuntimeMode) -> Result<f64
     if x == 0.0 {
         return rgamma_nonnegative(b);
     }
-    if a == 0.0 {
-        let log_value = x + rgamma_log_nonnegative(b)?;
-        return Ok(exp_from_log(log_value, LN_MIN, LN_MAX));
-    }
-
-    let log_value = log_wright_bessel_series(a, b, x)?;
+    let log_value = if a == 0.0 {
+        x + rgamma_log_nonnegative(b)?
+    } else {
+        log_wright_bessel_series(a, b, x)?
+    };
     Ok(exp_from_log(log_value, LN_MIN, LN_MAX))
+}
+
+fn log_wright_bessel_scalar(
+    a: f64,
+    b: f64,
+    x: f64,
+    mode: RuntimeMode,
+) -> Result<f64, SpecialError> {
+    if a.is_nan() || b.is_nan() || x.is_nan() {
+        return Ok(f64::NAN);
+    }
+    if !a.is_finite() || !b.is_finite() || !x.is_finite() || a < 0.0 || b < 0.0 || x < 0.0 {
+        return domain_error_by_mode(
+            "log_wright_bessel",
+            mode,
+            format!("a={a},b={b},x={x}"),
+            "log_wright_bessel requires finite a>=0, b>=0, x>=0",
+        );
+    }
+    if x == 0.0 {
+        return rgamma_log_nonnegative(b);
+    }
+    if a == 0.0 {
+        return Ok(x + rgamma_log_nonnegative(b)?);
+    }
+    log_wright_bessel_series(a, b, x)
 }
 
 fn log_wright_bessel_series(a: f64, b: f64, x: f64) -> Result<f64, SpecialError> {
@@ -4334,6 +4374,56 @@ mod tests {
             RuntimeMode::Strict,
         ))?)?;
         assert!((exp_result - 2.0_f64.exp()).abs() < 1e-12);
+        Ok(())
+    }
+
+    #[test]
+    fn log_wright_bessel_zero_and_exponential_boundaries() -> Result<(), String> {
+        let zero = real_value(tensor_result(log_wright_bessel(
+            &scalar(0.0),
+            &scalar(0.0),
+            &scalar(0.0),
+            RuntimeMode::Strict,
+        ))?)?;
+        assert_eq!(zero, f64::NEG_INFINITY);
+
+        let exp_log = real_value(tensor_result(log_wright_bessel(
+            &scalar(0.0),
+            &scalar(1.0),
+            &scalar(2.0),
+            RuntimeMode::Strict,
+        ))?)?;
+        assert!((exp_log - 2.0).abs() < 1e-14);
+        Ok(())
+    }
+
+    #[test]
+    fn log_wright_bessel_matches_existing_log_domain_series() -> Result<(), String> {
+        let cases: [(f64, f64, f64); 4] = [
+            (1.0, 1.0, 3.0),
+            (2.0, 4.0, 5.0),
+            (10.0, 10.0, 100.0),
+            (20.0, 1.5, 2.0),
+        ];
+
+        for (a, b, x) in cases {
+            let logged = real_value(tensor_result(log_wright_bessel(
+                &scalar(a),
+                &scalar(b),
+                &scalar(x),
+                RuntimeMode::Strict,
+            ))?)?;
+            let direct = real_value(tensor_result(wright_bessel(
+                &scalar(a),
+                &scalar(b),
+                &scalar(x),
+                RuntimeMode::Strict,
+            ))?)?;
+            assert!(
+                (logged.exp() - direct).abs() <= 1e-12 * direct.abs().max(1.0),
+                "log_wright_bessel({a}, {b}, {x}) did not match wright_bessel"
+            );
+        }
         Ok(())
     }
 
