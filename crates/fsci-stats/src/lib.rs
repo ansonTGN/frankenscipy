@@ -31571,6 +31571,76 @@ pub fn jaccard_distance(u: &[f64], v: &[f64]) -> f64 {
     if union == 0 { 0.0 } else { 1.0 - intersection as f64 / union as f64 }
 }
 
+/// Adjusted Rand Index for comparing cluster assignments.
+/// labels_true and labels_pred should be integer labels (encoded as f64).
+pub fn adjusted_rand_index(labels_true: &[f64], labels_pred: &[f64]) -> f64 {
+    if labels_true.len() != labels_pred.len() || labels_true.is_empty() {
+        return f64::NAN;
+    }
+    let n = labels_true.len();
+
+    let mut contingency: std::collections::HashMap<(i64, i64), usize> = std::collections::HashMap::new();
+    for (&t, &p) in labels_true.iter().zip(labels_pred.iter()) {
+        let key = (t.round() as i64, p.round() as i64);
+        *contingency.entry(key).or_insert(0) += 1;
+    }
+
+    let mut sum_comb_nij = 0i64;
+    let mut a_sums: std::collections::HashMap<i64, usize> = std::collections::HashMap::new();
+    let mut b_sums: std::collections::HashMap<i64, usize> = std::collections::HashMap::new();
+
+    for (&(t, p), &nij) in &contingency {
+        if nij >= 2 {
+            sum_comb_nij += (nij * (nij - 1) / 2) as i64;
+        }
+        *a_sums.entry(t).or_insert(0) += nij;
+        *b_sums.entry(p).or_insert(0) += nij;
+    }
+
+    let sum_comb_a: i64 = a_sums.values().map(|&a| if a >= 2 { (a * (a - 1) / 2) as i64 } else { 0 }).sum();
+    let sum_comb_b: i64 = b_sums.values().map(|&b| if b >= 2 { (b * (b - 1) / 2) as i64 } else { 0 }).sum();
+
+    let comb_n = if n >= 2 { (n * (n - 1) / 2) as i64 } else { 0 };
+    if comb_n == 0 {
+        return 0.0;
+    }
+
+    let expected = (sum_comb_a as f64 * sum_comb_b as f64) / comb_n as f64;
+    let max_index = 0.5 * (sum_comb_a as f64 + sum_comb_b as f64);
+    let denom = max_index - expected;
+
+    if denom.abs() < 1e-15 {
+        return 1.0;
+    }
+    (sum_comb_nij as f64 - expected) / denom
+}
+
+/// Rand Index for comparing cluster assignments.
+pub fn rand_index(labels_true: &[f64], labels_pred: &[f64]) -> f64 {
+    if labels_true.len() != labels_pred.len() || labels_true.is_empty() {
+        return f64::NAN;
+    }
+    let n = labels_true.len();
+    if n < 2 {
+        return 1.0;
+    }
+
+    let mut a = 0usize;
+    let mut b = 0usize;
+
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let same_true = labels_true[i].round() as i64 == labels_true[j].round() as i64;
+            let same_pred = labels_pred[i].round() as i64 == labels_pred[j].round() as i64;
+            if same_true == same_pred {
+                if same_true { a += 1; } else { b += 1; }
+            }
+        }
+    }
+    let total_pairs = n * (n - 1) / 2;
+    (a + b) as f64 / total_pairs as f64
+}
+
 /// Compute the log-likelihood for a normal distribution.
 pub fn norm_loglikelihood(data: &[f64], mu: f64, sigma: f64) -> f64 {
     let n = data.len() as f64;
