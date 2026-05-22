@@ -2028,6 +2028,118 @@ impl ContinuousDistribution for Exponential {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// Generalized Exponential Distribution
+// ══════════════════════════════════════════════════════════════════════
+
+/// Generalized exponential distribution.
+///
+/// Matches `scipy.stats.genexpon(a, b, c)`.
+/// PDF: f(x) = (a + b*(1 - exp(-c*x))) * exp(-a*x - b*x + (b/c)*(1-exp(-c*x)))
+/// for x >= 0, a > 0, b > 0, c > 0.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GeneralizedExponential {
+    pub a: f64,
+    pub b: f64,
+    pub c: f64,
+}
+
+impl GeneralizedExponential {
+    #[must_use]
+    pub fn new(a: f64, b: f64, c: f64) -> Self {
+        assert!(a > 0.0, "a must be positive, got {a}");
+        assert!(b > 0.0, "b must be positive, got {b}");
+        assert!(c > 0.0, "c must be positive, got {c}");
+        Self { a, b, c }
+    }
+}
+
+impl ContinuousDistribution for GeneralizedExponential {
+    fn pdf(&self, x: f64) -> f64 {
+        if x < 0.0 {
+            return 0.0;
+        }
+        let ecx = (-self.c * x).exp();
+        let term1 = self.a + self.b * (1.0 - ecx);
+        let exponent = -self.a * x - self.b * x + (self.b / self.c) * (1.0 - ecx);
+        term1 * exponent.exp()
+    }
+
+    fn cdf(&self, x: f64) -> f64 {
+        if x <= 0.0 {
+            return 0.0;
+        }
+        let ecx = (-self.c * x).exp();
+        let exponent = -self.a * x - self.b * x + (self.b / self.c) * (1.0 - ecx);
+        1.0 - exponent.exp()
+    }
+
+    fn ppf(&self, q: f64) -> f64 {
+        if !(0.0..=1.0).contains(&q) {
+            return f64::NAN;
+        }
+        if q == 0.0 {
+            return 0.0;
+        }
+        if q == 1.0 {
+            return f64::INFINITY;
+        }
+        let target = 1.0 - q;
+        let mut lo = 0.0_f64;
+        let mut hi = 100.0_f64;
+        while self.sf(hi) > target && hi < 1e10 {
+            hi *= 2.0;
+        }
+        for _ in 0..60 {
+            let mid = 0.5 * (lo + hi);
+            if self.sf(mid) > target {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        0.5 * (lo + hi)
+    }
+
+    fn mean(&self) -> f64 {
+        f64::NAN
+    }
+
+    fn var(&self) -> f64 {
+        f64::NAN
+    }
+
+    fn fit(_data: &[f64]) -> Self {
+        Self {
+            a: f64::NAN,
+            b: f64::NAN,
+            c: f64::NAN,
+        }
+    }
+
+    fn try_fit(_data: &[f64]) -> Result<Self, FitError> {
+        Err(FitError::NotImplemented {
+            distribution: "GeneralizedExponential".into(),
+        })
+    }
+
+    fn entropy(&self) -> f64 {
+        f64::NAN
+    }
+
+    fn skewness(&self) -> f64 {
+        f64::NAN
+    }
+
+    fn kurtosis(&self) -> f64 {
+        f64::NAN
+    }
+
+    fn mode(&self) -> f64 {
+        0.0
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // F-Distribution
 // ══════════════════════════════════════════════════════════════════════
 
@@ -51400,5 +51512,15 @@ mod tests {
         assert!(g.mean() > 0.0 && g.mean().is_finite());
         assert!(g.var() > 0.0);
         assert!((g.ppf(0.5) - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_generalized_exponential() {
+        let ge = GeneralizedExponential::new(1.0, 0.5, 2.0);
+        assert!(ge.pdf(0.0) > 0.0);
+        assert!(ge.pdf(1.0) > 0.0);
+        assert_eq!(ge.cdf(0.0), 0.0);
+        assert!(ge.cdf(1.0) > 0.0 && ge.cdf(1.0) < 1.0);
+        assert!(ge.cdf(10.0) > 0.99);
     }
 }
