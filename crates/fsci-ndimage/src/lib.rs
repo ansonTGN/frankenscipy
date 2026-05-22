@@ -1679,6 +1679,59 @@ pub fn binary_dilation(
     ))
 }
 
+/// Binary propagation: repeatedly dilate the input until convergence,
+/// optionally constrained by a mask.
+///
+/// Matches `scipy.ndimage.binary_propagation` for dense structuring elements.
+pub fn binary_propagation(
+    input: &NdArray,
+    structure_size: usize,
+    mask: Option<&NdArray>,
+) -> Result<NdArray, NdimageError> {
+    if input.size() == 0 {
+        return Err(NdimageError::EmptyInput);
+    }
+    if let Some(mask) = mask
+        && mask.shape != input.shape
+    {
+        return Err(NdimageError::DimensionMismatch(format!(
+            "mask shape {:?} != input shape {:?}",
+            mask.shape, input.shape
+        )));
+    }
+
+    let size = if structure_size == 0 {
+        3
+    } else {
+        structure_size
+    };
+    let mut current = input.clone();
+    for value in &mut current.data {
+        *value = if *value != 0.0 { 1.0 } else { 0.0 };
+    }
+
+    loop {
+        let mut next = binary_dilation_once(&current, size);
+        let mut changed = false;
+        for flat in 0..next.size() {
+            let mask_allows_update = match mask {
+                Some(mask) => mask.data[flat] != 0.0,
+                None => true,
+            };
+            if !mask_allows_update {
+                next.data[flat] = current.data[flat];
+            }
+            if next.data[flat] != current.data[flat] {
+                changed = true;
+            }
+        }
+        if !changed {
+            return Ok(next);
+        }
+        current = next;
+    }
+}
+
 /// Binary opening: erosion followed by dilation.
 ///
 /// Matches `scipy.ndimage.binary_opening`.
@@ -4020,6 +4073,51 @@ mod tests {
         assert_eq!(result.data[12], 1.0); // (2,2)
         assert_eq!(result.data[7], 1.0); // (1,2)
         assert_eq!(result.data[17], 1.0); // (3,2)
+    }
+
+    #[test]
+    fn binary_propagation_matches_scipy_dense_mask() {
+        let mut seed = vec![0.0; 25];
+        seed[12] = 1.0;
+        let input = NdArray::new(seed, vec![5, 5]).unwrap();
+
+        #[rustfmt::skip]
+        let mask = NdArray::new(vec![
+            0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 1.0, 0.0,
+            0.0, 1.0, 1.0, 1.0, 0.0,
+            0.0, 1.0, 1.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0,
+        ], vec![5, 5])
+        .unwrap();
+
+        let result = binary_propagation(&input, 3, Some(&mask)).unwrap();
+
+        #[rustfmt::skip]
+        let expected = vec![
+            0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 1.0, 0.0,
+            0.0, 1.0, 1.0, 1.0, 0.0,
+            0.0, 1.0, 1.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0,
+        ];
+        assert_eq!(result.data, expected);
+    }
+
+    #[test]
+    fn binary_propagation_without_mask_converges_to_full_reachable_image() {
+        let mut seed = vec![0.0; 25];
+        seed[12] = 1.0;
+        let input = NdArray::new(seed, vec![5, 5]).unwrap();
+        let result = binary_propagation(&input, 3, None).unwrap();
+        assert!(result.data.iter().all(|&value| value == 1.0));
+    }
+
+    #[test]
+    fn binary_propagation_empty_seed_stays_empty() {
+        let input = NdArray::zeros(vec![4, 4]);
+        let result = binary_propagation(&input, 3, None).unwrap();
+        assert!(result.data.iter().all(|&value| value == 0.0));
     }
 
     #[test]
