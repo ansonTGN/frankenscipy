@@ -22762,6 +22762,68 @@ pub fn mad_zscore(data: &[f64], scale: bool) -> Vec<f64> {
     data.iter().map(|&x| (x - med) / mad_val).collect()
 }
 
+/// Min-max scale data to a given range.
+///
+/// Scales data linearly to [feature_min, feature_max].
+/// Default range is [0, 1].
+///
+/// scaled = (x - min) / (max - min) * (feature_max - feature_min) + feature_min
+pub fn min_max_scale(data: &[f64], feature_range: Option<(f64, f64)>) -> Vec<f64> {
+    if data.is_empty() {
+        return vec![];
+    }
+
+    let (feature_min, feature_max) = feature_range.unwrap_or((0.0, 1.0));
+
+    let min_val = data.iter().copied().fold(f64::INFINITY, f64::min);
+    let max_val = data.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+
+    if !min_val.is_finite() || !max_val.is_finite() {
+        return vec![f64::NAN; data.len()];
+    }
+
+    let range = max_val - min_val;
+    if range == 0.0 {
+        return vec![(feature_min + feature_max) / 2.0; data.len()];
+    }
+
+    let scale = (feature_max - feature_min) / range;
+    data.iter()
+        .map(|&x| (x - min_val) * scale + feature_min)
+        .collect()
+}
+
+/// Center data by subtracting the mean.
+///
+/// Returns data with zero mean.
+pub fn center(data: &[f64]) -> Vec<f64> {
+    if data.is_empty() {
+        return vec![];
+    }
+    let mean_val = data.iter().sum::<f64>() / data.len() as f64;
+    data.iter().map(|&x| x - mean_val).collect()
+}
+
+/// Scale data by dividing by the standard deviation.
+///
+/// Returns data with unit variance (if ddof=0) or unit sample variance (if ddof=1).
+pub fn scale(data: &[f64], ddof: usize) -> Vec<f64> {
+    if data.is_empty() || data.len() <= ddof {
+        return vec![f64::NAN; data.len()];
+    }
+
+    let n = data.len() as f64;
+    let mean_val = data.iter().sum::<f64>() / n;
+    let var: f64 = data.iter().map(|&x| (x - mean_val).powi(2)).sum::<f64>() / (n - ddof as f64);
+    let std_val = var.sqrt();
+
+    if std_val == 0.0 {
+        return vec![f64::NAN; data.len()];
+    }
+
+    data.iter().map(|&x| x / std_val).collect()
+}
+
 /// Compute relative z-scores using the mean and variance of `compare`.
 ///
 /// Matches the core 1D behavior of `scipy.stats.zmap(scores, compare)`.
