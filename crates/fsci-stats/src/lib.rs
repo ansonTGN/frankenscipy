@@ -55975,6 +55975,41 @@ mod tests {
     }
 
     #[test]
+    fn softmax_matches_scipy_special_reference() {
+        // scipy.special.softmax([1, 2, 3]) = [0.09003057, 0.24472847, 0.66524096]
+        let x = vec![1.0, 2.0, 3.0];
+        let s = softmax(&x);
+        assert!((s[0] - 0.09003057317038046).abs() < 1e-10, "softmax[0]");
+        assert!((s[1] - 0.24472847105479767).abs() < 1e-10, "softmax[1]");
+        assert!((s[2] - 0.6652409557748219).abs() < 1e-10, "softmax[2]");
+
+        // With large values (numerical stability test)
+        let x2 = vec![1000.0, 1001.0, 1002.0];
+        let s2 = softmax(&x2);
+        assert!((s2[0] - 0.09003057317038046).abs() < 1e-10, "softmax with large values [0]");
+        assert!((s2[1] - 0.24472847105479767).abs() < 1e-10, "softmax with large values [1]");
+        assert!((s2[2] - 0.6652409557748219).abs() < 1e-10, "softmax with large values [2]");
+    }
+
+    #[test]
+    fn log_softmax_matches_scipy_special_reference() {
+        // scipy.special.log_softmax([1, 2, 3]) = [-2.40760596, -1.40760596, -0.40760596]
+        let x = vec![1.0, 2.0, 3.0];
+        let ls = log_softmax(&x);
+        assert!((ls[0] - (-2.4076059644443806)).abs() < 1e-10, "log_softmax[0]");
+        assert!((ls[1] - (-1.4076059644443806)).abs() < 1e-10, "log_softmax[1]");
+        assert!((ls[2] - (-0.40760596444438063)).abs() < 1e-10, "log_softmax[2]");
+
+        // log_softmax(x) = x - logsumexp(x), so each element differs from max by log ratio
+        let x2 = vec![0.0, 0.0, 0.0];
+        let ls2 = log_softmax(&x2);
+        let expected = -(3.0f64).ln();  // log(1/3) for uniform
+        assert!((ls2[0] - expected).abs() < 1e-10, "uniform log_softmax");
+        assert!((ls2[1] - expected).abs() < 1e-10, "uniform log_softmax");
+        assert!((ls2[2] - expected).abs() < 1e-10, "uniform log_softmax");
+    }
+
+    #[test]
     fn test_xlogy_zero_x() {
         let result = xlogy(0.0, 5.0);
         assert!((result - 0.0).abs() < 1e-10, "xlogy(0, y) should be 0, got {}", result);
