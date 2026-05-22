@@ -26534,6 +26534,51 @@ pub fn cohens_d(group1: &[f64], group2: &[f64]) -> f64 {
     (mean1 - mean2) / pooled_std
 }
 
+/// Hedges' g: bias-corrected standardized mean difference.
+///
+/// A correction to Cohen's d that reduces bias for small samples:
+/// g = d * (1 - 3/(4*(n1+n2) - 9))
+pub fn hedges_g(group1: &[f64], group2: &[f64]) -> f64 {
+    let d = cohens_d(group1, group2);
+    if !d.is_finite() {
+        return d;
+    }
+
+    let n = (group1.len() + group2.len()) as f64;
+    let correction = 1.0 - 3.0 / (4.0 * n - 9.0);
+    d * correction
+}
+
+/// Glass's delta: effect size using control group standard deviation.
+///
+/// Δ = (mean_treatment - mean_control) / sd_control
+///
+/// # Arguments
+/// * `treatment` — Treatment group
+/// * `control` — Control group (used for SD denominator)
+pub fn glass_delta(treatment: &[f64], control: &[f64]) -> f64 {
+    let n_t = treatment.len() as f64;
+    let n_c = control.len() as f64;
+    if n_t < 1.0 || n_c < 2.0 {
+        return f64::NAN;
+    }
+
+    let mean_t: f64 = treatment.iter().sum::<f64>() / n_t;
+    let mean_c: f64 = control.iter().sum::<f64>() / n_c;
+    let var_c: f64 = control.iter().map(|&x| (x - mean_c).powi(2)).sum::<f64>() / (n_c - 1.0);
+    let sd_c = var_c.sqrt();
+
+    if sd_c == 0.0 {
+        return if (mean_t - mean_c).abs() < 1e-15 {
+            0.0
+        } else {
+            f64::INFINITY * (mean_t - mean_c).signum()
+        };
+    }
+
+    (mean_t - mean_c) / sd_c
+}
+
 /// Cramér's V: association measure for contingency tables.
 ///
 /// V = sqrt(χ²/(n * min(r-1, c-1))), where χ² is the chi-squared statistic.
@@ -45991,6 +46036,44 @@ mod tests {
         let g = vec![1.0, 2.0, 3.0, 4.0];
         let d = cohens_d(&g, &g);
         assert!((d - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn hedges_g_corrects_cohens_d() {
+        let g1 = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let g2 = vec![6.0, 7.0, 8.0, 9.0, 10.0];
+        let d = cohens_d(&g1, &g2);
+        let g = hedges_g(&g1, &g2);
+        // Hedges g should have smaller magnitude (bias correction)
+        assert!(g.abs() < d.abs(), "hedges_g {} should be smaller than cohens_d {}", g, d);
+        // Same sign
+        assert!(d.signum() == g.signum());
+    }
+
+    #[test]
+    fn hedges_g_identical_groups() {
+        let g = vec![1.0, 2.0, 3.0, 4.0];
+        let h = hedges_g(&g, &g);
+        assert!((h - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn glass_delta_uses_control_sd() {
+        let treatment = vec![10.0, 11.0, 12.0, 13.0, 14.0];
+        let control = vec![5.0, 5.0, 5.0, 5.0, 5.0]; // zero variance
+        let delta = glass_delta(&treatment, &control);
+        // With zero control SD, should be infinite
+        assert!(delta.is_infinite());
+    }
+
+    #[test]
+    fn glass_delta_basic() {
+        let treatment = vec![6.0, 7.0, 8.0, 9.0, 10.0];
+        let control = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let delta = glass_delta(&treatment, &control);
+        // mean_treatment = 8, mean_control = 3, sd_control = sqrt(2.5) ≈ 1.58
+        // delta ≈ (8-3)/1.58 ≈ 3.16
+        assert!(delta > 2.0 && delta < 4.0, "glass_delta = {}", delta);
     }
 
     #[test]
