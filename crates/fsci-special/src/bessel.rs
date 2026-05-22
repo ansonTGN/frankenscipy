@@ -3733,6 +3733,32 @@ pub fn yn_zeros(n: u32, k: usize) -> Vec<f64> {
     out
 }
 
+/// First `nt` positive zeros of `Y_0(x)` and SciPy's companion values.
+///
+/// Matches the real branch of `scipy.special.y0_zeros(nt)`. SciPy returns
+/// the zeros of `Y_0` and the corresponding `Y_1(zero)` values.
+pub fn y0_zeros(nt: usize) -> (Vec<f64>, Vec<f64>) {
+    let zeros = yn_zeros(0, nt);
+    let values = zeros
+        .iter()
+        .map(|&z| y1_scalar(z, RuntimeMode::Strict).unwrap_or(f64::NAN))
+        .collect();
+    (zeros, values)
+}
+
+/// First `nt` positive zeros of `Y_1(x)` and derivative values.
+///
+/// Matches the real branch of `scipy.special.y1_zeros(nt)`. At a zero
+/// of `Y_1`, the derivative value is `Y_0(zero)`.
+pub fn y1_zeros(nt: usize) -> (Vec<f64>, Vec<f64>) {
+    let zeros = yn_zeros(1, nt);
+    let values = zeros
+        .iter()
+        .map(|&z| y0_scalar(z, RuntimeMode::Strict).unwrap_or(f64::NAN))
+        .collect();
+    (zeros, values)
+}
+
 /// First `k` positive zeros of the Bessel function J_n(x), for integer
 /// order `n ≥ 0`. Returns a Vec of length `k`, sorted ascending.
 ///
@@ -4968,6 +4994,49 @@ mod tests {
         assert_eq!(zeros.len(), 3);
         for (got, exp) in zeros.iter().zip(expected.iter()) {
             assert!((got - exp).abs() < 1e-4, "y0 zero {got} vs {exp}");
+        }
+    }
+
+    #[test]
+    fn y0_y1_zeros_wrappers_match_scipy_reference_points() {
+        let (y0_z, y0_v) = y0_zeros(3);
+        let expected_y0_z = [
+            0.893_576_966_279_167_5_f64,
+            3.957_678_419_314_857_5,
+            7.086_051_060_301_744,
+        ];
+        let expected_y0_v = [
+            -0.879_420_802_497_195_f64,
+            0.402_542_671_775_024_3,
+            -0.300_097_614_910_467_16,
+        ];
+        for ((z, v), (ez, ev)) in y0_z
+            .iter()
+            .zip(y0_v.iter())
+            .zip(expected_y0_z.iter().zip(expected_y0_v.iter()))
+        {
+            assert!((z - ez).abs() < 1.0e-7, "y0 zero {z} vs {ez}");
+            assert!((v - ev).abs() < 1.0e-7, "y0 companion {v} vs {ev}");
+        }
+
+        let (y1_z, y1_v) = y1_zeros(3);
+        let expected_y1_z = [
+            2.197_141_326_031_017_f64,
+            5.429_681_040_794_132,
+            8.596_005_868_330_957,
+        ];
+        let expected_y1_v = [
+            0.520_786_412_402_267_5_f64,
+            -0.340_318_045_523_441_1,
+            0.271_459_877_311_590_2,
+        ];
+        for ((z, v), (ez, ev)) in y1_z
+            .iter()
+            .zip(y1_v.iter())
+            .zip(expected_y1_z.iter().zip(expected_y1_v.iter()))
+        {
+            assert!((z - ez).abs() < 1.0e-7, "y1 zero {z} vs {ez}");
+            assert!((v - ev).abs() < 1.0e-7, "y1 companion {v} vs {ev}");
         }
     }
 

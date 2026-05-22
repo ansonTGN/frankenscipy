@@ -23,7 +23,8 @@ pub use bessel::{
     i0e_scalar, i1, i1_scalar, i1e, i1e_scalar, iv, ive, ive_scalar, ivp, j0, j1, jn, jn_zeros, jv,
     jve, jvp, k0, k0_scalar, k0e, k0e_scalar, k1, k1_scalar, k1e, k1e_scalar, kn, kn_scalar, kv,
     kve, kve_scalar, kvp, log_wright_bessel, riccati_jn, riccati_yn, spherical_in, spherical_jn,
-    spherical_kn, spherical_yn, wright_bessel, y0, y1, yn, yn_zeros, yv, yve, yvp,
+    spherical_kn, spherical_yn, wright_bessel, y0, y0_zeros, y1, y1_zeros, yn, yn_zeros, yv, yve,
+    yvp,
 };
 pub use beta::{
     BETA_DISPATCH_PLAN, bdtr, bdtrc, bdtri, bdtrik, bdtrin, beta, betainc, betainc_scalar,

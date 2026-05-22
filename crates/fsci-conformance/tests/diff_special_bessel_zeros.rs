@@ -1,16 +1,18 @@
 #![forbid(unsafe_code)]
 //! Live SciPy differential coverage for the zeros of
 //! integer-order Bessel functions
-//! `scipy.special.jn_zeros(n, k)` and
-//! `scipy.special.yn_zeros(n, k)`.
+//! `scipy.special.jn_zeros(n, k)`, `scipy.special.yn_zeros(n, k)`,
+//! `scipy.special.y0_zeros(k)`, and `scipy.special.y1_zeros(k)`.
 //!
 //! Resolves [frankenscipy-hwam6]. fsci-special exposes Newton-
 //! refined zero finders.
 //!
-//! 4 orders × 5 zero-counts × 2 funcs = 40 batches; we compare
-//! the first k zeros entrywise. Tolerances: 1e-7 abs (Newton-
-//! refined; floor matches the cylindrical Bessel precision
-//! that the residual is computed against — frankenscipy-0om9c).
+//! 4 orders × 5 zero-counts × 2 generic funcs plus 5 zero-counts ×
+//! 2 order-specific funcs = 50 batches; we compare the first k zeros
+//! entrywise, and for y0_zeros/y1_zeros also compare SciPy's companion
+//! values at those zeros. Tolerances: 1e-7 abs (Newton-refined; floor
+//! matches the cylindrical Bessel precision that the residual is
+//! computed against — frankenscipy-0om9c).
 
 use std::collections::HashMap;
 use std::fs;
@@ -19,7 +21,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_special::{jn_zeros, yn_zeros};
+use fsci_special::{jn_zeros, y0_zeros, y1_zeros, yn_zeros};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -95,6 +97,14 @@ fn fsci_eval(func: &str, n: u32, k: usize) -> Option<Vec<f64>> {
     let zs = match func {
         "jn_zeros" => jn_zeros(n, k),
         "yn_zeros" => yn_zeros(n, k),
+        "y0_zeros" => {
+            let (zeros, values) = y0_zeros(k);
+            zeros.into_iter().chain(values).collect()
+        }
+        "y1_zeros" => {
+            let (zeros, values) = y1_zeros(k);
+            zeros.into_iter().chain(values).collect()
+        }
         _ => return None,
     };
     if zs.iter().all(|z| z.is_finite()) {
@@ -120,6 +130,16 @@ fn generate_query() -> OracleQuery {
             }
         }
     }
+    for &k in &ks {
+        for func in ["y0_zeros", "y1_zeros"] {
+            points.push(PointCase {
+                case_id: format!("{func}_k{k}"),
+                func: func.to_string(),
+                n: 0,
+                k,
+            });
+        }
+    }
     OracleQuery { points }
 }
 
@@ -140,7 +160,7 @@ def finite_or_none_list(arr):
             out.append(None)
     return out
 
-q = json.load(sys.stdin)
+q = json.loads(sys.argv[1])
 points = []
 for case in q["points"]:
     cid = case["case_id"]; func = case["func"]
@@ -150,6 +170,12 @@ for case in q["points"]:
             arr = special.jn_zeros(n, k).tolist()
         elif func == "yn_zeros":
             arr = special.yn_zeros(n, k).tolist()
+        elif func == "y0_zeros":
+            zeros, values = special.y0_zeros(k)
+            arr = [float(v) for v in zeros] + [float(v) for v in values]
+        elif func == "y1_zeros":
+            zeros, values = special.y1_zeros(k)
+            arr = [float(v) for v in zeros] + [float(v) for v in values]
         else:
             arr = []
         if any(v is None for v in finite_or_none_list(arr)):
@@ -163,8 +189,8 @@ print(json.dumps({"points": points}))
 
     let query_json = serde_json::to_string(query).expect("serialize bessel-zeros query");
     let mut child = match Command::new("python3")
-        .arg("-c")
-        .arg(script)
+        .arg("-")
+        .arg(&query_json)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -184,15 +210,15 @@ print(json.dumps({"points": points}))
         let stdin = child
             .stdin
             .as_mut()
-            .expect("open bessel-zeros oracle stdin");
-        if let Err(err) = stdin.write_all(query_json.as_bytes()) {
+            .expect("open bessel-zeros oracle script stdin");
+        if let Err(err) = stdin.write_all(script.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
-                "bessel-zeros oracle stdin write failed: {err}; stderr: {stderr}"
+                "bessel-zeros oracle script write failed: {err}; stderr: {stderr}"
             );
-            eprintln!("skipping bessel-zeros oracle: stdin write failed ({err})\n{stderr}");
+            eprintln!("skipping bessel-zeros oracle: script write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -263,7 +289,7 @@ fn diff_special_bessel_zeros() {
 
     let log = DiffLog {
         test_id: "diff_special_bessel_zeros".into(),
-        category: "scipy.special.jn_zeros/yn_zeros".into(),
+        category: "scipy.special.jn_zeros/yn_zeros/y0_zeros/y1_zeros".into(),
         case_count: diffs.len(),
         max_abs_diff: max_overall,
         pass: all_pass,
