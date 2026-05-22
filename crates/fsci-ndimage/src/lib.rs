@@ -1245,16 +1245,48 @@ pub fn gaussian_filter(
     mode: BoundaryMode,
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
+    let axes = (0..input.ndim()).collect::<Vec<_>>();
+    gaussian_filter_usize_axes(input, sigma, &axes, mode, cval)
+}
+
+/// Gaussian filter over a SciPy-style signed axes subset.
+///
+/// `axes=[]` matches SciPy's empty-axes identity behavior.
+pub fn gaussian_filter_axes(
+    input: &NdArray,
+    sigma: f64,
+    axes: &[isize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let axes = normalize_signed_axes(axes, input.ndim())?;
+    gaussian_filter_usize_axes(input, sigma, &axes, mode, cval)
+}
+
+fn gaussian_filter_usize_axes(
+    input: &NdArray,
+    sigma: f64,
+    axes: &[usize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
     if !sigma.is_finite() || sigma <= 0.0 {
         return Err(NdimageError::InvalidArgument(
             "sigma must be positive".to_string(),
         ));
     }
+    if axes.is_empty() {
+        return Ok(input.clone());
+    }
 
-    // Apply 1D Gaussian along each axis for separability
     let mut current = input.clone();
-
-    for axis in 0..input.ndim() {
+    let ndim = input.ndim();
+    for &axis in axes {
+        if axis >= ndim {
+            return Err(NdimageError::InvalidArgument(format!(
+                "axis {axis} out of range for {ndim}-dimensional input"
+            )));
+        }
         current = gaussian_filter1d_axis(&current, sigma, axis, 0, mode, cval)?;
     }
 
@@ -6127,6 +6159,63 @@ mod tests {
         for &v in &result.data {
             assert!((v - 5.0).abs() < 1e-10, "constant image changed: {v}");
         }
+    }
+
+    #[test]
+    fn gaussian_filter_axes_matches_scipy_subset_fixtures() {
+        let input = NdArray::new(vec![1.0, 2.0, 4.0, 8.0, 16.0, 32.0], vec![2, 3]).unwrap();
+
+        // scipy.ndimage.gaussian_filter(input, 1.0, mode='constant', cval=0.0, axes=(-1,))
+        let last_axis = [
+            1.098850870352,
+            2.007744166995,
+            2.133707896158,
+            8.790806962817,
+            16.061953335962,
+            17.069663169266,
+        ];
+        // scipy.ndimage.gaussian_filter(input, 1.0, mode='constant', cval=0.0, axes=(-2,))
+        let first_axis = [
+            2.334715034609,
+            4.669430069218,
+            9.338860138436,
+            3.433519200505,
+            6.867038401011,
+            13.734076802022,
+        ];
+
+        let got_last =
+            gaussian_filter_axes(&input, 1.0, &[-1], BoundaryMode::Constant, 0.0).unwrap();
+        assert_close_or_nan(&got_last.data, &last_axis);
+
+        let got_first =
+            gaussian_filter_axes(&input, 1.0, &[-2], BoundaryMode::Constant, 0.0).unwrap();
+        assert_close_or_nan(&got_first.data, &first_axis);
+
+        assert_close_or_nan(
+            &gaussian_filter_axes(&input, 1.0, &[-2, -1], BoundaryMode::Constant, 0.0)
+                .unwrap()
+                .data,
+            &gaussian_filter(&input, 1.0, BoundaryMode::Constant, 0.0)
+                .unwrap()
+                .data,
+        );
+        assert_eq!(
+            gaussian_filter_axes(&input, 1.0, &[], BoundaryMode::Constant, 0.0)
+                .unwrap()
+                .data,
+            input.data
+        );
+    }
+
+    #[test]
+    fn gaussian_filter_axes_rejects_duplicate_and_out_of_range_axes() {
+        let input = NdArray::new(vec![1.0; 6], vec![2, 3]).unwrap();
+
+        assert!(gaussian_filter_axes(&input, 1.0, &[1, -1], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(gaussian_filter_axes(&input, 1.0, &[2], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(gaussian_filter_axes(&input, 1.0, &[-3], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(gaussian_filter_axes(&input, 0.0, &[-1], BoundaryMode::Reflect, 0.0).is_err());
     }
 
     #[test]
