@@ -1106,16 +1106,30 @@ pub fn uniform_filter(
     mode: BoundaryMode,
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
+    uniform_filter_with_origins(input, size, &[0], mode, cval)
+}
+
+/// Uniform (box) filter with SciPy `origin` semantics.
+pub fn uniform_filter_with_origins(
+    input: &NdArray,
+    size: usize,
+    origins: &[i64],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
     if size == 0 {
         return Err(NdimageError::InvalidArgument(
             "filter size must be positive".to_string(),
         ));
     }
+
     let kernel_shape = vec![size; input.ndim()];
-    let kernel_size: usize = kernel_shape.iter().product();
-    let val = 1.0 / kernel_size as f64;
-    let kernel = NdArray::new(vec![val; kernel_size], kernel_shape)?;
-    convolve(input, &kernel, mode, cval)
+    let origins = normalize_filter_origins(input.ndim(), &kernel_shape, origins)?;
+    let mut current = input.clone();
+    for (axis, &origin) in origins.iter().enumerate() {
+        current = uniform_filter1d_with_origin(&current, size, axis, mode, cval, origin)?;
+    }
+    Ok(current)
 }
 
 /// Gaussian filter.
@@ -5340,6 +5354,58 @@ mod tests {
         let result = uniform_filter(&input, 3, BoundaryMode::Constant, 0.0).unwrap();
         // Center should be average of [0, 1, 0] = 1/3
         assert!((result.data[2] - 1.0 / 3.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn uniform_filter_origins_match_scipy_constant() {
+        let input = NdArray::new(vec![1., 2., 3., 4., 5.], vec![5]).unwrap();
+
+        let even_left =
+            uniform_filter_with_origins(&input, 2, &[-1], BoundaryMode::Constant, 0.0).unwrap();
+        assert_close_or_nan(&even_left.data, &[1.5, 2.5, 3.5, 4.5, 2.5]);
+
+        let even_default =
+            uniform_filter_with_origins(&input, 2, &[0], BoundaryMode::Constant, 0.0).unwrap();
+        assert_close_or_nan(&even_default.data, &[0.5, 1.5, 2.5, 3.5, 4.5]);
+
+        let odd_left =
+            uniform_filter_with_origins(&input, 3, &[-1], BoundaryMode::Constant, 0.0).unwrap();
+        assert_close_or_nan(&odd_left.data, &[2.0, 3.0, 4.0, 3.0, 5.0 / 3.0]);
+
+        let odd_right =
+            uniform_filter_with_origins(&input, 3, &[1], BoundaryMode::Constant, 0.0).unwrap();
+        assert_close_or_nan(&odd_right.data, &[1.0 / 3.0, 1.0, 2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn uniform_filter_origins_apply_per_axis() {
+        let input = NdArray::new((1..=9).map(f64::from).collect(), vec![3, 3]).unwrap();
+        let result =
+            uniform_filter_with_origins(&input, 3, &[-1, 1], BoundaryMode::Constant, 0.0).unwrap();
+        assert_close_or_nan(
+            &result.data,
+            &[
+                4.0 / 3.0,
+                3.0,
+                5.0,
+                11.0 / 9.0,
+                8.0 / 3.0,
+                13.0 / 3.0,
+                7.0 / 9.0,
+                5.0 / 3.0,
+                8.0 / 3.0,
+            ],
+        );
+    }
+
+    #[test]
+    fn uniform_filter_origin_validation_matches_scipy_bounds() {
+        let input = NdArray::new(vec![1., 2., 3., 4., 5.], vec![5]).unwrap();
+
+        assert!(uniform_filter_with_origins(&input, 2, &[-2], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(uniform_filter_with_origins(&input, 2, &[1], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(uniform_filter_with_origins(&input, 3, &[-2], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(uniform_filter_with_origins(&input, 3, &[2], BoundaryMode::Reflect, 0.0).is_err());
     }
 
     #[test]
