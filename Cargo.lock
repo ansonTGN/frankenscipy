@@ -730,6 +730,7 @@ dependencies = [
 name = "fsci-ndimage"
 version = "0.1.0"
 dependencies = [
+ "fsci-fft",
  "fsci-interpolate",
  "fsci-runtime",
  "proptest",
