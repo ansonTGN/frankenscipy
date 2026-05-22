@@ -31587,6 +31587,58 @@ pub fn jaccard_distance(u: &[f64], v: &[f64]) -> f64 {
     if union == 0 { 0.0 } else { 1.0 - intersection as f64 / union as f64 }
 }
 
+/// Correlation distance - 1 minus Pearson correlation.
+pub fn correlation_distance(u: &[f64], v: &[f64]) -> f64 {
+    if u.len() != v.len() || u.len() < 2 {
+        return f64::NAN;
+    }
+    let n = u.len() as f64;
+    let u_mean = u.iter().sum::<f64>() / n;
+    let v_mean = v.iter().sum::<f64>() / n;
+
+    let mut cov = 0.0f64;
+    let mut u_var = 0.0f64;
+    let mut v_var = 0.0f64;
+
+    for (&a, &b) in u.iter().zip(v.iter()) {
+        let u_dev = a - u_mean;
+        let v_dev = b - v_mean;
+        cov += u_dev * v_dev;
+        u_var += u_dev * u_dev;
+        v_var += v_dev * v_dev;
+    }
+
+    if u_var == 0.0 || v_var == 0.0 {
+        return f64::NAN;
+    }
+    let corr = cov / (u_var * v_var).sqrt();
+    1.0 - corr
+}
+
+/// Dice distance for binary data - 1 minus Dice coefficient.
+pub fn dice_distance(u: &[f64], v: &[f64]) -> f64 {
+    if u.len() != v.len() || u.is_empty() {
+        return f64::NAN;
+    }
+    let mut c_tt = 0usize;
+    let mut c_tf = 0usize;
+    let mut c_ft = 0usize;
+
+    for (&a, &b) in u.iter().zip(v.iter()) {
+        let a_pos = a > 0.0;
+        let b_pos = b > 0.0;
+        match (a_pos, b_pos) {
+            (true, true) => c_tt += 1,
+            (true, false) => c_tf += 1,
+            (false, true) => c_ft += 1,
+            _ => {}
+        }
+    }
+
+    let denom = 2.0 * c_tt as f64 + c_tf as f64 + c_ft as f64;
+    if denom == 0.0 { 0.0 } else { (c_tf + c_ft) as f64 / denom }
+}
+
 /// Adjusted Rand Index for comparing cluster assignments.
 /// labels_true and labels_pred should be integer labels (encoded as f64).
 pub fn adjusted_rand_index(labels_true: &[f64], labels_pred: &[f64]) -> f64 {
