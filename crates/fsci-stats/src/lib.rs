@@ -55623,6 +55623,62 @@ mod tests {
     }
 
     #[test]
+    fn test_precision_score_perfect() {
+        let y_true = vec![1.0, 1.0, 0.0, 0.0];
+        let y_pred = vec![1.0, 1.0, 0.0, 0.0];
+        let p = precision_score(&y_true, &y_pred);
+        assert!((p - 1.0).abs() < 1e-10, "Precision of perfect predictions should be 1.0, got {}", p);
+    }
+
+    #[test]
+    fn test_recall_score_perfect() {
+        let y_true = vec![1.0, 1.0, 0.0, 0.0];
+        let y_pred = vec![1.0, 1.0, 0.0, 0.0];
+        let r = recall_score(&y_true, &y_pred);
+        assert!((r - 1.0).abs() < 1e-10, "Recall of perfect predictions should be 1.0, got {}", r);
+    }
+
+    #[test]
+    fn test_f1_score_perfect() {
+        let y_true = vec![1.0, 1.0, 0.0, 0.0];
+        let y_pred = vec![1.0, 1.0, 0.0, 0.0];
+        let f1 = f1_score(&y_true, &y_pred);
+        assert!((f1 - 1.0).abs() < 1e-10, "F1 of perfect predictions should be 1.0, got {}", f1);
+    }
+
+    #[test]
+    fn test_matthews_corrcoef_perfect() {
+        let y_true = vec![1.0, 1.0, 0.0, 0.0];
+        let y_pred = vec![1.0, 1.0, 0.0, 0.0];
+        let mcc = matthews_corrcoef(&y_true, &y_pred);
+        assert!((mcc - 1.0).abs() < 1e-10, "MCC of perfect predictions should be 1.0, got {}", mcc);
+    }
+
+    #[test]
+    fn test_accuracy_score_perfect() {
+        let y_true = vec![1.0, 0.0, 1.0, 0.0];
+        let y_pred = vec![1.0, 0.0, 1.0, 0.0];
+        let acc = accuracy_score(&y_true, &y_pred);
+        assert!((acc - 1.0).abs() < 1e-10, "Accuracy of perfect predictions should be 1.0, got {}", acc);
+    }
+
+    #[test]
+    fn test_specificity_score_perfect() {
+        let y_true = vec![0.0, 0.0, 1.0, 1.0];
+        let y_pred = vec![0.0, 0.0, 1.0, 1.0];
+        let spec = specificity_score(&y_true, &y_pred);
+        assert!((spec - 1.0).abs() < 1e-10, "Specificity of perfect predictions should be 1.0, got {}", spec);
+    }
+
+    #[test]
+    fn test_balanced_accuracy_perfect() {
+        let y_true = vec![1.0, 1.0, 0.0, 0.0];
+        let y_pred = vec![1.0, 1.0, 0.0, 0.0];
+        let ba = balanced_accuracy_score(&y_true, &y_pred);
+        assert!((ba - 1.0).abs() < 1e-10, "Balanced accuracy of perfect predictions should be 1.0, got {}", ba);
+    }
+
+    #[test]
     fn test_find_peaks_basic() {
         let data = vec![0.0, 1.0, 0.0, 2.0, 0.0];
         let peaks = find_peaks(&data);
