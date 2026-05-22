@@ -26133,6 +26133,98 @@ pub fn entropy(pk: &[f64], base: Option<f64>) -> f64 {
     }
 }
 
+/// Compute the Kullback-Leibler divergence (relative entropy) D_KL(P || Q).
+///
+/// D_KL(P || Q) = Σ p_k * log(p_k / q_k)
+///
+/// The KL divergence is the expected log-likelihood ratio under P.
+/// It is not symmetric: D_KL(P || Q) ≠ D_KL(Q || P).
+///
+/// # Arguments
+/// * `pk` - True probability distribution P
+/// * `qk` - Approximating distribution Q
+/// * `base` - Logarithm base (None = natural log)
+///
+/// # Returns
+/// KL divergence value >= 0. Returns infinity if any q_k = 0 where p_k > 0.
+pub fn kl_divergence(pk: &[f64], qk: &[f64], base: Option<f64>) -> f64 {
+    if pk.len() != qk.len() || pk.is_empty() {
+        return f64::NAN;
+    }
+    if pk.iter().any(|&p| p < 0.0) || qk.iter().any(|&q| q < 0.0) {
+        return f64::NAN;
+    }
+
+    let sum_p: f64 = pk.iter().sum();
+    let sum_q: f64 = qk.iter().sum();
+    if sum_p == 0.0 || sum_q == 0.0 {
+        return f64::NAN;
+    }
+
+    let mut kl = 0.0;
+    for (&p, &q) in pk.iter().zip(qk) {
+        let pi = p / sum_p;
+        let qi = q / sum_q;
+        if pi > 0.0 {
+            if qi == 0.0 {
+                return f64::INFINITY;
+            }
+            kl += pi * (pi / qi).ln();
+        }
+    }
+
+    match base {
+        Some(b) => kl / b.ln(),
+        None => kl,
+    }
+}
+
+/// Compute the cross entropy H(P, Q) = -Σ p_k * log(q_k).
+///
+/// Cross entropy measures the expected message length when using code
+/// optimized for Q to encode samples from P.
+///
+/// Note: H(P, Q) = H(P) + D_KL(P || Q)
+///
+/// # Arguments
+/// * `pk` - True probability distribution P
+/// * `qk` - Approximating distribution Q
+/// * `base` - Logarithm base (None = natural log)
+///
+/// # Returns
+/// Cross entropy value. Returns infinity if any q_k = 0 where p_k > 0.
+pub fn cross_entropy(pk: &[f64], qk: &[f64], base: Option<f64>) -> f64 {
+    if pk.len() != qk.len() || pk.is_empty() {
+        return f64::NAN;
+    }
+    if pk.iter().any(|&p| p < 0.0) || qk.iter().any(|&q| q < 0.0) {
+        return f64::NAN;
+    }
+
+    let sum_p: f64 = pk.iter().sum();
+    let sum_q: f64 = qk.iter().sum();
+    if sum_p == 0.0 || sum_q == 0.0 {
+        return f64::NAN;
+    }
+
+    let mut ce = 0.0;
+    for (&p, &q) in pk.iter().zip(qk) {
+        let pi = p / sum_p;
+        let qi = q / sum_q;
+        if pi > 0.0 {
+            if qi == 0.0 {
+                return f64::INFINITY;
+            }
+            ce -= pi * qi.ln();
+        }
+    }
+
+    match base {
+        Some(b) => ce / b.ln(),
+        None => ce,
+    }
+}
+
 /// Result of Box-Cox transformation.
 #[derive(Debug, Clone)]
 pub struct BoxCoxResult {
