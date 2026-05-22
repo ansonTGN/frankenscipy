@@ -18619,6 +18619,125 @@ fn within_set_l1_pair_sum(x: &[f64]) -> f64 {
     sum
 }
 
+/// Jensen-Shannon divergence between two probability distributions.
+///
+/// The Jensen-Shannon divergence is a symmetric, smoothed version of
+/// KL divergence. It is the square of the Jensen-Shannon distance.
+///
+/// D_JS(P || Q) = (D_KL(P || M) + D_KL(Q || M)) / 2
+/// where M = (P + Q) / 2
+///
+/// # Arguments
+/// * `p` - First probability distribution (must sum to 1)
+/// * `q` - Second probability distribution (must sum to 1)
+/// * `base` - Logarithm base (e.g., 2.0 for bits, E for nats)
+///
+/// # Returns
+/// Jensen-Shannon divergence value in [0, log(2)] for base e.
+pub fn jensenshannon(p: &[f64], q: &[f64], base: Option<f64>) -> f64 {
+    if p.len() != q.len() || p.is_empty() {
+        return f64::NAN;
+    }
+
+    let base = base.unwrap_or(std::f64::consts::E);
+
+    let m: Vec<f64> = p.iter().zip(q).map(|(&pi, &qi)| (pi + qi) / 2.0).collect();
+
+    let mut d_pm = 0.0;
+    let mut d_qm = 0.0;
+
+    for ((&pi, &qi), &mi) in p.iter().zip(q).zip(&m) {
+        if pi > 0.0 && mi > 0.0 {
+            d_pm += pi * (pi / mi).ln();
+        }
+        if qi > 0.0 && mi > 0.0 {
+            d_qm += qi * (qi / mi).ln();
+        }
+    }
+
+    let js = (d_pm + d_qm) / 2.0;
+    if base == std::f64::consts::E {
+        js
+    } else {
+        js / base.ln()
+    }
+}
+
+/// Jensen-Shannon distance between two probability distributions.
+///
+/// The Jensen-Shannon distance is the square root of the JS divergence.
+/// It is a proper metric satisfying the triangle inequality.
+///
+/// # Arguments
+/// * `p` - First probability distribution (must sum to 1)
+/// * `q` - Second probability distribution (must sum to 1)
+///
+/// # Returns
+/// Jensen-Shannon distance value in [0, 1] when using log base 2.
+pub fn jensenshannon_distance(p: &[f64], q: &[f64]) -> f64 {
+    let js = jensenshannon(p, q, Some(2.0));
+    if js.is_nan() || js < 0.0 {
+        f64::NAN
+    } else {
+        js.sqrt()
+    }
+}
+
+/// Hellinger distance between two probability distributions.
+///
+/// The Hellinger distance is defined as:
+/// H(P, Q) = sqrt(1 - BC(P, Q))
+/// where BC(P, Q) = Σ sqrt(P_i * Q_i) is the Bhattacharyya coefficient.
+///
+/// # Arguments
+/// * `p` - First probability distribution (must sum to 1)
+/// * `q` - Second probability distribution (must sum to 1)
+///
+/// # Returns
+/// Hellinger distance value in [0, 1].
+pub fn hellinger_distance(p: &[f64], q: &[f64]) -> f64 {
+    if p.len() != q.len() || p.is_empty() {
+        return f64::NAN;
+    }
+
+    let bc: f64 = p
+        .iter()
+        .zip(q)
+        .map(|(&pi, &qi)| (pi * qi).sqrt())
+        .sum();
+
+    (1.0 - bc.min(1.0)).max(0.0).sqrt()
+}
+
+/// Bhattacharyya distance between two probability distributions.
+///
+/// D_B(P, Q) = -ln(BC(P, Q))
+/// where BC(P, Q) = Σ sqrt(P_i * Q_i) is the Bhattacharyya coefficient.
+///
+/// # Arguments
+/// * `p` - First probability distribution (must sum to 1)
+/// * `q` - Second probability distribution (must sum to 1)
+///
+/// # Returns
+/// Bhattacharyya distance value in [0, ∞).
+pub fn bhattacharyya_distance(p: &[f64], q: &[f64]) -> f64 {
+    if p.len() != q.len() || p.is_empty() {
+        return f64::NAN;
+    }
+
+    let bc: f64 = p
+        .iter()
+        .zip(q)
+        .map(|(&pi, &qi)| (pi * qi).sqrt())
+        .sum();
+
+    if bc <= 0.0 {
+        f64::INFINITY
+    } else {
+        -bc.ln()
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Non-parametric Tests and ANOVA
 // ══════════════════════════════════════════════════════════════════════
