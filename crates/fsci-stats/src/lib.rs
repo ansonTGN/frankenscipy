@@ -52599,6 +52599,29 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn f_oneway_matches_scipy_reference_values() {
+        // f_oneway([1,2,3], [4,5,6], [7,8,9])
+        // F = MSB/MSW where:
+        //   SSB = 3*((2-5)^2 + (5-5)^2 + (8-5)^2) = 54, MSB = 54/2 = 27
+        //   SSW = 2*(1+1+1) = 6, MSW = 6/6 = 1
+        //   F = 27/1 = 27
+        let g1 = vec![1.0, 2.0, 3.0];
+        let g2 = vec![4.0, 5.0, 6.0];
+        let g3 = vec![7.0, 8.0, 9.0];
+        let groups: Vec<&[f64]> = vec![&g1, &g2, &g3];
+        let res = f_oneway(&groups);
+        assert!((res.statistic - 27.0).abs() < 1e-10, "f_oneway statistic, got {}", res.statistic);
+        // pvalue for F(2,6) = 27 is very small
+        assert!(res.pvalue < 0.01, "f_oneway pvalue should be significant, got {}", res.pvalue);
+
+        // Same groups should give F=0
+        let same: Vec<&[f64]> = vec![&g1, &g1, &g1];
+        let res2 = f_oneway(&same);
+        assert!(res2.statistic.abs() < 1e-10 || res2.statistic.is_nan(), "f_oneway same groups F~0, got {}", res2.statistic);
+    }
+
+    #[test]
     fn test_f_oneway_nan_policy() {
         let g1 = [1.0, 2.0, 3.0, 4.0];
         let g2 = [5.0, 6.0, 7.0, 8.0];
