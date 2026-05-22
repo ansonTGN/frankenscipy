@@ -52745,6 +52745,26 @@ mod tests {
     }
 
     #[test]
+    fn fligner_matches_scipy_reference_values() {
+        // scipy.stats.fligner - Fligner-Killeen test for variance homogeneity
+        // More robust to non-normality than Bartlett
+        let g1 = vec![0.0, 1.0, 2.0, 3.0, 4.0];
+        let g2 = vec![0.0, 1.0, 2.0, 3.0, 4.0];
+        let groups: Vec<&[f64]> = vec![&g1, &g2];
+        let res = fligner(&groups);
+        // Identical groups should have statistic near 0 and high pvalue
+        assert!(res.statistic >= 0.0, "fligner statistic should be non-negative");
+        assert!(res.pvalue >= 0.5, "fligner identical groups should have high pvalue, got {}", res.pvalue);
+
+        // Groups with different variances should give higher statistic
+        let narrow = vec![4.9, 5.0, 5.1, 5.0, 5.05];
+        let wide = vec![0.0, 2.5, 5.0, 7.5, 10.0];
+        let diff_groups: Vec<&[f64]> = vec![&narrow, &wide];
+        let res2 = fligner(&diff_groups);
+        assert!(res2.pvalue < res.pvalue, "fligner with different variances should have lower pvalue");
+    }
+
+    #[test]
     fn test_fligner_nan_policy() {
         let g1 = [1.0, 2.0, 3.0, 4.0, 5.0];
         let g2 = [2.0, 4.0, 6.0, 8.0, 10.0];
