@@ -43,6 +43,24 @@ pub const GAMMA_DISPATCH_PLAN: &[DispatchPlan] = &[
         notes: "Keep +inf pole parity with SciPy and avoid direct exp(gammaln) overflow back-conversions.",
     },
     DispatchPlan {
+        function: "loggamma",
+        steps: &[
+            DispatchStep {
+                regime: KernelRegime::Recurrence,
+                when: "positive real axis reuses gammaln stable window",
+            },
+            DispatchStep {
+                regime: KernelRegime::Reflection,
+                when: "complex arguments cross Re(z) < 0.5 principal branch",
+            },
+            DispatchStep {
+                regime: KernelRegime::Asymptotic,
+                when: "large positive real or complex magnitude",
+            },
+        ],
+        notes: "Real inputs preserve scipy.special.loggamma's negative-axis NaN branch cut; complex inputs return the principal branch.",
+    },
+    DispatchPlan {
         function: "gammainc",
         steps: &[
             DispatchStep {
@@ -153,6 +171,10 @@ pub fn gammaln(x: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
     gammaln_dispatch("gammaln", x, mode)
 }
 
+pub fn loggamma(z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
+    loggamma_dispatch("loggamma", z, mode)
+}
+
 fn gamma_dispatch(function: &'static str, z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
     match z {
         SpecialTensor::RealScalar(x) => gamma_scalar(*x, mode).map(SpecialTensor::RealScalar),
@@ -185,6 +207,33 @@ fn gammaln_dispatch(function: &'static str, z: &SpecialTensor, mode: RuntimeMode
         SpecialTensor::RealVec(values) => values
             .iter()
             .map(|&x| gammaln_scalar(x, mode))
+            .collect::<Result<Vec<_>, _>>()
+            .map(SpecialTensor::RealVec),
+        SpecialTensor::ComplexScalar(z_val) => {
+            Ok(SpecialTensor::ComplexScalar(complex_gammaln(*z_val)))
+        }
+        SpecialTensor::ComplexVec(values) => Ok(SpecialTensor::ComplexVec(
+            values.iter().map(|&z_val| complex_gammaln(z_val)).collect(),
+        )),
+        SpecialTensor::Empty => Err(SpecialError {
+            function,
+            kind: SpecialErrorKind::DomainError,
+            mode,
+            detail: "empty tensor is not a valid special-function input",
+        }),
+    }
+}
+
+fn loggamma_dispatch(
+    function: &'static str,
+    z: &SpecialTensor,
+    mode: RuntimeMode,
+) -> SpecialResult {
+    match z {
+        SpecialTensor::RealScalar(x) => loggamma_scalar(*x, mode).map(SpecialTensor::RealScalar),
+        SpecialTensor::RealVec(values) => values
+            .iter()
+            .map(|&x| loggamma_scalar(x, mode))
             .collect::<Result<Vec<_>, _>>()
             .map(SpecialTensor::RealVec),
         SpecialTensor::ComplexScalar(z_val) => {
@@ -784,6 +833,50 @@ pub fn gammaln_scalar(x: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
         );
     }
     Ok(output)
+}
+
+pub fn loggamma_scalar(x: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
+    if x.is_nan() {
+        return Ok(f64::NAN);
+    }
+    if x < 0.0 {
+        if matches!(mode, RuntimeMode::Hardened) {
+            record_special_trace(
+                "loggamma",
+                mode,
+                "domain_error",
+                format!("input={x}"),
+                "fail_closed",
+                "real loggamma is undefined on the negative real branch cut",
+                false,
+            );
+            return Err(SpecialError {
+                function: "loggamma",
+                kind: SpecialErrorKind::DomainError,
+                mode,
+                detail: "real loggamma is undefined on the negative real branch cut",
+            });
+        }
+        return Ok(f64::NAN);
+    }
+    if x == 0.0 && matches!(mode, RuntimeMode::Hardened) {
+        record_special_trace(
+            "loggamma",
+            mode,
+            "pole_input",
+            format!("input={x}"),
+            "fail_closed",
+            "loggamma pole at zero",
+            false,
+        );
+        return Err(SpecialError {
+            function: "loggamma",
+            kind: SpecialErrorKind::PoleInput,
+            mode,
+            detail: "loggamma pole at zero",
+        });
+    }
+    gammaln_scalar(x, mode)
 }
 
 fn multigammaln_scalar(a: f64, d: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
@@ -3605,6 +3698,44 @@ mod tests {
             expected
         );
         assert!(c.im.abs() < 1e-10);
+        Ok(())
+    }
+
+    #[test]
+    fn loggamma_real_inputs_preserve_scipy_branch_cut() -> Result<(), String> {
+        let positive = get_scalar(loggamma(&scalar(0.5), RuntimeMode::Strict))?;
+        assert!((positive - 0.5 * PI.ln()).abs() < 1e-12);
+
+        let pole = get_scalar(loggamma(&scalar(0.0), RuntimeMode::Strict))?;
+        assert!(pole.is_infinite() && pole.is_sign_positive());
+
+        let branch_cut = get_scalar(loggamma(&scalar(-0.5), RuntimeMode::Strict))?;
+        assert!(branch_cut.is_nan());
+
+        let err = loggamma(&scalar(-0.5), RuntimeMode::Hardened).unwrap_err();
+        assert_eq!(err.kind, SpecialErrorKind::DomainError);
+
+        let err = loggamma(&scalar(0.0), RuntimeMode::Hardened).unwrap_err();
+        assert_eq!(err.kind, SpecialErrorKind::PoleInput);
+        Ok(())
+    }
+
+    #[test]
+    fn loggamma_complex_inputs_use_principal_branch() -> Result<(), String> {
+        let actual = get_complex_scalar(loggamma(&complex_scalar(-0.5, 0.0), RuntimeMode::Strict))?;
+        assert!((actual.re - 1.265_512_123_484_647).abs() < 1e-12);
+        assert!((actual.im + PI).abs() < 1e-12);
+
+        let near_upper = get_complex_scalar(loggamma(
+            &complex_scalar(-0.5, 1.0e-12),
+            RuntimeMode::Strict,
+        ))?;
+        let near_lower = get_complex_scalar(loggamma(
+            &complex_scalar(-0.5, -1.0e-12),
+            RuntimeMode::Strict,
+        ))?;
+        assert!(near_upper.im < 0.0);
+        assert!(near_lower.im > 0.0);
         Ok(())
     }
 
