@@ -30984,6 +30984,116 @@ pub fn mad(data: &[f64], scale: f64) -> f64 {
     median(&abs_devs) / scale
 }
 
+/// Compute the medcouple (robust measure of skewness).
+///
+/// The medcouple is defined as the median of:
+/// h(x_i, x_j) = (x_j - m + x_i - m) / (x_j - x_i)
+/// for all x_i <= m <= x_j where m is the median.
+///
+/// Returns a value in [-1, 1] where:
+/// - 0 indicates symmetry
+/// - Positive values indicate right skewness
+/// - Negative values indicate left skewness
+///
+/// This is the same definition used by scipy.stats.mstats.medcouple.
+pub fn medcouple(data: &[f64]) -> f64 {
+    let n = data.len();
+    if n < 3 {
+        return f64::NAN;
+    }
+
+    let mut sorted: Vec<f64> = data.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let med = if n % 2 == 0 {
+        (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
+    } else {
+        sorted[n / 2]
+    };
+
+    let mut h_values = Vec::new();
+
+    for i in 0..n {
+        for j in i + 1..n {
+            let xi = sorted[i];
+            let xj = sorted[j];
+
+            if xi <= med && med <= xj && (xj - xi).abs() > 1e-15 {
+                let h = ((xj - med) - (med - xi)) / (xj - xi);
+                h_values.push(h);
+            }
+        }
+    }
+
+    if h_values.is_empty() {
+        return 0.0;
+    }
+
+    h_values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let m = h_values.len();
+    if m % 2 == 0 {
+        (h_values[m / 2 - 1] + h_values[m / 2]) / 2.0
+    } else {
+        h_values[m / 2]
+    }
+}
+
+/// Compute the biweight midcorrelation.
+///
+/// A robust correlation measure based on Tukey's biweight function.
+/// Less sensitive to outliers than Pearson's correlation.
+///
+/// # Arguments
+/// * `x` - First variable
+/// * `y` - Second variable
+/// * `c` - Tuning constant (typically 9.0)
+///
+/// # Returns
+/// Biweight midcorrelation in [-1, 1].
+pub fn biweight_midcorrelation(x: &[f64], y: &[f64], c: f64) -> f64 {
+    if x.len() != y.len() || x.len() < 3 {
+        return f64::NAN;
+    }
+
+    let med_x = median(x);
+    let med_y = median(y);
+    let mad_x = mad(x, 1.0);
+    let mad_y = mad(y, 1.0);
+
+    if mad_x == 0.0 || mad_y == 0.0 {
+        return f64::NAN;
+    }
+
+    let biweight = |val: f64, med: f64, mad: f64| -> (f64, f64) {
+        let u = (val - med) / (c * mad);
+        if u.abs() >= 1.0 {
+            (0.0, 0.0)
+        } else {
+            let w = (1.0 - u * u).powi(2);
+            ((val - med) * w, w)
+        }
+    };
+
+    let mut num = 0.0;
+    let mut den_x = 0.0;
+    let mut den_y = 0.0;
+
+    for (&xi, &yi) in x.iter().zip(y) {
+        let (bx, wx) = biweight(xi, med_x, mad_x);
+        let (by, wy) = biweight(yi, med_y, mad_y);
+        num += bx * by;
+        den_x += bx * bx;
+        den_y += by * by;
+    }
+
+    let denom = (den_x * den_y).sqrt();
+    if denom == 0.0 {
+        f64::NAN
+    } else {
+        num / denom
+    }
+}
+
 /// Compute the coefficient of variation (CV = std/mean).
 pub fn coefficient_of_variation(data: &[f64]) -> f64 {
     let n = data.len() as f64;
