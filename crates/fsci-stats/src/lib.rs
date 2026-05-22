@@ -22176,6 +22176,22 @@ pub fn raw_moment(data: &[f64], k: u32) -> f64 {
         / n
 }
 
+/// Compute the k-th central moment E[(X - μ)^k].
+pub fn central_moment(data: &[f64], k: u32) -> f64 {
+    if data.is_empty() {
+        return f64::NAN;
+    }
+    if k == 0 {
+        return 1.0;
+    }
+    let n = data.len() as f64;
+    let mean_val = data.iter().sum::<f64>() / n;
+    data.iter()
+        .map(|&x| (x - mean_val).powi(k as i32))
+        .sum::<f64>()
+        / n
+}
+
 /// Compute the k-th standardized moment of a data set.
 ///
 /// standardized_moment_k = E[((X - μ) / σ)^k] = μ_k / σ^k
