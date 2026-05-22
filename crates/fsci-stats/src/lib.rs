@@ -31641,6 +31641,60 @@ pub fn rand_index(labels_true: &[f64], labels_pred: &[f64]) -> f64 {
     (a + b) as f64 / total_pairs as f64
 }
 
+/// Silhouette coefficient for a single 1D sample.
+/// data: array of feature values, labels: cluster assignments (encoded as f64).
+/// Returns the mean silhouette coefficient across all samples.
+pub fn silhouette_score_1d(data: &[f64], labels: &[f64]) -> f64 {
+    if data.len() != labels.len() || data.len() < 2 {
+        return f64::NAN;
+    }
+    let n = data.len();
+
+    let unique_labels: std::collections::HashSet<i64> =
+        labels.iter().map(|&l| l.round() as i64).collect();
+    if unique_labels.len() < 2 {
+        return 0.0;
+    }
+
+    let mut silhouettes = Vec::with_capacity(n);
+
+    for i in 0..n {
+        let li = labels[i].round() as i64;
+
+        let mut same_cluster_dists = vec![];
+        let mut other_cluster_dists: std::collections::HashMap<i64, Vec<f64>> =
+            std::collections::HashMap::new();
+
+        for j in 0..n {
+            if i == j { continue; }
+            let lj = labels[j].round() as i64;
+            let dist = (data[i] - data[j]).abs();
+
+            if lj == li {
+                same_cluster_dists.push(dist);
+            } else {
+                other_cluster_dists.entry(lj).or_default().push(dist);
+            }
+        }
+
+        let a = if same_cluster_dists.is_empty() {
+            0.0
+        } else {
+            same_cluster_dists.iter().sum::<f64>() / same_cluster_dists.len() as f64
+        };
+
+        let b = other_cluster_dists
+            .values()
+            .map(|dists| dists.iter().sum::<f64>() / dists.len() as f64)
+            .fold(f64::INFINITY, f64::min);
+
+        let s = if a.max(b) == 0.0 { 0.0 } else { (b - a) / a.max(b) };
+        silhouettes.push(s);
+    }
+
+    silhouettes.iter().sum::<f64>() / silhouettes.len() as f64
+}
+
 /// Compute the log-likelihood for a normal distribution.
 pub fn norm_loglikelihood(data: &[f64], mu: f64, sigma: f64) -> f64 {
     let n = data.len() as f64;
