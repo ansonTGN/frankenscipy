@@ -1472,6 +1472,22 @@ pub fn generic_filter1d<F>(
 where
     F: Fn(&[f64]) -> f64,
 {
+    generic_filter1d_with_origin(input, function, filter_size, axis, 0, mode, cval)
+}
+
+/// Apply a generic function along one axis with SciPy `origin` semantics.
+pub fn generic_filter1d_with_origin<F>(
+    input: &NdArray,
+    function: F,
+    filter_size: usize,
+    axis: usize,
+    origin: i64,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError>
+where
+    F: Fn(&[f64]) -> f64,
+{
     if filter_size == 0 {
         return Err(NdimageError::InvalidArgument(
             "filter size must be positive".to_string(),
@@ -1485,6 +1501,7 @@ where
             "axis out of bounds".to_string(),
         ));
     }
+    validate_filter_origin(filter_size, origin)?;
 
     let mut output = NdArray::zeros(input.shape.clone());
     let offset = filter_size as i64 / 2;
@@ -1494,7 +1511,7 @@ where
 
         for k in 0..filter_size {
             let mut in_idx: Vec<i64> = out_idx.iter().map(|&coord| coord as i64).collect();
-            in_idx[axis] += k as i64 - offset;
+            in_idx[axis] += k as i64 - offset - origin;
             neighborhood.push(input.get_boundary(&in_idx, mode, cval));
         }
 
@@ -7871,6 +7888,45 @@ mod tests {
                 .unwrap()
                 .data,
             vec![3.0, 6.0, 5.0, 9.0, 15.0, 11.0]
+        );
+    }
+
+    #[test]
+    fn generic_filter1d_origin_matches_scipy_even_window() {
+        let input = NdArray::new(vec![1., 2., 3., 4., 5.], vec![5]).unwrap();
+        let sum_window = |values: &[f64]| values.iter().sum::<f64>();
+
+        let origin_zero =
+            generic_filter1d_with_origin(&input, sum_window, 2, 0, 0, BoundaryMode::Constant, 0.0)
+                .unwrap();
+        assert_eq!(origin_zero.data, vec![1., 3., 5., 7., 9.]);
+
+        let shifted =
+            generic_filter1d_with_origin(&input, sum_window, 2, 0, -1, BoundaryMode::Constant, 0.0)
+                .unwrap();
+        assert_eq!(shifted.data, vec![3., 5., 7., 9., 5.]);
+    }
+
+    #[test]
+    fn generic_filter1d_origin_validation_matches_scipy_bounds() {
+        let input = NdArray::new(vec![1., 2., 3., 4., 5.], vec![5]).unwrap();
+        let sum_window = |values: &[f64]| values.iter().sum::<f64>();
+
+        assert!(
+            generic_filter1d_with_origin(&input, sum_window, 2, 0, -1, BoundaryMode::Reflect, 0.0)
+                .is_ok()
+        );
+        assert!(
+            generic_filter1d_with_origin(&input, sum_window, 2, 0, 0, BoundaryMode::Reflect, 0.0)
+                .is_ok()
+        );
+        assert!(
+            generic_filter1d_with_origin(&input, sum_window, 2, 0, 1, BoundaryMode::Reflect, 0.0)
+                .is_err()
+        );
+        assert!(
+            generic_filter1d_with_origin(&input, sum_window, 2, 0, -2, BoundaryMode::Reflect, 0.0)
+                .is_err()
         );
     }
 
