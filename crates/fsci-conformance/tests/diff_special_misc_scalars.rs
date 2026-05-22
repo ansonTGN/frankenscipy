@@ -3,9 +3,8 @@
 //! special functions:
 //!   - `fsci_special::tklmbda(x, lam)` vs `scipy.special.tklmbda`
 //!     (Tukey-lambda CDF)
-//!   - `fsci_special::voigt_profile_real_gamma_zero(x, sigma)` vs
-//!     `scipy.special.voigt_profile(x, sigma, 0.0)`  (Voigt profile with
-//!     gamma=0 reduces to a Gaussian)
+//!   - `fsci_special::voigt_profile(x, sigma, gamma)` vs
+//!     `scipy.special.voigt_profile(x, sigma, gamma)` (Voigt profile)
 //!   - `fsci_special::stdtridf(p, t)` vs `scipy.special.stdtridf(p, t)`
 //!     (Student-t df inversion)
 //!
@@ -18,11 +17,12 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_special::{stdtridf, tklmbda, voigt_profile_real_gamma_zero};
+use fsci_special::{stdtridf, tklmbda, voigt_profile};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-002";
 const TIGHT_TOL: f64 = 1.0e-12;
+const VOIGT_TOL: f64 = 5.0e-8;
 const STDTRIDF_TOL: f64 = 1.0e-6; // df-inversion is iterative
 const REQUIRE_SCIPY_ENV: &str = "FSCI_REQUIRE_SCIPY_ORACLE";
 
@@ -32,6 +32,7 @@ struct PointCase {
     func: String,
     arg1: f64,
     arg2: f64,
+    arg3: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -104,22 +105,44 @@ fn generate_query() -> OracleQuery {
                 func: "tklmbda".into(),
                 arg1: x,
                 arg2: lam,
+                arg3: 0.0,
             });
         }
     }
 
-    // voigt_profile_real_gamma_zero: x ∈ ℝ, sigma > 0
+    // voigt_profile: x ∈ ℝ with positive-shape and zero-shape edge cases.
     let v_xs: &[f64] = &[-4.0, -2.0, -1.0, 0.0, 0.5, 1.0, 2.0, 4.0];
     let v_sigmas: &[f64] = &[0.5, 1.0, 1.5, 3.0];
     for &x in v_xs {
         for &s in v_sigmas {
             points.push(PointCase {
                 case_id: format!("voigt0_x{x}_s{s}"),
-                func: "voigt_gamma0".into(),
+                func: "voigt_profile".into(),
                 arg1: x,
                 arg2: s,
+                arg3: 0.0,
             });
         }
+    }
+    let voigt_cases: &[(f64, f64, f64)] = &[
+        (0.0, 1.0, 0.25),
+        (0.0, 1.0, 1.0),
+        (1.0, 1.0, 0.5),
+        (1.0, 1.0, 1.0),
+        (-1.5, 0.75, 0.25),
+        (2.0, 1.5, 1.25),
+        (0.0, 0.0, 1.0),
+        (1.0, 0.0, 1.0),
+        (2.0, 0.0, 0.5),
+    ];
+    for &(x, sigma, gamma) in voigt_cases {
+        points.push(PointCase {
+            case_id: format!("voigt_x{x}_s{sigma}_g{gamma}"),
+            func: "voigt_profile".into(),
+            arg1: x,
+            arg2: sigma,
+            arg3: gamma,
+        });
     }
 
     // stdtridf: p ∈ (0, 1), t — valid student-t inversion.
@@ -140,6 +163,7 @@ fn generate_query() -> OracleQuery {
             func: "stdtridf".into(),
             arg1: *p,
             arg2: *t,
+            arg3: 0.0,
         });
     }
 
@@ -160,16 +184,17 @@ def fnone(v):
         return None
     return v if math.isfinite(v) else None
 
-q = json.load(sys.stdin)
+q = json.loads(sys.argv[1])
 points = []
 for case in q["points"]:
     cid = case["case_id"]; fn = case["func"]
     a1 = float(case["arg1"]); a2 = float(case["arg2"])
+    a3 = float(case.get("arg3", 0.0))
     try:
         if fn == "tklmbda":
             v = special.tklmbda(a1, a2)
-        elif fn == "voigt_gamma0":
-            v = special.voigt_profile(a1, a2, 0.0)
+        elif fn == "voigt_profile":
+            v = special.voigt_profile(a1, a2, a3)
         elif fn == "stdtridf":
             v = special.stdtridf(a1, a2)
         else:
@@ -181,8 +206,8 @@ print(json.dumps({"points": points}))
 "#;
     let query_json = serde_json::to_string(query).expect("serialize misc_scalars query");
     let mut child = match Command::new("python3")
-        .arg("-c")
-        .arg(script)
+        .arg("-")
+        .arg(query_json)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -203,14 +228,14 @@ print(json.dumps({"points": points}))
             .stdin
             .as_mut()
             .expect("open misc_scalars oracle stdin");
-        if let Err(err) = stdin.write_all(query_json.as_bytes()) {
+        if let Err(err) = stdin.write_all(script.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
-                "misc_scalars oracle stdin write failed: {err}; stderr: {stderr}"
+                "misc_scalars oracle script write failed: {err}; stderr: {stderr}"
             );
-            eprintln!("skipping misc_scalars oracle: stdin write failed ({err})\n{stderr}");
+            eprintln!("skipping misc_scalars oracle: script write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -255,10 +280,7 @@ fn diff_special_misc_scalars() {
         };
         let (fsci_v, tol) = match case.func.as_str() {
             "tklmbda" => (tklmbda(case.arg1, case.arg2), TIGHT_TOL),
-            "voigt_gamma0" => (
-                voigt_profile_real_gamma_zero(case.arg1, case.arg2),
-                TIGHT_TOL,
-            ),
+            "voigt_profile" => (voigt_profile(case.arg1, case.arg2, case.arg3), VOIGT_TOL),
             "stdtridf" => (stdtridf(case.arg1, case.arg2), STDTRIDF_TOL),
             _ => continue,
         };
@@ -300,7 +322,7 @@ fn diff_special_misc_scalars() {
 
     assert!(
         all_pass,
-        "scipy.special tklmbda / voigt_profile(gamma=0) / stdtridf conformance failed: {} cases, max_diff={}",
+        "scipy.special tklmbda / voigt_profile / stdtridf conformance failed: {} cases, max_diff={}",
         diffs.len(),
         max_overall
     );

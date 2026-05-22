@@ -3419,11 +3419,41 @@ pub fn wofz_real(x: f64) -> (f64, f64) {
     (re, im)
 }
 
+/// Voigt profile V(x; σ, γ) on the real axis.
+///
+/// Matches `scipy.special.voigt_profile` for scalar real inputs. The general
+/// case is expressed through the Faddeeva function,
+/// `Re[w((x + iγ)/(sqrt(2)σ))] / (σ sqrt(2π))`, with SciPy's point-mass and
+/// Lorentzian edge cases when `sigma == 0`.
+pub fn voigt_profile(x: f64, sigma: f64, gamma: f64) -> f64 {
+    if x.is_nan() || sigma.is_nan() || gamma.is_nan() {
+        return f64::NAN;
+    }
+    if x.is_infinite() {
+        return 0.0;
+    }
+    if sigma == 0.0 {
+        if gamma == 0.0 {
+            return if x == 0.0 { f64::INFINITY } else { 0.0 };
+        }
+        return gamma / (PI * (x * x + gamma * gamma));
+    }
+    if gamma == 0.0 && sigma > 0.0 {
+        return voigt_profile_real_gamma_zero(x, sigma);
+    }
+
+    let scale = SQRT_2 * sigma;
+    let z = Complex64::new(x / scale, gamma / scale);
+    match wofz_scalar(z, RuntimeMode::Strict) {
+        Ok(w) => w.re / (sigma * (2.0 * PI).sqrt()),
+        Err(_) => f64::NAN,
+    }
+}
+
 /// Voigt profile V(x; σ, γ) on the real axis at γ = 0.
 ///
 /// `scipy.special.voigt_profile(x, sigma, 0)` collapses to a Gaussian and is
-/// a useful real-only fast path. Adding the full γ ≠ 0 path (which needs
-/// complex `wofz`) is a follow-on.
+/// a useful real-only fast path.
 pub fn voigt_profile_real_gamma_zero(x: f64, sigma: f64) -> f64 {
     if sigma <= 0.0 || sigma.is_nan() || x.is_nan() {
         return f64::NAN;
@@ -9408,6 +9438,34 @@ mod tests {
         assert!(voigt_profile_real_gamma_zero(1.0, 0.0).is_nan());
         assert!(voigt_profile_real_gamma_zero(1.0, -0.5).is_nan());
         assert!(voigt_profile_real_gamma_zero(f64::NAN, 1.0).is_nan());
+    }
+
+    #[test]
+    fn voigt_profile_matches_scipy_contract_points() {
+        let samples = [
+            (0.0, 1.0, 0.0, 0.398_942_280_401_432_7),
+            (1.0, 1.0, 0.0, 0.241_970_724_519_143_37),
+            (0.0, 1.0, 1.0, 0.208_709_280_520_367_72),
+            (1.0, 1.0, 1.0, 0.165_795_662_689_166_5),
+            (0.0, 0.0, 1.0, std::f64::consts::FRAC_1_PI),
+            (1.0, 0.0, 1.0, std::f64::consts::FRAC_1_PI / 2.0),
+            (0.0, 0.0, 0.0, f64::INFINITY),
+            (1.0, 0.0, 0.0, 0.0),
+        ];
+        for (x, sigma, gamma, expected) in samples {
+            let actual = voigt_profile(x, sigma, gamma);
+            if expected.is_infinite() {
+                assert!(
+                    actual.is_infinite(),
+                    "voigt_profile({x}, {sigma}, {gamma}) = {actual}"
+                );
+            } else {
+                assert!(
+                    (actual - expected).abs() <= 5.0e-8,
+                    "voigt_profile({x}, {sigma}, {gamma}) = {actual}, expected {expected}"
+                );
+            }
+        }
     }
 
     #[test]

@@ -226,6 +226,7 @@ pub use convenience::{
     tklmbda,
     trigamma,
     trunc,
+    voigt_profile,
     voigt_profile_real_gamma_zero,
     wofz,
     wofz_real,
