@@ -21336,6 +21336,30 @@ pub fn iqr(data: &[f64]) -> f64 {
     quantile_sorted(&sorted, 0.75) - quantile_sorted(&sorted, 0.25)
 }
 
+/// Range of data (maximum - minimum).
+///
+/// Matches `numpy.ptp` (peak-to-peak).
+/// Returns the difference between the maximum and minimum values.
+pub fn peak_to_peak(data: &[f64]) -> f64 {
+    if data.is_empty() {
+        return f64::NAN;
+    }
+    let mut min_val = f64::INFINITY;
+    let mut max_val = f64::NEG_INFINITY;
+    for &x in data {
+        if x.is_nan() {
+            return f64::NAN;
+        }
+        if x < min_val {
+            min_val = x;
+        }
+        if x > max_val {
+            max_val = x;
+        }
+    }
+    max_val - min_val
+}
+
 /// Returns ideal fourths (robust quartile estimators).
 ///
 /// Matches `scipy.stats.mstats.idealfourths(data)`.
@@ -52411,6 +52435,18 @@ mod tests {
         let (stat_c, pval_c) = rayleightest(&concentrated);
         assert!(stat_c > stat_u);
         assert!(pval_c < 0.01);
+    }
+
+    #[test]
+    fn test_peak_to_peak() {
+        let data = vec![1.0, 5.0, 3.0, 2.0, 8.0, 4.0];
+        assert!((peak_to_peak(&data) - 7.0).abs() < 1e-10);
+        let single = vec![5.0];
+        assert_eq!(peak_to_peak(&single), 0.0);
+        let empty: Vec<f64> = vec![];
+        assert!(peak_to_peak(&empty).is_nan());
+        let with_nan = vec![1.0, f64::NAN, 3.0];
+        assert!(peak_to_peak(&with_nan).is_nan());
     }
 
 }
