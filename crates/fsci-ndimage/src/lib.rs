@@ -2762,6 +2762,13 @@ pub enum DistanceMetric {
     Chessboard,
 }
 
+/// Distance transform outputs matching SciPy's return flag combinations.
+#[derive(Debug, Clone)]
+pub struct DistanceTransformEdtResult {
+    pub distances: Option<NdArray>,
+    pub indices: Option<Vec<NdArray>>,
+}
+
 const BF_NO_BACKGROUND_EUCLIDEAN: f64 = 1.340_780_792_994_259_6e154;
 const BF_NO_BACKGROUND_GRID: f64 = u32::MAX as f64;
 
@@ -2776,40 +2783,67 @@ pub fn distance_transform_edt(
     input: &NdArray,
     sampling: Option<&[f64]>,
 ) -> Result<NdArray, NdimageError> {
+    distance_transform_edt_full(input, sampling, true, false)?
+        .distances
+        .ok_or_else(|| NdimageError::InvalidArgument("distances were not requested".to_string()))
+}
+
+/// Euclidean distance transform with SciPy-style optional feature indices.
+///
+/// Matches `scipy.ndimage.distance_transform_edt` for the distance output and
+/// the `return_indices=True` feature transform. Indices are returned as one
+/// `NdArray` per input axis, each with the input shape and integer coordinates
+/// represented as `f64` values.
+pub fn distance_transform_edt_full(
+    input: &NdArray,
+    sampling: Option<&[f64]>,
+    return_distances: bool,
+    return_indices: bool,
+) -> Result<DistanceTransformEdtResult, NdimageError> {
     if input.size() == 0 {
         return Err(NdimageError::EmptyInput);
     }
+    if !return_distances && !return_indices {
+        return Err(NdimageError::InvalidArgument(
+            "at least one of return_distances/return_indices must be true".to_string(),
+        ));
+    }
 
     let sampling = normalize_sampling(input.ndim(), sampling)?;
-    let mut output = NdArray::zeros(input.shape.clone());
     let backgrounds = background_coordinates(input);
+    let mut distances = return_distances.then(|| NdArray::zeros(input.shape.clone()));
+    let mut indices = return_indices.then(|| {
+        (0..input.ndim())
+            .map(|_| NdArray::zeros(input.shape.clone()))
+            .collect::<Vec<_>>()
+    });
 
     // For each foreground pixel, find distance to nearest background pixel.
     for (flat, &value) in input.data.iter().enumerate() {
-        if value == 0.0 {
-            output.data[flat] = 0.0;
-            continue;
-        }
-
         let coords = input.unravel(flat);
-        output.data[flat] = if backgrounds.is_empty() {
-            edt_all_foreground_distance(&coords, &sampling)
+        if value == 0.0 {
+            if let Some(output) = distances.as_mut() {
+                output.data[flat] = 0.0;
+            }
+            if let Some(axis_indices) = indices.as_mut() {
+                for (axis, output) in axis_indices.iter_mut().enumerate() {
+                    output.data[flat] = coords[axis] as f64;
+                }
+            }
         } else {
-            backgrounds
-                .iter()
-                .map(|background| {
-                    metric_distance(
-                        &coords,
-                        background,
-                        DistanceMetric::Euclidean,
-                        Some(&sampling),
-                    )
-                })
-                .fold(f64::INFINITY, f64::min)
-        };
+            let (distance, nearest) = nearest_edt_background(&coords, &backgrounds, &sampling);
+            if let Some(output) = distances.as_mut() {
+                output.data[flat] = distance;
+            }
+            if let Some(axis_indices) = indices.as_mut() {
+                for (axis, output) in axis_indices.iter_mut().enumerate() {
+                    output.data[flat] = nearest[axis];
+                }
+            }
+        }
     }
 
-    Ok(output)
+    Ok(DistanceTransformEdtResult { distances, indices })
 }
 
 /// Brute-force distance transform for a binary image.
@@ -2941,6 +2975,48 @@ fn metric_distance(
             .map(|(&coord, &background_coord)| coord.abs_diff(background_coord) as f64)
             .fold(0.0, f64::max),
     }
+}
+
+fn nearest_edt_background(
+    coords: &[usize],
+    backgrounds: &[Vec<usize>],
+    sampling: &[f64],
+) -> (f64, Vec<f64>) {
+    if backgrounds.is_empty() {
+        let mut nearest = vec![0.0; coords.len()];
+        if let Some(first) = nearest.first_mut() {
+            *first = -1.0;
+        }
+        return (edt_all_foreground_distance(coords, sampling), nearest);
+    }
+
+    let mut nearest_background = &backgrounds[0];
+    let mut min_distance = metric_distance(
+        coords,
+        nearest_background,
+        DistanceMetric::Euclidean,
+        Some(sampling),
+    );
+    for background in &backgrounds[1..] {
+        let distance = metric_distance(
+            coords,
+            background,
+            DistanceMetric::Euclidean,
+            Some(sampling),
+        );
+        if distance < min_distance {
+            min_distance = distance;
+            nearest_background = background;
+        }
+    }
+
+    (
+        min_distance,
+        nearest_background
+            .iter()
+            .map(|&coord| coord as f64)
+            .collect(),
+    )
 }
 
 fn edt_all_foreground_distance(coords: &[usize], sampling: &[f64]) -> f64 {
@@ -6098,6 +6174,86 @@ mod tests {
         for (actual, expected) in result.data.iter().zip(expected) {
             assert!((actual - expected).abs() < 1e-10);
         }
+    }
+
+    #[test]
+    fn distance_transform_edt_full_returns_feature_indices() {
+        #[rustfmt::skip]
+        let data = vec![
+            1.0, 0.0, 1.0,
+            1.0, 1.0, 1.0,
+        ];
+        let input = NdArray::new(data, vec![2, 3]).unwrap();
+        let result = distance_transform_edt_full(&input, None, true, true).unwrap();
+        let distances = result.distances.unwrap();
+        let indices = result.indices.unwrap();
+
+        assert_eq!(
+            distances.data,
+            vec![1.0, 0.0, 1.0, 2.0f64.sqrt(), 1.0, 2.0f64.sqrt()]
+        );
+        assert_eq!(indices.len(), 2);
+        assert_eq!(indices[0].shape, vec![2, 3]);
+        assert_eq!(indices[0].data, vec![0.0; 6]);
+        assert_eq!(indices[1].data, vec![1.0; 6]);
+    }
+
+    #[test]
+    fn distance_transform_edt_full_can_return_indices_without_distances() {
+        let input = NdArray::new(vec![1.0, 0.0, 1.0], vec![3]).unwrap();
+        let result = distance_transform_edt_full(&input, None, false, true).unwrap();
+
+        assert!(result.distances.is_none());
+        let indices = result.indices.unwrap();
+        assert_eq!(indices.len(), 1);
+        assert_eq!(indices[0].shape, vec![3]);
+        assert_eq!(indices[0].data, vec![1.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn distance_transform_edt_full_three_dimensional_indices_match_scipy() {
+        let mut data = vec![1.0; 8];
+        data[5] = 0.0;
+        let input = NdArray::new(data, vec![2, 2, 2]).unwrap();
+        let result = distance_transform_edt_full(&input, None, true, true).unwrap();
+        let distances = result.distances.unwrap();
+        let indices = result.indices.unwrap();
+
+        assert_eq!(
+            distances.data,
+            vec![
+                2.0f64.sqrt(),
+                1.0,
+                3.0f64.sqrt(),
+                2.0f64.sqrt(),
+                1.0,
+                0.0,
+                2.0f64.sqrt(),
+                1.0,
+            ]
+        );
+        assert_eq!(indices[0].data, vec![1.0; 8]);
+        assert_eq!(indices[1].data, vec![0.0; 8]);
+        assert_eq!(indices[2].data, vec![1.0; 8]);
+    }
+
+    #[test]
+    fn distance_transform_edt_full_all_foreground_indices_match_scipy() {
+        let input = NdArray::new(vec![1.0; 4], vec![2, 2]).unwrap();
+        let result = distance_transform_edt_full(&input, None, true, true).unwrap();
+        let distances = result.distances.unwrap();
+        let indices = result.indices.unwrap();
+
+        assert_eq!(distances.data, vec![1.0, 2.0f64.sqrt(), 2.0, 5.0f64.sqrt()]);
+        assert_eq!(indices[0].data, vec![-1.0; 4]);
+        assert_eq!(indices[1].data, vec![0.0; 4]);
+    }
+
+    #[test]
+    fn distance_transform_edt_full_rejects_no_outputs() {
+        let input = NdArray::new(vec![1.0, 0.0], vec![2]).unwrap();
+        let err = distance_transform_edt_full(&input, None, false, false).unwrap_err();
+        assert!(matches!(err, NdimageError::InvalidArgument(_)));
     }
 
     #[test]
