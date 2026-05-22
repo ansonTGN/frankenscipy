@@ -1943,6 +1943,49 @@ pub fn percentile_filter(
     percentile_filter_with_origins(input, percentile, size, &[0], mode, cval)
 }
 
+/// Percentile filter over a SciPy-style signed axes subset.
+///
+/// `axes=[]` matches SciPy's empty-axes identity behavior after percentile
+/// validation.
+pub fn percentile_filter_axes(
+    input: &NdArray,
+    percentile: f64,
+    size: usize,
+    axes: &[isize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    if !percentile.is_finite() {
+        return Err(NdimageError::InvalidArgument(
+            "invalid percentile".to_string(),
+        ));
+    }
+
+    let mut normalized = percentile;
+    if normalized < 0.0 {
+        normalized += 100.0;
+    }
+    if !(0.0..=100.0).contains(&normalized) {
+        return Err(NdimageError::InvalidArgument(
+            "invalid percentile".to_string(),
+        ));
+    }
+
+    let axes = normalize_signed_axes(axes, input.ndim())?;
+    if axes.is_empty() {
+        return Ok(input.clone());
+    }
+
+    let filter_size = filter_footprint_size(axes.len(), size)?;
+    let rank = if normalized == 100.0 {
+        filter_size - 1
+    } else {
+        (filter_size as f64 * normalized / 100.0).floor() as usize
+    };
+
+    rank_filter_index_usize_axes(input, size, &axes, mode, cval, rank)
+}
+
 /// Percentile filter with SciPy `origin` semantics.
 pub fn percentile_filter_with_origins(
     input: &NdArray,
@@ -10002,12 +10045,80 @@ mod tests {
     }
 
     #[test]
+    fn percentile_filter_axes_match_scipy_subset_fixtures() {
+        let input = NdArray::new(vec![4.0, 1.0, 7.0, 2.0, 9.0, 3.0], vec![2, 3]).unwrap();
+
+        // scipy.ndimage.percentile_filter(input, 50, 2, mode='constant', cval=-10.0, axes=(-1,))
+        let median_last_axis = [4.0, 4.0, 7.0, 2.0, 9.0, 9.0];
+        // scipy.ndimage.percentile_filter(input, 50, 2, mode='constant', cval=-10.0, axes=(-2,))
+        let median_first_axis = [4.0, 1.0, 7.0, 4.0, 9.0, 7.0];
+        // scipy.ndimage.percentile_filter(input, 50, 2, mode='constant', cval=-10.0, axes=(-2, -1))
+        let median_all_axes = [-10.0, 1.0, 1.0, 2.0, 4.0, 7.0];
+        // scipy.ndimage.percentile_filter(input, 75, 2, mode='constant', cval=-10.0, axes=(-2, -1))
+        let high_quartile_all_axes = [4.0, 4.0, 7.0, 4.0, 9.0, 9.0];
+
+        assert_eq!(
+            percentile_filter_axes(&input, 50.0, 2, &[-1], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            median_last_axis
+        );
+        assert_eq!(
+            percentile_filter_axes(&input, 50.0, 2, &[-2], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            median_first_axis
+        );
+        assert_eq!(
+            percentile_filter_axes(&input, 50.0, 2, &[-2, -1], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            median_all_axes
+        );
+        assert_eq!(
+            percentile_filter_axes(&input, 75.0, 2, &[-2, -1], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            high_quartile_all_axes
+        );
+        assert_eq!(
+            percentile_filter_axes(&input, -25.0, 2, &[-2, -1], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            high_quartile_all_axes
+        );
+        assert_eq!(
+            percentile_filter_axes(&input, 50.0, 0, &[], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            input.data
+        );
+    }
+
+    #[test]
     fn percentile_filter_rejects_invalid_percentiles() {
         let input = NdArray::new(vec![10., 20., 30.], vec![3]).unwrap();
 
         assert!(percentile_filter(&input, -101.0, 3, BoundaryMode::Reflect, 0.0).is_err());
         assert!(percentile_filter(&input, 101.0, 3, BoundaryMode::Reflect, 0.0).is_err());
         assert!(percentile_filter(&input, f64::NAN, 3, BoundaryMode::Reflect, 0.0).is_err());
+        assert!(percentile_filter_axes(&input, 101.0, 0, &[], BoundaryMode::Reflect, 0.0).is_err());
+    }
+
+    #[test]
+    fn percentile_filter_axes_rejects_duplicate_and_out_of_range_axes() {
+        let input = NdArray::new(vec![1.0; 6], vec![2, 3]).unwrap();
+
+        assert!(
+            percentile_filter_axes(&input, 50.0, 2, &[1, -1], BoundaryMode::Reflect, 0.0).is_err()
+        );
+        assert!(percentile_filter_axes(&input, 50.0, 2, &[2], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(
+            percentile_filter_axes(&input, 50.0, 2, &[-3], BoundaryMode::Reflect, 0.0).is_err()
+        );
+        assert!(
+            percentile_filter_axes(&input, 50.0, 0, &[-1], BoundaryMode::Reflect, 0.0).is_err()
+        );
     }
 
     #[test]
