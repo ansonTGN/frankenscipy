@@ -666,7 +666,7 @@ pub fn find(query: &str) -> Vec<(&'static str, f64)> {
         .filter(|(name, _)| name.to_lowercase().contains(&q))
         .cloned()
         .collect();
-    matches.sort_by(|(a, _), (b, _)| a.cmp(b));
+    matches.sort_by_key(|(name, _)| *name);
     matches
 }
 
