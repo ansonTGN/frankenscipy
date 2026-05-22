@@ -22059,6 +22059,34 @@ pub fn zmap_ddof(scores: &[f64], compare: &[f64], ddof: usize) -> Vec<f64> {
     out
 }
 
+/// Compute weighted relative z-scores using the weighted mean and variance of `compare`.
+///
+/// Matches `scipy.stats.zmap` with weights parameter.
+pub fn zmap_weighted(scores: &[f64], compare: &[f64], weights: &[f64]) -> Vec<f64> {
+    if compare.is_empty() || compare.len() != weights.len() {
+        return vec![f64::NAN; scores.len()];
+    }
+    if weights.iter().any(|&w| !w.is_finite() || w < 0.0) {
+        return vec![f64::NAN; scores.len()];
+    }
+    let total_w: f64 = weights.iter().sum();
+    if total_w <= 0.0 {
+        return vec![f64::NAN; scores.len()];
+    }
+    let mean: f64 = compare.iter().zip(weights).map(|(&x, &w)| w * x).sum::<f64>() / total_w;
+    let var: f64 = compare
+        .iter()
+        .zip(weights)
+        .map(|(&x, &w)| w * (x - mean).powi(2))
+        .sum::<f64>()
+        / total_w;
+    let std = var.sqrt();
+    if std == 0.0 {
+        return vec![f64::NAN; scores.len()];
+    }
+    scores.iter().map(|&s| (s - mean) / std).collect()
+}
+
 /// Compute the geometric z-score for strictly positive data.
 ///
 /// Matches the core 1D behavior of `scipy.stats.gzscore(a)`.
