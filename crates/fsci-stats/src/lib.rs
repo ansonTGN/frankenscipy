@@ -56604,6 +56604,25 @@ mod tests {
     }
 
     #[test]
+    fn binomtest_matches_scipy_reference_values() {
+        // scipy.stats.binomtest(5, 10, 0.5).pvalue = 1.0 (fair coin, 5 heads in 10)
+        let p1 = binomtest(5, 10, 0.5);
+        assert!((p1 - 1.0).abs() < 1e-10, "binomtest(5, 10, 0.5) should be 1.0, got {}", p1);
+
+        // scipy.stats.binomtest(9, 10, 0.5).pvalue = 0.021484375 (9 heads unlikely for fair coin)
+        let p2 = binomtest(9, 10, 0.5);
+        assert!((p2 - 0.021484375).abs() < 1e-9, "binomtest(9, 10, 0.5), got {}", p2);
+
+        // scipy.stats.binomtest(0, 10, 0.5).pvalue = 0.001953125 (0 heads unlikely for fair coin)
+        let p3 = binomtest(0, 10, 0.5);
+        assert!((p3 - 0.001953125).abs() < 1e-9, "binomtest(0, 10, 0.5), got {}", p3);
+
+        // Edge cases
+        assert!((binomtest(0, 5, 0.0) - 1.0).abs() < 1e-10, "binomtest(0, 5, 0.0) = 1");
+        assert!((binomtest(5, 5, 1.0) - 1.0).abs() < 1e-10, "binomtest(5, 5, 1.0) = 1");
+    }
+
+    #[test]
     fn test_braycurtis_distance_identical() {
         let u = vec![1.0, 2.0, 3.0];
         let v = vec![1.0, 2.0, 3.0];
