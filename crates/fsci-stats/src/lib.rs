@@ -24296,6 +24296,145 @@ pub fn fisher_exact(table: &[[f64; 2]; 2]) -> FisherExactResult {
     FisherExactResult { odds_ratio, pvalue }
 }
 
+/// Result of Barnard's exact test.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BarnardExactResult {
+    /// Wald test statistic.
+    pub statistic: f64,
+    /// P-value computed by maximizing over nuisance parameter.
+    pub pvalue: f64,
+}
+
+/// Barnard's exact test for 2x2 contingency tables.
+///
+/// An unconditional exact test that doesn't condition on marginal totals,
+/// making it more powerful than Fisher's exact test in many cases.
+/// Uses the Wald statistic and searches over the nuisance parameter.
+///
+/// Matches `scipy.stats.barnard_exact(table)`.
+///
+/// # Arguments
+/// * `table` — 2x2 contingency table [[a, b], [c, d]] with non-negative integer counts.
+pub fn barnard_exact(table: &[[usize; 2]; 2]) -> BarnardExactResult {
+    barnard_exact_alternative(table, "two-sided")
+}
+
+/// Barnard's exact test with alternative hypothesis specification.
+///
+/// Matches `scipy.stats.barnard_exact(table, alternative=...)`.
+///
+/// # Arguments
+/// * `table` — 2x2 contingency table [[a, b], [c, d]] with non-negative integer counts.
+/// * `alternative` — "two-sided", "less", or "greater"
+pub fn barnard_exact_alternative(table: &[[usize; 2]; 2], alternative: &str) -> BarnardExactResult {
+    let a = table[0][0];
+    let b = table[0][1];
+    let c = table[1][0];
+    let d = table[1][1];
+
+    let n1 = (a + b) as f64;
+    let n2 = (c + d) as f64;
+
+    if n1 == 0.0 || n2 == 0.0 {
+        return BarnardExactResult {
+            statistic: f64::NAN,
+            pvalue: f64::NAN,
+        };
+    }
+
+    // Wald statistic
+    let wald_stat = barnard_wald_statistic(a, b, c, d);
+
+    // Search over nuisance parameter p to find maximum p-value
+    // Use grid search over [0, 1]
+    let n_grid = 101;
+    let mut max_pvalue = 0.0_f64;
+
+    for i in 1..n_grid {
+        let p = i as f64 / n_grid as f64;
+
+        // Compute p-value for this nuisance parameter
+        let pval = barnard_pvalue_at_p(
+            a as u64,
+            b as u64,
+            c as u64,
+            d as u64,
+            p,
+            wald_stat,
+            alternative,
+        );
+
+        max_pvalue = max_pvalue.max(pval);
+    }
+
+    BarnardExactResult {
+        statistic: wald_stat,
+        pvalue: max_pvalue.min(1.0),
+    }
+}
+
+fn barnard_wald_statistic(a: usize, b: usize, c: usize, d: usize) -> f64 {
+    let n1 = (a + b) as f64;
+    let n2 = (c + d) as f64;
+    let n = n1 + n2;
+
+    let p1 = a as f64 / n1;
+    let p2 = c as f64 / n2;
+    let p_pooled = (a + c) as f64 / n;
+
+    if p_pooled == 0.0 || p_pooled == 1.0 {
+        return 0.0;
+    }
+
+    let se = (p_pooled * (1.0 - p_pooled) * (1.0 / n1 + 1.0 / n2)).sqrt();
+    if se == 0.0 {
+        return 0.0;
+    }
+
+    (p1 - p2) / se
+}
+
+fn barnard_pvalue_at_p(
+    a_obs: u64,
+    b_obs: u64,
+    c_obs: u64,
+    d_obs: u64,
+    p: f64,
+    observed_stat: f64,
+    alternative: &str,
+) -> f64 {
+    let n1 = a_obs + b_obs;
+    let n2 = c_obs + d_obs;
+
+    let binom1 = Binomial::new(n1, p);
+    let binom2 = Binomial::new(n2, p);
+
+    let mut pvalue = 0.0;
+
+    // Sum over all possible tables
+    for a in 0..=n1 {
+        let b = n1 - a;
+        for c in 0..=n2 {
+            let d = n2 - c;
+
+            let stat = barnard_wald_statistic(a as usize, b as usize, c as usize, d as usize);
+
+            let is_extreme = match alternative {
+                "less" => stat <= observed_stat,
+                "greater" => stat >= observed_stat,
+                _ => stat.abs() >= observed_stat.abs() - 1e-10,
+            };
+
+            if is_extreme {
+                let prob = binom1.pmf(a) * binom2.pmf(c);
+                pvalue += prob;
+            }
+        }
+    }
+
+    pvalue
+}
+
 // ── Chi-squared contingency test ─────────────────────────────────────
 
 /// Result of a chi-squared contingency test.
@@ -38881,6 +39020,74 @@ mod tests {
         // Table with zero: [[0, 5], [5, 0]]
         let result = fisher_exact(&[[0.0, 5.0], [5.0, 0.0]]);
         assert!(result.pvalue < 0.05, "p should be small: {}", result.pvalue);
+    }
+
+    // ── barnard_exact tests ────────────────────────────────────────────
+
+    #[test]
+    fn barnard_exact_significant_difference() {
+        // Treatment vs control with clear difference
+        // Treatment: 8 successes, 2 failures
+        // Control: 2 successes, 8 failures
+        let table = [[8, 2], [2, 8]];
+        let result = barnard_exact(&table);
+
+        assert!(
+            result.statistic.abs() > 0.0,
+            "statistic should be non-zero"
+        );
+        assert!(
+            result.pvalue < 0.05,
+            "p-value {} should be significant",
+            result.pvalue
+        );
+    }
+
+    #[test]
+    fn barnard_exact_no_difference() {
+        // Similar proportions
+        let table = [[5, 5], [5, 5]];
+        let result = barnard_exact(&table);
+
+        assert!(
+            result.pvalue > 0.1,
+            "p-value {} should not be significant for equal proportions",
+            result.pvalue
+        );
+    }
+
+    #[test]
+    fn barnard_exact_alternative_greater() {
+        // Clear greater effect
+        let table = [[9, 1], [1, 9]];
+        let result = barnard_exact_alternative(&table, "greater");
+
+        assert!(result.statistic > 0.0);
+        assert!(
+            result.pvalue < 0.05,
+            "one-sided p-value should be significant"
+        );
+    }
+
+    #[test]
+    fn barnard_exact_alternative_less() {
+        // Clear less effect
+        let table = [[1, 9], [9, 1]];
+        let result = barnard_exact_alternative(&table, "less");
+
+        assert!(result.statistic < 0.0);
+        assert!(
+            result.pvalue < 0.05,
+            "one-sided p-value should be significant"
+        );
+    }
+
+    #[test]
+    fn barnard_exact_empty_row() {
+        // Empty row should return NaN
+        let table = [[0, 0], [5, 5]];
+        let result = barnard_exact(&table);
+        assert!(result.pvalue.is_nan());
     }
 
     // ── gstd tests ────────────────────────────────────────────────────
