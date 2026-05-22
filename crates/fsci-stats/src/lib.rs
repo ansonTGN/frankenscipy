@@ -17525,6 +17525,60 @@ pub fn nanstd(data: &[f64]) -> f64 {
     nanvar(data).sqrt()
 }
 
+/// Compute median ignoring NaN values.
+///
+/// Matches `numpy.nanmedian`.
+pub fn nanmedian(data: &[f64]) -> f64 {
+    let mut valid: Vec<f64> = data.iter().copied().filter(|x| !x.is_nan()).collect();
+    if valid.is_empty() {
+        return f64::NAN;
+    }
+    valid.sort_by(|a, b| a.total_cmp(b));
+    let n = valid.len();
+    if n % 2 == 0 {
+        (valid[n / 2 - 1] + valid[n / 2]) / 2.0
+    } else {
+        valid[n / 2]
+    }
+}
+
+/// Compute quantiles ignoring NaN values.
+///
+/// Matches `numpy.nanquantile`.
+pub fn nanquantile(data: &[f64], q: &[f64]) -> Vec<f64> {
+    let mut valid: Vec<f64> = data.iter().copied().filter(|x| !x.is_nan()).collect();
+    if valid.is_empty() {
+        return vec![f64::NAN; q.len()];
+    }
+    valid.sort_by(|a, b| a.total_cmp(b));
+    let n = valid.len();
+    q.iter()
+        .map(|&qi| {
+            let qi = qi.clamp(0.0, 1.0);
+            let idx = qi * (n - 1) as f64;
+            let lo = idx.floor() as usize;
+            let hi = idx.ceil() as usize;
+            let frac = idx - lo as f64;
+            if lo == hi || hi >= n {
+                valid[lo.min(n - 1)]
+            } else {
+                valid[lo] * (1.0 - frac) + valid[hi] * frac
+            }
+        })
+        .collect()
+}
+
+/// Compute percentile ignoring NaN values.
+///
+/// Matches `numpy.nanpercentile`.
+pub fn nanpercentile(data: &[f64], q: f64) -> f64 {
+    if q.is_nan() {
+        return f64::NAN;
+    }
+    let result = nanquantile(data, &[q / 100.0]);
+    result.first().copied().unwrap_or(f64::NAN)
+}
+
 /// Compute the weighted geometric mean.
 ///
 /// G_w = exp(Σ(w·ln(x)) / Σw)
