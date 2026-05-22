@@ -26734,6 +26734,59 @@ pub fn rank_biserial(u_stat: f64, n1: usize, n2: usize) -> f64 {
     1.0 - 2.0 * u_stat / n
 }
 
+/// Fisher's z transformation for correlation coefficients.
+///
+/// Transforms r to z = arctanh(r) = 0.5 * ln((1+r)/(1-r)).
+/// Useful for confidence intervals and hypothesis tests on correlations.
+///
+/// # Arguments
+/// * `r` — Correlation coefficient in range [-1, 1]
+///
+/// # Returns
+/// Fisher's z value (unbounded)
+pub fn fisher_z(r: f64) -> f64 {
+    if r <= -1.0 || r >= 1.0 {
+        return if r <= -1.0 {
+            f64::NEG_INFINITY
+        } else {
+            f64::INFINITY
+        };
+    }
+    0.5 * ((1.0 + r) / (1.0 - r)).ln()
+}
+
+/// Inverse Fisher's z transformation.
+///
+/// Transforms z back to r = tanh(z).
+pub fn fisher_z_inv(z: f64) -> f64 {
+    z.tanh()
+}
+
+/// Confidence interval for a correlation coefficient using Fisher's z.
+///
+/// # Arguments
+/// * `r` — Correlation coefficient
+/// * `n` — Sample size
+/// * `confidence` — Confidence level (e.g., 0.95)
+///
+/// # Returns
+/// (lower, upper) bounds of the confidence interval for r
+pub fn correlation_ci(r: f64, n: usize, confidence: f64) -> (f64, f64) {
+    if n < 4 {
+        return (f64::NAN, f64::NAN);
+    }
+
+    let z = fisher_z(r);
+    let se = 1.0 / ((n - 3) as f64).sqrt();
+    let alpha = 1.0 - confidence;
+    let z_crit = standard_normal_ppf(1.0 - alpha / 2.0);
+
+    let z_lo = z - z_crit * se;
+    let z_hi = z + z_crit * se;
+
+    (fisher_z_inv(z_lo), fisher_z_inv(z_hi))
+}
+
 /// Yule's Q coefficient of association for 2x2 tables.
 ///
 /// Q = (ad - bc) / (ad + bc) where the table is [[a, b], [c, d]].
@@ -46536,6 +46589,46 @@ mod tests {
             "different proportions should have low p-value: {}",
             result.pvalue
         );
+    }
+
+    // ── Fisher z transformation tests ────────────────────────────────
+
+    #[test]
+    fn fisher_z_at_zero() {
+        let z = fisher_z(0.0);
+        assert_close(z, 0.0, 1e-10, "fisher_z(0) = 0");
+    }
+
+    #[test]
+    fn fisher_z_positive() {
+        let z = fisher_z(0.5);
+        let expected = 0.5_f64.atanh();
+        assert_close(z, expected, 1e-10, "fisher_z(0.5)");
+    }
+
+    #[test]
+    fn fisher_z_inverse_roundtrip() {
+        for r in [-0.9, -0.5, 0.0, 0.5, 0.9] {
+            let z = fisher_z(r);
+            let r_back = fisher_z_inv(z);
+            assert_close(r_back, r, 1e-10, &format!("roundtrip r={}", r));
+        }
+    }
+
+    #[test]
+    fn correlation_ci_contains_true() {
+        let (lo, hi) = correlation_ci(0.5, 100, 0.95);
+        assert!(lo < 0.5 && hi > 0.5, "CI should contain true r=0.5");
+        assert!(lo > 0.0 && hi < 1.0, "bounds should be reasonable");
+    }
+
+    #[test]
+    fn correlation_ci_wider_for_small_n() {
+        let (lo1, hi1) = correlation_ci(0.5, 20, 0.95);
+        let (lo2, hi2) = correlation_ci(0.5, 100, 0.95);
+        let width1 = hi1 - lo1;
+        let width2 = hi2 - lo2;
+        assert!(width1 > width2, "smaller n should have wider CI");
     }
 
     #[test]
