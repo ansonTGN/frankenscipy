@@ -55623,6 +55623,54 @@ mod tests {
     }
 
     #[test]
+    fn test_huber_loss_zero_residual() {
+        let y_true = vec![1.0, 2.0, 3.0];
+        let y_pred = vec![1.0, 2.0, 3.0];
+        let loss = huber_loss(&y_true, &y_pred, 1.0);
+        assert!(loss.abs() < 1e-10, "Huber loss with zero residual should be 0, got {}", loss);
+    }
+
+    #[test]
+    fn test_huber_loss_small_residual() {
+        let y_true = vec![0.0];
+        let y_pred = vec![0.5];
+        let loss = huber_loss(&y_true, &y_pred, 1.0);
+        assert!((loss - 0.125).abs() < 1e-10, "Huber loss for |r|<delta is 0.5*r^2, expected 0.125, got {}", loss);
+    }
+
+    #[test]
+    fn test_log_cosh_loss_zero() {
+        let y_true = vec![1.0, 2.0];
+        let y_pred = vec![1.0, 2.0];
+        let loss = log_cosh_loss(&y_true, &y_pred);
+        assert!(loss.abs() < 1e-10, "Log-cosh loss with zero residual should be ~0, got {}", loss);
+    }
+
+    #[test]
+    fn test_pinball_loss_tau_half() {
+        let y_true = vec![1.0, 2.0];
+        let y_pred = vec![0.0, 3.0];
+        let loss = pinball_loss(&y_true, &y_pred, 0.5);
+        assert!((loss - 0.5).abs() < 1e-10, "Pinball loss at tau=0.5 expected 0.5, got {}", loss);
+    }
+
+    #[test]
+    fn test_hinge_loss_correct_predictions() {
+        let y_true = vec![1.0, -1.0, 1.0];
+        let y_pred = vec![2.0, -2.0, 3.0];
+        let loss = hinge_loss(&y_true, &y_pred);
+        assert!(loss.abs() < 1e-10, "Hinge loss with correct margin should be 0, got {}", loss);
+    }
+
+    #[test]
+    fn test_brier_score_perfect() {
+        let y_true = vec![1.0, 0.0, 1.0];
+        let y_pred = vec![1.0, 0.0, 1.0];
+        let score = brier_score(&y_true, &y_pred);
+        assert!(score.abs() < 1e-10, "Brier score with perfect prediction should be 0, got {}", score);
+    }
+
+    #[test]
     fn test_adjusted_rand_index_perfect_match() {
         let labels = vec![0.0, 0.0, 1.0, 1.0, 2.0, 2.0];
         let ari = adjusted_rand_index(&labels, &labels);
