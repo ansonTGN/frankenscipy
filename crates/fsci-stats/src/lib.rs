@@ -25405,6 +25405,76 @@ fn ln_factorial(n: usize) -> f64 {
     (1..=n).map(|i| (i as f64).ln()).sum()
 }
 
+/// Result of Cochran's Q test.
+#[derive(Debug, Clone)]
+pub struct CochranQResult {
+    pub statistic: f64,
+    pub pvalue: f64,
+}
+
+/// Cochran's Q test for related samples with binary outcomes.
+///
+/// Tests the null hypothesis that k treatments have identical effects,
+/// where subjects are measured under each treatment (matched/repeated measures).
+///
+/// Matches `scipy.stats.cochrans_q(x)`.
+///
+/// # Arguments
+/// * `data` — Binary data matrix where rows are subjects and columns are treatments.
+///           Each element should be 0 or 1.
+///
+/// # Returns
+/// `CochranQResult` with test statistic and p-value (chi-squared with k-1 df)
+pub fn cochrans_q(data: &[Vec<u8>]) -> CochranQResult {
+    if data.is_empty() || data.iter().any(|row| row.is_empty()) {
+        return CochranQResult {
+            statistic: f64::NAN,
+            pvalue: f64::NAN,
+        };
+    }
+
+    let _n = data.len();
+    let k = data[0].len();
+
+    if k < 2 || data.iter().any(|row| row.len() != k) {
+        return CochranQResult {
+            statistic: f64::NAN,
+            pvalue: f64::NAN,
+        };
+    }
+
+    let row_sums: Vec<f64> = data
+        .iter()
+        .map(|row| row.iter().map(|&x| x as f64).sum())
+        .collect();
+    let col_sums: Vec<f64> = (0..k)
+        .map(|j| data.iter().map(|row| row[j] as f64).sum())
+        .collect();
+
+    let grand_total: f64 = row_sums.iter().sum();
+    let sum_col_sq: f64 = col_sums.iter().map(|c| c * c).sum();
+    let sum_row_sq: f64 = row_sums.iter().map(|r| r * r).sum();
+
+    let k_f = k as f64;
+    let denom = k_f * grand_total - sum_row_sq;
+
+    if denom.abs() < 1e-10 {
+        return CochranQResult {
+            statistic: f64::NAN,
+            pvalue: 1.0,
+        };
+    }
+
+    let q = (k_f - 1.0) * (k_f * sum_col_sq - grand_total * grand_total) / denom;
+
+    let pvalue = ChiSquared::new((k - 1) as f64).sf(q).clamp(0.0, 1.0);
+
+    CochranQResult {
+        statistic: q,
+        pvalue,
+    }
+}
+
 /// Power divergence statistic and test.
 ///
 /// Computes the power divergence statistic for testing whether observed
@@ -39797,6 +39867,62 @@ mod tests {
             "symmetric should have high pvalue, got {}",
             result.pvalue
         );
+    }
+
+    // ── Cochran's Q tests ────────────────────────────────────────────
+
+    #[test]
+    fn cochrans_q_basic() {
+        let data = vec![
+            vec![1, 1, 0],
+            vec![1, 0, 0],
+            vec![0, 1, 1],
+            vec![1, 1, 1],
+            vec![0, 0, 1],
+        ];
+        let result = cochrans_q(&data);
+        assert!(result.statistic.is_finite());
+        assert!(
+            result.pvalue >= 0.0 && result.pvalue <= 1.0,
+            "pvalue should be in [0,1]"
+        );
+    }
+
+    #[test]
+    fn cochrans_q_identical_columns() {
+        let data = vec![
+            vec![1, 1, 1],
+            vec![0, 0, 0],
+            vec![1, 1, 1],
+            vec![0, 0, 0],
+        ];
+        let result = cochrans_q(&data);
+        assert!(
+            result.statistic.abs() < 1e-10 || result.statistic.is_nan(),
+            "identical columns should have Q near 0"
+        );
+    }
+
+    #[test]
+    fn cochrans_q_different_columns() {
+        let data = vec![
+            vec![1, 0, 0],
+            vec![1, 0, 0],
+            vec![1, 0, 0],
+            vec![1, 0, 0],
+            vec![1, 0, 0],
+        ];
+        let result = cochrans_q(&data);
+        assert!(
+            result.pvalue < 0.05,
+            "clearly different columns should have low pvalue"
+        );
+    }
+
+    #[test]
+    fn cochrans_q_empty() {
+        let result = cochrans_q(&[]);
+        assert!(result.statistic.is_nan());
     }
 
     // ── Power divergence tests ───────────────────────────────────────
