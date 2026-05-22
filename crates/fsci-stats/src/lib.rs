@@ -31782,6 +31782,37 @@ pub fn hausdorff_1d(u: &[f64], v: &[f64]) -> f64 {
     d_uv.max(d_vu)
 }
 
+/// Compute x*log(y) with proper handling of x=0.
+/// Returns 0 when x=0, regardless of y.
+pub fn xlogy(x: f64, y: f64) -> f64 {
+    if x == 0.0 {
+        0.0
+    } else {
+        x * y.ln()
+    }
+}
+
+/// Compute x*log1p(y) with proper handling of x=0.
+pub fn xlog1py(x: f64, y: f64) -> f64 {
+    if x == 0.0 {
+        0.0
+    } else {
+        x * (1.0 + y).ln()
+    }
+}
+
+/// Relative entropy (elementwise): x*log(x/y).
+/// Returns 0 when x=0, inf when x>0 and y=0.
+pub fn rel_entr(x: f64, y: f64) -> f64 {
+    if x == 0.0 {
+        0.0
+    } else if y == 0.0 {
+        f64::INFINITY
+    } else {
+        x * (x / y).ln()
+    }
+}
+
 /// Adjusted Rand Index for comparing cluster assignments.
 /// labels_true and labels_pred should be integer labels (encoded as f64).
 pub fn adjusted_rand_index(labels_true: &[f64], labels_pred: &[f64]) -> f64 {
