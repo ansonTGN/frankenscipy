@@ -132,6 +132,7 @@ pub use convenience::{
     leaky_relu,
     log_comb,
     log_cosh,
+    log_expit,
     log_expit_scalar,
     log_ndtr,
     log_ndtr_scalar,

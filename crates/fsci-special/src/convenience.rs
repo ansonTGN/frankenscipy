@@ -4876,6 +4876,10 @@ pub fn silu_scalar(x: f64) -> f64 {
 /// log_expit(x) = log(1 / (1 + exp(-x))) = -log(1 + exp(-x))
 ///
 /// Numerically stable computation of log(expit(x)).
+pub fn log_expit(x_tensor: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
+    map_real("log_expit", x_tensor, mode, |x| Ok(log_expit_scalar(x)))
+}
+
 #[must_use]
 pub fn log_expit_scalar(x: f64) -> f64 {
     if x.is_nan() {
@@ -7103,6 +7107,28 @@ mod tests {
         // Symmetric property: log_expit(x) + log_expit(-x) = -log(2) - |x|... actually just test consistency
         assert!((log_expit_scalar(5.0) - expit_scalar(5.0).ln()).abs() < 1e-14);
         assert!((log_expit_scalar(-5.0) - expit_scalar(-5.0).ln()).abs() < 1e-14);
+    }
+
+    #[test]
+    fn log_expit_supports_real_tensor_dispatch() -> Result<(), String> {
+        let scalar = log_expit(&SpecialTensor::RealScalar(2.0), RuntimeMode::Strict)
+            .map_err(|err| err.to_string())?;
+        assert!((expect_real_scalar(scalar)? - log_expit_scalar(2.0)).abs() < 1e-14);
+
+        let input = vec![f64::NAN, -50.0, 0.0, 50.0];
+        let result = log_expit(&SpecialTensor::RealVec(input.clone()), RuntimeMode::Strict)
+            .map_err(|err| err.to_string())?;
+        let values = expect_real_vec(result)?;
+        assert_eq!(values.len(), input.len());
+        for (actual, x) in values.into_iter().zip(input) {
+            let expected = log_expit_scalar(x);
+            if expected.is_nan() {
+                assert!(actual.is_nan(), "log_expit({x}) should be NaN");
+            } else {
+                assert!((actual - expected).abs() < 1e-14, "log_expit({x})");
+            }
+        }
+        Ok(())
     }
 
     fn expect_real_scalar(tensor: SpecialTensor) -> Result<f64, String> {
