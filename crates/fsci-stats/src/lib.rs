@@ -17219,6 +17219,62 @@ pub fn quantile(data: &[f64], q: &[f64]) -> Vec<f64> {
         .collect()
 }
 
+/// Compute weighted quantiles of data at given probabilities.
+///
+/// Uses linear interpolation between data points where cumulative
+/// weight crosses the quantile threshold.
+pub fn quantile_weighted(data: &[f64], q: &[f64], weights: &[f64]) -> Vec<f64> {
+    if data.is_empty() || data.len() != weights.len() {
+        return vec![f64::NAN; q.len()];
+    }
+    if data.iter().any(|v| v.is_nan()) {
+        return vec![f64::NAN; q.len()];
+    }
+    if weights.iter().any(|&w| !w.is_finite() || w < 0.0) {
+        return vec![f64::NAN; q.len()];
+    }
+    let total_w: f64 = weights.iter().sum();
+    if total_w <= 0.0 {
+        return vec![f64::NAN; q.len()];
+    }
+
+    let mut pairs: Vec<(f64, f64)> = data.iter().zip(weights).map(|(&x, &w)| (x, w)).collect();
+    pairs.sort_by(|a, b| a.0.total_cmp(&b.0));
+
+    let mut cumulative = Vec::with_capacity(pairs.len());
+    let mut acc = 0.0;
+    for &(_, w) in &pairs {
+        acc += w;
+        cumulative.push(acc);
+    }
+
+    q.iter()
+        .map(|&qi| {
+            let qi = qi.clamp(0.0, 1.0);
+            let target = qi * total_w;
+
+            if target <= 0.0 {
+                return pairs[0].0;
+            }
+            if target >= total_w {
+                return pairs.last().map(|&(x, _)| x).unwrap_or(f64::NAN);
+            }
+
+            for (i, &cum) in cumulative.iter().enumerate() {
+                if cum >= target {
+                    if i == 0 {
+                        return pairs[0].0;
+                    }
+                    let prev_cum = cumulative[i - 1];
+                    let frac = (target - prev_cum) / (cum - prev_cum);
+                    return pairs[i - 1].0 * (1.0 - frac) + pairs[i].0 * frac;
+                }
+            }
+            pairs.last().map(|&(x, _)| x).unwrap_or(f64::NAN)
+        })
+        .collect()
+}
+
 /// Compute weighted mean.
 pub fn weighted_mean(values: &[f64], weights: &[f64]) -> f64 {
     if values.len() != weights.len() {
