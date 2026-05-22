@@ -55713,6 +55713,30 @@ mod tests {
     }
 
     #[test]
+    fn test_yule_distance_identical() {
+        let u = vec![1.0, 0.0, 1.0, 0.0];
+        let v = vec![1.0, 0.0, 1.0, 0.0];
+        let d = yule_distance(&u, &v);
+        assert!(d.abs() < 1e-10, "Yule distance of identical vectors should be 0, got {}", d);
+    }
+
+    #[test]
+    fn test_sokalmichener_distance_identical() {
+        let u = vec![1.0, 0.0, 1.0, 0.0];
+        let v = vec![1.0, 0.0, 1.0, 0.0];
+        let d = sokalmichener_distance(&u, &v);
+        assert!(d.abs() < 1e-10, "Sokal-Michener distance of identical vectors should be 0, got {}", d);
+    }
+
+    #[test]
+    fn test_sokalmichener_distance_bounds() {
+        let u = vec![1.0, 1.0, 0.0, 0.0];
+        let v = vec![0.0, 0.0, 1.0, 1.0];
+        let d = sokalmichener_distance(&u, &v);
+        assert!(d >= 0.0 && d <= 1.0, "Sokal-Michener should be in [0,1], got {}", d);
+    }
+
+    #[test]
     fn test_correlation_distance_identical() {
         let u = vec![1.0, 2.0, 3.0, 4.0];
         let v = vec![1.0, 2.0, 3.0, 4.0];
