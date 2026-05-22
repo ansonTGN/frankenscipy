@@ -3691,6 +3691,40 @@ fn bracket_and_bisect_zero(
     0.5 * (lo + hi)
 }
 
+fn bisect_bracketed_zero(f_at: impl Fn(f64) -> f64, mut lo: f64, mut hi: f64) -> f64 {
+    let mut f_lo = f_at(lo);
+    let f_hi = f_at(hi);
+    if !lo.is_finite()
+        || !hi.is_finite()
+        || !f_lo.is_finite()
+        || !f_hi.is_finite()
+        || f_lo.signum() == f_hi.signum()
+    {
+        return 0.5 * (lo + hi);
+    }
+
+    for _ in 0..120 {
+        let mid = 0.5 * (lo + hi);
+        let f_mid = f_at(mid);
+        if !f_mid.is_finite() {
+            break;
+        }
+        if f_mid == 0.0 {
+            return mid;
+        }
+        if f_mid.signum() == f_lo.signum() {
+            lo = mid;
+            f_lo = f_mid;
+        } else {
+            hi = mid;
+        }
+        if (hi - lo) < 1.0e-12 {
+            break;
+        }
+    }
+    0.5 * (lo + hi)
+}
+
 /// First `k` positive zeros of the Bessel function Y_n(x), for integer
 /// order `n ≥ 0`. Returns a Vec of length `k`, sorted ascending.
 ///
@@ -3755,6 +3789,91 @@ pub fn y1_zeros(nt: usize) -> (Vec<f64>, Vec<f64>) {
     let values = zeros
         .iter()
         .map(|&z| y0_scalar(z, RuntimeMode::Strict).unwrap_or(f64::NAN))
+        .collect();
+    (zeros, values)
+}
+
+/// First `nt` positive zeros of `J_n'(x)`.
+///
+/// Matches `scipy.special.jnp_zeros(n, nt)` on the real nonnegative integer
+/// order branch. For `n = 0`, `J_0'(x) = -J_1(x)`, so the roots are exactly
+/// the roots of `J_1`; otherwise derivative roots interlace the roots of
+/// `J_n`, with the first derivative root before the first function root.
+pub fn jnp_zeros(n: u32, nt: usize) -> Vec<f64> {
+    if n == 0 {
+        return jn_zeros(1, nt);
+    }
+
+    let function_zeros = jn_zeros(n, nt);
+    let n_f = n as f64;
+    let f_at = |x: f64| -> f64 {
+        bessel_derivative_real_scalar(
+            "jnp_zeros",
+            n_f,
+            x,
+            1,
+            RuntimeMode::Strict,
+            BesselKind::Jv,
+            DerivativeRule::Alternating,
+        )
+        .unwrap_or(f64::NAN)
+    };
+
+    let mut out = Vec::with_capacity(nt);
+    for idx in 0..nt {
+        let lo = if idx == 0 {
+            1.0e-6
+        } else {
+            function_zeros[idx - 1] + 1.0e-6
+        };
+        let hi = function_zeros[idx] - 1.0e-6;
+        out.push(bisect_bracketed_zero(f_at, lo, hi));
+    }
+    out
+}
+
+/// First `nt` positive zeros of `Y_n'(x)`.
+///
+/// Matches `scipy.special.ynp_zeros(n, nt)` on the real nonnegative integer
+/// order branch. For `n = 0`, `Y_0'(x) = -Y_1(x)`; otherwise derivative
+/// roots interlace successive roots of `Y_n`.
+pub fn ynp_zeros(n: u32, nt: usize) -> Vec<f64> {
+    if n == 0 {
+        return yn_zeros(1, nt);
+    }
+
+    let function_zeros = yn_zeros(n, nt + 1);
+    let n_f = n as f64;
+    let f_at = |x: f64| -> f64 {
+        bessel_derivative_real_scalar(
+            "ynp_zeros",
+            n_f,
+            x,
+            1,
+            RuntimeMode::Strict,
+            BesselKind::Yv,
+            DerivativeRule::Alternating,
+        )
+        .unwrap_or(f64::NAN)
+    };
+
+    let mut out = Vec::with_capacity(nt);
+    for idx in 0..nt {
+        let lo = function_zeros[idx] + 1.0e-6;
+        let hi = function_zeros[idx + 1] - 1.0e-6;
+        out.push(bisect_bracketed_zero(f_at, lo, hi));
+    }
+    out
+}
+
+/// First `nt` positive zeros of `Y_1'(x)` and `Y_1` values there.
+///
+/// Matches the real branch of `scipy.special.y1p_zeros(nt)`.
+pub fn y1p_zeros(nt: usize) -> (Vec<f64>, Vec<f64>) {
+    let zeros = ynp_zeros(1, nt);
+    let values = zeros
+        .iter()
+        .map(|&z| y1_scalar(z, RuntimeMode::Strict).unwrap_or(f64::NAN))
         .collect();
     (zeros, values)
 }
@@ -5037,6 +5156,82 @@ mod tests {
         {
             assert!((z - ez).abs() < 1.0e-7, "y1 zero {z} vs {ez}");
             assert!((v - ev).abs() < 1.0e-7, "y1 companion {v} vs {ev}");
+        }
+    }
+
+    #[test]
+    fn derivative_bessel_zeros_match_scipy_reference_points() {
+        let jnp0 = jnp_zeros(0, 3);
+        let expected_jnp0 = [
+            3.831_705_970_207_512_5_f64,
+            7.015_586_669_815_619,
+            10.173_468_135_062_722,
+        ];
+        for (z, expected) in jnp0.iter().zip(expected_jnp0.iter()) {
+            assert!(
+                (z - expected).abs() < 1.0e-7,
+                "jnp_zeros(0) {z} vs {expected}"
+            );
+        }
+
+        let jnp1 = jnp_zeros(1, 3);
+        let expected_jnp1 = [
+            1.841_183_781_340_659_5_f64,
+            5.331_442_773_525_032_5,
+            8.536_316_366_346_286,
+        ];
+        for (z, expected) in jnp1.iter().zip(expected_jnp1.iter()) {
+            assert!(
+                (z - expected).abs() < 1.0e-7,
+                "jnp_zeros(1) {z} vs {expected}"
+            );
+        }
+
+        let ynp0 = ynp_zeros(0, 3);
+        let expected_ynp0 = [
+            2.197_141_326_031_017_f64,
+            5.429_681_040_794_135,
+            8.596_005_868_331_169,
+        ];
+        for (z, expected) in ynp0.iter().zip(expected_ynp0.iter()) {
+            assert!(
+                (z - expected).abs() < 1.0e-7,
+                "ynp_zeros(0) {z} vs {expected}"
+            );
+        }
+
+        let ynp1 = ynp_zeros(1, 3);
+        let expected_ynp1 = [
+            3.683_022_856_585_177_7_f64,
+            6.941_499_953_654_175_5,
+            10.123_404_655_436_612,
+        ];
+        for (z, expected) in ynp1.iter().zip(expected_ynp1.iter()) {
+            assert!(
+                (z - expected).abs() < 1.0e-7,
+                "ynp_zeros(1) {z} vs {expected}"
+            );
+        }
+
+        let (y1p_z, y1p_v) = y1p_zeros(3);
+        let expected_y1p_v = [
+            0.416_729_928_106_451_26_f64,
+            -0.303_173_740_137_498_3,
+            0.250_912_536_277_893_56,
+        ];
+        for ((z, v), (expected_z, expected_v)) in y1p_z
+            .iter()
+            .zip(y1p_v.iter())
+            .zip(expected_ynp1.iter().zip(expected_y1p_v.iter()))
+        {
+            assert!(
+                (z - expected_z).abs() < 1.0e-7,
+                "y1p zero {z} vs {expected_z}"
+            );
+            assert!(
+                (v - expected_v).abs() < 1.0e-7,
+                "y1p companion {v} vs {expected_v}"
+            );
         }
     }
 

@@ -2,16 +2,18 @@
 //! Live SciPy differential coverage for the zeros of
 //! integer-order Bessel functions
 //! `scipy.special.jn_zeros(n, k)`, `scipy.special.yn_zeros(n, k)`,
-//! `scipy.special.y0_zeros(k)`, and `scipy.special.y1_zeros(k)`.
+//! `scipy.special.jnp_zeros(n, k)`, `scipy.special.ynp_zeros(n, k)`,
+//! `scipy.special.y0_zeros(k)`, `scipy.special.y1_zeros(k)`, and
+//! `scipy.special.y1p_zeros(k)`.
 //!
 //! Resolves [frankenscipy-hwam6]. fsci-special exposes Newton-
 //! refined zero finders.
 //!
-//! 4 orders × 5 zero-counts × 2 generic funcs plus 5 zero-counts ×
-//! 2 order-specific funcs = 50 batches; we compare the first k zeros
-//! entrywise, and for y0_zeros/y1_zeros also compare SciPy's companion
-//! values at those zeros. Tolerances: 1e-7 abs (Newton-refined; floor
-//! matches the cylindrical Bessel precision that the residual is
+//! 4 orders × 5 zero-counts × 4 generic funcs plus 5 zero-counts ×
+//! 3 order-specific funcs = 95 batches; we compare the first k zeros
+//! entrywise, and for y0_zeros/y1_zeros/y1p_zeros also compare SciPy's
+//! companion values at those zeros. Tolerances: 1e-7 abs (Newton-refined;
+//! floor matches the cylindrical Bessel precision that the residual is
 //! computed against — frankenscipy-0om9c).
 
 use std::collections::HashMap;
@@ -21,7 +23,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_special::{jn_zeros, y0_zeros, y1_zeros, yn_zeros};
+use fsci_special::{jn_zeros, jnp_zeros, y0_zeros, y1_zeros, y1p_zeros, yn_zeros, ynp_zeros};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -97,12 +99,18 @@ fn fsci_eval(func: &str, n: u32, k: usize) -> Option<Vec<f64>> {
     let zs = match func {
         "jn_zeros" => jn_zeros(n, k),
         "yn_zeros" => yn_zeros(n, k),
+        "jnp_zeros" => jnp_zeros(n, k),
+        "ynp_zeros" => ynp_zeros(n, k),
         "y0_zeros" => {
             let (zeros, values) = y0_zeros(k);
             zeros.into_iter().chain(values).collect()
         }
         "y1_zeros" => {
             let (zeros, values) = y1_zeros(k);
+            zeros.into_iter().chain(values).collect()
+        }
+        "y1p_zeros" => {
+            let (zeros, values) = y1p_zeros(k);
             zeros.into_iter().chain(values).collect()
         }
         _ => return None,
@@ -120,7 +128,7 @@ fn generate_query() -> OracleQuery {
     let mut points = Vec::new();
     for &n in &ns {
         for &k in &ks {
-            for func in ["jn_zeros", "yn_zeros"] {
+            for func in ["jn_zeros", "yn_zeros", "jnp_zeros", "ynp_zeros"] {
                 points.push(PointCase {
                     case_id: format!("{func}_n{n}_k{k}"),
                     func: func.to_string(),
@@ -131,7 +139,7 @@ fn generate_query() -> OracleQuery {
         }
     }
     for &k in &ks {
-        for func in ["y0_zeros", "y1_zeros"] {
+        for func in ["y0_zeros", "y1_zeros", "y1p_zeros"] {
             points.push(PointCase {
                 case_id: format!("{func}_k{k}"),
                 func: func.to_string(),
@@ -170,12 +178,19 @@ for case in q["points"]:
             arr = special.jn_zeros(n, k).tolist()
         elif func == "yn_zeros":
             arr = special.yn_zeros(n, k).tolist()
+        elif func == "jnp_zeros":
+            arr = special.jnp_zeros(n, k).tolist()
+        elif func == "ynp_zeros":
+            arr = special.ynp_zeros(n, k).tolist()
         elif func == "y0_zeros":
             zeros, values = special.y0_zeros(k)
-            arr = [float(v) for v in zeros] + [float(v) for v in values]
+            arr = [float(v.real) for v in zeros] + [float(v.real) for v in values]
         elif func == "y1_zeros":
             zeros, values = special.y1_zeros(k)
-            arr = [float(v) for v in zeros] + [float(v) for v in values]
+            arr = [float(v.real) for v in zeros] + [float(v.real) for v in values]
+        elif func == "y1p_zeros":
+            zeros, values = special.y1p_zeros(k)
+            arr = [float(v.real) for v in zeros] + [float(v.real) for v in values]
         else:
             arr = []
         if any(v is None for v in finite_or_none_list(arr)):
@@ -289,7 +304,8 @@ fn diff_special_bessel_zeros() {
 
     let log = DiffLog {
         test_id: "diff_special_bessel_zeros".into(),
-        category: "scipy.special.jn_zeros/yn_zeros/y0_zeros/y1_zeros".into(),
+        category: "scipy.special.jn_zeros/yn_zeros/jnp_zeros/ynp_zeros/y0_zeros/y1_zeros/y1p_zeros"
+            .into(),
         case_count: diffs.len(),
         max_abs_diff: max_overall,
         pass: all_pass,
