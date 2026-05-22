@@ -17,10 +17,11 @@ pub use audit::{
     SyncSharedAuditLedger, record_bounded_recovery, record_fail_closed, sync_audit_ledger,
 };
 pub use bessel::{
-    BESSEL_DISPATCH_PLAN, h1vp, h2vp, hankel1, hankel2, i0, i0_scalar, i1, i1_scalar, iv, ivp, j0,
-    j1, jn, jn_zeros, jv, jvp, k0, k0_scalar, k1, k1_scalar, kn, kn_scalar, kv, kvp, riccati_jn,
-    riccati_yn, spherical_in, spherical_jn, spherical_kn, spherical_yn, wright_bessel, y0, y1, yn,
-    yn_zeros, yv, yvp,
+    BESSEL_DISPATCH_PLAN, h1vp, h2vp, hankel1, hankel2, i0, i0_scalar, i0e, i0e_scalar, i1,
+    i1_scalar, i1e, i1e_scalar, iv, ive, ive_scalar, ivp, j0, j1, jn, jn_zeros, jv, jvp, k0,
+    k0_scalar, k0e, k0e_scalar, k1, k1_scalar, k1e, k1e_scalar, kn, kn_scalar, kv, kve, kve_scalar,
+    kvp, riccati_jn, riccati_yn, spherical_in, spherical_jn, spherical_kn, spherical_yn,
+    wright_bessel, y0, y1, yn, yn_zeros, yv, yvp,
 };
 pub use beta::{
     BETA_DISPATCH_PLAN, bdtr, bdtrc, bdtri, beta, betainc, betainc_scalar, betaln, betaln_scalar,
@@ -165,6 +166,7 @@ pub use convenience::{
     nrdtrisd,
     owens_t,
     owens_t_scalar,
+    pentagamma,
     poch,
     positive,
     power,
@@ -202,7 +204,6 @@ pub use convenience::{
     swish,
     tandg,
     tanhshrink,
-    pentagamma,
     tetragamma,
     threshold,
     tklmbda,

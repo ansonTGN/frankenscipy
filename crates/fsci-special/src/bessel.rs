@@ -342,6 +342,88 @@ pub fn kn_scalar(n: i32, x: f64) -> f64 {
     kv_scalar(f64::from(n), x, RuntimeMode::Strict).unwrap_or(f64::NAN)
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Exponentially Scaled Bessel Functions
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Exponentially scaled modified Bessel function I_0: i0e(x) = I_0(x) * exp(-|x|).
+///
+/// Matches `scipy.special.i0e(x)`.
+pub fn i0e(z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
+    map_real_input("i0e", z, mode, |x| Ok(i0e_scalar(x)))
+}
+
+/// Exponentially scaled modified Bessel function I_1: i1e(x) = I_1(x) * exp(-|x|).
+///
+/// Matches `scipy.special.i1e(x)`.
+pub fn i1e(z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
+    map_real_input("i1e", z, mode, |x| Ok(i1e_scalar(x)))
+}
+
+/// Exponentially scaled modified Bessel function I_v: ive(v, x) = I_v(x) * exp(-|x|).
+///
+/// Matches `scipy.special.ive(v, x)`.
+pub fn ive(v: &SpecialTensor, z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
+    bessel_dispatch("ive", v, z, mode, BesselKind::Ive)
+}
+
+/// Exponentially scaled modified Bessel function K_0: k0e(x) = K_0(x) * exp(x).
+///
+/// Matches `scipy.special.k0e(x)`.
+pub fn k0e(z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
+    map_real_input("k0e", z, mode, |x| Ok(k0e_scalar(x)))
+}
+
+/// Exponentially scaled modified Bessel function K_1: k1e(x) = K_1(x) * exp(x).
+///
+/// Matches `scipy.special.k1e(x)`.
+pub fn k1e(z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
+    map_real_input("k1e", z, mode, |x| Ok(k1e_scalar(x)))
+}
+
+/// Exponentially scaled modified Bessel function K_v: kve(v, x) = K_v(x) * exp(x).
+///
+/// Matches `scipy.special.kve(v, x)`.
+pub fn kve(v: &SpecialTensor, z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
+    bessel_dispatch("kve", v, z, mode, BesselKind::Kve)
+}
+
+/// Scalar: i0e(x) = I_0(x) * exp(-|x|).
+#[must_use]
+pub fn i0e_scalar(x: f64) -> f64 {
+    iv_scalar(0.0, x) * (-x.abs()).exp()
+}
+
+/// Scalar: i1e(x) = I_1(x) * exp(-|x|).
+#[must_use]
+pub fn i1e_scalar(x: f64) -> f64 {
+    iv_scalar(1.0, x) * (-x.abs()).exp()
+}
+
+/// Scalar: ive(v, x) = I_v(x) * exp(-|x|).
+#[must_use]
+pub fn ive_scalar(v: f64, x: f64) -> f64 {
+    iv_scalar(v, x) * (-x.abs()).exp()
+}
+
+/// Scalar: k0e(x) = K_0(x) * exp(x).
+#[must_use]
+pub fn k0e_scalar(x: f64) -> f64 {
+    k0_scalar(x) * x.exp()
+}
+
+/// Scalar: k1e(x) = K_1(x) * exp(x).
+#[must_use]
+pub fn k1e_scalar(x: f64) -> f64 {
+    k1_scalar(x) * x.exp()
+}
+
+/// Scalar: kve(v, x) = K_v(x) * exp(x).
+#[must_use]
+pub fn kve_scalar(v: f64, x: f64) -> f64 {
+    kv_scalar(v, x, RuntimeMode::Strict).unwrap_or(f64::NAN) * x.exp()
+}
+
 /// Hankel function of the first kind: H1_v(z) = J_v(z) + i·Y_v(z).
 pub fn hankel1(v: &SpecialTensor, z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
     hankel_dispatch("hankel1", v, z, mode, HankelKind::H1)
@@ -752,6 +834,12 @@ fn bessel_derivative_real_scalar(
             BesselKind::Yv => yv_scalar(shifted_order, value, mode),
             BesselKind::Iv => Ok(iv_scalar(shifted_order, value)),
             BesselKind::Kv => kv_scalar(shifted_order, value, mode),
+            BesselKind::Ive | BesselKind::Kve => Err(SpecialError {
+                function,
+                kind: SpecialErrorKind::NotYetImplemented,
+                mode,
+                detail: "scaled Bessel derivatives are not implemented",
+            }),
         },
     )
 }
@@ -1200,16 +1288,16 @@ fn kv_scalar(v: f64, z: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
         return domain_error_by_mode("kv", mode, format!("v={v},z={z}"), "kv requires z > 0");
     }
 
-    // For non-integer v: K_v = π/2 * (I_{-v} - I_v) / sin(vπ)
-    let sin_vpi = (v * PI).sin();
-    if sin_vpi.abs() > 1e-10 {
-        // Non-integer order: direct formula
-        let iv_neg = iv_scalar(-v, z);
-        let iv_pos = iv_scalar(v, z);
-        return Ok(PI / 2.0 * (iv_neg - iv_pos) / sin_vpi);
+    // K_v is symmetric: K_{-v}(z) = K_v(z)
+    let v_abs = v.abs();
+
+    // For non-integer v: use integral representation K_v(z) = ∫ exp(-z cosh t) cosh(vt) dt
+    // This avoids the I_{-v} formula which has numerical issues for non-integer negative orders.
+    if v_abs.fract() != 0.0 {
+        return Ok(kv_integral(v_abs, z));
     }
 
-    // Integer order: use K_0, K_1 from series, then recurrence K_{n+1} = K_{n-1} + 2n/z K_n
+    // Integer order: use K_0, K_1 from integral, then recurrence K_{n+1} = K_{n-1} + 2n/z K_n
     let k0 = kv_integer_zero(z);
     let n = v.abs().round() as u32;
     if n == 0 {
@@ -3133,6 +3221,8 @@ enum BesselKind {
     Yv,
     Iv,
     Kv,
+    Ive,
+    Kve,
 }
 
 fn bessel_dispatch(
@@ -3150,6 +3240,8 @@ fn bessel_dispatch(
                 BesselKind::Yv => yv_scalar(*order, *x, mode),
                 BesselKind::Iv => Ok(iv_scalar(*order, *x)),
                 BesselKind::Kv => kv_scalar(*order, *x, mode),
+                BesselKind::Ive => Ok(ive_scalar(*order, *x)),
+                BesselKind::Kve => Ok(kve_scalar(*order, *x)),
             };
             result.map(SpecialTensor::RealScalar)
         }
@@ -3160,6 +3252,8 @@ fn bessel_dispatch(
                 BesselKind::Yv => yv_scalar(order, *x, mode),
                 BesselKind::Iv => Ok(iv_scalar(order, *x)),
                 BesselKind::Kv => kv_scalar(order, *x, mode),
+                BesselKind::Ive => Ok(ive_scalar(order, *x)),
+                BesselKind::Kve => Ok(kve_scalar(order, *x)),
             })
             .collect::<Result<Vec<_>, _>>()
             .map(SpecialTensor::RealVec),
@@ -3170,6 +3264,8 @@ fn bessel_dispatch(
                 BesselKind::Yv => yv_scalar(*order, x, mode),
                 BesselKind::Iv => Ok(iv_scalar(*order, x)),
                 BesselKind::Kv => kv_scalar(*order, x, mode),
+                BesselKind::Ive => Ok(ive_scalar(*order, x)),
+                BesselKind::Kve => Ok(kve_scalar(*order, x)),
             })
             .collect::<Result<Vec<_>, _>>()
             .map(SpecialTensor::RealVec),
@@ -3190,6 +3286,8 @@ fn bessel_dispatch(
                     BesselKind::Yv => yv_scalar(order, x, mode),
                     BesselKind::Iv => Ok(iv_scalar(order, x)),
                     BesselKind::Kv => kv_scalar(order, x, mode),
+                    BesselKind::Ive => Ok(ive_scalar(order, x)),
+                    BesselKind::Kve => Ok(kve_scalar(order, x)),
                 })
                 .collect::<Result<Vec<_>, _>>()
                 .map(SpecialTensor::RealVec)
@@ -3251,6 +3349,8 @@ fn bessel_complex_scalar(
         BesselKind::Yv => complex_yv_scalar(order, z, mode),
         BesselKind::Iv => Ok(complex_iv_scalar(order, z)),
         BesselKind::Kv => complex_kv_scalar(order, z, mode),
+        BesselKind::Ive => Ok(complex_iv_scalar(order, z) * (-z.re.abs()).exp()),
+        BesselKind::Kve => complex_kv_scalar(order, z, mode).map(|k| k * z.re.exp()),
     }
 }
 
@@ -4891,7 +4991,7 @@ mod tests {
     fn k1_matches_scipy_reference() {
         // Values verified against scipy.special.k1
         let cases = [
-            (0.1, 9.8538447808706060),
+            (0.1, 9.853_844_780_870_606),
             (0.5, 1.6564411200033007),
             (1.0, 0.6019072301972346),
             (2.0, 0.1398658818165225),
@@ -4913,7 +5013,7 @@ mod tests {
             (0, 1.0, 0.4210244382407083),
             (1, 1.0, 0.6019072301972346),
             (2, 1.0, 1.6248388986351774),
-            (3, 1.0, 7.1012628247379439),
+            (3, 1.0, 7.101_262_824_737_944),
             (2, 2.0, 0.2537597545660559),
         ];
         for (n, x, expected) in cases {
@@ -4939,5 +5039,100 @@ mod tests {
         assert!(super::k0_scalar(-1.0).is_nan());
         assert!(super::k1_scalar(-1.0).is_nan());
         assert!(super::kn_scalar(0, -1.0).is_nan());
+    }
+
+    #[test]
+    fn i0e_matches_scipy_reference() {
+        // Values verified against scipy.special.i0e
+        let cases = [
+            (0.0, 1.0),
+            (1.0, 0.4657596075936404),
+            (2.0, 0.308_508_322_553_671),
+            (5.0, 0.1835408126093283),
+            (10.0, 0.1278333371634286),
+        ];
+        for (x, expected) in cases {
+            let val = super::i0e_scalar(x);
+            assert!(
+                (val - expected).abs() < 1e-10,
+                "i0e({x}) = {val}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn i1e_matches_scipy_reference() {
+        // Values verified against scipy.special.i1e
+        let cases = [
+            (0.0, 0.0),
+            (1.0, 0.2079104153497085),
+            (2.0, 0.2152692892489377),
+            (5.0, 0.1639722669445423),
+            (10.0, 0.1212626813844555),
+        ];
+        for (x, expected) in cases {
+            let val = super::i1e_scalar(x);
+            assert!(
+                (val - expected).abs() < 1e-10,
+                "i1e({x}) = {val}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn k0e_matches_scipy_reference() {
+        // Values verified against scipy.special.k0e
+        let cases = [
+            (0.5, 1.5241093857739092),
+            (1.0, 1.1444630798068947),
+            (2.0, 0.8415682150707712),
+            (5.0, 0.547_807_564_313_519),
+        ];
+        for (x, expected) in cases {
+            let val = super::k0e_scalar(x);
+            assert!(
+                (val - expected).abs() < 1e-9,
+                "k0e({x}) = {val}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn k1e_matches_scipy_reference() {
+        // Values verified against scipy.special.k1e
+        let cases = [
+            (0.5, 2.7310097082117855),
+            (1.0, 1.636_153_486_263_258),
+            (2.0, 1.0334768470686888),
+            (5.0, 0.6002738587883125),
+        ];
+        for (x, expected) in cases {
+            let val = super::k1e_scalar(x);
+            assert!(
+                (val - expected).abs() < 1e-10,
+                "k1e({x}) = {val}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn ive_kve_definition_matches_scaling() {
+        // ive(v, x) = iv(v, x) * exp(-|x|)
+        // kve(v, x) = kv(v, x) * exp(x)
+        let x = 2.0;
+        let v = 1.5;
+        let iv_val = super::iv_scalar(v, x);
+        let ive_val = super::ive_scalar(v, x);
+        assert!(
+            (ive_val - iv_val * (-x).exp()).abs() < 1e-12,
+            "ive definition mismatch"
+        );
+
+        let kv_val = super::kv_scalar(v, x, RuntimeMode::Strict).unwrap();
+        let kve_val = super::kve_scalar(v, x);
+        assert!(
+            (kve_val - kv_val * x.exp()).abs() < 1e-10,
+            "kve definition mismatch"
+        );
     }
 }
