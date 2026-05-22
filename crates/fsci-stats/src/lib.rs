@@ -55891,6 +55891,41 @@ mod tests {
     }
 
     #[test]
+    fn test_logit_half() {
+        let result = logit(0.5);
+        assert!(result.abs() < 1e-10, "logit(0.5) should be 0, got {}", result);
+    }
+
+    #[test]
+    fn test_expit_zero() {
+        let result = expit(0.0);
+        assert!((result - 0.5).abs() < 1e-10, "expit(0) should be 0.5, got {}", result);
+    }
+
+    #[test]
+    fn test_logit_expit_inverse() {
+        let p = 0.7;
+        let result = expit(logit(p));
+        assert!((result - p).abs() < 1e-10, "expit(logit(p)) should be p, got {}", result);
+    }
+
+    #[test]
+    fn test_softmax_sums_to_one() {
+        let x = vec![1.0, 2.0, 3.0];
+        let s = softmax(&x);
+        let sum: f64 = s.iter().sum();
+        assert!((sum - 1.0).abs() < 1e-10, "softmax should sum to 1, got {}", sum);
+    }
+
+    #[test]
+    fn test_log_softmax_exp_sums_to_one() {
+        let x = vec![1.0, 2.0, 3.0];
+        let ls = log_softmax(&x);
+        let sum: f64 = ls.iter().map(|&v| v.exp()).sum();
+        assert!((sum - 1.0).abs() < 1e-10, "exp(log_softmax) should sum to 1, got {}", sum);
+    }
+
+    #[test]
     fn test_xlogy_zero_x() {
         let result = xlogy(0.0, 5.0);
         assert!((result - 0.0).abs() < 1e-10, "xlogy(0, y) should be 0, got {}", result);
