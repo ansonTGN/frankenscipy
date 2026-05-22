@@ -31367,6 +31367,54 @@ pub fn power_mean(data: &[f64], p: f64) -> f64 {
     (sum_pow / data.len() as f64).powf(1.0 / p)
 }
 
+/// Gini coefficient - measure of statistical dispersion (inequality).
+/// Returns value between 0 (perfect equality) and 1 (perfect inequality).
+pub fn gini_coefficient(data: &[f64]) -> f64 {
+    if data.is_empty() || data.iter().any(|&x| x < 0.0) {
+        return f64::NAN;
+    }
+    let n = data.len();
+    let mut sorted: Vec<f64> = data.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let total: f64 = sorted.iter().sum();
+    if total == 0.0 {
+        return 0.0;
+    }
+
+    let mut cum_sum = 0.0f64;
+    let mut gini_sum = 0.0f64;
+    for (i, &x) in sorted.iter().enumerate() {
+        cum_sum += x;
+        gini_sum += (2.0 * (i + 1) as f64 - n as f64 - 1.0) * x;
+    }
+    gini_sum / (n as f64 * total)
+}
+
+/// Lorenz curve - cumulative proportion of total for ordered data.
+/// Returns (proportion of population, proportion of total value).
+pub fn lorenz_curve(data: &[f64]) -> (Vec<f64>, Vec<f64>) {
+    if data.is_empty() {
+        return (vec![], vec![]);
+    }
+    let mut sorted: Vec<f64> = data.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let total: f64 = sorted.iter().sum();
+    let n = sorted.len();
+
+    let mut pop = vec![0.0];
+    let mut cum = vec![0.0];
+    let mut running = 0.0f64;
+
+    for (i, &x) in sorted.iter().enumerate() {
+        running += x;
+        pop.push((i + 1) as f64 / n as f64);
+        cum.push(if total > 0.0 { running / total } else { 0.0 });
+    }
+    (pop, cum)
+}
+
 /// Compute the log-likelihood for a normal distribution.
 pub fn norm_loglikelihood(data: &[f64], mu: f64, sigma: f64) -> f64 {
     let n = data.len() as f64;
