@@ -31232,6 +31232,79 @@ pub fn max_calibration_error(y_true: &[f64], y_pred: &[f64], n_bins: usize) -> f
     mce
 }
 
+/// Matthews correlation coefficient for binary classification.
+/// y_true and y_pred are 0/1 binary labels.
+pub fn matthews_corrcoef(y_true: &[f64], y_pred: &[f64]) -> f64 {
+    if y_true.len() != y_pred.len() || y_true.is_empty() {
+        return f64::NAN;
+    }
+    let (mut tp, mut tn, mut fp, mut fn_) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
+    for (&t, &p) in y_true.iter().zip(y_pred.iter()) {
+        let ti = t.round() as i32;
+        let pi = p.round() as i32;
+        match (ti, pi) {
+            (1, 1) => tp += 1.0,
+            (0, 0) => tn += 1.0,
+            (0, 1) => fp += 1.0,
+            (1, 0) => fn_ += 1.0,
+            _ => {}
+        }
+    }
+    let num = tp * tn - fp * fn_;
+    let denom = ((tp + fp) * (tp + fn_) * (tn + fp) * (tn + fn_)).sqrt();
+    if denom == 0.0 { 0.0 } else { num / denom }
+}
+
+/// Precision score for binary classification.
+pub fn precision_score(y_true: &[f64], y_pred: &[f64]) -> f64 {
+    if y_true.len() != y_pred.len() || y_true.is_empty() {
+        return f64::NAN;
+    }
+    let (mut tp, mut fp) = (0.0, 0.0);
+    for (&t, &p) in y_true.iter().zip(y_pred.iter()) {
+        let ti = t.round() as i32;
+        let pi = p.round() as i32;
+        if pi == 1 {
+            if ti == 1 { tp += 1.0; } else { fp += 1.0; }
+        }
+    }
+    if tp + fp == 0.0 { 0.0 } else { tp / (tp + fp) }
+}
+
+/// Recall score for binary classification.
+pub fn recall_score(y_true: &[f64], y_pred: &[f64]) -> f64 {
+    if y_true.len() != y_pred.len() || y_true.is_empty() {
+        return f64::NAN;
+    }
+    let (mut tp, mut fn_) = (0.0, 0.0);
+    for (&t, &p) in y_true.iter().zip(y_pred.iter()) {
+        let ti = t.round() as i32;
+        let pi = p.round() as i32;
+        if ti == 1 {
+            if pi == 1 { tp += 1.0; } else { fn_ += 1.0; }
+        }
+    }
+    if tp + fn_ == 0.0 { 0.0 } else { tp / (tp + fn_) }
+}
+
+/// F1 score - harmonic mean of precision and recall.
+pub fn f1_score(y_true: &[f64], y_pred: &[f64]) -> f64 {
+    let p = precision_score(y_true, y_pred);
+    let r = recall_score(y_true, y_pred);
+    if p + r == 0.0 { 0.0 } else { 2.0 * p * r / (p + r) }
+}
+
+/// Accuracy score for classification.
+pub fn accuracy_score(y_true: &[f64], y_pred: &[f64]) -> f64 {
+    if y_true.len() != y_pred.len() || y_true.is_empty() {
+        return f64::NAN;
+    }
+    let correct = y_true.iter().zip(y_pred.iter())
+        .filter(|(t, p)| t.round() as i32 == p.round() as i32)
+        .count();
+    correct as f64 / y_true.len() as f64
+}
+
 /// Compute the log-likelihood for a normal distribution.
 pub fn norm_loglikelihood(data: &[f64], mu: f64, sigma: f64) -> f64 {
     let n = data.len() as f64;
