@@ -30950,6 +30950,54 @@ pub fn mean_absolute_percentage_error(y_true: &[f64], y_pred: &[f64]) -> f64 {
         / y_true.len() as f64
 }
 
+/// Compute the median absolute error.
+///
+/// More robust to outliers than MAE.
+pub fn median_absolute_error(y_true: &[f64], y_pred: &[f64]) -> f64 {
+    if y_true.len() != y_pred.len() || y_true.is_empty() {
+        return f64::NAN;
+    }
+    let mut errors: Vec<f64> = y_true
+        .iter()
+        .zip(y_pred.iter())
+        .map(|(&t, &p)| (t - p).abs())
+        .collect();
+    errors.sort_by(|a, b| a.total_cmp(b));
+    let n = errors.len();
+    if n % 2 == 0 {
+        (errors[n / 2 - 1] + errors[n / 2]) / 2.0
+    } else {
+        errors[n / 2]
+    }
+}
+
+/// Compute the explained variance score.
+///
+/// explained_variance = 1 - Var(y_true - y_pred) / Var(y_true)
+///
+/// Unlike R², this measures how well the variance is explained
+/// regardless of the mean prediction.
+pub fn explained_variance_score(y_true: &[f64], y_pred: &[f64]) -> f64 {
+    if y_true.len() != y_pred.len() || y_true.len() < 2 {
+        return f64::NAN;
+    }
+
+    let n = y_true.len() as f64;
+    let mean_true = y_true.iter().sum::<f64>() / n;
+
+    let var_true: f64 = y_true.iter().map(|&x| (x - mean_true).powi(2)).sum::<f64>() / n;
+
+    let residuals: Vec<f64> = y_true.iter().zip(y_pred).map(|(&t, &p)| t - p).collect();
+    let mean_res = residuals.iter().sum::<f64>() / n;
+    let var_res: f64 = residuals.iter().map(|&x| (x - mean_res).powi(2)).sum::<f64>() / n;
+
+    if var_true == 0.0 {
+        return if var_res == 0.0 { 1.0 } else { 0.0 };
+    }
+
+    1.0 - var_res / var_true
+}
+
 /// Compute the log-likelihood for a normal distribution.
 pub fn norm_loglikelihood(data: &[f64], mu: f64, sigma: f64) -> f64 {
     let n = data.len() as f64;
