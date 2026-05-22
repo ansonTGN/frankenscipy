@@ -17471,6 +17471,52 @@ pub fn circstd(data: &[f64]) -> f64 {
     (-2.0 * (1.0 - v).ln()).sqrt()
 }
 
+/// Weighted circular mean for angular data.
+///
+/// Matches `scipy.stats.circmean` with weights parameter.
+pub fn circmean_weighted(data: &[f64], weights: &[f64]) -> f64 {
+    if data.is_empty() || data.len() != weights.len() {
+        return f64::NAN;
+    }
+    if weights.iter().any(|&w| !w.is_finite() || w < 0.0) {
+        return f64::NAN;
+    }
+    let sin_sum: f64 = data.iter().zip(weights).map(|(&x, &w)| w * x.sin()).sum();
+    let cos_sum: f64 = data.iter().zip(weights).map(|(&x, &w)| w * x.cos()).sum();
+    sin_sum.atan2(cos_sum)
+}
+
+/// Weighted circular variance for angular data.
+///
+/// Matches `scipy.stats.circvar` with weights parameter.
+pub fn circvar_weighted(data: &[f64], weights: &[f64]) -> f64 {
+    if data.is_empty() || data.len() != weights.len() {
+        return f64::NAN;
+    }
+    if weights.iter().any(|&w| !w.is_finite() || w < 0.0) {
+        return f64::NAN;
+    }
+    let total_w: f64 = weights.iter().sum();
+    if total_w <= 0.0 {
+        return f64::NAN;
+    }
+    let sin_sum: f64 = data.iter().zip(weights).map(|(&x, &w)| w * x.sin()).sum();
+    let cos_sum: f64 = data.iter().zip(weights).map(|(&x, &w)| w * x.cos()).sum();
+    let r = (sin_sum * sin_sum + cos_sum * cos_sum).sqrt() / total_w;
+    1.0 - r
+}
+
+/// Weighted circular standard deviation for angular data.
+///
+/// Matches `scipy.stats.circstd` with weights parameter.
+pub fn circstd_weighted(data: &[f64], weights: &[f64]) -> f64 {
+    let v = circvar_weighted(data, weights);
+    if v.is_nan() || v <= 0.0 {
+        return if v.is_nan() { f64::NAN } else { 0.0 };
+    }
+    (-2.0 * (1.0 - v).ln()).sqrt()
+}
+
 /// Rayleigh test for circular uniformity.
 ///
 /// Matches `scipy.stats.rayleightest(samples)`.
