@@ -58181,4 +58181,46 @@ mod tests {
             cum[4]
         );
     }
+
+    #[test]
+    fn fisher_exact_matches_scipy_reference_values() {
+        let table1 = [[8.0, 2.0], [1.0, 5.0]];
+        let result1 = fisher_exact(&table1);
+        assert!(
+            (result1.odds_ratio - 20.0).abs() < 1e-10,
+            "fisher odds_ratio got {}, expected 20.0",
+            result1.odds_ratio
+        );
+        assert!(
+            (result1.pvalue - 0.034965034965034975).abs() < 1e-10,
+            "fisher pvalue got {}, expected 0.0350",
+            result1.pvalue
+        );
+
+        let table2 = [[10.0, 10.0], [10.0, 10.0]];
+        let result2 = fisher_exact(&table2);
+        assert!(
+            (result2.odds_ratio - 1.0).abs() < 1e-10,
+            "fisher odds_ratio got {}, expected 1.0",
+            result2.odds_ratio
+        );
+        assert!(
+            (result2.pvalue - 1.0).abs() < 1e-10,
+            "fisher pvalue got {}, expected 1.0",
+            result2.pvalue
+        );
+
+        let table3 = [[5.0, 1.0], [1.0, 5.0]];
+        let result3 = fisher_exact(&table3);
+        assert!(
+            (result3.odds_ratio - 25.0).abs() < 1e-10,
+            "fisher odds_ratio got {}, expected 25.0",
+            result3.odds_ratio
+        );
+        assert!(
+            (result3.pvalue - 0.08008658008658008).abs() < 1e-10,
+            "fisher pvalue got {}, expected 0.0801",
+            result3.pvalue
+        );
+    }
 }
