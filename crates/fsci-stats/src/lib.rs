@@ -29119,6 +29119,39 @@ pub fn median(data: &[f64]) -> f64 {
     }
 }
 
+/// Compute the weighted median of a dataset.
+///
+/// The weighted median is the value where cumulative weights reach 50% of total.
+/// For interpolation, uses lower value when exactly at 50%.
+pub fn median_weighted(data: &[f64], weights: &[f64]) -> f64 {
+    if data.is_empty() || data.len() != weights.len() {
+        return f64::NAN;
+    }
+    if weights.iter().any(|&w| !w.is_finite() || w < 0.0) {
+        return f64::NAN;
+    }
+    let total_w: f64 = weights.iter().sum();
+    if total_w <= 0.0 {
+        return f64::NAN;
+    }
+
+    let mut pairs: Vec<(f64, f64)> = data.iter().zip(weights).map(|(&x, &w)| (x, w)).collect();
+    pairs.sort_by(|a, b| a.0.total_cmp(&b.0));
+
+    let half_w = total_w / 2.0;
+    let mut cumulative = 0.0;
+    for (i, &(x, w)) in pairs.iter().enumerate() {
+        cumulative += w;
+        if cumulative >= half_w {
+            if cumulative == half_w && i + 1 < pairs.len() {
+                return (x + pairs[i + 1].0) / 2.0;
+            }
+            return x;
+        }
+    }
+    pairs.last().map(|&(x, _)| x).unwrap_or(f64::NAN)
+}
+
 /// Result of mode calculation with count.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModeResult {
