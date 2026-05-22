@@ -58855,4 +58855,34 @@ mod tests {
             "cohens_d got {result}, expected -0.6324555320336759"
         );
     }
+
+    #[test]
+    fn cramers_v_matches_scipy_reference_values() {
+        let observed = vec![
+            vec![10.0, 20.0, 30.0],
+            vec![20.0, 30.0, 40.0],
+        ];
+        let result = cramers_v(&observed);
+        assert!(
+            (result - 0.07273929674533079).abs() < 1e-10,
+            "cramers_v got {result}, expected 0.07273929674533079"
+        );
+    }
+
+    #[test]
+    fn mood_matches_scipy_reference_values() {
+        let x = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let y = vec![2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5];
+        let result = mood(&x, &y);
+        assert!(
+            result.statistic.abs() < 1e-10,
+            "mood statistic got {}, expected 0.0",
+            result.statistic
+        );
+        assert!(
+            (result.pvalue - 1.0).abs() < 1e-10,
+            "mood pvalue got {}, expected 1.0",
+            result.pvalue
+        );
+    }
 }
