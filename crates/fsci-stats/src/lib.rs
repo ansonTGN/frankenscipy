@@ -17390,6 +17390,36 @@ pub fn circstd(data: &[f64]) -> f64 {
     (-2.0 * (1.0 - v).ln()).sqrt()
 }
 
+/// Rayleigh test for circular uniformity.
+///
+/// Matches `scipy.stats.rayleightest(samples)`.
+/// Tests whether the circular data comes from a uniform distribution.
+///
+/// # Arguments
+/// * `samples` - Circular data in radians
+///
+/// # Returns
+/// A tuple (statistic, pvalue) where statistic is Rayleigh's R² value
+/// and pvalue is the probability under the null hypothesis of uniformity.
+pub fn rayleightest(samples: &[f64]) -> (f64, f64) {
+    let n = samples.len();
+    if n < 2 {
+        return (f64::NAN, f64::NAN);
+    }
+    let nf = n as f64;
+
+    let sum_cos: f64 = samples.iter().map(|&x| x.cos()).sum();
+    let sum_sin: f64 = samples.iter().map(|&x| x.sin()).sum();
+
+    let r_bar = ((sum_cos * sum_cos + sum_sin * sum_sin) / (nf * nf)).sqrt();
+    let z = nf * r_bar * r_bar;
+
+    let pvalue = (-z).exp() * (1.0 + (2.0 * z - z * z) / (4.0 * nf)
+        - (24.0 * z - 132.0 * z * z + 76.0 * z * z * z - 9.0 * z * z * z * z) / (288.0 * nf * nf));
+
+    (z, pvalue.clamp(0.0, 1.0))
+}
+
 /// Result for directional statistics.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DirectionalStatsResult {
@@ -52368,6 +52398,19 @@ mod tests {
         assert!(concentrated < 2.0);
         let empty = neff(&[]);
         assert_eq!(empty, 0.0);
+    }
+
+    #[test]
+    fn test_rayleightest() {
+        use std::f64::consts::PI;
+        let uniform: Vec<f64> = (0..100).map(|i| 2.0 * PI * i as f64 / 100.0).collect();
+        let (stat_u, pval_u) = rayleightest(&uniform);
+        assert!(stat_u.is_finite());
+        assert!(pval_u > 0.05);
+        let concentrated: Vec<f64> = (0..100).map(|i| 0.1 * (i as f64 - 50.0) / 50.0).collect();
+        let (stat_c, pval_c) = rayleightest(&concentrated);
+        assert!(stat_c > stat_u);
+        assert!(pval_c < 0.01);
     }
 
 }
