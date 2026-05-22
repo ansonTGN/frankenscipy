@@ -57758,4 +57758,116 @@ mod tests {
         let xy2 = xlog1py(2.0, 3.0);
         assert!((xy2 - 2.772588722239781).abs() < 1e-12, "xlog1py(2, 3)");
     }
+
+    #[test]
+    fn circmean_matches_scipy_reference_values() {
+        let data = vec![0.1, 0.5, 1.0, 1.5, 2.0, 2.5];
+        let result = circmean(&data);
+        assert!(
+            (result - 1.258780518668372).abs() < 1e-10,
+            "circmean got {result}, expected 1.258780518668372"
+        );
+
+        let close_angles = vec![0.0, 0.01, 0.02];
+        let result_close = circmean(&close_angles);
+        assert!(
+            (result_close - 0.01).abs() < 1e-10,
+            "circmean(close) got {result_close}, expected 0.01"
+        );
+
+        let around_zero = vec![-0.1, 0.0, 0.1, 0.05, -0.05];
+        let result_zero = circmean(&around_zero);
+        assert!(
+            result_zero.abs() < 1e-10,
+            "circmean(around_zero) got {result_zero}, expected 0.0"
+        );
+    }
+
+    #[test]
+    fn circvar_matches_scipy_reference_values() {
+        let data = vec![0.1, 0.5, 1.0, 1.5, 2.0, 2.5];
+        let result = circvar(&data);
+        assert!(
+            (result - 0.3124714327259147).abs() < 1e-10,
+            "circvar got {result}, expected 0.3124714327259147"
+        );
+
+        let close_angles = vec![0.0, 0.01, 0.02];
+        let result_close = circvar(&close_angles);
+        assert!(
+            (result_close - 3.33330555565281e-05).abs() < 1e-12,
+            "circvar(close) got {result_close}, expected ~3.33e-5"
+        );
+
+        let spread_angles = vec![0.0, 1.57, 3.14, 4.71];
+        let result_spread = circvar(&spread_angles);
+        assert!(
+            (result_spread - 0.9994366878264027).abs() < 1e-10,
+            "circvar(spread) got {result_spread}, expected 0.9994366878264027"
+        );
+    }
+
+    #[test]
+    fn circstd_matches_scipy_reference_values() {
+        let data = vec![0.1, 0.5, 1.0, 1.5, 2.0, 2.5];
+        let result = circstd(&data);
+        assert!(
+            (result - 0.8656233567851761).abs() < 1e-10,
+            "circstd got {result}, expected 0.8656233567851761"
+        );
+
+        let close_angles = vec![0.0, 0.01, 0.02];
+        let result_close = circstd(&close_angles);
+        assert!(
+            (result_close - 0.008164999830394383).abs() < 1e-10,
+            "circstd(close) got {result_close}, expected 0.008164999830394383"
+        );
+
+        let spread_angles = vec![0.0, 1.57, 3.14, 4.71];
+        let result_spread = circstd(&spread_angles);
+        assert!(
+            (result_spread - 3.8682493717655784).abs() < 1e-10,
+            "circstd(spread) got {result_spread}, expected 3.8682493717655784"
+        );
+    }
+
+    #[test]
+    fn pmean_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+
+        let p2 = pmean(&data, 2.0);
+        assert!(
+            (p2 - 3.3166247903554).abs() < 1e-10,
+            "pmean(p=2) got {p2}, expected 3.3166247903554"
+        );
+
+        let pm1 = pmean(&data, -1.0);
+        assert!(
+            (pm1 - 2.18978102189781).abs() < 1e-10,
+            "pmean(p=-1) got {pm1}, expected 2.18978102189781"
+        );
+
+        let p05 = pmean(&data, 0.5);
+        assert!(
+            (p05 - 2.810539823318741).abs() < 1e-10,
+            "pmean(p=0.5) got {p05}, expected 2.810539823318741"
+        );
+    }
+
+    #[test]
+    fn gstd_matches_scipy_reference_values() {
+        let data1 = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let result1 = gstd(&data1);
+        assert!(
+            (result1 - 1.8879837085617042).abs() < 1e-10,
+            "gstd([1,2,3,4,5]) got {result1}, expected 1.8879837085617042"
+        );
+
+        let data2 = vec![2.0, 4.0, 8.0];
+        let result2 = gstd(&data2);
+        assert!(
+            (result2 - 2.0).abs() < 1e-10,
+            "gstd([2,4,8]) got {result2}, expected 2.0"
+        );
+    }
 }
