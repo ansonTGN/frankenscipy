@@ -1569,6 +1569,43 @@ pub fn rank_filter(
     rank_filter_with_origins(input, rank, size, &[0], mode, cval)
 }
 
+/// Rank filter over a SciPy-style signed axes subset.
+///
+/// `axes=[]` matches SciPy's empty-axes identity behavior after rank
+/// validation against the selected-axis footprint.
+pub fn rank_filter_axes(
+    input: &NdArray,
+    rank: isize,
+    size: usize,
+    axes: &[isize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let axes = normalize_signed_axes(axes, input.ndim())?;
+    let footprint_size = if axes.is_empty() {
+        1
+    } else {
+        filter_footprint_size(axes.len(), size)?
+    };
+    let footprint_size = isize::try_from(footprint_size)
+        .map_err(|_| NdimageError::InvalidArgument("filter footprint is too large".to_string()))?;
+    let normalized_rank = if rank < 0 {
+        footprint_size + rank
+    } else {
+        rank
+    };
+    if !(0..footprint_size).contains(&normalized_rank) {
+        return Err(NdimageError::InvalidArgument(
+            "rank not within filter footprint size".to_string(),
+        ));
+    }
+    let rank_index = usize::try_from(normalized_rank).map_err(|_| {
+        NdimageError::InvalidArgument("rank not within filter footprint size".to_string())
+    })?;
+
+    rank_filter_index_usize_axes(input, size, &axes, mode, cval, rank_index)
+}
+
 /// Rank filter with SciPy `origin` semantics.
 pub fn rank_filter_with_origins(
     input: &NdArray,
@@ -7364,6 +7401,62 @@ mod tests {
         let shifted_max =
             rank_filter_with_origins(&input, 1, 2, &[-1], BoundaryMode::Constant, 0.0).unwrap();
         assert_eq!(shifted_max.data, vec![2., 3., 4., 5., 5.]);
+    }
+
+    #[test]
+    fn rank_filter_axes_match_scipy_subset_fixtures() {
+        let input = NdArray::new(vec![4.0, 1.0, 7.0, 2.0, 9.0, 3.0], vec![2, 3]).unwrap();
+
+        // scipy.ndimage.rank_filter(input, 0, 2, mode='constant', cval=-10.0, axes=(-1,))
+        let rank0_last_axis = [-10.0, 1.0, 1.0, -10.0, 2.0, 3.0];
+        // scipy.ndimage.rank_filter(input, 1, 2, mode='constant', cval=-10.0, axes=(-2, -1))
+        let rank1_all_axes = [-10.0, -10.0, -10.0, -10.0, 2.0, 3.0];
+        // scipy.ndimage.rank_filter(input, -1, 2, mode='constant', cval=-10.0, axes=(-2, -1))
+        let rank_neg1_all_axes = [4.0, 4.0, 7.0, 4.0, 9.0, 9.0];
+
+        assert_eq!(
+            rank_filter_axes(&input, 0, 2, &[-1], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            rank0_last_axis
+        );
+        assert_eq!(
+            rank_filter_axes(&input, 1, 2, &[-2, -1], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            rank1_all_axes
+        );
+        assert_eq!(
+            rank_filter_axes(&input, -1, 2, &[-2, -1], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            rank_neg1_all_axes
+        );
+        assert_eq!(
+            rank_filter_axes(&input, 0, 0, &[], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            input.data
+        );
+        assert_eq!(
+            rank_filter_axes(&input, -1, 0, &[], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            input.data
+        );
+    }
+
+    #[test]
+    fn rank_filter_axes_rejects_invalid_rank_and_axes() {
+        let input = NdArray::new(vec![1.0; 6], vec![2, 3]).unwrap();
+
+        assert!(rank_filter_axes(&input, 2, 2, &[-1], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(rank_filter_axes(&input, -3, 2, &[-1], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(rank_filter_axes(&input, 1, 0, &[], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(rank_filter_axes(&input, 0, 2, &[1, -1], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(rank_filter_axes(&input, 0, 2, &[2], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(rank_filter_axes(&input, 0, 2, &[-3], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(rank_filter_axes(&input, 0, 0, &[-1], BoundaryMode::Reflect, 0.0).is_err());
     }
 
     #[test]
