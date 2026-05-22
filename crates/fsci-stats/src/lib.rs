@@ -56641,6 +56641,37 @@ mod tests {
     }
 
     #[test]
+    fn ttest_1samp_matches_scipy_reference_values() {
+        // scipy.stats.ttest_1samp([1,2,3,4,5], 3.0)
+        // Mean = 3.0, so t-statistic should be 0 and pvalue = 1
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let res = ttest_1samp(&data, 3.0);
+        assert!(res.statistic.abs() < 1e-10, "ttest_1samp t-stat when mean=popmean, got {}", res.statistic);
+        assert!((res.pvalue - 1.0).abs() < 1e-10, "ttest_1samp pvalue when mean=popmean, got {}", res.pvalue);
+
+        // scipy.stats.ttest_1samp([1,2,3,4,5], 0.0)
+        // Mean = 3.0, popmean = 0, so should reject null
+        let res2 = ttest_1samp(&data, 0.0);
+        assert!(res2.statistic > 0.0, "ttest_1samp t-stat should be positive when mean > popmean");
+        assert!(res2.pvalue < 0.05, "ttest_1samp should reject H0 when true mean != popmean");
+    }
+
+    #[test]
+    fn ttest_ind_matches_scipy_reference_values() {
+        // scipy.stats.ttest_ind([1,2,3], [4,5,6])
+        // Two groups with different means should have significant t-stat
+        let a = vec![1.0, 2.0, 3.0];
+        let b = vec![4.0, 5.0, 6.0];
+        let res = ttest_ind(&a, &b);
+        assert!(res.statistic < 0.0, "ttest_ind t-stat should be negative when a < b");
+        assert!(res.pvalue < 0.05, "ttest_ind should detect difference");
+
+        // Same groups should give t-stat = 0
+        let res2 = ttest_ind(&a, &a);
+        assert!(res2.statistic.abs() < 1e-10, "ttest_ind identical groups t-stat = 0");
+    }
+
+    #[test]
     fn cov_matrix_matches_numpy_reference() {
         // numpy.cov([[1,2,3], [4,5,6]]) with rowvar=True
         // For perfectly correlated data, cov should show linear relationship
