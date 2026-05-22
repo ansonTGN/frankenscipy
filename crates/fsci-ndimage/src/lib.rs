@@ -1085,6 +1085,47 @@ pub fn maximum_filter(
     rank_filter_impl(input, size, mode, cval, kernel_total - 1)
 }
 
+/// Rank filter: select the element at `rank` from each sorted neighborhood.
+///
+/// Matches `scipy.ndimage.rank_filter`; negative ranks count backward from the
+/// end of the filter footprint.
+pub fn rank_filter(
+    input: &NdArray,
+    rank: isize,
+    size: usize,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    if size == 0 {
+        return Err(NdimageError::InvalidArgument(
+            "filter size must be positive".to_string(),
+        ));
+    }
+
+    let footprint_size = (0..input.ndim()).try_fold(1usize, |acc, _| {
+        acc.checked_mul(size).ok_or_else(|| {
+            NdimageError::InvalidArgument("filter footprint is too large".to_string())
+        })
+    })?;
+    let footprint_size = isize::try_from(footprint_size)
+        .map_err(|_| NdimageError::InvalidArgument("filter footprint is too large".to_string()))?;
+    let normalized_rank = if rank < 0 {
+        footprint_size + rank
+    } else {
+        rank
+    };
+    if !(0..footprint_size).contains(&normalized_rank) {
+        return Err(NdimageError::InvalidArgument(
+            "rank not within filter footprint size".to_string(),
+        ));
+    }
+    let rank_index = usize::try_from(normalized_rank).map_err(|_| {
+        NdimageError::InvalidArgument("rank not within filter footprint size".to_string())
+    })?;
+
+    rank_filter_impl(input, size, mode, cval, rank_index)
+}
+
 fn rank_filter_impl(
     input: &NdArray,
     size: usize,
@@ -3763,6 +3804,32 @@ mod tests {
         let error = maximum_filter(&input, 0, BoundaryMode::Constant, 0.0)
             .expect_err("zero-sized maximum filter should be rejected");
         assert!(matches!(error, NdimageError::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn rank_filter_matches_scipy_reference_ranks() {
+        let input = NdArray::new(vec![3.0, 1.0, 4.0, 1.0, 5.0], vec![5]).unwrap();
+
+        let min_rank = rank_filter(&input, 0, 3, BoundaryMode::Constant, 0.0).unwrap();
+        assert_eq!(min_rank.data, vec![0.0, 1.0, 1.0, 1.0, 0.0]);
+
+        let mid_rank = rank_filter(&input, 1, 3, BoundaryMode::Constant, 0.0).unwrap();
+        assert_eq!(mid_rank.data, vec![1.0, 3.0, 1.0, 4.0, 1.0]);
+
+        let max_rank = rank_filter(&input, 2, 3, BoundaryMode::Constant, 0.0).unwrap();
+        assert_eq!(max_rank.data, vec![3.0, 4.0, 4.0, 5.0, 5.0]);
+
+        let negative_rank = rank_filter(&input, -1, 3, BoundaryMode::Constant, 0.0).unwrap();
+        assert_eq!(negative_rank.data, max_rank.data);
+    }
+
+    #[test]
+    fn rank_filter_rejects_out_of_footprint_ranks() {
+        let input = NdArray::new(vec![3.0, 1.0, 4.0, 1.0, 5.0], vec![5]).unwrap();
+
+        assert!(rank_filter(&input, 3, 3, BoundaryMode::Constant, 0.0).is_err());
+        assert!(rank_filter(&input, -4, 3, BoundaryMode::Constant, 0.0).is_err());
+        assert!(rank_filter(&input, 0, 0, BoundaryMode::Constant, 0.0).is_err());
     }
 
     #[test]

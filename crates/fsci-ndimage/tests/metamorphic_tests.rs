@@ -981,20 +981,22 @@ fn mr_generate_binary_structure_shape_and_center() {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// MR51 — gaussian_laplace of a constant image is zero (interior).
+// MR51 — gaussian_laplace of a constant image matches SciPy's finite-kernel
+// truncation bias and remains spatially constant.
 // ─────────────────────────────────────────────────────────────────────
 
 #[test]
 fn mr_gaussian_laplace_constant_zero() {
     let img = arr_2d(8, 10, |_, _| 7.5);
     let g = gaussian_laplace(&img, 1.5, BoundaryMode::Reflect, 0.0).unwrap();
+    let scipy_constant = -0.0014419608933147199;
     let cols = 10;
     for i in 2..6 {
         for j in 2..8 {
             let v = g.data[i * cols + j];
             assert!(
-                v.abs() < 1e-9,
-                "MR51 gaussian_laplace(const) interior at ({i}, {j}) = {v}"
+                (v - scipy_constant).abs() < 1e-12,
+                "MR51 gaussian_laplace(const) interior at ({i}, {j}) = {v}, expected {scipy_constant}"
             );
         }
     }
