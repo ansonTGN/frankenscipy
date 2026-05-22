@@ -17494,6 +17494,38 @@ pub fn corrcoef_weighted(x: &[f64], y: &[f64], weights: &[f64]) -> f64 {
     cov_xy / (var_x * var_y).sqrt()
 }
 
+/// Lin's concordance correlation coefficient.
+///
+/// Measures agreement between two continuous measurements.
+/// Unlike Pearson's r, CCC penalizes both lack of precision and accuracy.
+///
+/// CCC = 2 * cov(x,y) / (var(x) + var(y) + (mean(x) - mean(y))²)
+///
+/// # Returns
+/// CCC value in [-1, 1] where 1 = perfect agreement, 0 = no agreement.
+pub fn concordance_correlation(x: &[f64], y: &[f64]) -> f64 {
+    if x.len() != y.len() || x.len() < 2 {
+        return f64::NAN;
+    }
+
+    let n = x.len() as f64;
+    let mean_x = x.iter().sum::<f64>() / n;
+    let mean_y = y.iter().sum::<f64>() / n;
+
+    let var_x: f64 = x.iter().map(|&xi| (xi - mean_x).powi(2)).sum::<f64>() / n;
+    let var_y: f64 = y.iter().map(|&yi| (yi - mean_y).powi(2)).sum::<f64>() / n;
+    let cov_xy: f64 = x.iter().zip(y).map(|(&xi, &yi)| (xi - mean_x) * (yi - mean_y)).sum::<f64>() / n;
+
+    let mean_diff_sq = (mean_x - mean_y).powi(2);
+    let denom = var_x + var_y + mean_diff_sq;
+
+    if denom == 0.0 {
+        return f64::NAN;
+    }
+
+    2.0 * cov_xy / denom
+}
+
 /// Compute the partial correlation between x and y, controlling for z.
 ///
 /// The partial correlation measures the relationship between x and y
