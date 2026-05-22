@@ -31053,6 +31053,66 @@ pub fn mean_bias_error(y_true: &[f64], y_pred: &[f64]) -> f64 {
         / y_true.len() as f64
 }
 
+/// Huber loss for robust regression.
+/// delta controls the threshold between squared and linear loss.
+pub fn huber_loss(y_true: &[f64], y_pred: &[f64], delta: f64) -> f64 {
+    if y_true.len() != y_pred.len() || y_true.is_empty() {
+        return f64::NAN;
+    }
+    y_true
+        .iter()
+        .zip(y_pred.iter())
+        .map(|(&t, &p)| {
+            let r = (t - p).abs();
+            if r <= delta {
+                0.5 * r * r
+            } else {
+                delta * (r - 0.5 * delta)
+            }
+        })
+        .sum::<f64>()
+        / y_true.len() as f64
+}
+
+/// Log-cosh loss - smoother than MSE with outlier robustness.
+pub fn log_cosh_loss(y_true: &[f64], y_pred: &[f64]) -> f64 {
+    if y_true.len() != y_pred.len() || y_true.is_empty() {
+        return f64::NAN;
+    }
+    y_true
+        .iter()
+        .zip(y_pred.iter())
+        .map(|(&t, &p)| (p - t).cosh().ln())
+        .sum::<f64>()
+        / y_true.len() as f64
+}
+
+/// Pinball loss for quantile regression.
+/// tau is the quantile level (0 < tau < 1).
+pub fn pinball_loss(y_true: &[f64], y_pred: &[f64], tau: f64) -> f64 {
+    if y_true.len() != y_pred.len() || y_true.is_empty() {
+        return f64::NAN;
+    }
+    y_true
+        .iter()
+        .zip(y_pred.iter())
+        .map(|(&t, &p)| {
+            let diff = t - p;
+            if diff >= 0.0 {
+                tau * diff
+            } else {
+                (tau - 1.0) * diff
+            }
+        })
+        .sum::<f64>()
+        / y_true.len() as f64
+}
+
+/// Quantile loss - alias for pinball_loss.
+pub fn quantile_loss(y_true: &[f64], y_pred: &[f64], tau: f64) -> f64 {
+    pinball_loss(y_true, y_pred, tau)
+}
+
 /// Compute the log-likelihood for a normal distribution.
 pub fn norm_loglikelihood(data: &[f64], mu: f64, sigma: f64) -> f64 {
     let n = data.len() as f64;
