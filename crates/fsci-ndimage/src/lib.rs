@@ -3924,6 +3924,31 @@ pub fn gaussian_gradient_magnitude(
     mode: BoundaryMode,
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
+    let axes = (0..input.ndim()).collect::<Vec<_>>();
+    gaussian_gradient_magnitude_usize_axes(input, sigma, &axes, mode, cval)
+}
+
+/// Gaussian gradient magnitude over a SciPy-style signed axes subset.
+///
+/// `axes=[]` matches SciPy's empty-axes identity behavior.
+pub fn gaussian_gradient_magnitude_axes(
+    input: &NdArray,
+    sigma: f64,
+    axes: &[isize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let axes = normalize_signed_axes(axes, input.ndim())?;
+    gaussian_gradient_magnitude_usize_axes(input, sigma, &axes, mode, cval)
+}
+
+fn gaussian_gradient_magnitude_usize_axes(
+    input: &NdArray,
+    sigma: f64,
+    axes: &[usize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
     if !sigma.is_finite() || sigma <= 0.0 {
         return Err(NdimageError::InvalidArgument(
             "sigma must be positive".to_string(),
@@ -3936,9 +3961,17 @@ pub fn gaussian_gradient_magnitude(
     if ndim == 0 {
         return Ok(input.clone());
     }
+    if axes.is_empty() {
+        return Ok(input.clone());
+    }
 
     let mut result = NdArray::zeros(input.shape.clone());
-    for axis in 0..ndim {
+    for &axis in axes {
+        if axis >= ndim {
+            return Err(NdimageError::InvalidArgument(format!(
+                "axis {axis} out of range for {ndim}-dimensional input"
+            )));
+        }
         let mut orders = vec![0usize; ndim];
         orders[axis] = 1;
         let deriv = gaussian_filter_with_orders(input, sigma, &orders, mode, cval)?;
@@ -6753,6 +6786,87 @@ mod tests {
         for (g, e) in got.data.iter().zip(&expect) {
             assert!((g - e).abs() < 1e-9, "ggm 2d mismatch: {g} vs {e}");
         }
+    }
+
+    #[test]
+    fn gaussian_gradient_magnitude_axes_matches_scipy_subset_fixtures() {
+        let input = NdArray::new(vec![1.0, 2.0, 4.0, 8.0, 16.0, 32.0], vec![2, 3]).unwrap();
+
+        // scipy.ndimage.gaussian_gradient_magnitude(input, 1.0, mode='constant', cval=0.0, axes=(-1,))
+        let last_axis = [
+            2.138299919638,
+            1.694803116362,
+            1.38197653809,
+            3.144663790519,
+            2.492440813908,
+            2.032386354584,
+        ];
+        // scipy.ndimage.gaussian_gradient_magnitude(input, 1.0, mode='constant', cval=0.0, axes=(-2,))
+        let first_axis = [
+            2.127124269281,
+            3.886534068771,
+            4.130371073939,
+            0.26589053366,
+            0.485816758596,
+            0.516296384242,
+        ];
+
+        let got_last =
+            gaussian_gradient_magnitude_axes(&input, 1.0, &[-1], BoundaryMode::Constant, 0.0)
+                .unwrap();
+        for (got, expect) in got_last.data.iter().zip(&last_axis) {
+            assert!(
+                (got - expect).abs() < 1e-9,
+                "last-axis GGM: {got} vs {expect}"
+            );
+        }
+
+        let got_first =
+            gaussian_gradient_magnitude_axes(&input, 1.0, &[-2], BoundaryMode::Constant, 0.0)
+                .unwrap();
+        for (got, expect) in got_first.data.iter().zip(&first_axis) {
+            assert!(
+                (got - expect).abs() < 1e-9,
+                "first-axis GGM: {got} vs {expect}"
+            );
+        }
+
+        assert_close_or_nan(
+            &gaussian_gradient_magnitude_axes(&input, 1.0, &[-2, -1], BoundaryMode::Constant, 0.0)
+                .unwrap()
+                .data,
+            &gaussian_gradient_magnitude(&input, 1.0, BoundaryMode::Constant, 0.0)
+                .unwrap()
+                .data,
+        );
+        assert_eq!(
+            gaussian_gradient_magnitude_axes(&input, 1.0, &[], BoundaryMode::Constant, 0.0)
+                .unwrap()
+                .data,
+            input.data
+        );
+    }
+
+    #[test]
+    fn gaussian_gradient_magnitude_axes_rejects_duplicate_and_out_of_range_axes() {
+        let input = NdArray::new(vec![1.0; 6], vec![2, 3]).unwrap();
+
+        assert!(
+            gaussian_gradient_magnitude_axes(&input, 1.0, &[1, -1], BoundaryMode::Reflect, 0.0)
+                .is_err()
+        );
+        assert!(
+            gaussian_gradient_magnitude_axes(&input, 1.0, &[2], BoundaryMode::Reflect, 0.0)
+                .is_err()
+        );
+        assert!(
+            gaussian_gradient_magnitude_axes(&input, 1.0, &[-3], BoundaryMode::Reflect, 0.0)
+                .is_err()
+        );
+        assert!(
+            gaussian_gradient_magnitude_axes(&input, 0.0, &[-1], BoundaryMode::Reflect, 0.0)
+                .is_err()
+        );
     }
 
     #[test]
