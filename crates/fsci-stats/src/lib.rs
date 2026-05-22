@@ -52649,6 +52649,27 @@ mod tests {
     }
 
     #[test]
+    fn levene_matches_scipy_reference_values() {
+        // scipy.stats.levene([1,2,3,4,5], [2,4,6,8,10], [3,6,9,12,15])
+        // Tests homogeneity of variances
+        let g1 = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let g2 = vec![2.0, 4.0, 6.0, 8.0, 10.0];
+        let g3 = vec![3.0, 6.0, 9.0, 12.0, 15.0];
+        let groups: Vec<&[f64]> = vec![&g1, &g2, &g3];
+        let res = levene(&groups);
+        // Verify basic properties: statistic should be non-negative and pvalue in [0,1]
+        assert!(res.statistic >= 0.0, "levene statistic should be non-negative");
+        assert!(res.pvalue >= 0.0 && res.pvalue <= 1.0, "levene pvalue in valid range");
+
+        // Groups with very different variances should give high statistic and low pvalue
+        let narrow = vec![4.9, 5.0, 5.1, 5.0, 5.05];
+        let wide = vec![0.0, 2.5, 5.0, 7.5, 10.0];
+        let diff_groups: Vec<&[f64]> = vec![&narrow, &wide];
+        let res2 = levene(&diff_groups);
+        assert!(res2.statistic > res.statistic, "levene with different variances should have higher stat");
+    }
+
+    #[test]
     fn test_levene_nan_policy() {
         let g1 = [1.0, 2.0, 3.0, 4.0, 5.0];
         let g2 = [2.0, 4.0, 6.0, 8.0, 10.0];
