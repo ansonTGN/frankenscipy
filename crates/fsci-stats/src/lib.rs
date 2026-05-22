@@ -18810,6 +18810,118 @@ pub fn bhattacharyya_distance(p: &[f64], q: &[f64]) -> f64 {
     }
 }
 
+/// Compute the Euclidean distance between two vectors.
+///
+/// d(u, v) = sqrt(Σ (u_i - v_i)²)
+pub fn euclidean_distance(u: &[f64], v: &[f64]) -> f64 {
+    if u.len() != v.len() || u.is_empty() {
+        return f64::NAN;
+    }
+    u.iter()
+        .zip(v)
+        .map(|(&ui, &vi)| (ui - vi).powi(2))
+        .sum::<f64>()
+        .sqrt()
+}
+
+/// Compute the squared Euclidean distance between two vectors.
+///
+/// d²(u, v) = Σ (u_i - v_i)²
+pub fn sqeuclidean_distance(u: &[f64], v: &[f64]) -> f64 {
+    if u.len() != v.len() || u.is_empty() {
+        return f64::NAN;
+    }
+    u.iter()
+        .zip(v)
+        .map(|(&ui, &vi)| (ui - vi).powi(2))
+        .sum()
+}
+
+/// Compute the cosine distance between two vectors.
+///
+/// d(u, v) = 1 - (u · v) / (||u|| ||v||)
+///
+/// Returns a value in [0, 2] where 0 means identical direction.
+pub fn cosine_distance(u: &[f64], v: &[f64]) -> f64 {
+    if u.len() != v.len() || u.is_empty() {
+        return f64::NAN;
+    }
+
+    let dot: f64 = u.iter().zip(v).map(|(&ui, &vi)| ui * vi).sum();
+    let norm_u: f64 = u.iter().map(|&x| x * x).sum::<f64>().sqrt();
+    let norm_v: f64 = v.iter().map(|&x| x * x).sum::<f64>().sqrt();
+
+    if norm_u == 0.0 || norm_v == 0.0 {
+        return f64::NAN;
+    }
+
+    1.0 - dot / (norm_u * norm_v)
+}
+
+/// Compute the Manhattan (city block) distance between two vectors.
+///
+/// d(u, v) = Σ |u_i - v_i|
+pub fn cityblock_distance(u: &[f64], v: &[f64]) -> f64 {
+    if u.len() != v.len() || u.is_empty() {
+        return f64::NAN;
+    }
+    u.iter()
+        .zip(v)
+        .map(|(&ui, &vi)| (ui - vi).abs())
+        .sum()
+}
+
+/// Compute the Chebyshev distance between two vectors.
+///
+/// d(u, v) = max_i |u_i - v_i|
+pub fn chebyshev_distance(u: &[f64], v: &[f64]) -> f64 {
+    if u.len() != v.len() || u.is_empty() {
+        return f64::NAN;
+    }
+    u.iter()
+        .zip(v)
+        .map(|(&ui, &vi)| (ui - vi).abs())
+        .fold(0.0f64, |acc, d| acc.max(d))
+}
+
+/// Compute the Minkowski distance between two vectors.
+///
+/// d(u, v) = (Σ |u_i - v_i|^p)^(1/p)
+///
+/// Special cases: p=1 is cityblock, p=2 is Euclidean.
+pub fn minkowski_distance(u: &[f64], v: &[f64], p: f64) -> f64 {
+    if u.len() != v.len() || u.is_empty() || p <= 0.0 {
+        return f64::NAN;
+    }
+    if p == f64::INFINITY {
+        return chebyshev_distance(u, v);
+    }
+    u.iter()
+        .zip(v)
+        .map(|(&ui, &vi)| (ui - vi).abs().powf(p))
+        .sum::<f64>()
+        .powf(1.0 / p)
+}
+
+/// Compute the Canberra distance between two vectors.
+///
+/// d(u, v) = Σ |u_i - v_i| / (|u_i| + |v_i|)
+///
+/// A weighted version of Manhattan distance, particularly sensitive
+/// to small changes near zero.
+pub fn canberra_distance(u: &[f64], v: &[f64]) -> f64 {
+    if u.len() != v.len() || u.is_empty() {
+        return f64::NAN;
+    }
+    u.iter()
+        .zip(v)
+        .map(|(&ui, &vi)| {
+            let denom = ui.abs() + vi.abs();
+            if denom == 0.0 { 0.0 } else { (ui - vi).abs() / denom }
+        })
+        .sum()
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Non-parametric Tests and ANOVA
 // ══════════════════════════════════════════════════════════════════════
