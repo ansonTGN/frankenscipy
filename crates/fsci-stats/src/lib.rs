@@ -21687,6 +21687,17 @@ pub fn iqr(data: &[f64]) -> f64 {
     quantile_sorted(&sorted, 0.75) - quantile_sorted(&sorted, 0.25)
 }
 
+/// Weighted interquartile range (IQR = Q3 - Q1).
+///
+/// Matches `scipy.stats.iqr` with weights parameter.
+pub fn iqr_weighted(data: &[f64], weights: &[f64]) -> f64 {
+    let q = quantile_weighted(data, &[0.25, 0.75], weights);
+    if q.len() != 2 {
+        return f64::NAN;
+    }
+    q[1] - q[0]
+}
+
 /// Range of data (maximum - minimum).
 ///
 /// Matches `numpy.ptp` (peak-to-peak).
