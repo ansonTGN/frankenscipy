@@ -31484,6 +31484,53 @@ pub fn convolve_1d(a: &[f64], v: &[f64]) -> Vec<f64> {
     correlate_1d(a, &rev_v)
 }
 
+/// Find local maxima (peaks) in a 1D array.
+/// Returns indices where the value is greater than both neighbors.
+pub fn find_peaks(data: &[f64]) -> Vec<usize> {
+    if data.len() < 3 {
+        return vec![];
+    }
+    let mut peaks = vec![];
+    for i in 1..data.len() - 1 {
+        if data[i] > data[i - 1] && data[i] > data[i + 1] {
+            peaks.push(i);
+        }
+    }
+    peaks
+}
+
+/// Find local minima (valleys) in a 1D array.
+pub fn find_valleys(data: &[f64]) -> Vec<usize> {
+    if data.len() < 3 {
+        return vec![];
+    }
+    let mut valleys = vec![];
+    for i in 1..data.len() - 1 {
+        if data[i] < data[i - 1] && data[i] < data[i + 1] {
+            valleys.push(i);
+        }
+    }
+    valleys
+}
+
+/// Compute prominences of peaks.
+/// Returns prominence values for each peak index provided.
+pub fn peak_prominences(data: &[f64], peaks: &[usize]) -> Vec<f64> {
+    peaks
+        .iter()
+        .map(|&p| {
+            if p >= data.len() {
+                return f64::NAN;
+            }
+            let peak_val = data[p];
+            let left_min = data[..p].iter().copied().fold(f64::INFINITY, f64::min);
+            let right_min = data[p + 1..].iter().copied().fold(f64::INFINITY, f64::min);
+            let base = left_min.max(right_min);
+            peak_val - base
+        })
+        .collect()
+}
+
 /// Compute the log-likelihood for a normal distribution.
 pub fn norm_loglikelihood(data: &[f64], mu: f64, sigma: f64) -> f64 {
     let n = data.len() as f64;
