@@ -1134,6 +1134,75 @@ pub fn modstruve(v: f64, x: f64) -> f64 {
     modstruve_series(v, x)
 }
 
+/// Integral of the Struve function H_0 from 0 to x.
+///
+/// Matches `scipy.special.itstruve0`. Because H_0 is odd, SciPy's integral is
+/// even in x: integrating from 0 to a negative endpoint returns the same value
+/// as integrating to the positive endpoint.
+pub fn itstruve0(x: f64) -> f64 {
+    struve_integral_abs(x, |t| struve(0.0, t))
+}
+
+/// Integral of the modified Struve function L_0 from 0 to x.
+///
+/// Matches `scipy.special.itmodstruve0`; L_0 has the same odd symmetry as H_0
+/// for real inputs, so the integral is even in x.
+pub fn itmodstruve0(x: f64) -> f64 {
+    struve_integral_abs(x, |t| modstruve(0.0, t))
+}
+
+/// Integral of H_0(t) / t from x to infinity.
+///
+/// Matches `scipy.special.it2struve0`. The identity
+/// ∫₀∞ H_0(t)/t dt = π/2 lets us compute the finite correction from 0 to |x|
+/// while preserving SciPy's negative-argument symmetry.
+pub fn it2struve0(x: f64) -> f64 {
+    if !x.is_finite() {
+        return f64::NAN;
+    }
+
+    let correction = struve_integral_abs(x, struve0_over_t);
+    if x.is_sign_negative() {
+        std::f64::consts::FRAC_PI_2 + correction
+    } else {
+        std::f64::consts::FRAC_PI_2 - correction
+    }
+}
+
+fn struve_integral_abs<F>(x: f64, integrand: F) -> f64
+where
+    F: Fn(f64) -> f64,
+{
+    if !x.is_finite() {
+        return f64::NAN;
+    }
+    let upper = x.abs();
+    if upper == 0.0 {
+        return 0.0;
+    }
+
+    let raw_steps = (256.0 * upper.max(1.0)).ceil() as usize;
+    let steps = raw_steps.clamp(256, 32_768);
+    let steps = steps + (steps % 2);
+    let h = upper / steps as f64;
+
+    let mut sum = integrand(0.0) + integrand(upper);
+    for i in 1..steps {
+        let t = i as f64 * h;
+        let weight = if i % 2 == 0 { 2.0 } else { 4.0 };
+        sum += weight * integrand(t);
+    }
+    sum * h / 3.0
+}
+
+fn struve0_over_t(t: f64) -> f64 {
+    if t.abs() < 1.0e-12 {
+        2.0 / PI
+    } else {
+        struve(0.0, t) / t
+    }
+}
+
 /// Struve function via power series.
 fn struve_series(v: f64, x: f64) -> f64 {
     let half_x = x / 2.0;
@@ -9439,6 +9508,77 @@ mod tests {
         // undefined; we conservatively return NaN.
         assert!(struve(-1.5, 0.0).is_nan());
         assert!(struve(-2.0, 0.0).is_nan());
+    }
+
+    #[test]
+    fn struve_integral_scalars_match_scipy_reference_values() {
+        let cases = [
+            (itstruve0 as fn(f64) -> f64, 0.0, 0.0, "itstruve0(0)"),
+            (
+                itstruve0 as fn(f64) -> f64,
+                1.0,
+                0.301_090_426_708_055_47,
+                "itstruve0(1)",
+            ),
+            (
+                itstruve0 as fn(f64) -> f64,
+                -1.0,
+                0.301_090_426_708_055_47,
+                "itstruve0(-1)",
+            ),
+            (
+                it2struve0 as fn(f64) -> f64,
+                0.0,
+                std::f64::consts::FRAC_PI_2,
+                "it2struve0(0)",
+            ),
+            (
+                it2struve0 as fn(f64) -> f64,
+                1.0,
+                0.957_197_350_638_352_4,
+                "it2struve0(1)",
+            ),
+            (
+                it2struve0 as fn(f64) -> f64,
+                -1.0,
+                2.184_395_302_951_440_7,
+                "it2struve0(-1)",
+            ),
+            (
+                itmodstruve0 as fn(f64) -> f64,
+                1.0,
+                0.336_472_628_644_038_4,
+                "itmodstruve0(1)",
+            ),
+            (
+                itmodstruve0 as fn(f64) -> f64,
+                -1.0,
+                0.336_472_628_644_038_4,
+                "itmodstruve0(-1)",
+            ),
+        ];
+
+        for &(func, x, expected, label) in &cases {
+            let actual = func(x);
+            let tol = 2.0e-7 * expected.abs().max(1.0);
+            assert!(
+                (actual - expected).abs() <= tol,
+                "{label} = {actual}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn struve_integral_scalars_propagate_nonfinite_inputs() {
+        for func in [
+            itstruve0 as fn(f64) -> f64,
+            it2struve0 as fn(f64) -> f64,
+            itmodstruve0 as fn(f64) -> f64,
+        ] {
+            assert!(func(f64::NAN).is_nan());
+            assert!(func(f64::INFINITY).is_nan());
+            assert!(func(f64::NEG_INFINITY).is_nan());
+        }
     }
 
     #[test]
