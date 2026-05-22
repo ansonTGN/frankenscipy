@@ -17597,6 +17597,69 @@ pub fn nanstd(data: &[f64]) -> f64 {
     nanvar(data).sqrt()
 }
 
+/// Compute z-scores ignoring NaN values.
+///
+/// Computes (x - nanmean) / nanstd, preserving NaN positions.
+///
+/// Like `scipy.stats.zscore` with nan_policy='omit'.
+pub fn nanzscore(data: &[f64]) -> Vec<f64> {
+    let valid: Vec<f64> = data.iter().copied().filter(|x| !x.is_nan()).collect();
+    if valid.len() < 2 {
+        return vec![f64::NAN; data.len()];
+    }
+
+    let n = valid.len() as f64;
+    let mean = valid.iter().sum::<f64>() / n;
+    let var = valid.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / n;
+    let std = var.sqrt();
+
+    if std == 0.0 {
+        return vec![f64::NAN; data.len()];
+    }
+
+    data.iter()
+        .map(|&x| if x.is_nan() { f64::NAN } else { (x - mean) / std })
+        .collect()
+}
+
+/// Compute NaN-aware sum.
+///
+/// Returns the sum of values, ignoring NaN values.
+/// Matches `numpy.nansum`.
+pub fn nansum(data: &[f64]) -> f64 {
+    data.iter().filter(|x| !x.is_nan()).sum()
+}
+
+/// Compute NaN-aware product.
+///
+/// Returns the product of values, ignoring NaN values.
+/// Matches `numpy.nanprod`.
+pub fn nanprod(data: &[f64]) -> f64 {
+    data.iter().filter(|x| !x.is_nan()).product()
+}
+
+/// Compute NaN-aware min.
+///
+/// Returns the minimum value, ignoring NaN values.
+/// Matches `numpy.nanmin`.
+pub fn nanmin(data: &[f64]) -> f64 {
+    data.iter()
+        .filter(|x| !x.is_nan())
+        .copied()
+        .fold(f64::INFINITY, f64::min)
+}
+
+/// Compute NaN-aware max.
+///
+/// Returns the maximum value, ignoring NaN values.
+/// Matches `numpy.nanmax`.
+pub fn nanmax(data: &[f64]) -> f64 {
+    data.iter()
+        .filter(|x| !x.is_nan())
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max)
+}
+
 /// Compute median ignoring NaN values.
 ///
 /// Matches `numpy.nanmedian`.
