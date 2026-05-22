@@ -55623,6 +55623,58 @@ mod tests {
     }
 
     #[test]
+    fn test_gini_coefficient_perfect_equality() {
+        let data = vec![100.0, 100.0, 100.0, 100.0];
+        let g = gini_coefficient(&data);
+        assert!(g.abs() < 1e-10, "Gini of equal distribution should be 0, got {}", g);
+    }
+
+    #[test]
+    fn test_gini_coefficient_bounds() {
+        let data = vec![0.0, 0.0, 0.0, 100.0];
+        let g = gini_coefficient(&data);
+        assert!(g >= 0.0 && g <= 1.0, "Gini should be in [0,1], got {}", g);
+        assert!(g > 0.7, "Highly unequal distribution should have high Gini, got {}", g);
+    }
+
+    #[test]
+    fn test_theil_t_index_equal() {
+        let data = vec![10.0, 10.0, 10.0, 10.0];
+        let t = theil_t_index(&data);
+        assert!(t.abs() < 1e-10, "Theil T of equal distribution should be 0, got {}", t);
+    }
+
+    #[test]
+    fn test_theil_l_index_equal() {
+        let data = vec![10.0, 10.0, 10.0, 10.0];
+        let t = theil_l_index(&data);
+        assert!(t.abs() < 1e-10, "Theil L of equal distribution should be 0, got {}", t);
+    }
+
+    #[test]
+    fn test_geometric_mean_squares() {
+        let data = vec![4.0, 16.0];
+        let g = geometric_mean(&data);
+        assert!((g - 8.0).abs() < 1e-10, "Geometric mean of [4, 16] should be 8, got {}", g);
+    }
+
+    #[test]
+    fn test_harmonic_mean_reciprocals() {
+        let data = vec![2.0, 4.0];
+        let h = harmonic_mean(&data);
+        let expected = 2.0 / (0.5 + 0.25);
+        assert!((h - expected).abs() < 1e-10, "Harmonic mean of [2, 4] should be {}, got {}", expected, h);
+    }
+
+    #[test]
+    fn test_power_mean_arithmetic() {
+        let data = vec![1.0, 2.0, 3.0];
+        let m = power_mean(&data, 1.0);
+        let expected = 2.0;
+        assert!((m - expected).abs() < 1e-10, "Power mean with p=1 should be arithmetic mean, got {}", m);
+    }
+
+    #[test]
     fn test_braycurtis_distance_identical() {
         let u = vec![1.0, 2.0, 3.0];
         let v = vec![1.0, 2.0, 3.0];
