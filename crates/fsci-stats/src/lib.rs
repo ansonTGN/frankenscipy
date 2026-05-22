@@ -55818,6 +55818,31 @@ mod tests {
     }
 
     #[test]
+    fn test_hausdorff_1d_identical() {
+        let u = vec![1.0, 2.0, 3.0];
+        let v = vec![1.0, 2.0, 3.0];
+        let d = hausdorff_1d(&u, &v);
+        assert!(d.abs() < 1e-10, "Hausdorff distance of identical point sets should be 0, got {}", d);
+    }
+
+    #[test]
+    fn test_hausdorff_1d_shifted() {
+        let u = vec![0.0, 1.0, 2.0];
+        let v = vec![1.0, 2.0, 3.0];
+        let d = hausdorff_1d(&u, &v);
+        assert!((d - 1.0).abs() < 1e-10, "Hausdorff of shifted sets should be 1, got {}", d);
+    }
+
+    #[test]
+    fn test_directed_hausdorff_1d_asymmetric() {
+        let u = vec![0.0];
+        let v = vec![0.0, 10.0];
+        let d_uv = directed_hausdorff_1d(&u, &v);
+        let d_vu = directed_hausdorff_1d(&v, &u);
+        assert!(d_uv < d_vu, "Directed Hausdorff should be asymmetric");
+    }
+
+    #[test]
     fn test_sokalsneath_distance_identical() {
         let u = vec![1.0, 1.0, 0.0, 0.0];
         let v = vec![1.0, 1.0, 0.0, 0.0];
