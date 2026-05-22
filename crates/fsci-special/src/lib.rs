@@ -165,6 +165,8 @@ pub use convenience::{
     ndtr,
     ndtr_scalar,
     ndtri,
+    ndtri_exp,
+    ndtri_exp_scalar,
     ndtri_scalar,
     negative,
     negentropy,

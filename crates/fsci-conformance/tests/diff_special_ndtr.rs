@@ -13,6 +13,8 @@
 //!                      frankenscipy-0om9c)
 //!   ndtri    1e-7 rel (Beasley-Springer-Moro rational; floor
 //!                      widens near q∈{0, 1})
+//!   ndtri_exp 2e-6 rel-scaled abs (Acklam log-tail inverse; finite
+//!                         at y=-800 and y≈0 where exp(y) would fail)
 
 use std::collections::HashMap;
 use std::fs;
@@ -23,13 +25,14 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use fsci_runtime::RuntimeMode;
 use fsci_special::types::SpecialTensor;
-use fsci_special::{log_ndtr, ndtr, ndtri};
+use fsci_special::{log_ndtr, ndtr, ndtri, ndtri_exp};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
 const NDTR_TOL: f64 = 5.0e-13;
 const LOG_NDTR_TOL: f64 = 1.0e-6;
 const NDTRI_TOL_REL: f64 = 1.0e-7;
+const NDTRI_EXP_TOL_REL: f64 = 2.0e-6;
 const REQUIRE_SCIPY_ENV: &str = "FSCI_REQUIRE_SCIPY_ORACLE";
 
 #[derive(Debug, Clone, Serialize)]
@@ -104,6 +107,7 @@ fn fsci_eval(func: &str, x: f64) -> Option<f64> {
         "ndtr" => ndtr(&arg, RuntimeMode::Strict),
         "log_ndtr" => log_ndtr(&arg, RuntimeMode::Strict),
         "ndtri" => ndtri(&arg, RuntimeMode::Strict),
+        "ndtri_exp" => ndtri_exp(&arg, RuntimeMode::Strict),
         _ => return None,
     };
     match result {
@@ -130,6 +134,21 @@ fn generate_query() -> OracleQuery {
         1.0 - 1.0e-6,
         1.0 - 1.0e-9,
     ];
+    // ndtri_exp takes log-probabilities directly and must stay finite
+    // in both tails where ndtri(exp(y)) loses information.
+    let log_ps = [
+        -1000.0_f64,
+        -800.0,
+        -100.0,
+        -50.0,
+        -10.0,
+        -2.0,
+        -1.0,
+        -std::f64::consts::LN_2,
+        -0.1,
+        -1.0e-9,
+        -1.0e-20,
+    ];
 
     let mut points = Vec::new();
     for &x in &xs {
@@ -146,6 +165,13 @@ fn generate_query() -> OracleQuery {
             case_id: format!("ndtri_q{q}"),
             func: "ndtri".into(),
             x: q,
+        });
+    }
+    for &log_p in &log_ps {
+        points.push(PointCase {
+            case_id: format!("ndtri_exp_logp{log_p}"),
+            func: "ndtri_exp".into(),
+            x: log_p,
         });
     }
     OracleQuery { points }
@@ -165,7 +191,7 @@ def finite_or_none(v):
         return None
     return v if math.isfinite(v) else None
 
-q = json.load(sys.stdin)
+q = json.loads(sys.argv[1])
 points = []
 for case in q["points"]:
     cid = case["case_id"]
@@ -174,6 +200,7 @@ for case in q["points"]:
         if func == "ndtr":     value = special.ndtr(x)
         elif func == "log_ndtr":value = special.log_ndtr(x)
         elif func == "ndtri":  value = special.ndtri(x)
+        elif func == "ndtri_exp": value = special.ndtri_exp(x)
         else: value = None
         points.append({"case_id": cid, "value": finite_or_none(value)})
     except Exception:
@@ -183,8 +210,8 @@ print(json.dumps({"points": points}))
 
     let query_json = serde_json::to_string(query).expect("serialize ndtr family query");
     let mut child = match Command::new("python3")
-        .arg("-c")
-        .arg(script)
+        .arg("-")
+        .arg(query_json)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -202,7 +229,7 @@ print(json.dumps({"points": points}))
     };
     {
         let stdin = child.stdin.as_mut().expect("open ndtr family oracle stdin");
-        if let Err(err) = stdin.write_all(query_json.as_bytes()) {
+        if let Err(err) = stdin.write_all(script.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(
@@ -269,6 +296,10 @@ fn diff_special_ndtr() {
                     let scale = scipy_v.abs().max(1.0);
                     abs_diff <= NDTRI_TOL_REL * scale
                 }
+                "ndtri_exp" => {
+                    let scale = scipy_v.abs().max(1.0);
+                    abs_diff <= NDTRI_EXP_TOL_REL * scale
+                }
                 _ => false,
             };
             diffs.push(CaseDiff {
@@ -285,7 +316,7 @@ fn diff_special_ndtr() {
 
     let log = DiffLog {
         test_id: "diff_special_ndtr".into(),
-        category: "scipy.special.ndtr/ndtri/log_ndtr".into(),
+        category: "scipy.special.ndtr/ndtri/ndtri_exp/log_ndtr".into(),
         case_count: diffs.len(),
         max_abs_diff: max_abs_overall,
         max_rel_diff: max_rel_overall,

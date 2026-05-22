@@ -10,7 +10,7 @@
 //! - `logit` — Log-odds: log(p / (1 - p))
 //! - `entr` — Elementwise entropy: -x * log(x)
 //! - `rel_entr` — Relative entropy (KL divergence element): x * log(x/y)
-//! - `ndtr` / `ndtri` — Standard normal CDF and inverse CDF
+//! - `ndtr` / `ndtri` / `ndtri_exp` — Standard normal CDF and inverse CDF
 //! - `nrdtrimn` — Recover the normal mean from a CDF value, scale, and quantile
 //! - `kl_div` — KL divergence element with the `-x + y` correction
 
@@ -58,6 +58,45 @@ pub const CONVENIENCE_DISPATCH_PLAN: &[DispatchPlan] = &[
 
 const DILOG_SERIES_MAX_TERMS: usize = 128;
 const PI_SQUARED_OVER_SIX: f64 = PI * PI / 6.0;
+const NDTRI_EXP_LOG_P_LOW: f64 = -3.719_338_661_598_645;
+const NDTRI_EXP_LOG_P_HIGH: f64 = -0.024_548_872_921_412_7;
+
+#[allow(clippy::excessive_precision)]
+const NDTRI_EXP_A: [f64; 6] = [
+    -3.969_683_028_665_376e1,
+    2.209_460_984_245_205e2,
+    -2.759_285_104_469_687e2,
+    1.383_577_518_672_690e2,
+    -3.066_479_806_614_716e1,
+    2.506_628_277_459_239,
+];
+
+#[allow(clippy::excessive_precision)]
+const NDTRI_EXP_B: [f64; 5] = [
+    -5.447_609_879_822_406e1,
+    1.615_858_368_580_409e2,
+    -1.556_989_798_598_866e2,
+    6.680_131_188_771_972e1,
+    -1.328_068_155_288_572e1,
+];
+
+#[allow(clippy::excessive_precision)]
+const NDTRI_EXP_C: [f64; 6] = [
+    -7.784_894_002_430_293e-3,
+    -3.223_964_580_411_365e-1,
+    -2.400_758_277_161_838,
+    -2.549_732_539_343_734,
+    4.374_664_141_464_968,
+    2.938_163_982_698_783,
+];
+
+#[allow(clippy::excessive_precision)]
+const NDTRI_EXP_D: [f64; 4] = [
+    7.784_695_709_041_462e-3,
+    3.224_671_290_700_398e-1,
+    2.445_134_137_142_996,
+    3.754_408_661_907_416,
+];
 
 /// Normalized sinc function: sin(πx) / (πx).
 ///
@@ -369,6 +408,73 @@ pub fn ndtri_scalar(y: f64) -> f64 {
         return f64::INFINITY;
     }
     SQRT_2 * crate::error::erfinv_scalar(2.0 * y - 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN)
+}
+
+/// Inverse of `log_ndtr`.
+///
+/// Finds `x` such that `log_ndtr(x) = y`, matching `scipy.special.ndtri_exp(y)`.
+pub fn ndtri_exp(y_tensor: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
+    map_real("ndtri_exp", y_tensor, mode, |y| Ok(ndtri_exp_scalar(y)))
+}
+
+/// Scalar helper for `ndtri_exp`.
+#[must_use]
+pub fn ndtri_exp_scalar(log_p: f64) -> f64 {
+    if log_p.is_nan() {
+        return f64::NAN;
+    }
+    if log_p > 0.0 {
+        return f64::NAN;
+    }
+    if log_p == 0.0 {
+        return f64::INFINITY;
+    }
+    if log_p == f64::NEG_INFINITY {
+        return f64::NEG_INFINITY;
+    }
+
+    if log_p <= NDTRI_EXP_LOG_P_LOW {
+        return ndtri_exp_lower_tail_from_log_p(log_p);
+    }
+    if log_p >= NDTRI_EXP_LOG_P_HIGH {
+        let upper_tail = -log_p.exp_m1();
+        if upper_tail == 0.0 {
+            return f64::INFINITY;
+        }
+        return -ndtri_exp_lower_tail_from_log_p(upper_tail.ln());
+    }
+
+    ndtri_exp_central(log_p.exp())
+}
+
+fn ndtri_exp_lower_tail_from_log_p(log_p: f64) -> f64 {
+    let q = (-2.0 * log_p).sqrt();
+    let numerator =
+        (((((NDTRI_EXP_C[0] * q + NDTRI_EXP_C[1]) * q + NDTRI_EXP_C[2]) * q + NDTRI_EXP_C[3]) * q
+            + NDTRI_EXP_C[4])
+            * q)
+            + NDTRI_EXP_C[5];
+    let denominator =
+        ((((NDTRI_EXP_D[0] * q + NDTRI_EXP_D[1]) * q + NDTRI_EXP_D[2]) * q + NDTRI_EXP_D[3]) * q)
+            + 1.0;
+    numerator / denominator
+}
+
+fn ndtri_exp_central(p: f64) -> f64 {
+    let q = p - 0.5;
+    let r = q * q;
+    let numerator =
+        (((((NDTRI_EXP_A[0] * r + NDTRI_EXP_A[1]) * r + NDTRI_EXP_A[2]) * r + NDTRI_EXP_A[3]) * r
+            + NDTRI_EXP_A[4])
+            * r
+            + NDTRI_EXP_A[5])
+            * q;
+    let denominator =
+        (((((NDTRI_EXP_B[0] * r + NDTRI_EXP_B[1]) * r + NDTRI_EXP_B[2]) * r + NDTRI_EXP_B[3]) * r
+            + NDTRI_EXP_B[4])
+            * r)
+            + 1.0;
+    numerator / denominator
 }
 
 /// Recover the mean of a normal distribution from a CDF value, standard deviation, and quantile.
@@ -7267,6 +7373,37 @@ mod tests {
         assert!(values[3].is_nan());
         assert!(values[4].is_nan());
         Ok(())
+    }
+
+    #[test]
+    fn ndtri_exp_tensor_dispatch_matches_scipy_contract_points() -> Result<(), String> {
+        let result = ndtri_exp(
+            &SpecialTensor::RealVec(vec![-800.0, -1.0, -1.0e-20]),
+            RuntimeMode::Strict,
+        )
+        .map_err(|err| err.to_string())?;
+        let values = expect_real_vec(result)?;
+        let expected = [
+            -39.884_694_838_256_68,
+            -0.337_474_963_764_202_44,
+            9.262_340_089_798_409,
+        ];
+        for (actual, expected) in values.iter().zip(expected.iter()) {
+            assert!(
+                (actual - expected).abs() <= 2.0e-6 * expected.abs().max(1.0),
+                "ndtri_exp contract point = {actual}, scipy {expected}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn ndtri_exp_scalar_preserves_log_probability_boundaries() {
+        assert_eq!(ndtri_exp_scalar(0.0), f64::INFINITY);
+        assert_eq!(ndtri_exp_scalar(-0.0), f64::INFINITY);
+        assert_eq!(ndtri_exp_scalar(f64::NEG_INFINITY), f64::NEG_INFINITY);
+        assert!(ndtri_exp_scalar(1.0).is_nan());
+        assert!(ndtri_exp_scalar(f64::NAN).is_nan());
     }
 
     #[test]
