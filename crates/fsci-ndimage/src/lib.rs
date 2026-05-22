@@ -1959,7 +1959,7 @@ pub fn gaussian_laplace(
 /// element neighborhood are 1.
 ///
 /// Matches `scipy.ndimage.binary_erosion`.
-fn binary_erosion_once(current: &NdArray, size: usize) -> NdArray {
+fn binary_erosion_once_with_origins(current: &NdArray, size: usize, origins: &[i64]) -> NdArray {
     let ndim = current.ndim();
     let mut output = NdArray::zeros(current.shape.clone());
     let offsets: Vec<i64> = vec![size as i64 / 2; ndim];
@@ -1981,7 +1981,7 @@ fn binary_erosion_once(current: &NdArray, size: usize) -> NdArray {
 
             let mut in_idx = vec![0i64; ndim];
             for d in 0..ndim {
-                in_idx[d] = out_idx[d] as i64 + k_idx[d] as i64 - offsets[d];
+                in_idx[d] = out_idx[d] as i64 + k_idx[d] as i64 - offsets[d] - origins[d];
             }
 
             let val = current.get_boundary(&in_idx, BoundaryMode::Constant, 0.0);
@@ -1997,7 +1997,7 @@ fn binary_erosion_once(current: &NdArray, size: usize) -> NdArray {
     output
 }
 
-fn binary_dilation_once(current: &NdArray, size: usize) -> NdArray {
+fn binary_dilation_once_with_origins(current: &NdArray, size: usize, origins: &[i64]) -> NdArray {
     let ndim = current.ndim();
     let mut output = NdArray::zeros(current.shape.clone());
     let offsets: Vec<i64> = vec![size as i64 / 2; ndim];
@@ -2015,29 +2015,31 @@ fn binary_dilation_once(current: &NdArray, size: usize) -> NdArray {
         }
         let mut delta = vec![0i64; ndim];
         for d in 0..ndim {
-            delta[d] = k_idx[d] as i64 - offsets[d];
+            delta[d] = k_idx[d] as i64 - offsets[d] - origins[d];
         }
         kernel_deltas.push(delta);
     }
 
-    for flat_out in 0..current.size() {
-        let out_idx = current.unravel(flat_out);
-        let mut any_set = false;
-
+    for flat_in in 0..current.size() {
+        if current.data[flat_in] == 0.0 {
+            continue;
+        }
+        let idx = current.unravel(flat_in);
         for delta in &kernel_deltas {
-            let mut in_idx = vec![0i64; ndim];
-            for d in 0..ndim {
-                in_idx[d] = out_idx[d] as i64 + delta[d];
+            let mut out_idx = Vec::with_capacity(ndim);
+            let mut in_bounds = true;
+            for axis in 0..ndim {
+                let coord = idx[axis] as i64 + delta[axis];
+                if coord < 0 || coord >= current.shape[axis] as i64 {
+                    in_bounds = false;
+                    break;
+                }
+                out_idx.push(coord as usize);
             }
-
-            let val = current.get_boundary(&in_idx, BoundaryMode::Constant, 0.0);
-            if val != 0.0 {
-                any_set = true;
-                break;
+            if in_bounds {
+                output.set(&out_idx, 1.0);
             }
         }
-
-        output.data[flat_out] = if any_set { 1.0 } else { 0.0 };
     }
 
     output
@@ -2046,26 +2048,29 @@ fn binary_dilation_once(current: &NdArray, size: usize) -> NdArray {
 fn run_binary_iterations(
     input: &NdArray,
     size: usize,
+    origins: &[i64],
     iterations: usize,
-    op: fn(&NdArray, usize) -> NdArray,
-) -> NdArray {
+    op: fn(&NdArray, usize, &[i64]) -> NdArray,
+) -> Result<NdArray, NdimageError> {
+    let kernel_shape: Vec<usize> = vec![size; input.ndim()];
+    let origins = normalize_filter_origins(input.ndim(), &kernel_shape, origins)?;
     let mut current = input.clone();
 
     if iterations == 0 {
         loop {
-            let output = op(&current, size);
+            let output = op(&current, size, &origins);
             if output.data == current.data {
-                return output;
+                return Ok(output);
             }
             current = output;
         }
     }
 
     for _ in 0..iterations {
-        current = op(&current, size);
+        current = op(&current, size, &origins);
     }
 
-    current
+    Ok(current)
 }
 
 /// Binary erosion: output pixel is 1 only if all pixels in the structuring
@@ -2077,6 +2082,16 @@ pub fn binary_erosion(
     structure_size: usize,
     iterations: usize,
 ) -> Result<NdArray, NdimageError> {
+    binary_erosion_with_origins(input, structure_size, &[0], iterations)
+}
+
+/// Binary erosion with SciPy `origin` semantics.
+pub fn binary_erosion_with_origins(
+    input: &NdArray,
+    structure_size: usize,
+    origins: &[i64],
+    iterations: usize,
+) -> Result<NdArray, NdimageError> {
     if input.size() == 0 {
         return Err(NdimageError::EmptyInput);
     }
@@ -2085,12 +2100,13 @@ pub fn binary_erosion(
     } else {
         structure_size
     };
-    Ok(run_binary_iterations(
+    run_binary_iterations(
         input,
         size,
+        origins,
         iterations,
-        binary_erosion_once,
-    ))
+        binary_erosion_once_with_origins,
+    )
 }
 
 /// Binary dilation: output pixel is 1 if any pixel in the structuring
@@ -2102,6 +2118,16 @@ pub fn binary_dilation(
     structure_size: usize,
     iterations: usize,
 ) -> Result<NdArray, NdimageError> {
+    binary_dilation_with_origins(input, structure_size, &[0], iterations)
+}
+
+/// Binary dilation with SciPy `origin` semantics.
+pub fn binary_dilation_with_origins(
+    input: &NdArray,
+    structure_size: usize,
+    origins: &[i64],
+    iterations: usize,
+) -> Result<NdArray, NdimageError> {
     if input.size() == 0 {
         return Err(NdimageError::EmptyInput);
     }
@@ -2110,12 +2136,13 @@ pub fn binary_dilation(
     } else {
         structure_size
     };
-    Ok(run_binary_iterations(
+    run_binary_iterations(
         input,
         size,
+        origins,
         iterations,
-        binary_dilation_once,
-    ))
+        binary_dilation_once_with_origins,
+    )
 }
 
 /// Binary propagation: repeatedly dilate the input until convergence,
@@ -2148,9 +2175,10 @@ pub fn binary_propagation(
     for value in &mut current.data {
         *value = if *value != 0.0 { 1.0 } else { 0.0 };
     }
+    let origins = vec![0; current.ndim()];
 
     loop {
-        let mut next = binary_dilation_once(&current, size);
+        let mut next = binary_dilation_once_with_origins(&current, size, &origins);
         let mut changed = false;
         for flat in 0..next.size() {
             let mask_allows_update = match mask {
@@ -2179,8 +2207,18 @@ pub fn binary_opening(
     structure_size: usize,
     iterations: usize,
 ) -> Result<NdArray, NdimageError> {
-    let eroded = binary_erosion(input, structure_size, iterations)?;
-    binary_dilation(&eroded, structure_size, iterations)
+    binary_opening_with_origins(input, structure_size, &[0], iterations)
+}
+
+/// Binary opening with SciPy `origin` semantics.
+pub fn binary_opening_with_origins(
+    input: &NdArray,
+    structure_size: usize,
+    origins: &[i64],
+    iterations: usize,
+) -> Result<NdArray, NdimageError> {
+    let eroded = binary_erosion_with_origins(input, structure_size, origins, iterations)?;
+    binary_dilation_with_origins(&eroded, structure_size, origins, iterations)
 }
 
 /// Binary closing: dilation followed by erosion.
@@ -2191,8 +2229,18 @@ pub fn binary_closing(
     structure_size: usize,
     iterations: usize,
 ) -> Result<NdArray, NdimageError> {
-    let dilated = binary_dilation(input, structure_size, iterations)?;
-    binary_erosion(&dilated, structure_size, iterations)
+    binary_closing_with_origins(input, structure_size, &[0], iterations)
+}
+
+/// Binary closing with SciPy `origin` semantics.
+pub fn binary_closing_with_origins(
+    input: &NdArray,
+    structure_size: usize,
+    origins: &[i64],
+    iterations: usize,
+) -> Result<NdArray, NdimageError> {
+    let dilated = binary_dilation_with_origins(input, structure_size, origins, iterations)?;
+    binary_erosion_with_origins(&dilated, structure_size, origins, iterations)
 }
 
 /// Binary fill holes: fill holes in binary objects.
@@ -6182,6 +6230,35 @@ mod tests {
         assert_eq!(result.data[12], 1.0); // (2,2)
         assert_eq!(result.data[7], 1.0); // (1,2)
         assert_eq!(result.data[17], 1.0); // (3,2)
+    }
+
+    #[test]
+    fn binary_morphology_origins_match_scipy_constant() {
+        let input = NdArray::new(vec![0., 1., 1., 0., 1.], vec![5]).unwrap();
+
+        let eroded = binary_erosion_with_origins(&input, 2, &[-1], 1).unwrap();
+        assert_eq!(eroded.data, vec![0., 1., 0., 0., 0.]);
+
+        let point = NdArray::new(vec![0., 0., 1., 0., 0.], vec![5]).unwrap();
+        let dilated = binary_dilation_with_origins(&point, 3, &[1], 1).unwrap();
+        assert_eq!(dilated.data, vec![1., 1., 1., 0., 0.]);
+
+        let opened = binary_opening_with_origins(&input, 2, &[-1], 1).unwrap();
+        assert_eq!(opened.data, vec![0., 1., 1., 0., 0.]);
+
+        let closed = binary_closing_with_origins(&input, 3, &[1], 1).unwrap();
+        assert_eq!(closed.data, vec![0., 0., 1., 1., 1.]);
+    }
+
+    #[test]
+    fn binary_morphology_origin_validation_matches_filter_bounds() {
+        let input = NdArray::new(vec![0., 1., 1., 0., 1.], vec![5]).unwrap();
+
+        assert!(binary_erosion_with_origins(&input, 2, &[-1], 1).is_ok());
+        assert!(binary_erosion_with_origins(&input, 2, &[1], 1).is_err());
+        assert!(binary_dilation_with_origins(&input, 3, &[1], 1).is_ok());
+        assert!(binary_opening_with_origins(&input, 3, &[-2], 1).is_err());
+        assert!(binary_closing_with_origins(&input, 3, &[2], 1).is_err());
     }
 
     #[test]
