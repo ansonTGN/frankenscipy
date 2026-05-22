@@ -1440,6 +1440,44 @@ pub fn black_tophat(
 
 /// Histogram of values in labeled regions.
 ///
+/// Matches `scipy.ndimage.histogram`; scalar SciPy results are returned as a
+/// one-element vector of bin counts, while explicit `index` lists return one
+/// histogram per label.
+pub fn histogram(
+    input: &NdArray,
+    min_val: f64,
+    max_val: f64,
+    nbins: usize,
+    labels: Option<&NdArray>,
+    index: Option<&[usize]>,
+) -> Result<Vec<Vec<usize>>, NdimageError> {
+    let groups = measurement_label_groups(input, labels, index)?;
+    let mut histograms = vec![vec![0usize; nbins]; groups.len()];
+    if nbins == 0
+        || !min_val.is_finite()
+        || !max_val.is_finite()
+        || max_val <= min_val
+        || input.data.iter().any(|value| !value.is_finite())
+    {
+        return Ok(histograms);
+    }
+
+    let bin_width = (max_val - min_val) / nbins as f64;
+    for (histogram, values) in histograms.iter_mut().zip(groups) {
+        for value in values {
+            if value < min_val || value > max_val {
+                continue;
+            }
+            let bin = ((value - min_val) / bin_width).floor() as usize;
+            histogram[bin.min(nbins - 1)] += 1;
+        }
+    }
+
+    Ok(histograms)
+}
+
+/// Histogram of values in labeled regions.
+///
 /// Returns a Vec of histograms (bin counts) for each label.
 /// Matches `scipy.ndimage.histogram`.
 pub fn histogram_labels(
@@ -4693,6 +4731,34 @@ mod tests {
         assert_eq!(
             median(&data, Some(&labels), Some(&index)).unwrap(),
             vec![10.0, 1.5, 5.0, 20.0]
+        );
+    }
+
+    #[test]
+    fn histogram_wrapper_matches_scipy_fixtures() {
+        let data = NdArray::new(vec![1.0, 2.0, 5.0, 10.0, 20.0], vec![5]).unwrap();
+        let labels = NdArray::new(vec![1.0, 1.0, 2.0, 0.0, 3.0], vec![5]).unwrap();
+        let index = [0, 1, 2, 3];
+
+        // scipy.ndimage.histogram(data, 0.0, 20.0, 4)
+        assert_eq!(
+            histogram(&data, 0.0, 20.0, 4, None, None).unwrap(),
+            vec![vec![2, 1, 1, 1]]
+        );
+        // scipy.ndimage.histogram(data, 0.0, 20.0, 4, labels)
+        assert_eq!(
+            histogram(&data, 0.0, 20.0, 4, Some(&labels), None).unwrap(),
+            vec![vec![2, 1, 0, 1]]
+        );
+        // scipy.ndimage.histogram(data, 0.0, 20.0, 4, labels, [0, 1, 2, 3])
+        assert_eq!(
+            histogram(&data, 0.0, 20.0, 4, Some(&labels), Some(&index)).unwrap(),
+            vec![
+                vec![0, 0, 1, 0],
+                vec![2, 0, 0, 0],
+                vec![0, 1, 0, 0],
+                vec![0, 0, 0, 1],
+            ]
         );
     }
 
