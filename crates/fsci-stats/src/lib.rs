@@ -58489,4 +58489,61 @@ mod tests {
             "yeojohnson_normmax got {lam_opt}, expected ~0.9"
         );
     }
+
+    #[test]
+    fn tmean_matches_scipy_reference_values() {
+        let data: Vec<f64> = (1..=10).map(|x| x as f64).collect();
+        let result = tmean(&data, (2.0, 9.0), (true, true));
+        assert!(
+            (result - 5.5).abs() < 1e-10,
+            "tmean(limits=(2,9)) got {result}, expected 5.5"
+        );
+    }
+
+    #[test]
+    fn tvar_matches_scipy_reference_values() {
+        let data: Vec<f64> = (1..=10).map(|x| x as f64).collect();
+        let result = tvar(&data, (2.0, 9.0), (true, true), 1);
+        assert!(
+            (result - 6.0).abs() < 1e-10,
+            "tvar(limits=(2,9)) got {result}, expected 6.0"
+        );
+    }
+
+    #[test]
+    fn tstd_matches_scipy_reference_values() {
+        let data: Vec<f64> = (1..=10).map(|x| x as f64).collect();
+        let result = tstd(&data, (2.0, 9.0), (true, true), 1);
+        assert!(
+            (result - 2.449489742783178).abs() < 1e-10,
+            "tstd(limits=(2,9)) got {result}, expected 2.449"
+        );
+    }
+
+    #[test]
+    fn tsem_matches_scipy_reference_values() {
+        let data: Vec<f64> = (1..=10).map(|x| x as f64).collect();
+        let result = tsem(&data, (2.0, 9.0), (true, true), 1);
+        assert!(
+            (result - 0.8660254037844385).abs() < 1e-10,
+            "tsem(limits=(2,9)) got {result}, expected 0.866"
+        );
+    }
+
+    #[test]
+    fn tmin_tmax_match_scipy_reference_values() {
+        let data: Vec<f64> = (1..=10).map(|x| x as f64).collect();
+
+        let mi = tmin(&data, 3.0, true);
+        assert!(
+            (mi - 3.0).abs() < 1e-10,
+            "tmin(lowerlimit=3) got {mi}, expected 3.0"
+        );
+
+        let ma = tmax(&data, 8.0, true);
+        assert!(
+            (ma - 8.0).abs() < 1e-10,
+            "tmax(upperlimit=8) got {ma}, expected 8.0"
+        );
+    }
 }
