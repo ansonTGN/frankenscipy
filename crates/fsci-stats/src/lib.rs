@@ -21728,6 +21728,49 @@ pub fn moment_weighted(data: &[f64], k: u32, weights: &[f64]) -> f64 {
         / total_w
 }
 
+/// Compute the k-th raw moment (about zero) of a data set.
+///
+/// raw_moment_k = E[X^k] = (1/n) * Σ x_i^k
+///
+/// Unlike `moment` which computes central moments about the mean,
+/// this computes moments about zero.
+pub fn raw_moment(data: &[f64], k: u32) -> f64 {
+    if data.is_empty() {
+        return f64::NAN;
+    }
+    if k == 0 {
+        return 1.0;
+    }
+    let n = data.len() as f64;
+    data.iter()
+        .map(|&x| x.powi(k as i32))
+        .sum::<f64>()
+        / n
+}
+
+/// Compute the k-th standardized moment of a data set.
+///
+/// standardized_moment_k = E[((X - μ) / σ)^k] = μ_k / σ^k
+///
+/// where μ_k is the k-th central moment and σ is the standard deviation.
+/// Note: skewness = standardized_moment(3), kurtosis = standardized_moment(4).
+pub fn standardized_moment(data: &[f64], k: u32) -> f64 {
+    if data.is_empty() || k < 2 {
+        return f64::NAN;
+    }
+    let n = data.len() as f64;
+    let mean_val = data.iter().sum::<f64>() / n;
+
+    let m2: f64 = data.iter().map(|&x| (x - mean_val).powi(2)).sum::<f64>() / n;
+    if m2 <= 0.0 {
+        return f64::NAN;
+    }
+    let std = m2.sqrt();
+
+    let mk: f64 = data.iter().map(|&x| (x - mean_val).powi(k as i32)).sum::<f64>() / n;
+    mk / std.powi(k as i32)
+}
+
 /// Compute the n-th k-statistic (unbiased cumulant estimator).
 ///
 /// K-statistics are unbiased estimators of cumulants:
