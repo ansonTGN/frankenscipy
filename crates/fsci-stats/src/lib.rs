@@ -6366,6 +6366,105 @@ impl DiscreteDistribution for Hypergeometric {
     }
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// Negative Hypergeometric Distribution
+// ══════════════════════════════════════════════════════════════════════
+
+/// Negative hypergeometric distribution.
+///
+/// Matches `scipy.stats.nhypergeom(M, n, r)`.
+/// PMF: P(k) = C(k+r-1, k) * C(M-r-k, n-r) / C(M, n)
+/// Distribution of failures before r successes in sampling without replacement.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NegHypergeometric {
+    pub big_m: u64,
+    pub n: u64,
+    pub r: u64,
+}
+
+impl NegHypergeometric {
+    #[must_use]
+    pub fn new(big_m: u64, n: u64, r: u64) -> Self {
+        assert!(n <= big_m, "n must be <= M, got n={n}, M={big_m}");
+        assert!(r <= n, "r must be <= n, got r={r}, n={n}");
+        Self { big_m, n, r }
+    }
+
+    fn ln_comb(n: u64, k: u64) -> f64 {
+        if k > n {
+            return f64::NEG_INFINITY;
+        }
+        ln_gamma(n as f64 + 1.0) - ln_gamma(k as f64 + 1.0) - ln_gamma((n - k) as f64 + 1.0)
+    }
+}
+
+impl DiscreteDistribution for NegHypergeometric {
+    fn pmf(&self, k: u64) -> f64 {
+        let m = self.big_m;
+        let n = self.n;
+        let r = self.r;
+        if r == 0 {
+            return if k == 0 { 1.0 } else { 0.0 };
+        }
+        let max_k = m - n;
+        if k > max_k {
+            return 0.0;
+        }
+        let ln_num1 = Self::ln_comb(k + r - 1, k);
+        let ln_num2 = Self::ln_comb(m - r - k, n - r);
+        let ln_den = Self::ln_comb(m, n);
+        (ln_num1 + ln_num2 - ln_den).exp()
+    }
+
+    fn cdf(&self, k: u64) -> f64 {
+        let max_k = self.big_m - self.n;
+        let k = k.min(max_k);
+        let mut sum = 0.0;
+        for i in 0..=k {
+            sum += self.pmf(i);
+        }
+        sum.min(1.0)
+    }
+
+    fn mean(&self) -> f64 {
+        let m = self.big_m as f64;
+        let n = self.n as f64;
+        let r = self.r as f64;
+        r * (m - n) / (n + 1.0)
+    }
+
+    fn var(&self) -> f64 {
+        let m = self.big_m as f64;
+        let n = self.n as f64;
+        let r = self.r as f64;
+        r * (m - n) * (m + 1.0) * (n - r + 1.0) / ((n + 1.0) * (n + 1.0) * (n + 2.0))
+    }
+
+    fn skewness(&self) -> f64 {
+        f64::NAN
+    }
+
+    fn kurtosis(&self) -> f64 {
+        f64::NAN
+    }
+
+    fn mode(&self) -> f64 {
+        0.0
+    }
+
+    fn entropy(&self) -> f64 {
+        let max_k = self.big_m - self.n;
+        let mut h = 0.0_f64;
+        for k in 0..=max_k {
+            let p = self.pmf(k);
+            if p > 0.0 {
+                h -= p * p.ln();
+            }
+        }
+        h
+    }
+}
+
 /// Logarithmic (log-series) distribution.
 ///
 /// Matches `scipy.stats.logser`.
@@ -52059,6 +52158,20 @@ mod tests {
         assert!((total - 1.0).abs() < 0.01);
         assert!((sk.mean() - 2.0).abs() < 1e-10);
         assert!((sk.var() - 8.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_neg_hypergeometric() {
+        let nhg = NegHypergeometric::new(20, 7, 3);
+        let mut total = 0.0;
+        for k in 0..=13 {
+            total += nhg.pmf(k);
+        }
+        assert!((total - 1.0).abs() < 1e-10);
+        let mu = nhg.mean();
+        assert!(mu > 0.0 && mu.is_finite());
+        assert!(nhg.var() > 0.0);
+        assert!((nhg.cdf(0) - nhg.pmf(0)).abs() < 1e-14);
     }
 
 }
