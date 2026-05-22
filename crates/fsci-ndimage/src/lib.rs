@@ -6195,6 +6195,41 @@ where
     result
 }
 
+/// Generic gradient magnitude over a SciPy-style signed axes subset.
+pub fn generic_gradient_magnitude_axes<F>(
+    input: &NdArray,
+    derivative: F,
+    axes: &[isize],
+) -> Result<NdArray, NdimageError>
+where
+    F: Fn(&NdArray, usize) -> NdArray,
+{
+    let axes = normalize_signed_axes(axes, input.ndim())?;
+    if axes.is_empty() {
+        return Ok(input.clone());
+    }
+
+    let mut result = NdArray::zeros(input.shape.clone());
+    for axis in axes {
+        let deriv = derivative(input, axis);
+        if deriv.shape != input.shape {
+            return Err(NdimageError::DimensionMismatch(format!(
+                "derivative output shape {:?} != input shape {:?}",
+                deriv.shape, input.shape
+            )));
+        }
+        for (r, &d) in result.data.iter_mut().zip(deriv.data.iter()) {
+            *r += d * d;
+        }
+    }
+
+    for r in &mut result.data {
+        *r = r.sqrt();
+    }
+
+    Ok(result)
+}
+
 /// Generic Laplace filter.
 ///
 /// Matches `scipy.ndimage.generic_laplace`. Computes Laplacian using a
@@ -6220,6 +6255,37 @@ where
     }
 
     result
+}
+
+/// Generic Laplace filter over a SciPy-style signed axes subset.
+pub fn generic_laplace_axes<F>(
+    input: &NdArray,
+    derivative2: F,
+    axes: &[isize],
+) -> Result<NdArray, NdimageError>
+where
+    F: Fn(&NdArray, usize) -> NdArray,
+{
+    let axes = normalize_signed_axes(axes, input.ndim())?;
+    if axes.is_empty() {
+        return Ok(input.clone());
+    }
+
+    let mut result = NdArray::zeros(input.shape.clone());
+    for axis in axes {
+        let deriv2 = derivative2(input, axis);
+        if deriv2.shape != input.shape {
+            return Err(NdimageError::DimensionMismatch(format!(
+                "derivative output shape {:?} != input shape {:?}",
+                deriv2.shape, input.shape
+            )));
+        }
+        for (r, &d) in result.data.iter_mut().zip(deriv2.data.iter()) {
+            *r += d;
+        }
+    }
+
+    Ok(result)
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -10029,6 +10095,97 @@ mod tests {
         .unwrap();
         assert_eq!(result.data[1], 5.0); // max of [1, 5, 3]
         assert_eq!(result.data[2], 5.0); // max of [5, 3, 2]
+    }
+
+    #[test]
+    fn generic_derivative_axes_match_scipy_subset_fixtures() {
+        let input = NdArray::new(vec![4.0, 1.0, 7.0, 2.0, 9.0, 3.0], vec![2, 3]).unwrap();
+        let axis_constant = |array: &NdArray, axis: usize| {
+            let mut output = NdArray::zeros(array.shape.clone());
+            for value in &mut output.data {
+                *value = (axis + 1) as f64;
+            }
+            output
+        };
+
+        // scipy.ndimage.generic_gradient_magnitude(input, derivative, axes=(-1,))
+        assert_eq!(
+            generic_gradient_magnitude_axes(&input, axis_constant, &[-1])
+                .unwrap()
+                .data,
+            vec![2.0; 6]
+        );
+        // scipy.ndimage.generic_gradient_magnitude(input, derivative, axes=(-2,))
+        assert_eq!(
+            generic_gradient_magnitude_axes(&input, axis_constant, &[-2])
+                .unwrap()
+                .data,
+            vec![1.0; 6]
+        );
+        // scipy.ndimage.generic_gradient_magnitude(input, derivative, axes=(-2, -1))
+        for value in generic_gradient_magnitude_axes(&input, axis_constant, &[-2, -1])
+            .unwrap()
+            .data
+        {
+            assert!((value - 5.0_f64.sqrt()).abs() < 1e-12);
+        }
+        assert_eq!(
+            generic_gradient_magnitude_axes(&input, axis_constant, &[])
+                .unwrap()
+                .data,
+            input.data
+        );
+
+        // scipy.ndimage.generic_laplace(input, derivative2, axes=(-1,))
+        assert_eq!(
+            generic_laplace_axes(&input, axis_constant, &[-1])
+                .unwrap()
+                .data,
+            vec![2.0; 6]
+        );
+        // scipy.ndimage.generic_laplace(input, derivative2, axes=(-2,))
+        assert_eq!(
+            generic_laplace_axes(&input, axis_constant, &[-2])
+                .unwrap()
+                .data,
+            vec![1.0; 6]
+        );
+        // scipy.ndimage.generic_laplace(input, derivative2, axes=(-2, -1))
+        assert_eq!(
+            generic_laplace_axes(&input, axis_constant, &[-2, -1])
+                .unwrap()
+                .data,
+            vec![3.0; 6]
+        );
+        assert_eq!(
+            generic_laplace_axes(&input, axis_constant, &[])
+                .unwrap()
+                .data,
+            input.data
+        );
+    }
+
+    #[test]
+    fn generic_derivative_axes_reject_duplicate_out_of_range_and_bad_shape() {
+        let input = NdArray::new(vec![1.0; 6], vec![2, 3]).unwrap();
+        let axis_constant = |array: &NdArray, axis: usize| {
+            let mut output = NdArray::zeros(array.shape.clone());
+            for value in &mut output.data {
+                *value = (axis + 1) as f64;
+            }
+            output
+        };
+        let bad_shape = |_array: &NdArray, _axis: usize| NdArray::new(vec![1.0], vec![1]).unwrap();
+
+        assert!(generic_gradient_magnitude_axes(&input, axis_constant, &[1, -1]).is_err());
+        assert!(generic_gradient_magnitude_axes(&input, axis_constant, &[2]).is_err());
+        assert!(generic_gradient_magnitude_axes(&input, axis_constant, &[-3]).is_err());
+        assert!(generic_gradient_magnitude_axes(&input, bad_shape, &[-1]).is_err());
+
+        assert!(generic_laplace_axes(&input, axis_constant, &[1, -1]).is_err());
+        assert!(generic_laplace_axes(&input, axis_constant, &[2]).is_err());
+        assert!(generic_laplace_axes(&input, axis_constant, &[-3]).is_err());
+        assert!(generic_laplace_axes(&input, bad_shape, &[-1]).is_err());
     }
 
     #[test]
