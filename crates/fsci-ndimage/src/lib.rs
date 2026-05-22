@@ -4516,6 +4516,18 @@ pub fn grey_opening(
     grey_opening_with_origins(input, size, &[0], mode, cval)
 }
 
+/// Grey-scale opening over a SciPy-style signed axes subset.
+pub fn grey_opening_axes(
+    input: &NdArray,
+    size: usize,
+    axes: &[isize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let eroded = grey_erosion_axes(input, size, axes, mode, cval)?;
+    grey_dilation_axes(&eroded, size, axes, mode, cval)
+}
+
 /// Grey-scale opening with SciPy `origin` semantics.
 pub fn grey_opening_with_origins(
     input: &NdArray,
@@ -10428,6 +10440,49 @@ mod tests {
         assert!(grey_dilation_axes(&input, 2, &[2], BoundaryMode::Reflect, 0.0).is_err());
         assert!(grey_dilation_axes(&input, 2, &[-3], BoundaryMode::Reflect, 0.0).is_err());
         assert!(grey_dilation_axes(&input, 0, &[-1], BoundaryMode::Reflect, 0.0).is_err());
+    }
+
+    #[test]
+    fn grey_opening_axes_match_scipy_subset_fixtures() {
+        let input = NdArray::new(vec![4.0, 1.0, 7.0, 2.0, 9.0, 3.0], vec![2, 3]).unwrap();
+
+        // scipy.ndimage.grey_opening(input, size=2, mode='constant', cval=-10.0, axes=(-1,))
+        assert_eq!(
+            grey_opening_axes(&input, 2, &[-1], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            vec![1.0, 1.0, 1.0, 2.0, 3.0, 3.0]
+        );
+        // scipy.ndimage.grey_opening(input, size=2, mode='constant', cval=-10.0, axes=(-2,))
+        assert_eq!(
+            grey_opening_axes(&input, 2, &[-2], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            vec![2.0, 1.0, 3.0, 2.0, 1.0, 3.0]
+        );
+        // scipy.ndimage.grey_opening(input, size=2, mode='constant', cval=-10.0, axes=(-2, -1))
+        assert_eq!(
+            grey_opening_axes(&input, 2, &[-2, -1], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            vec![1.0; 6]
+        );
+        assert_eq!(
+            grey_opening_axes(&input, 0, &[], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            input.data
+        );
+    }
+
+    #[test]
+    fn grey_opening_axes_rejects_duplicate_and_out_of_range_axes() {
+        let input = NdArray::new(vec![1.0; 6], vec![2, 3]).unwrap();
+
+        assert!(grey_opening_axes(&input, 2, &[1, -1], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(grey_opening_axes(&input, 2, &[2], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(grey_opening_axes(&input, 2, &[-3], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(grey_opening_axes(&input, 0, &[-1], BoundaryMode::Reflect, 0.0).is_err());
     }
 
     #[test]
