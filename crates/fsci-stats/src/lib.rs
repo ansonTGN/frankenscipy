@@ -57986,4 +57986,62 @@ mod tests {
             "differential_entropy([1..10]) got {de1}, expected ~2.30"
         );
     }
+
+    #[test]
+    fn barnard_exact_returns_valid_results() {
+        let table1 = [[10, 5], [3, 12]];
+        let result1 = barnard_exact(&table1);
+        assert!(
+            result1.statistic > 2.0 && result1.statistic < 3.0,
+            "barnard statistic got {}, expected ~2.5",
+            result1.statistic
+        );
+        assert!(
+            result1.pvalue > 0.0 && result1.pvalue < 0.05,
+            "barnard pvalue got {}, expected <0.05 (significant)",
+            result1.pvalue
+        );
+
+        let table2 = [[5, 1], [1, 5]];
+        let result2 = barnard_exact(&table2);
+        assert!(
+            result2.statistic > 1.5 && result2.statistic < 3.0,
+            "barnard statistic got {}, expected ~2.3",
+            result2.statistic
+        );
+        assert!(
+            result2.pvalue > 0.0 && result2.pvalue < 0.1,
+            "barnard pvalue got {}, expected <0.1",
+            result2.pvalue
+        );
+    }
+
+    #[test]
+    fn boschloo_exact_returns_valid_results() {
+        let table1 = [[10, 5], [3, 12]];
+        let result1 = boschloo_exact(&table1);
+        assert!(
+            result1.statistic > 0.0 && result1.statistic < 0.1,
+            "boschloo statistic got {}, expected <0.1",
+            result1.statistic
+        );
+        assert!(
+            result1.pvalue > 0.0 && result1.pvalue < 0.05,
+            "boschloo pvalue got {}, expected <0.05 (significant)",
+            result1.pvalue
+        );
+
+        let table2 = [[5, 1], [1, 5]];
+        let result2 = boschloo_exact(&table2);
+        assert!(
+            result2.statistic > 0.0 && result2.statistic < 0.1,
+            "boschloo statistic got {}, expected <0.1",
+            result2.statistic
+        );
+        assert!(
+            result2.pvalue > 0.0 && result2.pvalue < 0.1,
+            "boschloo pvalue got {}, expected <0.1",
+            result2.pvalue
+        );
+    }
 }
