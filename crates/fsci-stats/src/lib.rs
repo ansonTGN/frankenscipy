@@ -56747,6 +56747,37 @@ mod tests {
     }
 
     #[test]
+    fn moment_matches_scipy_reference() {
+        // scipy.stats.moment([1,2,3,4,5], moment=2) = variance (2nd central moment)
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let m2 = moment(&data, 2);
+        // Variance of [1,2,3,4,5] = 2.0 (population variance)
+        assert!((m2 - 2.0).abs() < 1e-10, "2nd moment (variance), got {}", m2);
+
+        // scipy.stats.moment([1,2,3,4,5], moment=1) = 0 (1st central moment is always 0)
+        let m1 = moment(&data, 1);
+        assert!(m1.abs() < 1e-10, "1st moment should be 0, got {}", m1);
+
+        // scipy.stats.moment([1,2,3,4,5], moment=0) = 1
+        let m0 = moment(&data, 0);
+        assert!((m0 - 1.0).abs() < 1e-10, "0th moment should be 1, got {}", m0);
+    }
+
+    #[test]
+    fn gmean_hmean_match_scipy_reference() {
+        // scipy.stats.gmean([1,2,3,4,5]) = (1*2*3*4*5)^(1/5) = 120^0.2 ≈ 2.605
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let gm = gmean(&data);
+        let expected_gm = 120.0f64.powf(0.2);
+        assert!((gm - expected_gm).abs() < 1e-10, "gmean, got {}", gm);
+
+        // scipy.stats.hmean([1,2,3,4,5]) = 5 / (1/1 + 1/2 + 1/3 + 1/4 + 1/5)
+        let hm = hmean(&data);
+        let expected_hm = 5.0 / (1.0 + 0.5 + 1.0/3.0 + 0.25 + 0.2);
+        assert!((hm - expected_hm).abs() < 1e-10, "hmean, got {}", hm);
+    }
+
+    #[test]
     fn cov_matrix_matches_numpy_reference() {
         // numpy.cov([[1,2,3], [4,5,6]]) with rowvar=True
         // For perfectly correlated data, cov should show linear relationship
