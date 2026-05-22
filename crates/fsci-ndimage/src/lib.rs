@@ -1967,6 +1967,22 @@ fn normalize_signed_axis(axis: isize, ndim: usize) -> Result<usize, NdimageError
         .map_err(|_| NdimageError::InvalidArgument("axis normalization failed".to_string()))
 }
 
+fn normalize_signed_axes(axes: &[isize], ndim: usize) -> Result<Vec<usize>, NdimageError> {
+    let mut normalized = Vec::with_capacity(axes.len());
+    let mut seen = vec![false; ndim];
+    for &axis in axes {
+        let axis = normalize_signed_axis(axis, ndim)?;
+        if seen[axis] {
+            return Err(NdimageError::InvalidArgument(
+                "axes must be unique".to_string(),
+            ));
+        }
+        seen[axis] = true;
+        normalized.push(axis);
+    }
+    Ok(normalized)
+}
+
 /// Sobel edge detection filter along a given axis.
 ///
 /// Matches `scipy.ndimage.sobel`.
@@ -2083,14 +2099,46 @@ pub fn prewitt_default_axis(
 ///
 /// Matches `scipy.ndimage.laplace`.
 pub fn laplace(input: &NdArray, mode: BoundaryMode, cval: f64) -> Result<NdArray, NdimageError> {
+    let axes = (0..input.ndim()).collect::<Vec<_>>();
+    laplace_usize_axes(input, &axes, mode, cval)
+}
+
+/// Laplace filter over a SciPy-style signed axes subset.
+///
+/// `axes=[]` matches SciPy's empty-axes identity behavior.
+pub fn laplace_axes(
+    input: &NdArray,
+    axes: &[isize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let axes = normalize_signed_axes(axes, input.ndim())?;
+    laplace_usize_axes(input, &axes, mode, cval)
+}
+
+fn laplace_usize_axes(
+    input: &NdArray,
+    axes: &[usize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
     if input.size() == 0 {
         return Err(NdimageError::EmptyInput);
+    }
+    if axes.is_empty() {
+        return Ok(input.clone());
     }
 
     // Laplace = sum of second-derivative filters along each axis
     let mut result = NdArray::zeros(input.shape.clone());
 
-    for axis in 0..input.ndim() {
+    for &axis in axes {
+        if axis >= input.ndim() {
+            return Err(NdimageError::InvalidArgument(format!(
+                "axis {axis} out of range for {}-dimensional input",
+                input.ndim()
+            )));
+        }
         let kernel_1d = vec![1.0, -2.0, 1.0];
         let mut kernel_shape = vec![1usize; input.ndim()];
         kernel_shape[axis] = 3;
@@ -7407,6 +7455,52 @@ mod tests {
         let input = NdArray::new(vec![1.0; 4], vec![2, 2]).unwrap();
         assert!(prewitt(&input, 5, BoundaryMode::Reflect, 0.0).is_err());
         assert!(prewitt_signed_axis(&input, -3, BoundaryMode::Reflect, 0.0).is_err());
+    }
+
+    #[test]
+    fn laplace_axes_matches_scipy_subset_fixtures() {
+        let input = NdArray::new(vec![1.0, 2.0, 4.0, 8.0, 16.0, 32.0], vec![2, 3]).unwrap();
+
+        // scipy.ndimage.laplace(input, mode='constant', cval=0.0, axes=None)
+        assert_eq!(
+            laplace(&input, BoundaryMode::Constant, 0.0).unwrap().data,
+            vec![6.0, 13.0, 18.0, -15.0, -22.0, -108.0]
+        );
+        // scipy.ndimage.laplace(input, mode='constant', cval=0.0, axes=(-1,))
+        assert_eq!(
+            laplace_axes(&input, &[-1], BoundaryMode::Constant, 0.0)
+                .unwrap()
+                .data,
+            vec![0.0, 1.0, -6.0, 0.0, 8.0, -48.0]
+        );
+        // scipy.ndimage.laplace(input, mode='constant', cval=0.0, axes=(-2,))
+        assert_eq!(
+            laplace_axes(&input, &[-2], BoundaryMode::Constant, 0.0)
+                .unwrap()
+                .data,
+            vec![6.0, 12.0, 24.0, -15.0, -30.0, -60.0]
+        );
+        assert_eq!(
+            laplace_axes(&input, &[-2, -1], BoundaryMode::Constant, 0.0)
+                .unwrap()
+                .data,
+            laplace(&input, BoundaryMode::Constant, 0.0).unwrap().data
+        );
+        assert_eq!(
+            laplace_axes(&input, &[], BoundaryMode::Constant, 0.0)
+                .unwrap()
+                .data,
+            input.data
+        );
+    }
+
+    #[test]
+    fn laplace_axes_rejects_duplicate_and_out_of_range_axes() {
+        let input = NdArray::new(vec![1.0; 6], vec![2, 3]).unwrap();
+
+        assert!(laplace_axes(&input, &[1, -1], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(laplace_axes(&input, &[2], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(laplace_axes(&input, &[-3], BoundaryMode::Reflect, 0.0).is_err());
     }
 
     #[test]
