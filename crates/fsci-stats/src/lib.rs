@@ -55622,4 +55622,61 @@ mod tests {
         assert!(g2 > g);
     }
 
+    #[test]
+    fn test_adjusted_rand_index_perfect_match() {
+        let labels = vec![0.0, 0.0, 1.0, 1.0, 2.0, 2.0];
+        let ari = adjusted_rand_index(&labels, &labels);
+        assert!((ari - 1.0).abs() < 1e-10, "ARI of identical labels should be 1.0, got {}", ari);
+    }
+
+    #[test]
+    fn test_adjusted_rand_index_different() {
+        let true_labels = vec![0.0, 0.0, 1.0, 1.0];
+        let pred_labels = vec![0.0, 1.0, 0.0, 1.0];
+        let ari = adjusted_rand_index(&true_labels, &pred_labels);
+        assert!(ari < 0.5, "ARI of uncorrelated labels should be low, got {}", ari);
+    }
+
+    #[test]
+    fn test_rand_index_perfect_match() {
+        let labels = vec![0.0, 0.0, 1.0, 1.0];
+        let ri = rand_index(&labels, &labels);
+        assert!((ri - 1.0).abs() < 1e-10, "RI of identical labels should be 1.0, got {}", ri);
+    }
+
+    #[test]
+    fn test_rand_index_bounds() {
+        let true_labels = vec![0.0, 0.0, 1.0, 1.0];
+        let pred_labels = vec![0.0, 1.0, 0.0, 1.0];
+        let ri = rand_index(&true_labels, &pred_labels);
+        assert!(ri >= 0.0 && ri <= 1.0, "RI should be in [0,1], got {}", ri);
+    }
+
+    #[test]
+    fn test_silhouette_score_1d_perfect_clusters() {
+        let data = vec![0.0, 0.1, 10.0, 10.1];
+        let labels = vec![0.0, 0.0, 1.0, 1.0];
+        let s = silhouette_score_1d(&data, &labels);
+        assert!(s > 0.9, "Well-separated clusters should have high silhouette, got {}", s);
+    }
+
+    #[test]
+    fn test_silhouette_score_1d_overlapping() {
+        let data = vec![0.0, 1.0, 2.0, 3.0];
+        let labels = vec![0.0, 1.0, 0.0, 1.0];
+        let s = silhouette_score_1d(&data, &labels);
+        assert!(s < 0.5, "Overlapping clusters should have low silhouette, got {}", s);
+    }
+
+    #[test]
+    fn test_central_moment_basic() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let m0 = central_moment(&data, 0);
+        assert!((m0 - 1.0).abs() < 1e-10, "0th central moment should be 1");
+        let m1 = central_moment(&data, 1);
+        assert!(m1.abs() < 1e-10, "1st central moment should be ~0, got {}", m1);
+        let m2 = central_moment(&data, 2);
+        assert!(m2 > 0.0, "2nd central moment (variance) should be positive");
+    }
+
 }
