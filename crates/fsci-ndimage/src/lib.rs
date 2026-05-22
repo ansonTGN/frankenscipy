@@ -169,10 +169,13 @@ fn gaussian_filter_with_sigmas_and_orders(
 
     let mut current = input.clone();
     for (axis, (&sigma, &order)) in sigmas.iter().zip(orders).enumerate() {
-        if !sigma.is_finite() || sigma <= 0.0 {
+        if !sigma.is_finite() {
             return Err(NdimageError::InvalidArgument(
-                "sigmas must be finite and positive".to_string(),
+                "sigmas must be finite".to_string(),
             ));
+        }
+        if sigma <= 0.0 {
+            continue;
         }
         current = gaussian_filter1d_axis(&current, sigma, axis, order, mode, cval)?;
     }
@@ -5677,6 +5680,67 @@ mod tests {
     }
 
     #[test]
+    fn gaussian_filter_multi_sigma_matches_scipy_2d() {
+        let input = NdArray::new((0..12).map(f64::from).collect(), vec![3, 4]).unwrap();
+        // scipy.ndimage.gaussian_filter(x, [0.5, 1.0], mode='constant', cval=0.0)
+        let expect = [
+            0.623741755569,
+            1.33426091614,
+            1.97824192771,
+            1.84889615648,
+            3.15893295714,
+            4.78984061724,
+            5.51037314812,
+            4.52972430867,
+            5.02289529139,
+            7.22764648909,
+            7.87162750066,
+            6.2480496923,
+        ];
+        let got =
+            gaussian_filter_multi_sigma(&input, &[0.5, 1.0], BoundaryMode::Constant, 0.0).unwrap();
+        for (g, e) in got.data.iter().zip(&expect) {
+            assert!(
+                (g - e).abs() < 1e-9,
+                "multi-sigma gaussian mismatch: {g} vs {e}"
+            );
+        }
+    }
+
+    #[test]
+    fn gaussian_filter_multi_sigma_matches_scipy_skipped_axis() {
+        let input = NdArray::new((0..6).map(f64::from).collect(), vec![2, 3]).unwrap();
+        // scipy.ndimage.gaussian_filter(x, [0.0, 1.0], mode='constant', cval=0.0)
+        let expect = [
+            0.34995370049801,
+            0.882886360669299,
+            1.0398583843688,
+            2.43467182779822,
+            3.5315454426772,
+            3.12457651166901,
+        ];
+        let got =
+            gaussian_filter_multi_sigma(&input, &[0.0, 1.0], BoundaryMode::Constant, 0.0).unwrap();
+        for (g, e) in got.data.iter().zip(&expect) {
+            assert!(
+                (g - e).abs() < 1e-9,
+                "multi-sigma skipped-axis mismatch: {g} vs {e}"
+            );
+        }
+    }
+
+    #[test]
+    fn gaussian_filter_multi_sigma_rejects_shape_and_nonfinite_sigma() {
+        let input = NdArray::new((0..12).map(f64::from).collect(), vec![3, 4]).unwrap();
+
+        assert!(gaussian_filter_multi_sigma(&input, &[1.0], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(
+            gaussian_filter_multi_sigma(&input, &[1.0, f64::INFINITY], BoundaryMode::Reflect, 0.0)
+                .is_err()
+        );
+    }
+
+    #[test]
     fn convolve_and_correlate_origins_match_scipy_even_kernel() {
         let input = NdArray::new((1..=6).map(f64::from).collect(), vec![2, 3]).unwrap();
         let weights = NdArray::new(vec![1., 10., 100., 1000.], vec![2, 2]).unwrap();
@@ -6171,7 +6235,7 @@ mod tests {
         assert!(
             gaussian_gradient_magnitude_multi_sigma(
                 &input,
-                &[1.0, 0.0],
+                &[1.0, f64::INFINITY],
                 BoundaryMode::Reflect,
                 0.0,
             )
