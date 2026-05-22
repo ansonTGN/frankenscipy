@@ -18968,6 +18968,62 @@ pub fn canberra_distance(u: &[f64], v: &[f64]) -> f64 {
 
 /// One-way ANOVA (Analysis of Variance).
 ///
+/// Compute the total sum of squares (SS_Total).
+///
+/// SS_Total = Σ (x_i - grand_mean)²
+///
+/// This is the total variability in the data, which can be
+/// partitioned into between-group and within-group components.
+pub fn ss_total(groups: &[&[f64]]) -> f64 {
+    let all_values: Vec<f64> = groups.iter().flat_map(|g| g.iter().copied()).collect();
+    if all_values.is_empty() {
+        return f64::NAN;
+    }
+    let n = all_values.len() as f64;
+    let grand_mean = all_values.iter().sum::<f64>() / n;
+    all_values.iter().map(|&x| (x - grand_mean).powi(2)).sum()
+}
+
+/// Compute the between-group sum of squares (SS_Between).
+///
+/// SS_Between = Σ n_i * (group_mean_i - grand_mean)²
+///
+/// Measures the variability between group means.
+pub fn ss_between(groups: &[&[f64]]) -> f64 {
+    if groups.is_empty() || groups.iter().any(|g| g.is_empty()) {
+        return f64::NAN;
+    }
+    let all_values: Vec<f64> = groups.iter().flat_map(|g| g.iter().copied()).collect();
+    let n = all_values.len() as f64;
+    let grand_mean = all_values.iter().sum::<f64>() / n;
+
+    groups
+        .iter()
+        .map(|g| {
+            let gi_mean: f64 = g.iter().sum::<f64>() / g.len() as f64;
+            g.len() as f64 * (gi_mean - grand_mean).powi(2)
+        })
+        .sum()
+}
+
+/// Compute the within-group sum of squares (SS_Within).
+///
+/// SS_Within = Σ Σ (x_ij - group_mean_i)²
+///
+/// Measures the variability within groups (error/residual).
+pub fn ss_within(groups: &[&[f64]]) -> f64 {
+    if groups.is_empty() || groups.iter().any(|g| g.is_empty()) {
+        return f64::NAN;
+    }
+    groups
+        .iter()
+        .map(|g| {
+            let gi_mean: f64 = g.iter().sum::<f64>() / g.len() as f64;
+            g.iter().map(|&x| (x - gi_mean).powi(2)).sum::<f64>()
+        })
+        .sum()
+}
+
 /// Matches `scipy.stats.f_oneway(*groups)`.
 ///
 /// Tests H0: all group means are equal.
