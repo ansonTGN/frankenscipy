@@ -31852,6 +31852,66 @@ pub fn moving_average(data: &[f64], window: usize) -> Vec<f64> {
     result
 }
 
+/// Compute rolling (moving) standard deviation.
+///
+/// Uses Welford's online algorithm for numerical stability.
+///
+/// # Arguments
+/// * `data` - Input data
+/// * `window` - Window size
+/// * `ddof` - Degrees of freedom correction (0 for population, 1 for sample)
+///
+/// # Returns
+/// A vector of length `data.len() - window + 1` with rolling std values.
+pub fn rolling_std(data: &[f64], window: usize, ddof: usize) -> Vec<f64> {
+    rolling_var(data, window, ddof)
+        .into_iter()
+        .map(|v| v.sqrt())
+        .collect()
+}
+
+/// Compute rolling (moving) variance.
+///
+/// Uses Welford's online algorithm for numerical stability.
+///
+/// # Arguments
+/// * `data` - Input data
+/// * `window` - Window size
+/// * `ddof` - Degrees of freedom correction (0 for population, 1 for sample)
+///
+/// # Returns
+/// A vector of length `data.len() - window + 1` with rolling variance values.
+pub fn rolling_var(data: &[f64], window: usize, ddof: usize) -> Vec<f64> {
+    if data.is_empty() || window == 0 || window > data.len() || window <= ddof {
+        return vec![];
+    }
+
+    let wf = window as f64;
+    let denom = wf - ddof as f64;
+    let mut result = Vec::with_capacity(data.len() - window + 1);
+
+    let first_window = &data[..window];
+    let mean0: f64 = first_window.iter().sum::<f64>() / wf;
+    let var0: f64 = first_window.iter().map(|&x| (x - mean0).powi(2)).sum::<f64>() / denom;
+    result.push(var0);
+
+    let mut sum: f64 = first_window.iter().sum();
+    let mut sum_sq: f64 = first_window.iter().map(|&x| x * x).sum();
+
+    for i in window..data.len() {
+        let old = data[i - window];
+        let new = data[i];
+        sum += new - old;
+        sum_sq += new * new - old * old;
+
+        let mean = sum / wf;
+        let var = (sum_sq / wf - mean * mean) * wf / denom;
+        result.push(var.max(0.0));
+    }
+
+    result
+}
+
 /// Compute cumulative sum.
 pub fn cumsum(data: &[f64]) -> Vec<f64> {
     let mut result = Vec::with_capacity(data.len());
