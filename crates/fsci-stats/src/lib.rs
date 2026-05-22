@@ -58394,4 +58394,50 @@ mod tests {
             result.pvalue
         );
     }
+
+    #[test]
+    fn weightedtau_returns_valid_results() {
+        let x: Vec<f64> = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let y: Vec<f64> = vec![5.0, 6.0, 7.0, 8.0, 7.0];
+        let result = weightedtau(&x, &y);
+        assert!(
+            result > 0.5 && result < 0.7,
+            "weightedtau got {result}, expected positive correlation ~0.56"
+        );
+
+        let y_inv: Vec<f64> = vec![5.0, 4.0, 3.0, 2.0, 1.0];
+        let result_inv = weightedtau(&x, &y_inv);
+        assert!(
+            result_inv < -0.9,
+            "weightedtau(inverse) got {result_inv}, expected strong negative"
+        );
+    }
+
+    #[test]
+    fn median_test_matches_scipy_reference_values() {
+        let g1: Vec<f64> = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let g2: Vec<f64> = vec![6.0, 7.0, 8.0, 9.0, 10.0];
+        let groups: Vec<&[f64]> = vec![&g1, &g2];
+        let result = median_test(&groups);
+        assert!(
+            (result.statistic - 6.4).abs() < 0.1,
+            "median_test statistic got {}, expected ~6.4",
+            result.statistic
+        );
+        assert!(
+            (result.pvalue - 0.01141203638600166).abs() < 0.001,
+            "median_test pvalue got {}, expected ~0.011",
+            result.pvalue
+        );
+
+        let g3: Vec<f64> = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let g4: Vec<f64> = vec![3.0, 4.0, 5.0, 6.0, 7.0];
+        let groups2: Vec<&[f64]> = vec![&g3, &g4];
+        let result2 = median_test(&groups2);
+        assert!(
+            result2.pvalue > 0.05,
+            "median_test(overlap) pvalue should not be significant, got {}",
+            result2.pvalue
+        );
+    }
 }
