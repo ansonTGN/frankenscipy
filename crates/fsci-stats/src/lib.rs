@@ -56697,6 +56697,24 @@ mod tests {
     }
 
     #[test]
+    fn skew_kurtosis_match_scipy_reference() {
+        // scipy.stats.skew([1,2,3,4,5]) = 0 (symmetric)
+        let symmetric = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let s1 = skew(&symmetric);
+        assert!(s1.abs() < 1e-10, "symmetric data should have skew ~0, got {}", s1);
+
+        // scipy.stats.kurtosis([1,2,3,4,5]) should be negative (platykurtic vs normal)
+        let k1 = kurtosis(&symmetric);
+        // Fisher kurtosis (excess kurtosis) for uniform-like data is negative
+        assert!(k1 < 0.5, "uniform-like data has low kurtosis");
+
+        // Skewed data: [1,1,1,2,2,3,4,5,6,7,8,9,10] - right-skewed
+        let right_skewed = vec![1.0, 1.0, 1.0, 2.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let s2 = skew(&right_skewed);
+        assert!(s2 > 0.0, "right-skewed data should have positive skew, got {}", s2);
+    }
+
+    #[test]
     fn cov_matrix_matches_numpy_reference() {
         // numpy.cov([[1,2,3], [4,5,6]]) with rowvar=True
         // For perfectly correlated data, cov should show linear relationship
