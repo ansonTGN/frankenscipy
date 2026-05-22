@@ -1470,6 +1470,20 @@ pub fn minimum_filter(
     minimum_filter_with_origins(input, size, &[0], mode, cval)
 }
 
+/// Minimum filter over a SciPy-style signed axes subset.
+///
+/// `axes=[]` matches SciPy's empty-axes identity behavior.
+pub fn minimum_filter_axes(
+    input: &NdArray,
+    size: usize,
+    axes: &[isize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let axes = normalize_signed_axes(axes, input.ndim())?;
+    rank_filter_index_usize_axes(input, size, &axes, mode, cval, 0)
+}
+
 /// Minimum filter with SciPy `origin` semantics.
 pub fn minimum_filter_with_origins(
     input: &NdArray,
@@ -1491,6 +1505,24 @@ pub fn maximum_filter(
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
     maximum_filter_with_origins(input, size, &[0], mode, cval)
+}
+
+/// Maximum filter over a SciPy-style signed axes subset.
+///
+/// `axes=[]` matches SciPy's empty-axes identity behavior.
+pub fn maximum_filter_axes(
+    input: &NdArray,
+    size: usize,
+    axes: &[isize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let axes = normalize_signed_axes(axes, input.ndim())?;
+    if axes.is_empty() {
+        return Ok(input.clone());
+    }
+    let kernel_total = filter_footprint_size(axes.len(), size)?;
+    rank_filter_index_usize_axes(input, size, &axes, mode, cval, kernel_total - 1)
 }
 
 /// Maximum filter with SciPy `origin` semantics.
@@ -1598,6 +1630,62 @@ fn rank_filter_index_with_origins(
             let mut in_idx = vec![0i64; ndim];
             for d in 0..ndim {
                 in_idx[d] = out_idx[d] as i64 + k_idx[d] as i64 - offsets[d] - origins[d];
+            }
+            neighborhood.push(input.get_boundary(&in_idx, mode, cval));
+        }
+
+        neighborhood.sort_by(|a, b| a.total_cmp(b));
+        output.data[flat_out] = neighborhood[rank.min(neighborhood.len() - 1)];
+    }
+
+    Ok(output)
+}
+
+fn rank_filter_index_usize_axes(
+    input: &NdArray,
+    size: usize,
+    axes: &[usize],
+    mode: BoundaryMode,
+    cval: f64,
+    rank: usize,
+) -> Result<NdArray, NdimageError> {
+    if axes.is_empty() {
+        return Ok(input.clone());
+    }
+    let kernel_total = filter_footprint_size(axes.len(), size)?;
+    if input.size() == 0 {
+        return Err(NdimageError::EmptyInput);
+    }
+
+    let ndim = input.ndim();
+    for &axis in axes {
+        if axis >= ndim {
+            return Err(NdimageError::InvalidArgument(format!(
+                "axis {axis} out of range for {ndim}-dimensional input"
+            )));
+        }
+    }
+
+    let mut output = NdArray::zeros(input.shape.clone());
+    let offsets: Vec<i64> = vec![size as i64 / 2; axes.len()];
+    let kernel_shape: Vec<usize> = vec![size; axes.len()];
+    let kernel_strides = compute_strides(&kernel_shape);
+
+    for flat_out in 0..input.size() {
+        let out_idx = input.unravel(flat_out);
+        let mut neighborhood = Vec::with_capacity(kernel_total);
+
+        for flat_k in 0..kernel_total {
+            let mut k_idx = vec![0usize; axes.len()];
+            let mut rem = flat_k;
+            for (d, slot) in k_idx.iter_mut().enumerate() {
+                *slot = rem / kernel_strides[d];
+                rem %= kernel_strides[d];
+            }
+
+            let mut in_idx: Vec<i64> = out_idx.iter().map(|&coord| coord as i64).collect();
+            for (d, &axis) in axes.iter().enumerate() {
+                in_idx[axis] += k_idx[d] as i64 - offsets[d];
             }
             neighborhood.push(input.get_boundary(&in_idx, mode, cval));
         }
@@ -7232,6 +7320,91 @@ mod tests {
         let max_shifted =
             maximum_filter_with_origins(&input, 2, &[-1], BoundaryMode::Constant, 0.0).unwrap();
         assert_eq!(max_shifted.data, vec![2., 3., 4., 5., 5.]);
+    }
+
+    #[test]
+    fn min_max_filter_axes_match_scipy_subset_fixtures() {
+        let input = NdArray::new(vec![4.0, 1.0, 7.0, 2.0, 9.0, 3.0], vec![2, 3]).unwrap();
+
+        // scipy.ndimage.minimum_filter(input, 2, mode='constant', cval=-10.0, axes=(-1,))
+        let min_last_axis = [-10.0, 1.0, 1.0, -10.0, 2.0, 3.0];
+        // scipy.ndimage.minimum_filter(input, 2, mode='constant', cval=-10.0, axes=(-2,))
+        let min_first_axis = [-10.0, -10.0, -10.0, 2.0, 1.0, 3.0];
+        // scipy.ndimage.minimum_filter(input, 2, mode='constant', cval=-10.0, axes=(-2, -1))
+        let min_all_axes = [-10.0, -10.0, -10.0, -10.0, 1.0, 1.0];
+
+        assert_eq!(
+            minimum_filter_axes(&input, 2, &[-1], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            min_last_axis
+        );
+        assert_eq!(
+            minimum_filter_axes(&input, 2, &[-2], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            min_first_axis
+        );
+        assert_eq!(
+            minimum_filter_axes(&input, 2, &[-2, -1], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            min_all_axes
+        );
+
+        // scipy.ndimage.maximum_filter(input, 2, mode='constant', cval=-10.0, axes=(-1,))
+        let max_last_axis = [4.0, 4.0, 7.0, 2.0, 9.0, 9.0];
+        // scipy.ndimage.maximum_filter(input, 2, mode='constant', cval=-10.0, axes=(-2,))
+        let max_first_axis = [4.0, 1.0, 7.0, 4.0, 9.0, 7.0];
+        // scipy.ndimage.maximum_filter(input, 2, mode='constant', cval=-10.0, axes=(-2, -1))
+        let max_all_axes = [4.0, 4.0, 7.0, 4.0, 9.0, 9.0];
+
+        assert_eq!(
+            maximum_filter_axes(&input, 2, &[-1], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            max_last_axis
+        );
+        assert_eq!(
+            maximum_filter_axes(&input, 2, &[-2], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            max_first_axis
+        );
+        assert_eq!(
+            maximum_filter_axes(&input, 2, &[-2, -1], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            max_all_axes
+        );
+
+        assert_eq!(
+            minimum_filter_axes(&input, 0, &[], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            input.data
+        );
+        assert_eq!(
+            maximum_filter_axes(&input, 0, &[], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            input.data
+        );
+    }
+
+    #[test]
+    fn min_max_filter_axes_reject_duplicate_and_out_of_range_axes() {
+        let input = NdArray::new(vec![1.0; 6], vec![2, 3]).unwrap();
+
+        assert!(minimum_filter_axes(&input, 2, &[1, -1], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(minimum_filter_axes(&input, 2, &[2], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(minimum_filter_axes(&input, 2, &[-3], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(minimum_filter_axes(&input, 0, &[-1], BoundaryMode::Reflect, 0.0).is_err());
+
+        assert!(maximum_filter_axes(&input, 2, &[1, -1], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(maximum_filter_axes(&input, 2, &[2], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(maximum_filter_axes(&input, 2, &[-3], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(maximum_filter_axes(&input, 0, &[-1], BoundaryMode::Reflect, 0.0).is_err());
     }
 
     #[test]
