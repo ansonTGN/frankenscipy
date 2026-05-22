@@ -974,6 +974,28 @@ pub fn convolve1d(
     convolve1d_with_origin(input, weights, axis, mode, cval, 0)
 }
 
+/// One-dimensional convolution with SciPy-style signed axis normalization.
+pub fn convolve1d_signed_axis(
+    input: &NdArray,
+    weights: &[f64],
+    axis: isize,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let axis = normalize_signed_axis(axis, input.ndim())?;
+    convolve1d(input, weights, axis, mode, cval)
+}
+
+/// One-dimensional convolution using SciPy's default `axis=-1`.
+pub fn convolve1d_default_axis(
+    input: &NdArray,
+    weights: &[f64],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    convolve1d_signed_axis(input, weights, -1, mode, cval)
+}
+
 /// One-dimensional convolution along a selected axis with SciPy `origin` semantics.
 ///
 /// Positive origins shift the convolution window toward higher input coordinates;
@@ -1088,6 +1110,28 @@ pub fn correlate1d(
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
     correlate1d_with_origin(input, weights, axis, mode, cval, 0)
+}
+
+/// One-dimensional correlation with SciPy-style signed axis normalization.
+pub fn correlate1d_signed_axis(
+    input: &NdArray,
+    weights: &[f64],
+    axis: isize,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let axis = normalize_signed_axis(axis, input.ndim())?;
+    correlate1d(input, weights, axis, mode, cval)
+}
+
+/// One-dimensional correlation using SciPy's default `axis=-1`.
+pub fn correlate1d_default_axis(
+    input: &NdArray,
+    weights: &[f64],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    correlate1d_signed_axis(input, weights, -1, mode, cval)
 }
 
 /// One-dimensional correlation along a selected axis with SciPy `origin` semantics.
@@ -1218,6 +1262,30 @@ pub fn gaussian_filter1d(
     }
 
     gaussian_filter1d_axis(input, sigma, axis, order, mode, cval)
+}
+
+/// One-dimensional Gaussian filter with SciPy-style signed axis normalization.
+pub fn gaussian_filter1d_signed_axis(
+    input: &NdArray,
+    sigma: f64,
+    axis: isize,
+    order: usize,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let axis = normalize_signed_axis(axis, input.ndim())?;
+    gaussian_filter1d(input, sigma, axis, order, mode, cval)
+}
+
+/// One-dimensional Gaussian filter using SciPy's default `axis=-1`.
+pub fn gaussian_filter1d_default_axis(
+    input: &NdArray,
+    sigma: f64,
+    order: usize,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    gaussian_filter1d_signed_axis(input, sigma, -1, order, mode, cval)
 }
 
 /// Median filter.
@@ -5950,6 +6018,99 @@ mod tests {
 
         let conv_axis1 = convolve1d(&input, &weights, 1, BoundaryMode::Nearest, 0.0).unwrap();
         assert_eq!(conv_axis1.data, vec![1.0, 2.5, 3.0, 5.5, 7.0, 7.5]);
+    }
+
+    #[test]
+    fn core_1d_filters_signed_axis_match_scipy_fixtures() {
+        let input = NdArray::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], vec![2, 3]).unwrap();
+        let weights = [1.0, 0.0, -1.0];
+
+        let corr_default =
+            correlate1d_default_axis(&input, &weights, BoundaryMode::Nearest, 0.0).unwrap();
+        let corr_last =
+            correlate1d_signed_axis(&input, &weights, -1, BoundaryMode::Nearest, 0.0).unwrap();
+        let corr_first =
+            correlate1d_signed_axis(&input, &weights, -2, BoundaryMode::Nearest, 0.0).unwrap();
+        // scipy.ndimage.correlate1d([[1, 2, 3], [4, 5, 6]], [1, 0, -1], axis=-1, mode='nearest')
+        assert_eq!(corr_default.data, vec![-1.0, -2.0, -1.0, -1.0, -2.0, -1.0]);
+        assert_eq!(corr_last.data, corr_default.data);
+        // scipy.ndimage.correlate1d(..., axis=-2, mode='nearest')
+        assert_eq!(corr_first.data, vec![-3.0; 6]);
+
+        let conv_default =
+            convolve1d_default_axis(&input, &weights, BoundaryMode::Nearest, 0.0).unwrap();
+        let conv_last =
+            convolve1d_signed_axis(&input, &weights, -1, BoundaryMode::Nearest, 0.0).unwrap();
+        let conv_first =
+            convolve1d_signed_axis(&input, &weights, -2, BoundaryMode::Nearest, 0.0).unwrap();
+        // scipy.ndimage.convolve1d(..., axis=-1, mode='nearest')
+        assert_eq!(conv_default.data, vec![1.0, 2.0, 1.0, 1.0, 2.0, 1.0]);
+        assert_eq!(conv_last.data, conv_default.data);
+        // scipy.ndimage.convolve1d(..., axis=-2, mode='nearest')
+        assert_eq!(conv_first.data, vec![3.0; 6]);
+
+        let gauss_default =
+            gaussian_filter1d_default_axis(&input, 0.75, 0, BoundaryMode::Reflect, 0.0).unwrap();
+        let gauss_last =
+            gaussian_filter1d_signed_axis(&input, 0.75, -1, 0, BoundaryMode::Reflect, 0.0).unwrap();
+        let gauss_first =
+            gaussian_filter1d_signed_axis(&input, 0.75, -2, 0, BoundaryMode::Reflect, 0.0).unwrap();
+        // scipy.ndimage.gaussian_filter1d(..., 0.75, axis=-1, mode='reflect')
+        let expect_last = [
+            1.26497001042,
+            2.0,
+            2.73502998958,
+            4.26497001042,
+            5.0,
+            5.73502998958,
+        ];
+        for ((g, l), e) in gauss_default
+            .data
+            .iter()
+            .zip(&gauss_last.data)
+            .zip(expect_last)
+        {
+            assert!(
+                (*g - e).abs() < 1e-10,
+                "gaussian default-axis mismatch: {g} vs {e}"
+            );
+            assert!(
+                (*l - e).abs() < 1e-10,
+                "gaussian last-axis mismatch: {l} vs {e}"
+            );
+        }
+        // scipy.ndimage.gaussian_filter1d(..., 0.75, axis=-2, mode='reflect')
+        let expect_first = [
+            1.74772151257,
+            2.74772151257,
+            3.74772151257,
+            3.25227848743,
+            4.25227848743,
+            5.25227848743,
+        ];
+        for (g, e) in gauss_first.data.iter().zip(expect_first) {
+            assert!(
+                (*g - e).abs() < 1e-10,
+                "gaussian first-axis mismatch: {g} vs {e}"
+            );
+        }
+    }
+
+    #[test]
+    fn core_1d_filters_signed_axis_reject_out_of_range_axes() {
+        let input = NdArray::new(vec![1.0; 6], vec![2, 3]).unwrap();
+        let weights = [1.0, 0.0, -1.0];
+
+        assert!(correlate1d_signed_axis(&input, &weights, 2, BoundaryMode::Reflect, 0.0).is_err());
+        assert!(correlate1d_signed_axis(&input, &weights, -3, BoundaryMode::Reflect, 0.0).is_err());
+        assert!(convolve1d_signed_axis(&input, &weights, 2, BoundaryMode::Reflect, 0.0).is_err());
+        assert!(convolve1d_signed_axis(&input, &weights, -3, BoundaryMode::Reflect, 0.0).is_err());
+        assert!(
+            gaussian_filter1d_signed_axis(&input, 0.75, 2, 0, BoundaryMode::Reflect, 0.0).is_err()
+        );
+        assert!(
+            gaussian_filter1d_signed_axis(&input, 0.75, -3, 0, BoundaryMode::Reflect, 0.0).is_err()
+        );
     }
 
     #[test]
