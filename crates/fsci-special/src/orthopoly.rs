@@ -966,6 +966,96 @@ pub fn roots_jacobi(n: usize, alpha: f64, beta: f64) -> (Vec<f64>, Vec<f64>) {
     )
 }
 
+/// SciPy legacy alias for `roots_legendre`.
+#[must_use]
+pub fn p_roots(n: usize) -> (Vec<f64>, Vec<f64>) {
+    roots_legendre(n)
+}
+
+/// SciPy legacy alias for `roots_sh_legendre`.
+#[must_use]
+pub fn ps_roots(n: usize) -> (Vec<f64>, Vec<f64>) {
+    roots_sh_legendre(n)
+}
+
+/// SciPy legacy alias for `roots_chebyt`.
+#[must_use]
+pub fn t_roots(n: usize) -> (Vec<f64>, Vec<f64>) {
+    roots_chebyt(n)
+}
+
+/// SciPy legacy alias for `roots_sh_chebyt`.
+#[must_use]
+pub fn ts_roots(n: usize) -> (Vec<f64>, Vec<f64>) {
+    roots_sh_chebyt(n)
+}
+
+/// SciPy legacy alias for `roots_chebyu`.
+#[must_use]
+pub fn u_roots(n: usize) -> (Vec<f64>, Vec<f64>) {
+    roots_chebyu(n)
+}
+
+/// SciPy legacy alias for `roots_sh_chebyu`.
+#[must_use]
+pub fn us_roots(n: usize) -> (Vec<f64>, Vec<f64>) {
+    roots_sh_chebyu(n)
+}
+
+/// SciPy legacy alias for `roots_chebyc`.
+#[must_use]
+pub fn c_roots(n: usize) -> (Vec<f64>, Vec<f64>) {
+    roots_chebyc(n)
+}
+
+/// SciPy legacy alias for `roots_chebys`.
+#[must_use]
+pub fn s_roots(n: usize) -> (Vec<f64>, Vec<f64>) {
+    roots_chebys(n)
+}
+
+/// SciPy legacy alias for `roots_hermite`.
+#[must_use]
+pub fn h_roots(n: usize) -> (Vec<f64>, Vec<f64>) {
+    roots_hermite(n)
+}
+
+/// SciPy legacy alias for `roots_hermitenorm`.
+#[must_use]
+pub fn he_roots(n: usize) -> (Vec<f64>, Vec<f64>) {
+    roots_hermitenorm(n)
+}
+
+/// SciPy legacy alias for `roots_laguerre`.
+#[must_use]
+pub fn l_roots(n: usize) -> (Vec<f64>, Vec<f64>) {
+    roots_laguerre(n)
+}
+
+/// SciPy legacy alias for `roots_genlaguerre`.
+#[must_use]
+pub fn la_roots(n: usize, alpha: f64) -> (Vec<f64>, Vec<f64>) {
+    roots_genlaguerre(n, alpha)
+}
+
+/// SciPy legacy alias for `roots_gegenbauer`.
+#[must_use]
+pub fn cg_roots(n: usize, alpha: f64) -> (Vec<f64>, Vec<f64>) {
+    roots_gegenbauer(n, alpha)
+}
+
+/// SciPy legacy alias for `roots_jacobi`.
+#[must_use]
+pub fn j_roots(n: usize, alpha: f64, beta: f64) -> (Vec<f64>, Vec<f64>) {
+    roots_jacobi(n, alpha, beta)
+}
+
+/// SciPy legacy alias for `roots_sh_jacobi`.
+#[must_use]
+pub fn js_roots(n: usize, p: f64, q: f64) -> (Vec<f64>, Vec<f64>) {
+    roots_sh_jacobi(n, p, q)
+}
+
 fn invalid_quadrature(n: usize) -> (Vec<f64>, Vec<f64>) {
     (vec![f64::NAN; n], vec![f64::NAN; n])
 }
@@ -1242,6 +1332,36 @@ mod tests {
             "{msg}: got {actual}, expected {expected} (diff={})",
             (actual - expected).abs()
         );
+    }
+
+    fn assert_pairs_close(
+        actual: (Vec<f64>, Vec<f64>),
+        expected: (Vec<f64>, Vec<f64>),
+        tol: f64,
+        msg: &str,
+    ) {
+        assert_eq!(actual.0.len(), expected.0.len(), "{msg}: node length");
+        assert_eq!(actual.1.len(), expected.1.len(), "{msg}: weight length");
+        for (idx, (actual_node, expected_node)) in
+            actual.0.iter().zip(expected.0.iter()).enumerate()
+        {
+            assert_close(
+                *actual_node,
+                *expected_node,
+                tol,
+                &format!("{msg} node {idx}"),
+            );
+        }
+        for (idx, (actual_weight, expected_weight)) in
+            actual.1.iter().zip(expected.1.iter()).enumerate()
+        {
+            assert_close(
+                *actual_weight,
+                *expected_weight,
+                tol,
+                &format!("{msg} weight {idx}"),
+            );
+        }
     }
 
     // ── Legendre ──────────────────────────────────────────────────
@@ -2687,6 +2807,45 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn scipy_root_aliases_delegate_to_long_names() {
+        assert_pairs_close(p_roots(5), roots_legendre(5), 1e-12, "p_roots");
+        assert_pairs_close(ps_roots(5), roots_sh_legendre(5), 1e-12, "ps_roots");
+        assert_pairs_close(t_roots(5), roots_chebyt(5), 1e-12, "t_roots");
+        assert_pairs_close(ts_roots(5), roots_sh_chebyt(5), 1e-12, "ts_roots");
+        assert_pairs_close(u_roots(5), roots_chebyu(5), 1e-12, "u_roots");
+        assert_pairs_close(us_roots(5), roots_sh_chebyu(5), 1e-12, "us_roots");
+        assert_pairs_close(c_roots(5), roots_chebyc(5), 1e-12, "c_roots");
+        assert_pairs_close(s_roots(5), roots_chebys(5), 1e-12, "s_roots");
+        assert_pairs_close(h_roots(5), roots_hermite(5), 1e-12, "h_roots");
+        assert_pairs_close(he_roots(5), roots_hermitenorm(5), 1e-12, "he_roots");
+        assert_pairs_close(l_roots(5), roots_laguerre(5), 1e-12, "l_roots");
+        assert_pairs_close(
+            la_roots(5, 0.5),
+            roots_genlaguerre(5, 0.5),
+            1e-12,
+            "la_roots",
+        );
+        assert_pairs_close(
+            cg_roots(5, 1.5),
+            roots_gegenbauer(5, 1.5),
+            1e-12,
+            "cg_roots",
+        );
+        assert_pairs_close(
+            j_roots(5, 0.5, 0.3),
+            roots_jacobi(5, 0.5, 0.3),
+            1e-12,
+            "j_roots",
+        );
+        assert_pairs_close(
+            js_roots(5, 1.5, 0.75),
+            roots_sh_jacobi(5, 1.5, 0.75),
+            1e-12,
+            "js_roots",
+        );
     }
 
     #[test]

@@ -3,7 +3,7 @@
 //! variants not covered by diff_special_roots_quadrature:
 //! roots_chebyu, roots_chebyc, roots_chebys, roots_sh_legendre,
 //! roots_sh_chebyt, roots_sh_chebyu, roots_sh_jacobi, roots_genlaguerre,
-//! roots_gegenbauer, roots_jacobi.
+//! roots_gegenbauer, roots_jacobi, and SciPy's legacy *_roots aliases.
 //!
 //! Resolves [frankenscipy-lhrxe]. 1e-10 abs.
 
@@ -15,8 +15,10 @@ use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use fsci_special::{
+    c_roots, cg_roots, h_roots, he_roots, j_roots, js_roots, l_roots, la_roots, p_roots, ps_roots,
     roots_chebyc, roots_chebys, roots_chebyu, roots_gegenbauer, roots_genlaguerre, roots_jacobi,
-    roots_sh_chebyt, roots_sh_chebyu, roots_sh_jacobi, roots_sh_legendre,
+    roots_sh_chebyt, roots_sh_chebyu, roots_sh_jacobi, roots_sh_legendre, s_roots, t_roots,
+    ts_roots, u_roots, us_roots,
 };
 use serde::{Deserialize, Serialize};
 
@@ -169,6 +171,66 @@ fn generate_query() -> OracleQuery {
         }
     }
 
+    // Legacy alias names SciPy keeps at scipy.special top level.
+    for family in [
+        "p_roots", "ps_roots", "t_roots", "ts_roots", "u_roots", "us_roots", "c_roots", "s_roots",
+        "h_roots", "he_roots", "l_roots",
+    ] {
+        for n in [3_usize, 5, 8] {
+            points.push(PointCase {
+                case_id: format!("{family}_n{n}"),
+                family: family.into(),
+                n,
+                alpha: 0.0,
+                beta: 0.0,
+            });
+        }
+    }
+    for n in [3_usize, 5, 8] {
+        for alpha in [0.0_f64, 0.5, 1.5] {
+            points.push(PointCase {
+                case_id: format!("la_roots_n{n}_a{alpha}"),
+                family: "la_roots".into(),
+                n,
+                alpha,
+                beta: 0.0,
+            });
+        }
+    }
+    for n in [3_usize, 5, 8] {
+        for alpha in [0.5_f64, 1.0, 2.0] {
+            points.push(PointCase {
+                case_id: format!("cg_roots_n{n}_a{alpha}"),
+                family: "cg_roots".into(),
+                n,
+                alpha,
+                beta: 0.0,
+            });
+        }
+    }
+    for n in [3_usize, 5, 8] {
+        for (alpha, beta) in [(0.0_f64, 0.0), (0.5, 0.3), (1.5, -0.5)] {
+            points.push(PointCase {
+                case_id: format!("j_roots_n{n}_a{alpha}_b{beta}"),
+                family: "j_roots".into(),
+                n,
+                alpha,
+                beta,
+            });
+        }
+    }
+    for n in [3_usize, 5, 8] {
+        for (p, q) in [(0.5_f64, 1.25), (1.5, 0.75), (2.0, 2.0)] {
+            points.push(PointCase {
+                case_id: format!("js_roots_n{n}_p{p}_q{q}"),
+                family: "js_roots".into(),
+                n,
+                alpha: p,
+                beta: q,
+            });
+        }
+    }
+
     OracleQuery { points }
 }
 
@@ -196,9 +258,9 @@ for case in q["points"]:
     alpha = float(case["alpha"]); beta = float(case["beta"])
     try:
         fn = getattr(special, family)
-        if family == "roots_jacobi" or family == "roots_sh_jacobi":
+        if family in ("roots_jacobi", "roots_sh_jacobi", "j_roots", "js_roots"):
             nodes, weights = fn(n, alpha, beta)
-        elif family in ("roots_genlaguerre", "roots_gegenbauer"):
+        elif family in ("roots_genlaguerre", "roots_gegenbauer", "la_roots", "cg_roots"):
             nodes, weights = fn(n, alpha)
         else:
             nodes, weights = fn(n)
@@ -315,6 +377,21 @@ fn diff_special_roots_extras() {
             "roots_gegenbauer" => roots_gegenbauer(case.n, case.alpha),
             "roots_jacobi" => roots_jacobi(case.n, case.alpha, case.beta),
             "roots_sh_jacobi" => roots_sh_jacobi(case.n, case.alpha, case.beta),
+            "p_roots" => p_roots(case.n),
+            "ps_roots" => ps_roots(case.n),
+            "t_roots" => t_roots(case.n),
+            "ts_roots" => ts_roots(case.n),
+            "u_roots" => u_roots(case.n),
+            "us_roots" => us_roots(case.n),
+            "c_roots" => c_roots(case.n),
+            "s_roots" => s_roots(case.n),
+            "h_roots" => h_roots(case.n),
+            "he_roots" => he_roots(case.n),
+            "l_roots" => l_roots(case.n),
+            "la_roots" => la_roots(case.n, case.alpha),
+            "cg_roots" => cg_roots(case.n, case.alpha),
+            "j_roots" => j_roots(case.n, case.alpha, case.beta),
+            "js_roots" => js_roots(case.n, case.alpha, case.beta),
             _ => continue,
         };
         let (nodes, weights) = sort_pairs(n_raw, w_raw);
