@@ -20466,6 +20466,63 @@ pub fn trim_mean(data: &[f64], proportiontocut: f64) -> f64 {
     trimmed.iter().sum::<f64>() / trimmed.len() as f64
 }
 
+/// Confidence interval for trimmed mean using bootstrap.
+///
+/// Computes a confidence interval for the trimmed mean using the
+/// percentile bootstrap method.
+///
+/// # Arguments
+/// * `data` — Input array
+/// * `proportiontocut` — Fraction to trim from each end (0.0 to 0.5)
+/// * `confidence` — Confidence level (e.g., 0.95 for 95%)
+/// * `n_bootstrap` — Number of bootstrap samples (default: 1000)
+/// * `seed` — Random seed for reproducibility
+///
+/// # Returns
+/// (lower, upper) confidence interval bounds
+pub fn trimmed_mean_ci(
+    data: &[f64],
+    proportiontocut: f64,
+    confidence: f64,
+    n_bootstrap: usize,
+    seed: u64,
+) -> (f64, f64) {
+    if data.is_empty() || data.iter().any(|v| v.is_nan()) {
+        return (f64::NAN, f64::NAN);
+    }
+    if !(0.0..1.0).contains(&confidence) {
+        return (f64::NAN, f64::NAN);
+    }
+
+    let n = data.len();
+    let mut rng = StdRng::seed_from_u64(seed);
+    let mut bootstrap_means = Vec::with_capacity(n_bootstrap);
+
+    for _ in 0..n_bootstrap {
+        // Resample with replacement
+        let sample: Vec<f64> = (0..n).map(|_| data[rng.random_range(0..n)]).collect();
+        let tm = trim_mean(&sample, proportiontocut);
+        if tm.is_finite() {
+            bootstrap_means.push(tm);
+        }
+    }
+
+    if bootstrap_means.is_empty() {
+        return (f64::NAN, f64::NAN);
+    }
+
+    bootstrap_means.sort_by(|a, b| a.total_cmp(b));
+
+    let alpha = 1.0 - confidence;
+    let lower_idx = ((alpha / 2.0) * bootstrap_means.len() as f64).floor() as usize;
+    let upper_idx = ((1.0 - alpha / 2.0) * bootstrap_means.len() as f64).ceil() as usize;
+
+    let lower = bootstrap_means[lower_idx.min(bootstrap_means.len() - 1)];
+    let upper = bootstrap_means[(upper_idx - 1).min(bootstrap_means.len() - 1)];
+
+    (lower, upper)
+}
+
 /// Trim a proportion of elements from both ends of a sorted array.
 ///
 /// Slices off the given proportion from **each** end of the sorted input array,
@@ -39963,6 +40020,41 @@ mod tests {
         let result = trimboth(&data, 0.2);
         // sorted: [1, 2, 3, 4, 5], trim 1 from each end
         assert_eq!(result, vec![2.0, 3.0, 4.0]);
+    }
+
+    // ── trimmed_mean_ci tests ────────────────────────────────────────
+
+    #[test]
+    fn trimmed_mean_ci_contains_point_estimate() {
+        let data: Vec<f64> = (1..=100).map(|x| x as f64).collect();
+        let tm = trim_mean(&data, 0.1);
+        let (lower, upper) = trimmed_mean_ci(&data, 0.1, 0.95, 1000, 42);
+
+        assert!(
+            lower <= tm && tm <= upper,
+            "CI [{lower}, {upper}] should contain trim_mean {tm}"
+        );
+    }
+
+    #[test]
+    fn trimmed_mean_ci_wider_at_lower_confidence() {
+        let data: Vec<f64> = (1..=50).map(|x| x as f64).collect();
+        let (low_95, high_95) = trimmed_mean_ci(&data, 0.1, 0.95, 1000, 42);
+        let (low_90, high_90) = trimmed_mean_ci(&data, 0.1, 0.90, 1000, 42);
+
+        let width_95 = high_95 - low_95;
+        let width_90 = high_90 - low_90;
+
+        assert!(
+            width_95 >= width_90,
+            "95% CI width {width_95} should be >= 90% CI width {width_90}"
+        );
+    }
+
+    #[test]
+    fn trimmed_mean_ci_empty_returns_nan() {
+        let (lower, upper) = trimmed_mean_ci(&[], 0.1, 0.95, 1000, 42);
+        assert!(lower.is_nan() && upper.is_nan());
     }
 
     #[test]
