@@ -2878,6 +2878,139 @@ impl ContinuousDistribution for GammaDist {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// Generalized Gamma Distribution
+// ══════════════════════════════════════════════════════════════════════
+
+/// Generalized gamma distribution.
+///
+/// Matches `scipy.stats.gengamma(a, c)`.
+/// PDF: |c| * x^(c*a - 1) * exp(-x^c) / Γ(a) for x > 0.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GenGamma {
+    pub a: f64,
+    pub c: f64,
+}
+
+impl GenGamma {
+    #[must_use]
+    pub fn new(a: f64, c: f64) -> Self {
+        assert!(a > 0.0, "a must be positive, got {a}");
+        assert!(c != 0.0 && c.is_finite(), "c must be non-zero and finite, got {c}");
+        Self { a, c }
+    }
+}
+
+impl ContinuousDistribution for GenGamma {
+    fn pdf(&self, x: f64) -> f64 {
+        if x <= 0.0 {
+            return 0.0;
+        }
+        let a = self.a;
+        let c = self.c;
+        let ln_pdf = c.abs().ln() + (c * a - 1.0) * x.ln() - x.powf(c) - ln_gamma(a);
+        ln_pdf.exp()
+    }
+
+    fn cdf(&self, x: f64) -> f64 {
+        if x <= 0.0 {
+            return 0.0;
+        }
+        let a = self.a;
+        let c = self.c;
+        let y = x.powf(c.abs());
+        if c > 0.0 {
+            lower_regularized_gamma(a, y)
+        } else {
+            upper_regularized_gamma(a, y)
+        }
+    }
+
+    fn ppf(&self, q: f64) -> f64 {
+        if !(0.0..=1.0).contains(&q) {
+            return f64::NAN;
+        }
+        if q == 0.0 {
+            return 0.0;
+        }
+        if q == 1.0 {
+            return f64::INFINITY;
+        }
+        let a = self.a;
+        let c = self.c;
+        let q_adj = if c > 0.0 { q } else { 1.0 - q };
+        let y = fsci_special::gammaincinv_scalar(a, q_adj);
+        y.powf(1.0 / c.abs())
+    }
+
+    fn mean(&self) -> f64 {
+        let a = self.a;
+        let c = self.c;
+        (ln_gamma(a + 1.0 / c) - ln_gamma(a)).exp()
+    }
+
+    fn var(&self) -> f64 {
+        let a = self.a;
+        let c = self.c;
+        let g1 = (ln_gamma(a + 1.0 / c) - ln_gamma(a)).exp();
+        let g2 = (ln_gamma(a + 2.0 / c) - ln_gamma(a)).exp();
+        g2 - g1 * g1
+    }
+
+    fn fit(_data: &[f64]) -> Self {
+        Self {
+            a: f64::NAN,
+            c: f64::NAN,
+        }
+    }
+
+    fn try_fit(_data: &[f64]) -> Result<Self, FitError> {
+        Err(FitError::NotImplemented {
+            distribution: "GenGamma".into(),
+        })
+    }
+
+    fn skewness(&self) -> f64 {
+        let a = self.a;
+        let c = self.c;
+        let g1 = (ln_gamma(a + 1.0 / c) - ln_gamma(a)).exp();
+        let g2 = (ln_gamma(a + 2.0 / c) - ln_gamma(a)).exp();
+        let g3 = (ln_gamma(a + 3.0 / c) - ln_gamma(a)).exp();
+        let mu = g1;
+        let var = g2 - g1 * g1;
+        let sigma = var.sqrt();
+        (g3 - 3.0 * mu * var - mu * mu * mu) / (sigma * sigma * sigma)
+    }
+
+    fn kurtosis(&self) -> f64 {
+        let a = self.a;
+        let c = self.c;
+        let g1 = (ln_gamma(a + 1.0 / c) - ln_gamma(a)).exp();
+        let g2 = (ln_gamma(a + 2.0 / c) - ln_gamma(a)).exp();
+        let g3 = (ln_gamma(a + 3.0 / c) - ln_gamma(a)).exp();
+        let g4 = (ln_gamma(a + 4.0 / c) - ln_gamma(a)).exp();
+        let mu = g1;
+        let var = g2 - g1 * g1;
+        let mu3 = g3 - 3.0 * mu * var - mu * mu * mu;
+        let mu4 = g4 - 4.0 * mu * g3 + 6.0 * mu * mu * g2 - 3.0 * mu.powi(4);
+        mu4 / (var * var) - 3.0
+    }
+
+    fn entropy(&self) -> f64 {
+        f64::NAN
+    }
+
+    fn mode(&self) -> f64 {
+        let a = self.a;
+        let c = self.c;
+        if c * a >= 1.0 {
+            ((c * a - 1.0) / c).powf(1.0 / c)
+        } else {
+            0.0
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // Weibull Distribution
 // ══════════════════════════════════════════════════════════════════════
 
@@ -51663,6 +51796,25 @@ mod tests {
         assert!(nig.kurtosis().is_finite());
         let med = nig.ppf(0.5);
         assert!(med.is_finite());
+    }
+
+    #[test]
+    fn test_gen_gamma() {
+        let gg = GenGamma::new(2.0, 1.5);
+        assert_eq!(gg.pdf(0.0), 0.0);
+        assert!(gg.pdf(1.0) > 0.0);
+        assert!(gg.pdf(2.0) > 0.0);
+        assert_eq!(gg.cdf(0.0), 0.0);
+        assert!(gg.cdf(1.0) > 0.0 && gg.cdf(1.0) < 1.0);
+        assert!(gg.cdf(5.0) > 0.9);
+        let mu = gg.mean();
+        assert!(mu > 0.0 && mu.is_finite());
+        assert!(gg.var() > 0.0);
+        assert!(gg.skewness().is_finite());
+        assert!(gg.kurtosis().is_finite());
+        assert!(gg.mode() >= 0.0 && gg.mode().is_finite());
+        let q50 = gg.ppf(0.5);
+        assert!(q50 > 0.0 && q50.is_finite());
     }
 
 }
