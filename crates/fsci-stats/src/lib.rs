@@ -1613,6 +1613,158 @@ impl ContinuousDistribution for ChiSquared {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// Non-central Chi-Squared Distribution
+// ══════════════════════════════════════════════════════════════════════
+
+/// Non-central chi-squared distribution with `df` degrees of freedom
+/// and non-centrality parameter `nc`.
+///
+/// Matches `scipy.stats.ncx2(df, nc)`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NoncentralChiSquared {
+    pub df: f64,
+    pub nc: f64,
+}
+
+impl NoncentralChiSquared {
+    #[must_use]
+    pub fn new(df: f64, nc: f64) -> Self {
+        assert!(df > 0.0, "df must be positive, got {df}");
+        assert!(nc >= 0.0, "nc must be non-negative, got {nc}");
+        Self { df, nc }
+    }
+}
+
+impl ContinuousDistribution for NoncentralChiSquared {
+    fn pdf(&self, x: f64) -> f64 {
+        if x < 0.0 || x.is_nan() {
+            return if x.is_nan() { f64::NAN } else { 0.0 };
+        }
+        if self.nc == 0.0 {
+            return ChiSquared::new(self.df).pdf(x);
+        }
+        if x == 0.0 {
+            return if self.df >= 2.0 { 0.0 } else { f64::INFINITY };
+        }
+
+        // PDF: 0.5 * exp(-(x+λ)/2) * (x/λ)^((k/4)-(1/2)) * I_{k/2-1}(sqrt(λx))
+        let k = self.df;
+        let lam = self.nc;
+
+        let nu = k / 2.0 - 1.0;
+        let sqrt_lam_x = (lam * x).sqrt();
+
+        // Use ive_scalar and convert: I_v(z) = ive(v, z) * exp(|z|)
+        let ive_val = fsci_special::ive_scalar(nu, sqrt_lam_x);
+        let iv_val = ive_val * sqrt_lam_x.abs().exp();
+
+        if iv_val <= 0.0 || !iv_val.is_finite() {
+            return 0.0;
+        }
+
+        let log_pdf = -(x + lam) / 2.0
+            + ((k / 4.0) - 0.5) * (x / lam).ln()
+            + iv_val.ln()
+            - LN_2;
+
+        log_pdf.exp()
+    }
+
+    fn cdf(&self, x: f64) -> f64 {
+        if x <= 0.0 {
+            return if x < 0.0 { 0.0 } else { 0.0 };
+        }
+        if x.is_nan() {
+            return f64::NAN;
+        }
+        if self.nc == 0.0 {
+            return ChiSquared::new(self.df).cdf(x);
+        }
+
+        // Use series expansion: sum of Poisson-weighted central chi-squared CDFs
+        // P(X <= x) = Σ_{j=0}^∞ e^{-λ/2} (λ/2)^j / j! * P(χ²_{k+2j} <= x)
+        let half_lam = self.nc / 2.0;
+        let mut sum = 0.0;
+        let mut term = (-half_lam).exp(); // Poisson(λ/2) pmf at j=0
+
+        for j in 0..200 {
+            let df_j = self.df + 2.0 * j as f64;
+            let chi2_cdf = lower_regularized_gamma(0.5 * df_j, 0.5 * x);
+            sum += term * chi2_cdf;
+
+            // Next Poisson term
+            term *= half_lam / (j + 1) as f64;
+
+            if term < 1e-16 && j > 10 {
+                break;
+            }
+        }
+
+        sum.clamp(0.0, 1.0)
+    }
+
+    fn sf(&self, x: f64) -> f64 {
+        1.0 - self.cdf(x)
+    }
+
+    fn ppf(&self, q: f64) -> f64 {
+        if !(0.0..=1.0).contains(&q) {
+            return f64::NAN;
+        }
+        if q == 0.0 {
+            return 0.0;
+        }
+        if q == 1.0 {
+            return f64::INFINITY;
+        }
+
+        ppf_bisection(|v| self.cdf(v), q, self.mean(), self.std())
+    }
+
+    fn mean(&self) -> f64 {
+        self.df + self.nc
+    }
+
+    fn var(&self) -> f64 {
+        2.0 * (self.df + 2.0 * self.nc)
+    }
+
+    fn entropy(&self) -> f64 {
+        f64::NAN
+    }
+
+    fn fit(_data: &[f64]) -> Self {
+        Self {
+            df: f64::NAN,
+            nc: f64::NAN,
+        }
+    }
+
+    fn try_fit(_data: &[f64]) -> Result<Self, FitError> {
+        Err(FitError::NotImplemented {
+            distribution: "NoncentralChiSquared",
+        })
+    }
+
+    fn skewness(&self) -> f64 {
+        let k = self.df;
+        let lam = self.nc;
+        (8.0 * (k + 3.0 * lam)).sqrt() / (k + 2.0 * lam)
+    }
+
+    fn kurtosis(&self) -> f64 {
+        let k = self.df;
+        let lam = self.nc;
+        12.0 * (k + 4.0 * lam) / ((k + 2.0 * lam).powi(2))
+    }
+
+    fn mode(&self) -> f64 {
+        // Approximate: df + nc - 2 for large df
+        (self.df + self.nc - 2.0).max(0.0)
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // Uniform Distribution
 // ══════════════════════════════════════════════════════════════════════
 
@@ -29028,6 +29180,68 @@ mod tests {
         let c = ChiSquared::new(5.0);
         assert_eq!(c.mean(), 5.0);
         assert_eq!(c.var(), 10.0);
+    }
+
+    // ── Non-central Chi-Squared distribution ──────────────────────────
+
+    #[test]
+    fn ncx2_reduces_to_chi2_when_nc_zero() {
+        let ncx2 = NoncentralChiSquared::new(4.0, 0.0);
+        let chi2 = ChiSquared::new(4.0);
+
+        for &x in &[0.5, 1.0, 2.0, 5.0, 10.0] {
+            assert_close(
+                ncx2.pdf(x),
+                chi2.pdf(x),
+                1e-10,
+                &format!("ncx2 pdf at x={x} should match chi2"),
+            );
+            assert_close(
+                ncx2.cdf(x),
+                chi2.cdf(x),
+                1e-10,
+                &format!("ncx2 cdf at x={x} should match chi2"),
+            );
+        }
+    }
+
+    #[test]
+    fn ncx2_mean_var() {
+        let ncx2 = NoncentralChiSquared::new(4.0, 2.0);
+        // Mean = df + nc = 4 + 2 = 6
+        assert_close(ncx2.mean(), 6.0, 1e-10, "ncx2 mean");
+        // Var = 2(df + 2*nc) = 2(4 + 4) = 16
+        assert_close(ncx2.var(), 16.0, 1e-10, "ncx2 var");
+    }
+
+    #[test]
+    fn ncx2_cdf_increases_with_x() {
+        let ncx2 = NoncentralChiSquared::new(3.0, 1.5);
+        let cdf_1 = ncx2.cdf(1.0);
+        let cdf_5 = ncx2.cdf(5.0);
+        let cdf_10 = ncx2.cdf(10.0);
+
+        assert!(cdf_1 < cdf_5, "CDF should increase");
+        assert!(cdf_5 < cdf_10, "CDF should increase");
+        assert!(cdf_10 < 1.0, "CDF should be < 1 for finite x");
+    }
+
+    #[test]
+    fn ncx2_pdf_nonnegative() {
+        let ncx2 = NoncentralChiSquared::new(5.0, 3.0);
+        assert_eq!(ncx2.pdf(-1.0), 0.0);
+        assert!(ncx2.pdf(1.0) > 0.0);
+        assert!(ncx2.pdf(5.0) > 0.0);
+    }
+
+    #[test]
+    fn ncx2_ppf_inverts_cdf() {
+        let ncx2 = NoncentralChiSquared::new(4.0, 2.0);
+        for &q in &[0.1, 0.5, 0.9] {
+            let x = ncx2.ppf(q);
+            let cdf_x = ncx2.cdf(x);
+            assert_close(cdf_x, q, 1e-3, &format!("ncx2 ppf({q}) roundtrip"));
+        }
     }
 
     // ── Uniform distribution ────────────────────────────────────────
