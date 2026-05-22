@@ -17329,6 +17329,37 @@ pub fn hmean(data: &[f64]) -> f64 {
     n / inv_sum
 }
 
+/// Compute the weighted harmonic mean.
+///
+/// H_w = (Σw) / Σ(w/x)
+///
+/// Like scipy.stats.hmean with weights parameter.
+pub fn hmean_weighted(data: &[f64], weights: &[f64]) -> f64 {
+    if data.is_empty() || data.len() != weights.len() {
+        return f64::NAN;
+    }
+    if data.iter().any(|&x| x.is_nan() || x < 0.0) {
+        return f64::NAN;
+    }
+    if weights.iter().any(|&w| !w.is_finite() || w < 0.0) {
+        return f64::NAN;
+    }
+    let total_w: f64 = weights.iter().sum();
+    if total_w == 0.0 {
+        return f64::NAN;
+    }
+    for (&x, &w) in data.iter().zip(weights) {
+        if x == 0.0 && w > 0.0 {
+            return 0.0;
+        }
+    }
+    let weighted_inv_sum: f64 = data.iter().zip(weights).map(|(&x, &w)| w / x).sum();
+    if weighted_inv_sum == 0.0 {
+        return f64::INFINITY;
+    }
+    total_w / weighted_inv_sum
+}
+
 /// Compute the power mean (generalized mean).
 ///
 /// Matches `scipy.stats.pmean`.
@@ -52447,6 +52478,21 @@ mod tests {
         assert!(peak_to_peak(&empty).is_nan());
         let with_nan = vec![1.0, f64::NAN, 3.0];
         assert!(peak_to_peak(&with_nan).is_nan());
+    }
+
+    #[test]
+    fn test_hmean_weighted() {
+        let data = vec![2.0, 4.0];
+        let weights = vec![1.0, 1.0];
+        let h = hmean_weighted(&data, &weights);
+        assert!((h - hmean(&data)).abs() < 1e-10);
+        let unequal_w = vec![1.0, 3.0];
+        let h2 = hmean_weighted(&data, &unequal_w);
+        assert!(h2.is_finite());
+        assert!(h2 != h);
+        let with_zero = vec![0.0, 4.0];
+        let h3 = hmean_weighted(&with_zero, &weights);
+        assert_eq!(h3, 0.0);
     }
 
 }
