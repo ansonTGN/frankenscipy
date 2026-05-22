@@ -11,6 +11,7 @@
 //! - `entr` — Elementwise entropy: -x * log(x)
 //! - `rel_entr` — Relative entropy (KL divergence element): x * log(x/y)
 //! - `ndtr` / `ndtri` / `ndtri_exp` — Standard normal CDF and inverse CDF
+//! - `stirling2` — Stirling numbers of the second kind
 //! - `nrdtrimn` — Recover the normal mean from a CDF value, scale, and quantile
 //! - `kl_div` — KL divergence element with the `-x + y` correction
 
@@ -53,6 +54,14 @@ pub const CONVENIENCE_DISPATCH_PLAN: &[DispatchPlan] = &[
             when: "direct evaluation using x*log(x/y)",
         }],
         notes: "Matches SciPy domain rules including infinities.",
+    },
+    DispatchPlan {
+        function: "stirling2",
+        steps: &[DispatchStep {
+            regime: KernelRegime::Recurrence,
+            when: "integer n,k inputs: S(n,k) = k*S(n-1,k) + S(n-1,k-1)",
+        }],
+        notes: "Default floating output for scipy.special.stirling2(N, K, exact=False).",
     },
 ];
 
@@ -1230,6 +1239,83 @@ fn gamma_fn(x: f64) -> f64 {
 // ══════════════════════════════════════════════════════════════════════
 // Number Theory Functions
 // ══════════════════════════════════════════════════════════════════════
+
+/// Stirling number of the second kind S(n, k).
+///
+/// Counts partitions of `n` labeled items into `k` non-empty unlabeled subsets.
+/// This is the default floating-output path for `scipy.special.stirling2(N, K)`.
+pub fn stirling2(
+    n_tensor: &SpecialTensor,
+    k_tensor: &SpecialTensor,
+    mode: RuntimeMode,
+) -> SpecialResult {
+    map_real_binary("stirling2", n_tensor, k_tensor, mode, |n, k| {
+        stirling2_real_scalar(n, k, mode)
+    })
+}
+
+fn stirling2_real_scalar(n: f64, k: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
+    if !n.is_finite() || !k.is_finite() {
+        return Err(SpecialError {
+            function: "stirling2",
+            kind: SpecialErrorKind::NonFiniteInput,
+            mode,
+            detail: "stirling2 inputs must be finite integers",
+        });
+    }
+    if n.fract() != 0.0 || k.fract() != 0.0 {
+        return Err(SpecialError {
+            function: "stirling2",
+            kind: SpecialErrorKind::DomainError,
+            mode,
+            detail: "stirling2 inputs must be integers",
+        });
+    }
+    if n < i64::MIN as f64 || n > i64::MAX as f64 || k < i64::MIN as f64 || k > i64::MAX as f64 {
+        return Err(SpecialError {
+            function: "stirling2",
+            kind: SpecialErrorKind::OverflowRisk,
+            mode,
+            detail: "stirling2 integer inputs exceed i64 range",
+        });
+    }
+    Ok(stirling2_scalar(n as i64, k as i64))
+}
+
+/// Scalar floating-output Stirling number of the second kind.
+///
+/// Negative inputs and `k > n` return zero, matching SciPy. Results overflow to
+/// infinity naturally in the `f64` default-output regime.
+#[must_use]
+pub fn stirling2_scalar(n: i64, k: i64) -> f64 {
+    if n < 0 || k < 0 || k > n {
+        return 0.0;
+    }
+    if n == 0 {
+        return if k == 0 { 1.0 } else { 0.0 };
+    }
+    if k == 0 {
+        return 0.0;
+    }
+    if k == 1 || k == n {
+        return 1.0;
+    }
+
+    let n = n as usize;
+    let k = k as usize;
+    let mut row = vec![0.0; k + 1];
+    row[0] = 1.0;
+
+    for i in 1..=n {
+        let upper = k.min(i);
+        for j in (1..=upper).rev() {
+            row[j] = (j as f64).mul_add(row[j], row[j - 1]);
+        }
+        row[0] = 0.0;
+    }
+
+    row[k]
+}
 
 /// Bernoulli number B_n.
 ///
@@ -7341,6 +7427,41 @@ mod tests {
         let expected = 1.0 + 0.5e-8 + 1.0e-16 / 6.0 + 1.0e-24 / 24.0;
         assert!((value - expected).abs() < 1e-16);
         Ok(())
+    }
+
+    #[test]
+    fn stirling2_scalar_matches_scipy_contract_points() {
+        assert_eq!(stirling2_scalar(0, 0), 1.0);
+        assert_eq!(stirling2_scalar(0, 1), 0.0);
+        assert_eq!(stirling2_scalar(1, 0), 0.0);
+        assert_eq!(stirling2_scalar(5, 2), 15.0);
+        assert_eq!(stirling2_scalar(10, 3), 9330.0);
+        assert_eq!(stirling2_scalar(-1, 2), 0.0);
+        assert_eq!(stirling2_scalar(3, -1), 0.0);
+        assert_eq!(stirling2_scalar(3, 4), 0.0);
+    }
+
+    #[test]
+    fn stirling2_tensor_dispatch_broadcasts_scalar_k() -> Result<(), String> {
+        let result = stirling2(
+            &SpecialTensor::RealVec(vec![5.0, 6.0, 7.0]),
+            &SpecialTensor::RealScalar(2.0),
+            RuntimeMode::Strict,
+        )
+        .map_err(|err| err.to_string())?;
+        let values = expect_real_vec(result)?;
+        assert_eq!(values, vec![15.0, 31.0, 63.0]);
+        Ok(())
+    }
+
+    #[test]
+    fn stirling2_tensor_dispatch_rejects_non_integer_inputs() {
+        let result = stirling2(
+            &SpecialTensor::RealScalar(3.5),
+            &SpecialTensor::RealScalar(2.0),
+            RuntimeMode::Strict,
+        );
+        assert!(result.is_err());
     }
 
     #[test]

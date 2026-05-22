@@ -209,6 +209,8 @@ pub use convenience::{
     spence,
     spence_scalar,
     square,
+    stirling2,
+    stirling2_scalar,
     struve,
     struve_scalar,
     swish,
