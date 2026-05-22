@@ -56495,4 +56495,81 @@ mod tests {
         assert!(m2 > 0.0, "2nd central moment (variance) should be positive");
     }
 
+    #[test]
+    fn entropy_matches_scipy_reference_values() {
+        // scipy.stats.entropy([0.25, 0.25, 0.25, 0.25]) = ln(4) = 1.3862943611198906
+        let uniform4 = entropy(&[0.25, 0.25, 0.25, 0.25], None);
+        assert!((uniform4 - 1.3862943611198906).abs() < 1e-12, "uniform 4 entropy");
+
+        // scipy.stats.entropy([0.5, 0.5]) = ln(2) = 0.6931471805599453
+        let uniform2 = entropy(&[0.5, 0.5], None);
+        assert!((uniform2 - 0.6931471805599453).abs() < 1e-12, "uniform 2 entropy");
+
+        // scipy.stats.entropy([1.0, 0.0, 0.0]) = 0 (deterministic)
+        let deterministic = entropy(&[1.0, 0.0, 0.0], None);
+        assert!(deterministic.abs() < 1e-12, "deterministic entropy should be 0");
+
+        // scipy.stats.entropy([0.25, 0.25, 0.25, 0.25], base=2) = 2.0 bits
+        let uniform4_bits = entropy(&[0.25, 0.25, 0.25, 0.25], Some(2.0));
+        assert!((uniform4_bits - 2.0).abs() < 1e-12, "uniform 4 entropy in bits");
+
+        // Non-normalized input: scipy.stats.entropy([1, 1, 1, 1]) = ln(4)
+        let unnorm = entropy(&[1.0, 1.0, 1.0, 1.0], None);
+        assert!((unnorm - 1.3862943611198906).abs() < 1e-12, "unnormalized uniform entropy");
+    }
+
+    #[test]
+    fn kl_divergence_matches_scipy_reference_values() {
+        // scipy.stats.entropy([0.5, 0.5], [0.5, 0.5]) = 0 (same distribution)
+        let kl_same = kl_divergence(&[0.5, 0.5], &[0.5, 0.5], None);
+        assert!(kl_same.abs() < 1e-12, "KL divergence of identical distributions should be 0");
+
+        // scipy.stats.entropy([0.9, 0.1], [0.5, 0.5]) = 0.3680642072072096
+        // D_KL([0.9,0.1] || [0.5,0.5]) = 0.9*ln(0.9/0.5) + 0.1*ln(0.1/0.5)
+        let kl1 = kl_divergence(&[0.9, 0.1], &[0.5, 0.5], None);
+        assert!((kl1 - 0.3680642072072096).abs() < 1e-10, "KL divergence [0.9,0.1] vs uniform, got {}", kl1);
+
+        // scipy.stats.entropy([0.5, 0.5], [0.9, 0.1]) = 0.5108256237659907
+        // D_KL([0.5,0.5] || [0.9,0.1]) = 0.5*ln(0.5/0.9) + 0.5*ln(0.5/0.1)
+        let kl2 = kl_divergence(&[0.5, 0.5], &[0.9, 0.1], None);
+        assert!((kl2 - 0.5108256237659907).abs() < 1e-10, "KL divergence uniform vs [0.9,0.1], got {}", kl2);
+
+        // KL divergence is asymmetric
+        assert!((kl1 - kl2).abs() > 0.1, "KL divergence should be asymmetric");
+    }
+
+    #[test]
+    fn rel_entr_matches_scipy_special() {
+        // scipy.special.rel_entr(0.5, 0.5) = 0.5 * ln(1) = 0
+        assert!(rel_entr(0.5, 0.5).abs() < 1e-12, "rel_entr(0.5, 0.5) = 0");
+
+        // scipy.special.rel_entr(0.9, 0.5) = 0.9 * ln(0.9/0.5) = 0.9 * ln(1.8) = 0.5290079984
+        let r1 = rel_entr(0.9, 0.5);
+        assert!((r1 - 0.5290079984405946).abs() < 1e-10, "rel_entr(0.9, 0.5), got {}", r1);
+
+        // scipy.special.rel_entr(0, y) = 0 for y >= 0
+        assert!(rel_entr(0.0, 0.5).abs() < 1e-12, "rel_entr(0, 0.5) = 0");
+
+        // scipy.special.rel_entr(x, 0) = inf for x > 0
+        assert!(rel_entr(0.5, 0.0).is_infinite() && rel_entr(0.5, 0.0) > 0.0, "rel_entr(0.5, 0) = inf");
+    }
+
+    #[test]
+    fn xlogy_xlog1py_match_scipy_special() {
+        // scipy.special.xlogy(0, y) = 0 for any y
+        assert!(xlogy(0.0, 5.0).abs() < 1e-12, "xlogy(0, 5) = 0");
+        assert!(xlogy(0.0, 0.0).abs() < 1e-12, "xlogy(0, 0) = 0");
+
+        // scipy.special.xlogy(2, 3) = 2 * ln(3) = 2.1972245773362196
+        let xy1 = xlogy(2.0, 3.0);
+        assert!((xy1 - 2.1972245773362196).abs() < 1e-12, "xlogy(2, 3)");
+
+        // scipy.special.xlog1py(0, y) = 0 for any y
+        assert!(xlog1py(0.0, 5.0).abs() < 1e-12, "xlog1py(0, 5) = 0");
+
+        // scipy.special.xlog1py(2, 3) = 2 * ln(4) = 2.772588722239781
+        let xy2 = xlog1py(2.0, 3.0);
+        assert!((xy2 - 2.772588722239781).abs() < 1e-12, "xlog1py(2, 3)");
+    }
+
 }
