@@ -58223,4 +58223,79 @@ mod tests {
             result3.pvalue
         );
     }
+
+    #[test]
+    fn page_trend_test_returns_valid_results() {
+        let row1: Vec<f64> = vec![1.0, 2.0, 3.0];
+        let row2: Vec<f64> = vec![1.0, 2.0, 3.0];
+        let row3: Vec<f64> = vec![1.0, 2.0, 3.0];
+        let row4: Vec<f64> = vec![2.0, 1.0, 3.0];
+        let row5: Vec<f64> = vec![2.0, 1.0, 3.0];
+        let data: Vec<&[f64]> = vec![&row1, &row2, &row3, &row4, &row5];
+        let result = page_trend_test(&data);
+        assert!(
+            (result.statistic - 68.0).abs() < 1e-10,
+            "page_trend statistic got {}, expected 68.0",
+            result.statistic
+        );
+        assert!(
+            result.pvalue > 0.0 && result.pvalue < 0.01,
+            "page_trend pvalue got {}, expected <0.01 (significant)",
+            result.pvalue
+        );
+    }
+
+    #[test]
+    fn epps_singleton_2samp_matches_scipy_reference_values() {
+        let x: Vec<f64> = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let y: Vec<f64> = vec![2.0, 3.0, 4.0, 5.0, 6.0];
+        let result = epps_singleton_2samp(&x, &y);
+        assert!(
+            (result.statistic - 0.9138562188115202).abs() < 1e-10,
+            "epps_singleton statistic got {}, expected 0.914",
+            result.statistic
+        );
+        assert!(
+            (result.pvalue - 0.9225645570907983).abs() < 1e-10,
+            "epps_singleton pvalue got {}, expected 0.923",
+            result.pvalue
+        );
+    }
+
+    #[test]
+    fn tukey_hsd_returns_valid_results() {
+        let g1: Vec<f64> = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let g2: Vec<f64> = vec![2.0, 3.0, 4.0, 5.0, 6.0];
+        let g3: Vec<f64> = vec![5.0, 6.0, 7.0, 8.0, 9.0];
+        let groups: Vec<&[f64]> = vec![&g1, &g2, &g3];
+        let result = tukey_hsd(&groups);
+        assert_eq!(
+            result.pvalue.len(),
+            3,
+            "tukey_hsd should return 3x3 pvalue matrix"
+        );
+        assert!(
+            result.pvalue[0][2] < 0.05,
+            "tukey_hsd: g1 vs g3 should be significant, got pvalue={}",
+            result.pvalue[0][2]
+        );
+    }
+
+    #[test]
+    fn dunnett_returns_valid_results() {
+        let control: Vec<f64> = vec![10.0, 11.0, 12.0, 13.0, 14.0];
+        let t1: Vec<f64> = vec![15.0, 16.0, 17.0, 18.0, 19.0];
+        let t2: Vec<f64> = vec![12.0, 13.0, 14.0, 15.0, 16.0];
+        let treatments: Vec<&[f64]> = vec![&t1, &t2];
+        let result = dunnett(&treatments, &control);
+        assert_eq!(result.statistic.len(), 2, "dunnett should return 2 stats");
+        assert!(
+            result.pvalue[0] < 0.01,
+            "dunnett: t1 vs control should be highly significant"
+        );
+        assert!(
+            result.pvalue[1] > 0.05,
+            "dunnett: t2 vs control should not be significant"
+        );
+    }
 }
