@@ -238,7 +238,7 @@ pub use gamma::{
     factorial2, factorialk, gamma, gamma_with_audit, gammainc, gammainc_scalar, gammaincc,
     gammaincc_scalar, gammaln, gammaln_scalar, gammasgn, gammasgn_scalar, gdtr, gdtrc, gdtria,
     gdtrib, gdtrix, loggamma, loggamma_scalar, multigammaln, pdtr, pdtrc, pdtri, pdtrik, perm,
-    polygamma, rgamma, zeta, zetac,
+    polygamma, psi, rgamma, zeta, zetac,
 };
 pub use hyper::{
     HYPER_DISPATCH_PLAN, HyperCaspDecision, HyperCaspProblem, HypergeometricBranch,

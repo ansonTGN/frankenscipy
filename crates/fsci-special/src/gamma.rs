@@ -267,6 +267,10 @@ pub fn digamma(z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
     digamma_dispatch("digamma", z, mode)
 }
 
+pub fn psi(z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
+    digamma_dispatch("psi", z, mode)
+}
+
 fn digamma_dispatch(function: &'static str, z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
     match z {
         SpecialTensor::RealScalar(x) => digamma_scalar(*x, mode).map(SpecialTensor::RealScalar),
@@ -4271,6 +4275,28 @@ mod tests {
                 "ψ({x}) = {got}, expected {expected}"
             );
         }
+    }
+
+    #[test]
+    fn psi_alias_matches_digamma_dispatch() -> Result<(), String> {
+        let scalar_input = scalar(2.5);
+        let psi_scalar = get_scalar(psi(&scalar_input, RuntimeMode::Strict))?;
+        let digamma_scalar = get_scalar(digamma(&scalar_input, RuntimeMode::Strict))?;
+        assert!((psi_scalar - digamma_scalar).abs() < 1e-14);
+
+        let vec_input = SpecialTensor::RealVec(vec![0.5, 1.0, 2.5, 8.0]);
+        let psi_vec = psi(&vec_input, RuntimeMode::Strict).map_err(|err| err.to_string())?;
+        let digamma_vec =
+            digamma(&vec_input, RuntimeMode::Strict).map_err(|err| err.to_string())?;
+        assert_eq!(psi_vec, digamma_vec);
+
+        let complex_input = SpecialTensor::ComplexScalar(Complex64::new(1.5, 0.25));
+        let psi_complex =
+            psi(&complex_input, RuntimeMode::Strict).map_err(|err| err.to_string())?;
+        let digamma_complex =
+            digamma(&complex_input, RuntimeMode::Strict).map_err(|err| err.to_string())?;
+        assert_eq!(psi_complex, digamma_complex);
+        Ok(())
     }
 
     #[test]
