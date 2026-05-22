@@ -3498,7 +3498,18 @@ pub fn grey_erosion(
     mode: BoundaryMode,
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
-    minimum_filter(input, size, mode, cval)
+    grey_erosion_with_origins(input, size, &[0], mode, cval)
+}
+
+/// Grey-scale erosion with SciPy `origin` semantics.
+pub fn grey_erosion_with_origins(
+    input: &NdArray,
+    size: usize,
+    origins: &[i64],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    minimum_filter_with_origins(input, size, origins, mode, cval)
 }
 
 /// Grey-scale dilation (maximum filter equivalent for continuous values).
@@ -3510,7 +3521,38 @@ pub fn grey_dilation(
     mode: BoundaryMode,
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
-    maximum_filter(input, size, mode, cval)
+    grey_dilation_with_origins(input, size, &[0], mode, cval)
+}
+
+/// Grey-scale dilation with SciPy `origin` semantics.
+pub fn grey_dilation_with_origins(
+    input: &NdArray,
+    size: usize,
+    origins: &[i64],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let origins = normalize_grey_dilation_origins(input.ndim(), size, origins)?;
+    maximum_filter_with_origins(input, size, &origins, mode, cval)
+}
+
+fn normalize_grey_dilation_origins(
+    ndim: usize,
+    size: usize,
+    origins: &[i64],
+) -> Result<Vec<i64>, NdimageError> {
+    let shape = vec![size; ndim];
+    let origins = normalize_filter_origins(ndim, &shape, origins)?;
+    Ok(origins
+        .into_iter()
+        .map(|origin| {
+            let mut origin = -origin;
+            if size.is_multiple_of(2) {
+                origin -= 1;
+            }
+            origin
+        })
+        .collect())
 }
 
 /// Grey-scale opening: erosion followed by dilation.
@@ -3522,8 +3564,19 @@ pub fn grey_opening(
     mode: BoundaryMode,
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
-    let eroded = minimum_filter(input, size, mode, cval)?;
-    maximum_filter(&eroded, size, mode, cval)
+    grey_opening_with_origins(input, size, &[0], mode, cval)
+}
+
+/// Grey-scale opening with SciPy `origin` semantics.
+pub fn grey_opening_with_origins(
+    input: &NdArray,
+    size: usize,
+    origins: &[i64],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let eroded = grey_erosion_with_origins(input, size, origins, mode, cval)?;
+    grey_dilation_with_origins(&eroded, size, origins, mode, cval)
 }
 
 /// Grey-scale closing: dilation followed by erosion.
@@ -3535,8 +3588,19 @@ pub fn grey_closing(
     mode: BoundaryMode,
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
-    let dilated = maximum_filter(input, size, mode, cval)?;
-    minimum_filter(&dilated, size, mode, cval)
+    grey_closing_with_origins(input, size, &[0], mode, cval)
+}
+
+/// Grey-scale closing with SciPy `origin` semantics.
+pub fn grey_closing_with_origins(
+    input: &NdArray,
+    size: usize,
+    origins: &[i64],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let dilated = grey_dilation_with_origins(input, size, origins, mode, cval)?;
+    grey_erosion_with_origins(&dilated, size, origins, mode, cval)
 }
 
 /// Map coordinates: evaluate input at arbitrary (non-integer) coordinates.
@@ -8112,6 +8176,45 @@ mod tests {
             percentile_filter_with_origins(&input, 50.0, 3, &[-1, 0], BoundaryMode::Reflect, 0.0)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn grey_morphology_origins_match_scipy_constant() {
+        let input = NdArray::new(vec![1., 3., 2., 5., 4.], vec![5]).unwrap();
+
+        let erosion_left =
+            grey_erosion_with_origins(&input, 3, &[-1], BoundaryMode::Constant, 0.0).unwrap();
+        assert_eq!(erosion_left.data, vec![1., 2., 2., 0., 0.]);
+
+        let erosion_right =
+            grey_erosion_with_origins(&input, 3, &[1], BoundaryMode::Constant, 0.0).unwrap();
+        assert_eq!(erosion_right.data, vec![0., 0., 1., 2., 2.]);
+
+        let dilation_left =
+            grey_dilation_with_origins(&input, 3, &[-1], BoundaryMode::Constant, 0.0).unwrap();
+        assert_eq!(dilation_left.data, vec![1., 3., 3., 5., 5.]);
+
+        let dilation_right =
+            grey_dilation_with_origins(&input, 3, &[1], BoundaryMode::Constant, 0.0).unwrap();
+        assert_eq!(dilation_right.data, vec![3., 5., 5., 5., 4.]);
+
+        let opening =
+            grey_opening_with_origins(&input, 3, &[-1], BoundaryMode::Constant, 0.0).unwrap();
+        assert_eq!(opening.data, vec![1., 2., 2., 2., 2.]);
+
+        let closing =
+            grey_closing_with_origins(&input, 3, &[1], BoundaryMode::Constant, 0.0).unwrap();
+        assert_eq!(closing.data, vec![0., 0., 3., 5., 4.]);
+    }
+
+    #[test]
+    fn grey_morphology_origin_validation_matches_scipy_bounds() {
+        let input = NdArray::new(vec![1., 3., 2., 5., 4.], vec![5]).unwrap();
+
+        assert!(grey_erosion_with_origins(&input, 2, &[-1], BoundaryMode::Reflect, 0.0).is_ok());
+        assert!(grey_dilation_with_origins(&input, 2, &[0], BoundaryMode::Reflect, 0.0).is_ok());
+        assert!(grey_opening_with_origins(&input, 2, &[1], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(grey_closing_with_origins(&input, 3, &[-2], BoundaryMode::Reflect, 0.0).is_err());
     }
 
     #[test]
