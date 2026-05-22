@@ -29516,6 +29516,53 @@ pub fn intraclass_correlation(groups: &[&[f64]]) -> f64 {
     (ms_between - ms_within) / denom
 }
 
+/// Cronbach's alpha: internal consistency reliability coefficient.
+///
+/// α = (k / (k-1)) * (1 - Σσ²_i / σ²_total)
+///
+/// where k is the number of items (columns), σ²_i is the variance of item i,
+/// and σ²_total is the variance of the total scores.
+///
+/// # Arguments
+/// * `items` - Each inner slice is one item (column), values are responses across subjects
+///
+/// # Returns
+/// Alpha value typically in [0, 1], where higher values indicate better reliability.
+/// Can be negative if items are negatively correlated.
+pub fn cronbachs_alpha(items: &[&[f64]]) -> f64 {
+    let k = items.len();
+    if k < 2 {
+        return f64::NAN;
+    }
+
+    let n = items[0].len();
+    if n < 2 || items.iter().any(|item| item.len() != n) {
+        return f64::NAN;
+    }
+
+    let item_variances: f64 = items
+        .iter()
+        .map(|item| {
+            let mean = item.iter().sum::<f64>() / n as f64;
+            item.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / n as f64
+        })
+        .sum();
+
+    let totals: Vec<f64> = (0..n)
+        .map(|i| items.iter().map(|item| item[i]).sum())
+        .collect();
+
+    let total_mean = totals.iter().sum::<f64>() / n as f64;
+    let total_variance: f64 = totals.iter().map(|&x| (x - total_mean).powi(2)).sum::<f64>() / n as f64;
+
+    if total_variance == 0.0 {
+        return f64::NAN;
+    }
+
+    let kf = k as f64;
+    (kf / (kf - 1.0)) * (1.0 - item_variances / total_variance)
+}
+
 /// Omega-squared: bias-corrected proportion of variance explained.
 ///
 /// ω² = (SS_between - df_between * MS_within) / (SS_total + MS_within)
