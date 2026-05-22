@@ -58967,4 +58967,81 @@ mod tests {
             "mean_absolute_percentage_error got {result}, expected 0.05833333333333336"
         );
     }
+
+    #[test]
+    fn balanced_accuracy_score_matches_scipy_reference_values() {
+        let y_true = vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0];
+        let y_pred = vec![0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0];
+        let result = balanced_accuracy_score(&y_true, &y_pred);
+        assert!(
+            (result - 0.75).abs() < 1e-10,
+            "balanced_accuracy_score got {result}, expected 0.75"
+        );
+    }
+
+    #[test]
+    fn adjusted_r_squared_matches_scipy_reference_values() {
+        let y_true = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let y_pred = vec![1.1, 2.2, 2.8, 4.1, 5.0];
+        let result = adjusted_r_squared(&y_true, &y_pred, 1);
+        assert!(
+            (result - 0.9866666666666667).abs() < 1e-6,
+            "adjusted_r_squared got {result}, expected 0.9866666666666667"
+        );
+    }
+
+    #[test]
+    fn brier_score_matches_scipy_reference_values() {
+        let y_true = vec![1.0, 0.0, 1.0, 1.0, 0.0];
+        let y_pred = vec![0.9, 0.1, 0.8, 0.7, 0.3];
+        let result = brier_score(&y_true, &y_pred);
+        assert!(
+            (result - 0.048).abs() < 1e-10,
+            "brier_score got {result}, expected 0.048"
+        );
+    }
+
+    #[test]
+    fn bhattacharyya_distance_matches_scipy_reference_values() {
+        let p = vec![0.1, 0.2, 0.3, 0.4];
+        let q = vec![0.15, 0.25, 0.25, 0.35];
+        let result = bhattacharyya_distance(&p, &q);
+        assert!(
+            (result - 0.005909122205395264).abs() < 1e-10,
+            "bhattacharyya_distance got {result}, expected 0.005909122205395264"
+        );
+    }
+
+    #[test]
+    fn braycurtis_distance_matches_scipy_reference_values() {
+        let u = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let v = vec![1.1, 2.2, 2.8, 4.1, 5.0];
+        let result = braycurtis_distance(&u, &v);
+        assert!(
+            (result - 0.019867549668874173).abs() < 1e-10,
+            "braycurtis_distance got {result}, expected 0.019867549668874173"
+        );
+    }
+
+    #[test]
+    fn canberra_distance_matches_scipy_reference_values() {
+        let u = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let v = vec![1.1, 2.2, 2.8, 4.1, 5.0];
+        let result = canberra_distance(&u, &v);
+        assert!(
+            (result - 0.14206653287113064).abs() < 1e-10,
+            "canberra_distance got {result}, expected 0.14206653287113064"
+        );
+    }
+
+    #[test]
+    fn chebyshev_distance_matches_scipy_reference_values() {
+        let u = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let v = vec![1.1, 2.2, 2.8, 4.1, 5.0];
+        let result = chebyshev_distance(&u, &v);
+        assert!(
+            (result - 0.2).abs() < 1e-10,
+            "chebyshev_distance got {result}, expected 0.2"
+        );
+    }
 }
