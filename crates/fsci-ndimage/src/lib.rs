@@ -4126,6 +4126,28 @@ pub fn uniform_filter1d(
     uniform_filter1d_with_origin(input, size, axis, mode, cval, 0)
 }
 
+/// Apply a uniform filter with SciPy-style signed axis normalization.
+pub fn uniform_filter1d_signed_axis(
+    input: &NdArray,
+    size: usize,
+    axis: isize,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let axis = normalize_signed_axis(axis, input.ndim())?;
+    uniform_filter1d(input, size, axis, mode, cval)
+}
+
+/// Apply a uniform filter using SciPy's default `axis=-1`.
+pub fn uniform_filter1d_default_axis(
+    input: &NdArray,
+    size: usize,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    uniform_filter1d_signed_axis(input, size, -1, mode, cval)
+}
+
 /// Apply a uniform filter along a single axis with SciPy `origin` semantics.
 ///
 /// Positive origins shift the window toward lower input coordinates; negative
@@ -4263,6 +4285,28 @@ pub fn maximum_filter1d(
     maximum_filter1d_with_origin(input, size, axis, mode, cval, 0)
 }
 
+/// Apply a maximum filter with SciPy-style signed axis normalization.
+pub fn maximum_filter1d_signed_axis(
+    input: &NdArray,
+    size: usize,
+    axis: isize,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let axis = normalize_signed_axis(axis, input.ndim())?;
+    maximum_filter1d(input, size, axis, mode, cval)
+}
+
+/// Apply a maximum filter using SciPy's default `axis=-1`.
+pub fn maximum_filter1d_default_axis(
+    input: &NdArray,
+    size: usize,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    maximum_filter1d_signed_axis(input, size, -1, mode, cval)
+}
+
 /// Apply a maximum filter along a single axis with SciPy `origin` semantics.
 pub fn maximum_filter1d_with_origin(
     input: &NdArray,
@@ -4297,6 +4341,28 @@ pub fn minimum_filter1d(
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
     minimum_filter1d_with_origin(input, size, axis, mode, cval, 0)
+}
+
+/// Apply a minimum filter with SciPy-style signed axis normalization.
+pub fn minimum_filter1d_signed_axis(
+    input: &NdArray,
+    size: usize,
+    axis: isize,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let axis = normalize_signed_axis(axis, input.ndim())?;
+    minimum_filter1d(input, size, axis, mode, cval)
+}
+
+/// Apply a minimum filter using SciPy's default `axis=-1`.
+pub fn minimum_filter1d_default_axis(
+    input: &NdArray,
+    size: usize,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    minimum_filter1d_signed_axis(input, size, -1, mode, cval)
 }
 
 /// Apply a minimum filter along a single axis with SciPy `origin` semantics.
@@ -7885,6 +7951,59 @@ mod tests {
                 17., 18., 19.,
             ]
         );
+    }
+
+    #[test]
+    fn rank_filter1d_signed_axis_matches_scipy_fixtures() {
+        let input = NdArray::new(vec![1.0, 4.0, 2.0, 6.0, 3.0, 5.0], vec![2, 3]).unwrap();
+
+        let uniform_default =
+            uniform_filter1d_default_axis(&input, 2, BoundaryMode::Nearest, 0.0).unwrap();
+        let uniform_last =
+            uniform_filter1d_signed_axis(&input, 2, -1, BoundaryMode::Nearest, 0.0).unwrap();
+        let uniform_first =
+            uniform_filter1d_signed_axis(&input, 2, -2, BoundaryMode::Nearest, 0.0).unwrap();
+        // scipy.ndimage.uniform_filter1d([[1,4,2],[6,3,5]], 2, axis=-1, mode='nearest')
+        assert_eq!(uniform_default.data, vec![1.0, 2.5, 3.0, 6.0, 4.5, 4.0]);
+        assert_eq!(uniform_last.data, uniform_default.data);
+        // scipy.ndimage.uniform_filter1d(..., axis=-2, mode='nearest')
+        assert_eq!(uniform_first.data, vec![1.0, 4.0, 2.0, 3.5, 3.5, 3.5]);
+
+        let minimum_default =
+            minimum_filter1d_default_axis(&input, 2, BoundaryMode::Nearest, 0.0).unwrap();
+        let minimum_last =
+            minimum_filter1d_signed_axis(&input, 2, -1, BoundaryMode::Nearest, 0.0).unwrap();
+        let minimum_first =
+            minimum_filter1d_signed_axis(&input, 2, -2, BoundaryMode::Nearest, 0.0).unwrap();
+        // scipy.ndimage.minimum_filter1d(..., axis=-1, mode='nearest')
+        assert_eq!(minimum_default.data, vec![1.0, 1.0, 2.0, 6.0, 3.0, 3.0]);
+        assert_eq!(minimum_last.data, minimum_default.data);
+        // scipy.ndimage.minimum_filter1d(..., axis=-2, mode='nearest')
+        assert_eq!(minimum_first.data, vec![1.0, 4.0, 2.0, 1.0, 3.0, 2.0]);
+
+        let maximum_default =
+            maximum_filter1d_default_axis(&input, 2, BoundaryMode::Nearest, 0.0).unwrap();
+        let maximum_last =
+            maximum_filter1d_signed_axis(&input, 2, -1, BoundaryMode::Nearest, 0.0).unwrap();
+        let maximum_first =
+            maximum_filter1d_signed_axis(&input, 2, -2, BoundaryMode::Nearest, 0.0).unwrap();
+        // scipy.ndimage.maximum_filter1d(..., axis=-1, mode='nearest')
+        assert_eq!(maximum_default.data, vec![1.0, 4.0, 4.0, 6.0, 6.0, 5.0]);
+        assert_eq!(maximum_last.data, maximum_default.data);
+        // scipy.ndimage.maximum_filter1d(..., axis=-2, mode='nearest')
+        assert_eq!(maximum_first.data, vec![1.0, 4.0, 2.0, 6.0, 4.0, 5.0]);
+    }
+
+    #[test]
+    fn rank_filter1d_signed_axis_rejects_out_of_range_axes() {
+        let input = NdArray::new(vec![1.0; 6], vec![2, 3]).unwrap();
+
+        assert!(uniform_filter1d_signed_axis(&input, 2, 2, BoundaryMode::Reflect, 0.0).is_err());
+        assert!(uniform_filter1d_signed_axis(&input, 2, -3, BoundaryMode::Reflect, 0.0).is_err());
+        assert!(minimum_filter1d_signed_axis(&input, 2, 2, BoundaryMode::Reflect, 0.0).is_err());
+        assert!(minimum_filter1d_signed_axis(&input, 2, -3, BoundaryMode::Reflect, 0.0).is_err());
+        assert!(maximum_filter1d_signed_axis(&input, 2, 2, BoundaryMode::Reflect, 0.0).is_err());
+        assert!(maximum_filter1d_signed_axis(&input, 2, -3, BoundaryMode::Reflect, 0.0).is_err());
     }
 
     #[test]
