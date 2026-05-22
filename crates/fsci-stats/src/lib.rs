@@ -22074,6 +22074,20 @@ pub fn gzscore_ddof(data: &[f64], ddof: usize) -> Vec<f64> {
     zscore_ddof(&logged, ddof)
 }
 
+/// Compute the weighted geometric z-score for strictly positive data.
+///
+/// Matches `scipy.stats.gzscore` with weights parameter.
+pub fn gzscore_weighted(data: &[f64], weights: &[f64]) -> Vec<f64> {
+    if data.is_empty() || data.len() != weights.len() {
+        return vec![f64::NAN; data.len()];
+    }
+    if data.iter().any(|&x| x <= 0.0 || !x.is_finite()) {
+        return vec![f64::NAN; data.len()];
+    }
+    let logged: Vec<f64> = data.iter().map(|&x| x.ln()).collect();
+    zscore_weighted(&logged, weights)
+}
+
 /// Compute the q-th percentile of data.
 ///
 /// Uses linear interpolation between data points.
