@@ -1854,6 +1854,21 @@ pub fn extrema_labels(
     (mins, maxs)
 }
 
+fn normalize_signed_axis(axis: isize, ndim: usize) -> Result<usize, NdimageError> {
+    let ndim = isize::try_from(ndim)
+        .map_err(|_| NdimageError::InvalidArgument("input rank is too large".to_string()))?;
+    let normalized = if axis < 0 { axis + ndim } else { axis };
+
+    if normalized < 0 || normalized >= ndim {
+        return Err(NdimageError::InvalidArgument(format!(
+            "axis {axis} out of range for {ndim}-dimensional input"
+        )));
+    }
+
+    usize::try_from(normalized)
+        .map_err(|_| NdimageError::InvalidArgument("axis normalization failed".to_string()))
+}
+
 /// Sobel edge detection filter along a given axis.
 ///
 /// Matches `scipy.ndimage.sobel`.
@@ -1893,6 +1908,26 @@ pub fn sobel(
     Ok(current)
 }
 
+/// Sobel edge detection with SciPy-style signed axis normalization.
+pub fn sobel_signed_axis(
+    input: &NdArray,
+    axis: isize,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let axis = normalize_signed_axis(axis, input.ndim())?;
+    sobel(input, axis, mode, cval)
+}
+
+/// Sobel edge detection using SciPy's default `axis=-1`.
+pub fn sobel_default_axis(
+    input: &NdArray,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    sobel_signed_axis(input, -1, mode, cval)
+}
+
 /// Prewitt edge detection filter along a given axis.
 ///
 /// Matches `scipy.ndimage.prewitt`.
@@ -1924,6 +1959,26 @@ pub fn prewitt(
     }
 
     Ok(current)
+}
+
+/// Prewitt edge detection with SciPy-style signed axis normalization.
+pub fn prewitt_signed_axis(
+    input: &NdArray,
+    axis: isize,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let axis = normalize_signed_axis(axis, input.ndim())?;
+    prewitt(input, axis, mode, cval)
+}
+
+/// Prewitt edge detection using SciPy's default `axis=-1`.
+pub fn prewitt_default_axis(
+    input: &NdArray,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    prewitt_signed_axis(input, -1, mode, cval)
 }
 
 /// Laplace filter (sum of second derivatives).
@@ -6972,6 +7027,29 @@ mod tests {
     }
 
     #[test]
+    fn sobel_signed_axis_matches_scipy_fixtures() {
+        let input = NdArray::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], vec![2, 3]).unwrap();
+
+        let default_axis = sobel_default_axis(&input, BoundaryMode::Nearest, 0.0).unwrap();
+        let last_axis = sobel_signed_axis(&input, -1, BoundaryMode::Nearest, 0.0).unwrap();
+        let first_axis = sobel_signed_axis(&input, -2, BoundaryMode::Nearest, 0.0).unwrap();
+
+        // scipy.ndimage.sobel([[1, 2, 3], [4, 5, 6]], axis=-1, mode='nearest')
+        assert_eq!(default_axis.data, vec![4.0, 8.0, 4.0, 4.0, 8.0, 4.0]);
+        assert_eq!(last_axis.data, default_axis.data);
+        // scipy.ndimage.sobel(..., axis=-2, mode='nearest')
+        assert_eq!(first_axis.data, vec![12.0; 6]);
+    }
+
+    #[test]
+    fn sobel_signed_axis_rejects_out_of_range_axes() {
+        let input = NdArray::new(vec![1.0; 6], vec![2, 3]).unwrap();
+
+        assert!(sobel_signed_axis(&input, 2, BoundaryMode::Reflect, 0.0).is_err());
+        assert!(sobel_signed_axis(&input, -3, BoundaryMode::Reflect, 0.0).is_err());
+    }
+
+    #[test]
     fn prewitt_constant_image_is_zero() {
         // /testing-metamorphic for [frankenscipy-il5nf]: any uniform
         // image has zero gradient, so prewitt(const) must be 0
@@ -7033,9 +7111,25 @@ mod tests {
     }
 
     #[test]
+    fn prewitt_signed_axis_matches_scipy_fixtures() {
+        let input = NdArray::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], vec![2, 3]).unwrap();
+
+        let default_axis = prewitt_default_axis(&input, BoundaryMode::Nearest, 0.0).unwrap();
+        let last_axis = prewitt_signed_axis(&input, -1, BoundaryMode::Nearest, 0.0).unwrap();
+        let first_axis = prewitt_signed_axis(&input, -2, BoundaryMode::Nearest, 0.0).unwrap();
+
+        // scipy.ndimage.prewitt([[1, 2, 3], [4, 5, 6]], axis=-1, mode='nearest')
+        assert_eq!(default_axis.data, vec![3.0, 6.0, 3.0, 3.0, 6.0, 3.0]);
+        assert_eq!(last_axis.data, default_axis.data);
+        // scipy.ndimage.prewitt(..., axis=-2, mode='nearest')
+        assert_eq!(first_axis.data, vec![9.0; 6]);
+    }
+
+    #[test]
     fn prewitt_axis_out_of_range_returns_error() {
         let input = NdArray::new(vec![1.0; 4], vec![2, 2]).unwrap();
         assert!(prewitt(&input, 5, BoundaryMode::Reflect, 0.0).is_err());
+        assert!(prewitt_signed_axis(&input, -3, BoundaryMode::Reflect, 0.0).is_err());
     }
 
     #[test]
