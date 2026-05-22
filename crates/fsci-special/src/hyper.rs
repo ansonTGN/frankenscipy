@@ -41,6 +41,24 @@ pub const HYPER_DISPATCH_PLAN: &[DispatchPlan] = &[
         notes: "Fallback routing should preserve SciPy branch-selection semantics for strict mode.",
     },
     DispatchPlan {
+        function: "hyperu",
+        steps: &[
+            DispatchStep {
+                regime: KernelRegime::ContinuedFraction,
+                when: "a > 0 and x > 0 integral representation over the Tricomi kernel",
+            },
+            DispatchStep {
+                regime: KernelRegime::Series,
+                when: "a is a nonpositive integer and U reduces to a Laguerre polynomial",
+            },
+            DispatchStep {
+                regime: KernelRegime::Reflection,
+                when: "noninteger b fallback through the M(a,b,x) connection formula",
+            },
+        ],
+        notes: "Strict mode preserves SciPy's real-domain behavior: negative x and unsupported complex inputs fail closed to NaN/error surfaces.",
+    },
+    DispatchPlan {
         function: "hyp2f1",
         steps: &[
             DispatchStep {
@@ -217,6 +235,9 @@ const HYPER_UNSUPPORTED_CHAIN: &[HypergeometricBranch] =
     &[HypergeometricBranch::UnsupportedAnalyticContinuation];
 const HYP2F1_DIVERGENT_CHAIN: &[HypergeometricBranch] =
     &[HypergeometricBranch::DivergentAtUnitArgument];
+const HYPERU_QUADRATURE_STEPS: usize = 4096;
+const HYPERU_LOG_UNDERFLOW: f64 = -745.0;
+const HYPERU_LOG_OVERFLOW: f64 = 709.0;
 
 /// Select the hypergeometric branch for a scalar special-function problem.
 pub fn select_hypergeometric_branch(
@@ -286,6 +307,20 @@ pub fn hyp1f1(
     hyp1f1_dispatch("hyp1f1", a, b, z, mode)
 }
 
+/// Tricomi confluent hypergeometric function U(a, b, x).
+///
+/// Supports real scalar or vector parameters with NumPy-style broadcasting.
+/// Complex inputs are intentionally rejected because SciPy's `hyperu` ufunc is
+/// real-valued only.
+pub fn hyperu(
+    a: &SpecialTensor,
+    b: &SpecialTensor,
+    x: &SpecialTensor,
+    mode: RuntimeMode,
+) -> SpecialResult {
+    hyperu_dispatch("hyperu", a, b, x, mode)
+}
+
 fn hyp1f1_dispatch(
     function: &'static str,
     a: &SpecialTensor,
@@ -352,6 +387,52 @@ fn hyp1f1_dispatch(
     }
 }
 
+fn hyperu_dispatch(
+    function: &'static str,
+    a: &SpecialTensor,
+    b: &SpecialTensor,
+    x: &SpecialTensor,
+    mode: RuntimeMode,
+) -> SpecialResult {
+    if matches!(a, SpecialTensor::Empty)
+        || matches!(b, SpecialTensor::Empty)
+        || matches!(x, SpecialTensor::Empty)
+    {
+        return Ok(SpecialTensor::Empty);
+    }
+
+    if is_complex_tensor(a) || is_complex_tensor(b) || is_complex_tensor(x) {
+        return Err(SpecialError {
+            function,
+            kind: SpecialErrorKind::DomainError,
+            mode,
+            detail: "hyperu supports real-valued inputs only",
+        });
+    }
+
+    let a_len = tensor_vec_len(a);
+    let b_len = tensor_vec_len(b);
+    let x_len = tensor_vec_len(x);
+    let out_len = broadcast_len_3(a_len, b_len, x_len)
+        .ok_or_else(|| broadcast_shape_error(function, mode))?;
+
+    if out_len == 0 {
+        let a_r = tensor_as_real_scalar_for(function, a, mode)?;
+        let b_r = tensor_as_real_scalar_for(function, b, mode)?;
+        let x_r = tensor_as_real_scalar_for(function, x, mode)?;
+        return hyperu_scalar(a_r, b_r, x_r, mode).map(SpecialTensor::RealScalar);
+    }
+
+    let mut results = Vec::with_capacity(out_len);
+    for i in 0..out_len {
+        let a_r = tensor_get_real_for(function, a, i, a_len, mode)?;
+        let b_r = tensor_get_real_for(function, b, i, b_len, mode)?;
+        let x_r = tensor_get_real_for(function, x, i, x_len, mode)?;
+        results.push(hyperu_scalar(a_r, b_r, x_r, mode)?);
+    }
+    Ok(SpecialTensor::RealVec(results))
+}
+
 // Helper functions for broadcast dispatch
 
 fn tensor_vec_len(t: &SpecialTensor) -> usize {
@@ -401,6 +482,22 @@ fn tensor_as_real_scalar(t: &SpecialTensor) -> Result<f64, SpecialError> {
     }
 }
 
+fn tensor_as_real_scalar_for(
+    function: &'static str,
+    t: &SpecialTensor,
+    mode: RuntimeMode,
+) -> Result<f64, SpecialError> {
+    match t {
+        SpecialTensor::RealScalar(v) => Ok(*v),
+        _ => Err(SpecialError {
+            function,
+            kind: SpecialErrorKind::DomainError,
+            mode,
+            detail: "expected real scalar",
+        }),
+    }
+}
+
 fn tensor_as_complex_scalar(t: &SpecialTensor) -> Result<Complex64, SpecialError> {
     match t {
         SpecialTensor::RealScalar(v) => Ok(Complex64::from_real(*v)),
@@ -422,6 +519,34 @@ fn tensor_get_real(t: &SpecialTensor, i: usize, len: usize) -> Result<f64, Speci
             function: "hyp1f1",
             kind: SpecialErrorKind::DomainError,
             mode: RuntimeMode::Strict,
+            detail: "expected real tensor",
+        }),
+    }
+}
+
+fn tensor_get_real_for(
+    function: &'static str,
+    t: &SpecialTensor,
+    i: usize,
+    len: usize,
+    mode: RuntimeMode,
+) -> Result<f64, SpecialError> {
+    match t {
+        SpecialTensor::RealScalar(v) => Ok(*v),
+        SpecialTensor::RealVec(vec) => {
+            vec.get(if len == 0 { 0 } else { i })
+                .copied()
+                .ok_or(SpecialError {
+                    function,
+                    kind: SpecialErrorKind::ShapeMismatch,
+                    mode,
+                    detail: "real vector is empty or shorter than the broadcast output",
+                })
+        }
+        _ => Err(SpecialError {
+            function,
+            kind: SpecialErrorKind::DomainError,
+            mode,
             detail: "expected real tensor",
         }),
     }
@@ -1221,6 +1346,241 @@ fn hyp1f1_unconverged(mode: RuntimeMode, detail: &'static str) -> Result<f64, Sp
     Ok(f64::NAN)
 }
 
+/// Scalar implementation of Tricomi's confluent hypergeometric U(a, b, x).
+pub fn hyperu_scalar(a: f64, b: f64, x: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
+    if a.is_nan() || b.is_nan() || x.is_nan() {
+        return nonfinite_hyperu(mode);
+    }
+
+    if x.is_infinite() && x.is_sign_positive() && a.is_finite() && b.is_finite() {
+        if a == 0.0 {
+            return Ok(1.0);
+        }
+        if a > 0.0 {
+            return Ok(0.0);
+        }
+        if is_nonpositive_integer(a) {
+            return Ok(hyperu_terminating_polynomial(a, b, x));
+        }
+        return Ok(f64::NAN);
+    }
+
+    if !a.is_finite() || !b.is_finite() || !x.is_finite() {
+        return nonfinite_hyperu(mode);
+    }
+
+    if x < 0.0 {
+        if mode == RuntimeMode::Hardened {
+            return Err(SpecialError {
+                function: "hyperu",
+                kind: SpecialErrorKind::DomainError,
+                mode,
+                detail: "hyperu is real-valued only for x >= 0",
+            });
+        }
+        return Ok(f64::NAN);
+    }
+
+    if x == 0.0 {
+        return Ok(hyperu_at_zero(a, b));
+    }
+
+    if a == 0.0 {
+        return Ok(1.0);
+    }
+
+    if is_nonpositive_integer(a) {
+        return Ok(hyperu_terminating_polynomial(a, b, x));
+    }
+
+    if a > 0.0 {
+        return hyperu_positive_a_integral(a, b, x, mode);
+    }
+
+    if !is_near_integer(b) {
+        return hyperu_connection_formula(a, b, x, mode);
+    }
+
+    unsupported_hypergeometric_branch(
+        "hyperu",
+        mode,
+        "hyperu currently requires a > 0, nonpositive integer a, or noninteger b",
+    )
+}
+
+fn nonfinite_hyperu(mode: RuntimeMode) -> Result<f64, SpecialError> {
+    if mode == RuntimeMode::Hardened {
+        return Err(SpecialError {
+            function: "hyperu",
+            kind: SpecialErrorKind::NonFiniteInput,
+            mode,
+            detail: "hyperu parameters must be finite",
+        });
+    }
+    Ok(f64::NAN)
+}
+
+fn hyperu_at_zero(a: f64, b: f64) -> f64 {
+    if b < 1.0 {
+        return gamma_real(1.0 - b) * reciprocal_gamma_real(a - b + 1.0);
+    }
+    f64::INFINITY
+}
+
+fn hyperu_terminating_polynomial(a: f64, b: f64, x: f64) -> f64 {
+    let n = (-a) as usize;
+    if n == 0 {
+        return 1.0;
+    }
+
+    let alpha = b - 1.0;
+    let mut laguerre_nm2 = 1.0;
+    let mut laguerre_nm1 = 1.0 + alpha - x;
+    if n == 1 {
+        return -laguerre_nm1;
+    }
+
+    for k in 2..=n {
+        let kf = k as f64;
+        let laguerre_n =
+            ((2.0 * kf - 1.0 + alpha - x) * laguerre_nm1 - (kf - 1.0 + alpha) * laguerre_nm2) / kf;
+        laguerre_nm2 = laguerre_nm1;
+        laguerre_nm1 = laguerre_n;
+    }
+
+    let factorial = (1..=n).fold(1.0, |acc, k| acc * k as f64);
+    if n.is_multiple_of(2) {
+        factorial * laguerre_nm1
+    } else {
+        -factorial * laguerre_nm1
+    }
+}
+
+fn hyperu_positive_a_integral(
+    a: f64,
+    b: f64,
+    x: f64,
+    mode: RuntimeMode,
+) -> Result<f64, SpecialError> {
+    let (ln_gamma_a, sign_gamma_a) = ln_gamma_with_sign(a);
+    if !ln_gamma_a.is_finite() || sign_gamma_a <= 0.0 {
+        return unsupported_hypergeometric_branch(
+            "hyperu",
+            mode,
+            "positive-a hyperu integral requires finite Gamma(a)",
+        );
+    }
+
+    let peak_scale = (a - 1.0).max(b - 1.0);
+    let peak_s = if peak_scale > 0.0 {
+        (peak_scale / x).ln()
+    } else {
+        0.0
+    };
+    let lower_tail = (-44.0 / a.max(0.25)).clamp(-180.0, -18.0);
+    let lower = lower_tail.min(peak_s - 20.0).max(-180.0);
+    let upper_decay = (60.0 / x).ln();
+    let upper = upper_decay.max(peak_s + 20.0).clamp(18.0, 180.0);
+
+    let h = (upper - lower) / HYPERU_QUADRATURE_STEPS as f64;
+    let mut sum = hyperu_integrand_log_s(a, b, x, ln_gamma_a, lower)
+        + hyperu_integrand_log_s(a, b, x, ln_gamma_a, upper);
+
+    for i in 1..HYPERU_QUADRATURE_STEPS {
+        let s = lower + h * i as f64;
+        let weight = if i % 2 == 0 { 2.0 } else { 4.0 };
+        sum += weight * hyperu_integrand_log_s(a, b, x, ln_gamma_a, s);
+    }
+
+    let value = sum * h / 3.0;
+    if value.is_finite() {
+        return Ok(value);
+    }
+
+    unsupported_hypergeometric_branch(
+        "hyperu",
+        mode,
+        "hyperu integral quadrature overflowed before convergence was established",
+    )
+}
+
+fn hyperu_integrand_log_s(a: f64, b: f64, x: f64, ln_gamma_a: f64, s: f64) -> f64 {
+    let t = s.exp();
+    if !t.is_finite() {
+        return 0.0;
+    }
+
+    let log_value = -x * t + a * s + (b - a - 1.0) * t.ln_1p() - ln_gamma_a;
+    if log_value < HYPERU_LOG_UNDERFLOW {
+        return 0.0;
+    }
+    if log_value > HYPERU_LOG_OVERFLOW {
+        return f64::INFINITY;
+    }
+    log_value.exp()
+}
+
+fn hyperu_connection_formula(
+    a: f64,
+    b: f64,
+    x: f64,
+    mode: RuntimeMode,
+) -> Result<f64, SpecialError> {
+    let sin_pi_b = (std::f64::consts::PI * b).sin();
+    if sin_pi_b.abs() < 1.0e-12 {
+        return unsupported_hypergeometric_branch(
+            "hyperu",
+            mode,
+            "connection formula is singular for integer b",
+        );
+    }
+
+    let m_ab = hyp1f1_scalar(a, b, x, mode)?;
+    let shifted_a = a - b + 1.0;
+    let shifted_b = 2.0 - b;
+    let m_shifted = hyp1f1_scalar(shifted_a, shifted_b, x, mode)?;
+    let term1 = m_ab * reciprocal_gamma_real(shifted_a) * reciprocal_gamma_real(b);
+    let term2 =
+        x.powf(1.0 - b) * m_shifted * reciprocal_gamma_real(a) * reciprocal_gamma_real(shifted_b);
+    let value = std::f64::consts::PI * (term1 - term2) / sin_pi_b;
+
+    if value.is_finite() {
+        return Ok(value);
+    }
+
+    unsupported_hypergeometric_branch(
+        "hyperu",
+        mode,
+        "connection formula produced a non-finite value",
+    )
+}
+
+fn is_near_integer(x: f64) -> bool {
+    x.is_finite() && (x - x.round()).abs() <= 1.0e-12
+}
+
+fn reciprocal_gamma_real(x: f64) -> f64 {
+    if is_nonpositive_integer(x) {
+        return 0.0;
+    }
+    let (ln_abs, sign) = ln_gamma_with_sign(x);
+    if !ln_abs.is_finite() || sign == 0.0 {
+        return 0.0;
+    }
+    sign * (-ln_abs).exp()
+}
+
+fn gamma_real(x: f64) -> f64 {
+    if is_nonpositive_integer(x) {
+        return f64::INFINITY;
+    }
+    let (ln_abs, sign) = ln_gamma_with_sign(x);
+    if !ln_abs.is_finite() || sign == 0.0 {
+        return f64::NAN;
+    }
+    sign * ln_abs.exp()
+}
+
 fn complex_nan() -> Complex64 {
     Complex64::new(f64::NAN, f64::NAN)
 }
@@ -1746,10 +2106,7 @@ mod tests {
         let problem = HyperCaspProblem::hyp2f1(1.0, 2.0, 3.0, 1.5, 1.0e-14);
         let decision = select_casp_for_test(problem);
 
-        assert_eq!(
-            decision.branch,
-            HypergeometricBranch::RealBranchCutInfinity
-        );
+        assert_eq!(decision.branch, HypergeometricBranch::RealBranchCutInfinity);
         assert_eq!(decision.max_terms, 0);
     }
 
@@ -2115,6 +2472,70 @@ mod tests {
             RuntimeMode::Hardened,
         );
         assert_eq!(error_kind(&result), Some(SpecialErrorKind::ShapeMismatch));
+    }
+
+    // ── hyperu tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn hyperu_matches_scipy_reference_points() {
+        let cases = [
+            (1.0, 2.0, 3.0, 1.0 / 3.0),
+            (2.0, 3.0, 1.0, 1.0),
+            (0.5, 1.5, 2.0, std::f64::consts::FRAC_1_SQRT_2),
+            (2.5, 1.25, 0.75, 0.167_391_934_337_980_03),
+            (1.0, 1.0, 1.0, 0.596_347_362_323_194_1),
+            (2.0, 2.0, 1.0, 0.403_652_637_676_805_7),
+            (1.0, 3.0, 0.5, 6.0),
+            (1.0, -1.0, 1.0, 0.298_173_681_161_597_04),
+        ];
+
+        for (a, b, x, expected) in cases {
+            let actual = hyperu_scalar(a, b, x, RuntimeMode::Strict).unwrap_or(f64::NAN);
+            let scale = expected.abs().max(1.0);
+            assert!(
+                (actual - expected).abs() <= 5.0e-7 * scale,
+                "hyperu({a}, {b}, {x}) = {actual}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn hyperu_nonpositive_integer_a_uses_laguerre_polynomial() {
+        let u0 = hyperu_scalar(0.0, 2.0, 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN);
+        let u1 = hyperu_scalar(-1.0, 2.0, 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN);
+        let u2 = hyperu_scalar(-2.0, 3.0, 4.0, RuntimeMode::Strict).unwrap_or(f64::NAN);
+
+        assert_eq!(u0, 1.0);
+        assert!((u1 + 1.0).abs() <= 1.0e-14);
+        assert!((u2 + 4.0).abs() <= 1.0e-14);
+    }
+
+    #[test]
+    fn hyperu_vector_dispatch_broadcasts_real_inputs() {
+        let result = hyperu(
+            &scalar(1.0),
+            &SpecialTensor::RealVec(vec![2.0, 3.0]),
+            &SpecialTensor::RealVec(vec![3.0, 0.5]),
+            RuntimeMode::Strict,
+        );
+        let values = get_real_vec(&result).unwrap_or(&[]);
+
+        assert_eq!(values.len(), 2);
+        assert!((values[0] - 1.0 / 3.0).abs() <= 5.0e-8);
+        assert!((values[1] - 6.0).abs() <= 5.0e-7);
+    }
+
+    #[test]
+    fn hyperu_preserves_scipy_real_domain_edges() {
+        let strict_negative_x = hyperu_scalar(1.0, 2.0, -1.0, RuntimeMode::Strict).unwrap_or(0.0);
+        let hardened_negative_x = hyperu_scalar(1.0, 2.0, -1.0, RuntimeMode::Hardened);
+        let finite_zero = hyperu_scalar(1.0, 0.5, 0.0, RuntimeMode::Strict).unwrap_or(f64::NAN);
+        let singular_zero = hyperu_scalar(1.0, 2.0, 0.0, RuntimeMode::Strict).unwrap_or(f64::NAN);
+
+        assert!(strict_negative_x.is_nan());
+        assert!(hardened_negative_x.is_err());
+        assert!((finite_zero - 2.0).abs() <= 1.0e-12);
+        assert!(singular_zero.is_infinite());
     }
 
     // ── hyp2f1 tests ────────────────────────────────────────────────

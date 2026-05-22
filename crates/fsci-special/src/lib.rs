@@ -238,7 +238,8 @@ pub use gamma::{
 };
 pub use hyper::{
     HYPER_DISPATCH_PLAN, HyperCaspDecision, HyperCaspProblem, HypergeometricBranch,
-    HypergeometricFunction, hyp0f1, hyp0f1_scalar, hyp1f1, hyp2f1, select_hypergeometric_branch,
+    HypergeometricFunction, hyp0f1, hyp0f1_scalar, hyp1f1, hyp2f1, hyperu, hyperu_scalar,
+    select_hypergeometric_branch,
 };
 pub use orthopoly::{
     eval_chebyt, eval_chebyu, eval_gegenbauer, eval_genlaguerre, eval_hermite, eval_hermitenorm,
