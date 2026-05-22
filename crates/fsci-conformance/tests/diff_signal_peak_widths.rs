@@ -190,13 +190,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "peak_widths oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping peak_widths oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping peak_widths oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for peak_widths oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for peak_widths oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -276,7 +276,10 @@ fn diff_signal_peak_widths() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!("peak_widths mismatch: {} abs_diff={}", d.case_id, d.abs_diff);
+            eprintln!(
+                "peak_widths mismatch: {} abs_diff={}",
+                d.case_id, d.abs_diff
+            );
         }
     }
 

@@ -89,8 +89,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize percentileofscore diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize percentileofscore diff log");
     fs::write(path, json).expect("write percentileofscore diff log");
 }
 
@@ -164,8 +163,7 @@ for case in q["points"]:
     points.append({"case_id": cid, "value": fnone(val)})
 print(json.dumps({"points": points}))
 "#;
-    let query_json =
-        serde_json::to_string(query).expect("serialize percentileofscore query");
+    let query_json = serde_json::to_string(query).expect("serialize percentileofscore query");
     let mut child = match Command::new("python3")
         .arg("-c")
         .arg(script)
@@ -180,9 +178,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for percentileofscore oracle: {e}"
             );
-            eprintln!(
-                "skipping percentileofscore oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping percentileofscore oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -198,9 +194,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "percentileofscore oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping percentileofscore oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping percentileofscore oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -213,9 +207,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "percentileofscore oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping percentileofscore oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping percentileofscore oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

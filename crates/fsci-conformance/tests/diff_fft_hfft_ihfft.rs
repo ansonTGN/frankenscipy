@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_fft::{hfft, ihfft, Complex64, FftOptions};
+use fsci_fft::{Complex64, FftOptions, hfft, ihfft};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-005";

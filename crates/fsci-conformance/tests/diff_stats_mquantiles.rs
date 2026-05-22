@@ -200,13 +200,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "mquantiles oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping mquantiles oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping mquantiles oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for mquantiles oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for mquantiles oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

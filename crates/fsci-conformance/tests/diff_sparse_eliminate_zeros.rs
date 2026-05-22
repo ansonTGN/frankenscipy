@@ -217,7 +217,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for eliminate_zeros oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for eliminate_zeros oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -231,7 +233,13 @@ print(json.dumps({"points": points}))
     Some(serde_json::from_str(&stdout).expect("parse eliminate_zeros oracle JSON"))
 }
 
-fn csr_to_dense(rows: usize, cols: usize, indptr: &[usize], indices: &[usize], data: &[f64]) -> Vec<f64> {
+fn csr_to_dense(
+    rows: usize,
+    cols: usize,
+    indptr: &[usize],
+    indices: &[usize],
+    data: &[f64],
+) -> Vec<f64> {
     let mut out = vec![0.0; rows * cols];
     for i in 0..rows {
         for idx in indptr[i]..indptr[i + 1] {
@@ -277,7 +285,8 @@ fn diff_sparse_eliminate_zeros() {
             cols.push(c);
         }
         // sum_duplicates=false so explicit zeros aren't collapsed.
-        let Ok(coo) = CooMatrix::from_triplets(Shape2D::new(case.rows, case.cols), data, rows, cols, true)
+        let Ok(coo) =
+            CooMatrix::from_triplets(Shape2D::new(case.rows, case.cols), data, rows, cols, true)
         else {
             continue;
         };
@@ -302,7 +311,11 @@ fn diff_sparse_eliminate_zeros() {
         diffs.push(CaseDiff {
             case_id: format!("{}_nnz_after", case.case_id),
             op: "nnz_after".into(),
-            abs_diff: if nnz_pass { 0.0 } else { (actual_nnz as f64 - ennz as f64).abs() },
+            abs_diff: if nnz_pass {
+                0.0
+            } else {
+                (actual_nnz as f64 - ennz as f64).abs()
+            },
             pass: nnz_pass,
         });
 
@@ -335,7 +348,8 @@ fn diff_sparse_eliminate_zeros() {
 
     let log = DiffLog {
         test_id: "diff_sparse_eliminate_zeros".into(),
-        category: "fsci_sparse::sparse_has_explicit_zeros + sparse_eliminate_zeros vs scipy.sparse".into(),
+        category: "fsci_sparse::sparse_has_explicit_zeros + sparse_eliminate_zeros vs scipy.sparse"
+            .into(),
         case_count: diffs.len(),
         max_abs_diff: max_overall,
         pass: all_pass,

@@ -74,8 +74,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create differential_entropy diff output dir");
+    fs::create_dir_all(output_dir()).expect("create differential_entropy diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -87,18 +86,14 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize differential_entropy diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize differential_entropy diff log");
     fs::write(path, json).expect("write differential_entropy diff log");
 }
 
 fn generate_query() -> OracleQuery {
     // Need n large enough for window m = floor(sqrt(n)) to satisfy 2m < n.
     let datasets: Vec<(&str, Vec<f64>)> = vec![
-        (
-            "uniform_n30",
-            (1..=30).map(|i| i as f64 / 10.0).collect(),
-        ),
+        ("uniform_n30", (1..=30).map(|i| i as f64 / 10.0).collect()),
         (
             "near_normal_n40",
             (0..40)
@@ -160,8 +155,7 @@ for case in q["points"]:
     points.append({"case_id": cid, "value": fnone(val)})
 print(json.dumps({"points": points}))
 "#;
-    let query_json =
-        serde_json::to_string(query).expect("serialize differential_entropy query");
+    let query_json = serde_json::to_string(query).expect("serialize differential_entropy query");
     let mut child = match Command::new("python3")
         .arg("-c")
         .arg(script)
@@ -176,9 +170,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for differential_entropy oracle: {e}"
             );
-            eprintln!(
-                "skipping differential_entropy oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping differential_entropy oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -194,9 +186,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "differential_entropy oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping differential_entropy oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping differential_entropy oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -209,9 +199,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "differential_entropy oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping differential_entropy oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping differential_entropy oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

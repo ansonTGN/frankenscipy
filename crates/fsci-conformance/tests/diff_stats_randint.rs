@@ -110,14 +110,7 @@ fn generate_query() -> OracleQuery {
     // negative-low and asymmetric ranges. Sample k both inside and
     // immediately outside support so the boundary clamp logic is
     // exercised.
-    let ranges: [(i64, i64); 6] = [
-        (0, 5),
-        (-5, 5),
-        (1, 10),
-        (-10, 0),
-        (0, 100),
-        (50, 60),
-    ];
+    let ranges: [(i64, i64); 6] = [(0, 5), (-5, 5), (1, 10), (-10, 0), (0, 100), (50, 60)];
     let qs = [0.0_f64, 0.05, 0.25, 0.5, 0.75, 0.95, 1.0];
     let mut points = Vec::new();
     for &(low, high) in &ranges {

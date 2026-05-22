@@ -99,8 +99,7 @@ fn generate_query() -> OracleQuery {
         (
             "spread_n15",
             vec![
-                -3.0, -1.5, 0.0, 0.5, 1.5, 2.5, 3.5, 5.0, 7.0, 9.0, 12.0, 16.0, 21.0, 27.0,
-                34.0,
+                -3.0, -1.5, 0.0, 0.5, 1.5, 2.5, 3.5, 5.0, 7.0, 9.0, 12.0, 16.0, 21.0, 27.0, 34.0,
             ],
         ),
         (
@@ -188,14 +187,15 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for central_moments oracle: {e}"
             );
-            eprintln!(
-                "skipping central_moments oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping central_moments oracle: python3 not available ({e})");
             return None;
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open central_moments oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open central_moments oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -203,22 +203,20 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "central_moments oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping central_moments oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping central_moments oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for central_moments oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for central_moments oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "central_moments oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping central_moments oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping central_moments oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

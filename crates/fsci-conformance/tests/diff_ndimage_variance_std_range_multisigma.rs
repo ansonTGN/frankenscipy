@@ -116,7 +116,9 @@ fn synth_image(rows: usize, cols: usize, seed: u64) -> Vec<f64> {
     let mut s = seed;
     let mut out = Vec::with_capacity(rows * cols);
     for _ in 0..(rows * cols) {
-        s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        s = s
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         let u = ((s >> 11) as f64) / (1u64 << 53) as f64;
         out.push((u - 0.5) * 6.0);
     }
@@ -152,13 +154,7 @@ fn generate_query() -> OracleQuery {
         }
         // gauss_multi with several (σy, σx), including non-half-integer
         // values that exercise SciPy's default truncate-radius rounding.
-        for &(sy, sx) in &[
-            (0.5, 0.5),
-            (1.0, 0.5),
-            (0.5, 1.5),
-            (1.3, 0.7),
-            (1.5, 1.5),
-        ] {
+        for &(sy, sx) in &[(0.5, 0.5), (1.0, 0.5), (0.5, 1.5), (1.3, 0.7), (1.5, 1.5)] {
             for mode in ["reflect", "nearest"] {
                 points.push(Case {
                     case_id: format!("gauss_{label}_sy{sy}_sx{sx}_{mode}"),
@@ -272,7 +268,10 @@ fn vec_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]
@@ -325,12 +324,9 @@ fn diff_ndimage_variance_std_range_multisigma() {
                 (r.data, FLOOR_ABS_TOL)
             }
             "gauss_multi" => {
-                let Ok(r) = gaussian_filter_multi_sigma(
-                    &input,
-                    &[case.sigma_y, case.sigma_x],
-                    mode,
-                    0.0,
-                ) else {
+                let Ok(r) =
+                    gaussian_filter_multi_sigma(&input, &[case.sigma_y, case.sigma_x], mode, 0.0)
+                else {
                     continue;
                 };
                 (r.data, GAUSS_ABS_TOL)

@@ -66,16 +66,20 @@ fn complex_max_diff(a: &[Complex64], b: &[Complex64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|((ar, ai), (br, bi))| {
-        (ar - br).abs().max((ai - bi).abs())
-    }).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|((ar, ai), (br, bi))| (ar - br).abs().max((ai - bi).abs()))
+        .fold(0.0_f64, f64::max)
 }
 
 fn real_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]
@@ -91,11 +95,18 @@ fn diff_fft_audit_variants_equivalence() {
         let signal: Vec<Complex64> = (0..n)
             .map(|i| {
                 let t = i as f64 / n as f64;
-                ((2.0 * std::f64::consts::PI * t).sin(), (4.0 * std::f64::consts::PI * t).cos())
+                (
+                    (2.0 * std::f64::consts::PI * t).sin(),
+                    (4.0 * std::f64::consts::PI * t).cos(),
+                )
             })
             .collect();
-        let Ok(plain) = fft(&signal, &opts) else { continue };
-        let Ok(audited) = fft_with_audit(&signal, &opts, &ledger) else { continue };
+        let Ok(plain) = fft(&signal, &opts) else {
+            continue;
+        };
+        let Ok(audited) = fft_with_audit(&signal, &opts, &ledger) else {
+            continue;
+        };
         let d = complex_max_diff(&plain, &audited);
         max_overall = max_overall.max(d);
         diffs.push(CaseDiff {
@@ -106,8 +117,12 @@ fn diff_fft_audit_variants_equivalence() {
         });
 
         // ifft (round trip through fft)
-        let Ok(p_ifft) = ifft(&plain, &opts) else { continue };
-        let Ok(a_ifft) = ifft_with_audit(&plain, &opts, &ledger) else { continue };
+        let Ok(p_ifft) = ifft(&plain, &opts) else {
+            continue;
+        };
+        let Ok(a_ifft) = ifft_with_audit(&plain, &opts, &ledger) else {
+            continue;
+        };
         let d = complex_max_diff(&p_ifft, &a_ifft);
         max_overall = max_overall.max(d);
         diffs.push(CaseDiff {
@@ -119,8 +134,12 @@ fn diff_fft_audit_variants_equivalence() {
 
         // rfft
         let real_sig: Vec<f64> = signal.iter().map(|(re, _)| *re).collect();
-        let Ok(p_rfft) = rfft(&real_sig, &opts) else { continue };
-        let Ok(a_rfft) = rfft_with_audit(&real_sig, &opts, &ledger) else { continue };
+        let Ok(p_rfft) = rfft(&real_sig, &opts) else {
+            continue;
+        };
+        let Ok(a_rfft) = rfft_with_audit(&real_sig, &opts, &ledger) else {
+            continue;
+        };
         let d = complex_max_diff(&p_rfft, &a_rfft);
         max_overall = max_overall.max(d);
         diffs.push(CaseDiff {
@@ -131,8 +150,12 @@ fn diff_fft_audit_variants_equivalence() {
         });
 
         // irfft
-        let Ok(p_irfft) = irfft(&p_rfft, Some(n), &opts) else { continue };
-        let Ok(a_irfft) = irfft_with_audit(&p_rfft, Some(n), &opts, &ledger) else { continue };
+        let Ok(p_irfft) = irfft(&p_rfft, Some(n), &opts) else {
+            continue;
+        };
+        let Ok(a_irfft) = irfft_with_audit(&p_rfft, Some(n), &opts, &ledger) else {
+            continue;
+        };
         let d = real_max_diff(&p_irfft, &a_irfft);
         max_overall = max_overall.max(d);
         diffs.push(CaseDiff {

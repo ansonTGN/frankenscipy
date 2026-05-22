@@ -19,9 +19,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_ndimage::{
-    NdArray, binary_closing, binary_dilation, binary_erosion, binary_opening,
-};
+use fsci_ndimage::{NdArray, binary_closing, binary_dilation, binary_erosion, binary_opening};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-015";
@@ -123,19 +121,15 @@ fn generate_query() -> OracleQuery {
             ],
         ),
         // 6×6 solid block surrounded by zeros (boundary effects).
-        (
-            "6x6_solid_block",
-            vec![6, 6],
-            {
-                let mut v = vec![0.0; 36];
-                for r in 1..5 {
-                    for c in 1..5 {
-                        v[r * 6 + c] = 1.0;
-                    }
+        ("6x6_solid_block", vec![6, 6], {
+            let mut v = vec![0.0; 36];
+            for r in 1..5 {
+                for c in 1..5 {
+                    v[r * 6 + c] = 1.0;
                 }
-                v
-            },
-        ),
+            }
+            v
+        }),
         // 1D 9-element.
         (
             "1d_len9_segments",
@@ -143,17 +137,9 @@ fn generate_query() -> OracleQuery {
             vec![0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0],
         ),
         // All zeros.
-        (
-            "4x4_all_zero",
-            vec![4, 4],
-            vec![0.0; 16],
-        ),
+        ("4x4_all_zero", vec![4, 4], vec![0.0; 16]),
         // All ones — boundary effects dominate for erosion.
-        (
-            "4x4_all_one",
-            vec![4, 4],
-            vec![1.0; 16],
-        ),
+        ("4x4_all_one", vec![4, 4], vec![1.0; 16]),
     ];
 
     let mut points = Vec::new();
@@ -235,7 +221,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open binary_morph oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open binary_morph oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -243,9 +232,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "binary_morph oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping binary_morph oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping binary_morph oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }

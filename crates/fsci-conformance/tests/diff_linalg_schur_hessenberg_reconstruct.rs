@@ -218,7 +218,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open schur_hessenberg oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open schur_hessenberg oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -226,9 +229,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "schur_hessenberg oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping schur_hessenberg oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping schur_hessenberg oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -241,9 +242,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "schur_hessenberg oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping schur_hessenberg oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping schur_hessenberg oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -283,8 +282,7 @@ fn diff_linalg_schur_hessenberg_reconstruct() {
                 let zt_zt = mat_mul(&z_t, &transpose(&res.z));
                 let recon = frob_diff(&a, &zt_zt);
                 // Eigenvalues from T diagonal (for all-real spectra)
-                let mut t_diag: Vec<f64> =
-                    (0..res.t.len()).map(|i| res.t[i][i]).collect();
+                let mut t_diag: Vec<f64> = (0..res.t.len()).map(|i| res.t[i][i]).collect();
                 t_diag.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
                 let eig_d = if t_diag.len() != expected_eigs.len() {
                     f64::INFINITY
@@ -298,7 +296,9 @@ fn diff_linalg_schur_hessenberg_reconstruct() {
                 recon.max(eig_d)
             }
             "hessenberg" => {
-                let Ok(res) = hessenberg(&a, opts) else { continue };
+                let Ok(res) = hessenberg(&a, opts) else {
+                    continue;
+                };
                 // Reconstruction: A ≈ Q H Q^T
                 let q_h = mat_mul(&res.q, &res.h);
                 let qhq = mat_mul(&q_h, &transpose(&res.q));
@@ -342,10 +342,7 @@ fn diff_linalg_schur_hessenberg_reconstruct() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

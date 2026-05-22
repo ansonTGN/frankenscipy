@@ -96,15 +96,15 @@ fn generate_query() -> OracleQuery {
         (
             "near_normal_n20",
             vec![
-                -2.1, -1.6, -1.2, -0.9, -0.7, -0.4, -0.2, 0.0, 0.1, 0.3, 0.4, 0.6, 0.8, 1.0,
-                1.1, 1.3, 1.5, 1.8, 2.0, 2.4,
+                -2.1, -1.6, -1.2, -0.9, -0.7, -0.4, -0.2, 0.0, 0.1, 0.3, 0.4, 0.6, 0.8, 1.0, 1.1,
+                1.3, 1.5, 1.8, 2.0, 2.4,
             ],
         ),
         (
             "skewed_pos",
             vec![
-                0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 0.9, 1.2, 1.6, 2.1, 2.8, 3.7, 5.0, 7.0, 10.0,
-                14.0, 20.0, 28.0, 40.0, 60.0,
+                0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 0.9, 1.2, 1.6, 2.1, 2.8, 3.7, 5.0, 7.0, 10.0, 14.0,
+                20.0, 28.0, 40.0, 60.0,
             ],
         ),
         (
@@ -183,9 +183,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for skew_kurt_alt oracle: {e}"
             );
-            eprintln!(
-                "skipping skew_kurt_alt oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping skew_kurt_alt oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -201,9 +199,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "skew_kurt_alt oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping skew_kurt_alt oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping skew_kurt_alt oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -216,9 +212,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "skew_kurt_alt oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping skew_kurt_alt oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping skew_kurt_alt oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -256,29 +250,31 @@ fn diff_stats_skew_kurt_alt() {
         };
 
         if let Some(scipy_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - scipy_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - scipy_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(scipy_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

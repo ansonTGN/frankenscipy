@@ -99,7 +99,11 @@ fn generate_query() -> OracleQuery {
     let deconv_cases: &[(&str, Vec<f64>, Vec<f64>)] = &[
         ("exact_div", vec![1.0, 3.0, 5.0, 3.0], vec![1.0, 1.0]),
         ("with_rem", vec![1.0, 2.0, 3.0, 4.0], vec![1.0, 1.0]),
-        ("len5_by_len2", vec![2.0, 3.0, -1.0, 5.0, 4.0], vec![1.0, 2.0]),
+        (
+            "len5_by_len2",
+            vec![2.0, 3.0, -1.0, 5.0, 4.0],
+            vec![1.0, 2.0],
+        ),
         (
             "len6_by_len3",
             vec![1.0, 0.0, -2.0, 4.0, 1.0, 3.0],
@@ -230,9 +234,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "deconv_env oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping deconv_env oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping deconv_env oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -245,9 +247,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "deconv_env oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping deconv_env oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping deconv_env oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -283,7 +283,9 @@ fn diff_signal_deconvolve_envelope() {
                     continue;
                 };
                 // Match scipy's q-len boundary so we compare apples to apples.
-                let Some(q_len) = scipy_arm.q_len else { continue };
+                let Some(q_len) = scipy_arm.q_len else {
+                    continue;
+                };
                 if q.len() != q_len {
                     diffs.push(CaseDiff {
                         case_id: case.case_id.clone(),

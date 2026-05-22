@@ -90,11 +90,7 @@ fn emit_log(log: &DiffLog) {
 
 fn fsci_eval(n: usize, x: f64) -> Option<f64> {
     let v = expn(n, x);
-    if v.is_finite() {
-        Some(v)
-    } else {
-        None
-    }
+    if v.is_finite() { Some(v) } else { None }
 }
 
 fn generate_query() -> OracleQuery {
@@ -102,9 +98,7 @@ fn generate_query() -> OracleQuery {
     // the recurrence range.
     let ns = [1_usize, 2, 3, 5, 10];
     // x>0 (E_n diverges at 0 for n=1; E_n(0) = 1/(n-1) for n>1).
-    let xs = [
-        0.01_f64, 0.1, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0, 25.0,
-    ];
+    let xs = [0.01_f64, 0.1, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0, 25.0];
     let mut points = Vec::new();
     for &n in &ns {
         for &x in &xs {
@@ -212,16 +206,17 @@ fn diff_special_expn() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(case.n, case.x) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    n: case.n,
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(case.n, case.x)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                n: case.n,
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

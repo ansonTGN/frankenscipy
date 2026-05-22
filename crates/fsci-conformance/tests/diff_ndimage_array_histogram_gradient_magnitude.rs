@@ -105,7 +105,9 @@ fn synth_image(rows: usize, cols: usize, seed: u64) -> Vec<f64> {
     let mut s = seed;
     let mut out = Vec::with_capacity(rows * cols);
     for _ in 0..(rows * cols) {
-        s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        s = s
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         let u = ((s >> 11) as f64) / (1u64 << 53) as f64;
         out.push((u - 0.5) * 8.0);
     }
@@ -118,8 +120,9 @@ fn smooth_image(rows: usize, cols: usize) -> Vec<f64> {
         for j in 0..cols {
             let x = i as f64 / rows as f64;
             let y = j as f64 / cols as f64;
-            out.push((x * 2.0 * std::f64::consts::PI).sin()
-                + (y * 2.0 * std::f64::consts::PI).cos());
+            out.push(
+                (x * 2.0 * std::f64::consts::PI).sin() + (y * 2.0 * std::f64::consts::PI).cos(),
+            );
         }
     }
     out
@@ -287,7 +290,10 @@ fn vec_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]
@@ -313,8 +319,7 @@ fn diff_ndimage_array_histogram_gradient_magnitude() {
         };
         match case.op.as_str() {
             "hist" => {
-                let (Some(exp_counts), Some(exp_edges)) =
-                    (arm.counts.as_ref(), arm.edges.as_ref())
+                let (Some(exp_counts), Some(exp_edges)) = (arm.counts.as_ref(), arm.edges.as_ref())
                 else {
                     continue;
                 };

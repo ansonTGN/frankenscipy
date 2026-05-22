@@ -117,7 +117,14 @@ fn generate_query() -> OracleQuery {
         // 8 sample x-values relative to n.
         let nf = n as f64;
         let xs = [
-            0.1, 0.5, 0.9, nf / 4.0, nf / 2.0, 3.0 * nf / 4.0, nf - 0.5, nf - 0.1,
+            0.1,
+            0.5,
+            0.9,
+            nf / 4.0,
+            nf / 2.0,
+            3.0 * nf / 4.0,
+            nf - 0.5,
+            nf - 0.1,
         ];
         for x in xs {
             points.push(PointCase {
@@ -227,10 +234,16 @@ fn diff_stats_irwinhall() {
     assert_eq!(oracle.points.len(), query.points.len());
     assert_eq!(oracle.ppf.len(), query.ppf.len());
 
-    let pmap: HashMap<String, PointArm> =
-        oracle.points.into_iter().map(|r| (r.case_id.clone(), r)).collect();
-    let ppfmap: HashMap<String, PpfArm> =
-        oracle.ppf.into_iter().map(|r| (r.case_id.clone(), r)).collect();
+    let pmap: HashMap<String, PointArm> = oracle
+        .points
+        .into_iter()
+        .map(|r| (r.case_id.clone(), r))
+        .collect();
+    let ppfmap: HashMap<String, PpfArm> = oracle
+        .ppf
+        .into_iter()
+        .map(|r| (r.case_id.clone(), r))
+        .collect();
 
     let start = Instant::now();
     let mut diffs = Vec::new();

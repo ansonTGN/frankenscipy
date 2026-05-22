@@ -248,12 +248,7 @@ fn diff_stats_fisk() {
         // Tuples of (struct_name, pdf, cdf, sf) to drive both
         // implementations through the same oracle comparison.
         let triplets: [(&str, f64, f64, f64); 2] = [
-            (
-                "Fisk",
-                fisk.pdf(case.x),
-                fisk.cdf(case.x),
-                fisk.sf(case.x),
-            ),
+            ("Fisk", fisk.pdf(case.x), fisk.cdf(case.x), fisk.sf(case.x)),
             (
                 "Loglogistic",
                 loglog.pdf(case.x),

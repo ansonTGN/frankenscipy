@@ -13,9 +13,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_sparse::{
-    CooMatrix, FormatConvertible, IterativeSolveOptions, Shape2D, lsqr,
-};
+use fsci_sparse::{CooMatrix, FormatConvertible, IterativeSolveOptions, Shape2D, lsqr};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-004";
@@ -245,8 +243,7 @@ fn fsci_eval(case: &PointCase) -> Option<Vec<f64>> {
     let r: Vec<usize> = case.triplets.iter().map(|t| t.0).collect();
     let c: Vec<usize> = case.triplets.iter().map(|t| t.1).collect();
     let d: Vec<f64> = case.triplets.iter().map(|t| t.2).collect();
-    let coo =
-        CooMatrix::from_triplets(Shape2D::new(case.rows, case.cols), d, r, c, false).ok()?;
+    let coo = CooMatrix::from_triplets(Shape2D::new(case.rows, case.cols), d, r, c, false).ok()?;
     let csr = coo.to_csr().ok()?;
     let opts = IterativeSolveOptions {
         tol: 1.0e-10,
@@ -280,7 +277,9 @@ fn diff_sparse_lsqr() {
         let Some(scipy_x) = scipy_arm.x.as_ref() else {
             continue;
         };
-        let Some(fsci_x) = fsci_eval(case) else { continue };
+        let Some(fsci_x) = fsci_eval(case) else {
+            continue;
+        };
         if fsci_x.len() != scipy_x.len() {
             diffs.push(CaseDiff {
                 case_id: case.case_id.clone(),

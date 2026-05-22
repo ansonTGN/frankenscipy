@@ -96,11 +96,7 @@ fn fsci_eval(func: &str, alpha: &[f64], x: &[f64]) -> Option<f64> {
         "logpdf" => dist.logpdf(x),
         _ => return None,
     };
-    if v.is_finite() {
-        Some(v)
-    } else {
-        None
-    }
+    if v.is_finite() { Some(v) } else { None }
 }
 
 fn generate_query() -> OracleQuery {
@@ -221,9 +217,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "dirichlet oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping dirichlet oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping dirichlet oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -262,16 +256,17 @@ fn diff_stats_dirichlet() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(&case.func, &case.alpha, &case.x) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(&case.func, &case.alpha, &case.x)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

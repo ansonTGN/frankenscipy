@@ -340,7 +340,11 @@ fn diff_linalg_matrix_property_helpers() {
     ];
 
     let tol = 1.0e-10_f64;
-    pred_check("diag_3_is_diagonal_true", is_diagonal(&diag_3, tol), String::new());
+    pred_check(
+        "diag_3_is_diagonal_true",
+        is_diagonal(&diag_3, tol),
+        String::new(),
+    );
     pred_check(
         "upper_3_is_diagonal_false",
         !is_diagonal(&upper_3, tol),

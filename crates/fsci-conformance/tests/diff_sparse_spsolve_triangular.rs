@@ -248,9 +248,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "spsolve_triangular oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping spsolve_triangular oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping spsolve_triangular oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -302,7 +300,8 @@ fn diff_sparse_spsolve_triangular() {
             rows.push(r);
             cols.push(c);
         }
-        let Ok(coo) = CooMatrix::from_triplets(Shape2D::new(case.n, case.n), data, rows, cols, true)
+        let Ok(coo) =
+            CooMatrix::from_triplets(Shape2D::new(case.n, case.n), data, rows, cols, true)
         else {
             continue;
         };
@@ -351,10 +350,7 @@ fn diff_sparse_spsolve_triangular() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

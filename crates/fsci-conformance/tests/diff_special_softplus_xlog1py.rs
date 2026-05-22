@@ -88,8 +88,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize softplus/xlog1py diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize softplus/xlog1py diff log");
     fs::write(path, json).expect("write softplus/xlog1py diff log");
 }
 
@@ -189,9 +188,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "softplus/xlog1py oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping softplus/xlog1py oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping softplus/xlog1py oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }

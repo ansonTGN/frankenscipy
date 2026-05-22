@@ -125,9 +125,7 @@ fn generate_query() -> OracleQuery {
     });
 
     // Case 4: random-ish sample times with two-tone signal.
-    let t4: Vec<f64> = vec![
-        0.05, 0.3, 0.9, 1.4, 2.1, 2.8, 3.7, 4.5, 5.2, 6.0, 6.9, 7.5,
-    ];
+    let t4: Vec<f64> = vec![0.05, 0.3, 0.9, 1.4, 2.1, 2.8, 3.7, 4.5, 5.2, 6.0, 6.9, 7.5];
     let y4: Vec<f64> = t4
         .iter()
         .map(|t| (t).sin() + 0.4 * (3.0 * t).cos())
@@ -207,22 +205,20 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "lombscargle oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping lombscargle oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping lombscargle oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for lombscargle oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for lombscargle oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "lombscargle oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping lombscargle oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping lombscargle oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

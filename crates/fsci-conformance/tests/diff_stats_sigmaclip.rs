@@ -118,16 +118,16 @@ fn generate_query() -> OracleQuery {
         (
             "heavy_tailed",
             vec![
-                0.0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5, 2.0, -2.0, 3.0, -3.0, 5.0, -5.0, 8.0,
-                -8.0, 15.0, -15.0,
+                0.0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5, 2.0, -2.0, 3.0, -3.0, 5.0, -5.0, 8.0, -8.0,
+                15.0, -15.0,
             ],
         ),
     ];
     // (low_sigma, high_sigma) configs
     let configs: &[(&str, f64, f64)] = &[
-        ("3_3", 3.0, 3.0),    // Standard 3σ both sides
-        ("2_4", 2.0, 4.0),    // Tighter low, looser high
-        ("4_2", 4.0, 2.0),    // Looser low, tighter high
+        ("3_3", 3.0, 3.0), // Standard 3σ both sides
+        ("2_4", 2.0, 4.0), // Tighter low, looser high
+        ("4_2", 4.0, 2.0), // Looser low, tighter high
     ];
 
     let mut points = Vec::new();
@@ -206,9 +206,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "sigmaclip oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping sigmaclip oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping sigmaclip oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -259,27 +257,29 @@ fn diff_stats_sigmaclip() {
             });
         }
         if let Some(scipy_lo) = scipy_arm.lower
-            && result.lower.is_finite() {
-                let abs_diff = (result.lower - scipy_lo).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "lower".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.lower.is_finite()
+        {
+            let abs_diff = (result.lower - scipy_lo).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "lower".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(scipy_hi) = scipy_arm.upper
-            && result.upper.is_finite() {
-                let abs_diff = (result.upper - scipy_hi).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "upper".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.upper.is_finite()
+        {
+            let abs_diff = (result.upper - scipy_hi).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "upper".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

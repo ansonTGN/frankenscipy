@@ -201,9 +201,7 @@ print(json.dumps({"points": points}, allow_nan=False))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "hausdorff oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping hausdorff oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping hausdorff oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -243,32 +241,34 @@ fn diff_spatial_hausdorff() {
         let scipy_arm = pmap.get(&case.case_id).expect("validated oracle");
 
         if let Some(scipy_ab) = scipy_arm.directed_ab
-            && let Ok(rust_ab) = directed_hausdorff(&case.xa, &case.xb) {
-                let abs_diff = (rust_ab - scipy_ab).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    fn_name: "directed_hausdorff(a,b)".into(),
-                    rust_value: rust_ab,
-                    scipy_value: scipy_ab,
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && let Ok(rust_ab) = directed_hausdorff(&case.xa, &case.xb)
+        {
+            let abs_diff = (rust_ab - scipy_ab).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                fn_name: "directed_hausdorff(a,b)".into(),
+                rust_value: rust_ab,
+                scipy_value: scipy_ab,
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
 
         if let Some(scipy_sym) = scipy_arm.symmetric
-            && let Ok(rust_sym) = hausdorff_distance(&case.xa, &case.xb) {
-                let abs_diff = (rust_sym - scipy_sym).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    fn_name: "hausdorff_distance".into(),
-                    rust_value: rust_sym,
-                    scipy_value: scipy_sym,
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && let Ok(rust_sym) = hausdorff_distance(&case.xa, &case.xb)
+        {
+            let abs_diff = (rust_sym - scipy_sym).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                fn_name: "hausdorff_distance".into(),
+                rust_value: rust_sym,
+                scipy_value: scipy_sym,
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

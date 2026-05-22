@@ -97,11 +97,7 @@ fn fsci_eval(case: &PointCase) -> Option<f64> {
         "yeojohnson_llf" => yeojohnson_llf(case.lmb, &case.data),
         _ => return None,
     };
-    if v.is_finite() {
-        Some(v)
-    } else {
-        None
-    }
+    if v.is_finite() { Some(v) } else { None }
 }
 
 fn generate_query() -> OracleQuery {
@@ -109,10 +105,7 @@ fn generate_query() -> OracleQuery {
 
     // Box-Cox: positive data only.
     let boxcox_datasets: Vec<(&str, Vec<f64>)> = vec![
-        (
-            "compact",
-            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
-        ),
+        ("compact", vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
         (
             "wide_range",
             vec![0.5, 1.2, 2.5, 5.0, 10.0, 20.0, 50.0, 100.0],
@@ -125,14 +118,8 @@ fn generate_query() -> OracleQuery {
 
     // Yeo-Johnson: handles negatives and zero.
     let yj_datasets: Vec<(&str, Vec<f64>)> = vec![
-        (
-            "centered",
-            vec![-3.0, -1.5, -0.5, 0.0, 0.5, 1.5, 3.0],
-        ),
-        (
-            "asymmetric",
-            vec![-2.0, -1.0, 0.5, 1.0, 2.5, 4.0, 6.0, 8.0],
-        ),
+        ("centered", vec![-3.0, -1.5, -0.5, 0.0, 0.5, 1.5, 3.0]),
+        ("asymmetric", vec![-2.0, -1.0, 0.5, 1.0, 2.5, 4.0, 6.0, 8.0]),
         (
             "all_negative",
             vec![-5.0, -4.0, -3.0, -2.0, -1.5, -1.0, -0.5],
@@ -227,9 +214,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "power-transforms oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping power-transforms oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping power-transforms oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -242,9 +227,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "power-transforms oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping power-transforms oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping power-transforms oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -272,16 +255,17 @@ fn diff_stats_power_transforms() {
     for case in &query.points {
         let scipy_arm = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = scipy_arm.value
-            && let Some(rust_v) = fsci_eval(case) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(case)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

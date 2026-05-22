@@ -93,7 +93,8 @@ fn diff_stats_audit_record_helpers() {
 
     let log = DiffLog {
         test_id: "diff_stats_audit_record_helpers".into(),
-        category: "fsci_stats::{record_fail_closed, record_bounded_recovery} append behavior".into(),
+        category: "fsci_stats::{record_fail_closed, record_bounded_recovery} append behavior"
+            .into(),
         case_count: diffs.len(),
         pass: all_pass,
         timestamp_ms: timestamp_ms(),

@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_spatial::{cdist_metric, pdist, DistanceMetric};
+use fsci_spatial::{DistanceMetric, cdist_metric, pdist};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-011";
@@ -162,14 +162,26 @@ fn generate_query() -> OracleQuery {
 
     // For cdist, use distinct xa/xb pairs.
     let cdist_fixtures: Vec<(&str, Vec<Vec<f64>>, Vec<Vec<f64>>)> = vec![
-        ("small_4x3_2d", small_2d, vec![vec![2.0, 1.0], vec![3.0, 2.0], vec![4.0, 3.0]]),
-        ("larger_5x4_3d", larger_3d, vec![
-            vec![0.0, 0.0, 0.0],
-            vec![2.0, 2.0, 2.0],
-            vec![5.0, 5.0, 5.0],
-            vec![10.0, 10.0, 10.0],
-        ]),
-        ("one_d_8x6", one_d_long, (1..=6).map(|i| vec![i as f64]).collect()),
+        (
+            "small_4x3_2d",
+            small_2d,
+            vec![vec![2.0, 1.0], vec![3.0, 2.0], vec![4.0, 3.0]],
+        ),
+        (
+            "larger_5x4_3d",
+            larger_3d,
+            vec![
+                vec![0.0, 0.0, 0.0],
+                vec![2.0, 2.0, 2.0],
+                vec![5.0, 5.0, 5.0],
+                vec![10.0, 10.0, 10.0],
+            ],
+        ),
+        (
+            "one_d_8x6",
+            one_d_long,
+            (1..=6).map(|i| vec![i as f64]).collect(),
+        ),
     ];
 
     let mut pdist_cases = Vec::new();
@@ -286,10 +298,7 @@ print(json.dumps({"pdist": pdist_results, "cdist": cdist_results}, allow_nan=Fal
         }
     };
     {
-        let stdin = child
-            .stdin
-            .as_mut()
-            .expect("open pdist_cdist oracle stdin");
+        let stdin = child.stdin.as_mut().expect("open pdist_cdist oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -297,13 +306,13 @@ print(json.dumps({"pdist": pdist_results, "cdist": cdist_results}, allow_nan=Fal
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "pdist_cdist oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping pdist_cdist oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping pdist_cdist oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for pdist_cdist oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for pdist_cdist oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

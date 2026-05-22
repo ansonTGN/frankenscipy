@@ -75,8 +75,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create quantile_percentile diff output dir");
+    fs::create_dir_all(output_dir()).expect("create quantile_percentile diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -88,8 +87,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize quantile_percentile diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize quantile_percentile diff log");
     fs::write(path, json).expect("write quantile_percentile diff log");
 }
 
@@ -99,8 +97,7 @@ fn generate_query() -> OracleQuery {
         (
             "spread_n15",
             vec![
-                -3.0, -1.5, 0.0, 0.5, 1.5, 2.5, 3.5, 5.0, 7.0, 9.0, 12.0, 16.0, 21.0, 27.0,
-                34.0,
+                -3.0, -1.5, 0.0, 0.5, 1.5, 2.5, 3.5, 5.0, 7.0, 9.0, 12.0, 16.0, 21.0, 27.0, 34.0,
             ],
         ),
         (
@@ -186,9 +183,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for quantile_percentile oracle: {e}"
             );
-            eprintln!(
-                "skipping quantile_percentile oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping quantile_percentile oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -204,9 +199,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "quantile_percentile oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping quantile_percentile oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping quantile_percentile oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -219,9 +212,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "quantile_percentile oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping quantile_percentile oracle: numpy not available\n{stderr}"
-        );
+        eprintln!("skipping quantile_percentile oracle: numpy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -253,7 +244,11 @@ fn diff_stats_quantile_percentile() {
         };
         let rust_vec: Vec<f64> = match case.func.as_str() {
             "quantile" => quantile(&case.data, &case.probs),
-            "percentile" => case.probs.iter().map(|&p| percentile(&case.data, p)).collect(),
+            "percentile" => case
+                .probs
+                .iter()
+                .map(|&p| percentile(&case.data, p))
+                .collect(),
             _ => continue,
         };
         if rust_vec.len() != scipy_vec.len() {

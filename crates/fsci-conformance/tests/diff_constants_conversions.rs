@@ -182,12 +182,36 @@ fn temp_inputs() -> Vec<TempCase> {
 
 fn speed_mass_inputs() -> Vec<SpeedMassCase> {
     vec![
-        SpeedMassCase { case_id: "mph_60".into(),  op: "mph_to_mps".into(),   arg: 60.0 },
-        SpeedMassCase { case_id: "kmh_100".into(), op: "kmh_to_mps".into(),   arg: 100.0 },
-        SpeedMassCase { case_id: "knots_15".into(), op: "knots_to_mps".into(), arg: 15.0 },
-        SpeedMassCase { case_id: "psi_14_7".into(), op: "psi_to_pa".into(),   arg: 14.7 },
-        SpeedMassCase { case_id: "lb_150".into(),  op: "lb_to_kg".into(),     arg: 150.0 },
-        SpeedMassCase { case_id: "kg_75".into(),   op: "kg_to_lb".into(),     arg: 75.0 },
+        SpeedMassCase {
+            case_id: "mph_60".into(),
+            op: "mph_to_mps".into(),
+            arg: 60.0,
+        },
+        SpeedMassCase {
+            case_id: "kmh_100".into(),
+            op: "kmh_to_mps".into(),
+            arg: 100.0,
+        },
+        SpeedMassCase {
+            case_id: "knots_15".into(),
+            op: "knots_to_mps".into(),
+            arg: 15.0,
+        },
+        SpeedMassCase {
+            case_id: "psi_14_7".into(),
+            op: "psi_to_pa".into(),
+            arg: 14.7,
+        },
+        SpeedMassCase {
+            case_id: "lb_150".into(),
+            op: "lb_to_kg".into(),
+            arg: 150.0,
+        },
+        SpeedMassCase {
+            case_id: "kg_75".into(),
+            op: "kg_to_lb".into(),
+            arg: 75.0,
+        },
     ]
 }
 
@@ -306,9 +330,7 @@ print(json.dumps({"prefixes": prefixes, "temps": temps, "speed_mass": speed_mass
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "constants_conversions oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping constants_conversions oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping constants_conversions oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -444,10 +466,7 @@ fn diff_constants_conversions() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} rel_diff={}",
-                d.op, d.case_id, d.rel_diff
-            );
+            eprintln!("{} mismatch: {} rel_diff={}", d.op, d.case_id, d.rel_diff);
         }
     }
 

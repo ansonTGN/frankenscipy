@@ -195,10 +195,7 @@ print(json.dumps({"points": points, "ppf": ppf}))
         }
     };
     {
-        let stdin = child
-            .stdin
-            .as_mut()
-            .expect("open crystalball oracle stdin");
+        let stdin = child.stdin.as_mut().expect("open crystalball oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -210,7 +207,9 @@ print(json.dumps({"points": points, "ppf": ppf}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for crystalball oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for crystalball oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

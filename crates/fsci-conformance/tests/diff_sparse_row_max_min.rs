@@ -13,9 +13,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_sparse::{
-    CooMatrix, FormatConvertible, Shape2D, sparse_row_max, sparse_row_min,
-};
+use fsci_sparse::{CooMatrix, FormatConvertible, Shape2D, sparse_row_max, sparse_row_min};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -91,21 +89,23 @@ fn emit_log(log: &DiffLog) {
 fn generate_query() -> OracleQuery {
     let mut points = Vec::new();
     let a_3x4 = vec![
-        (0, 0, 3.0_f64), (0, 2, -1.0),
-        (1, 1, -2.0), (1, 3, 4.0),
-        (2, 0, -5.0), (2, 1, 1.5), (2, 2, 0.5),
+        (0, 0, 3.0_f64),
+        (0, 2, -1.0),
+        (1, 1, -2.0),
+        (1, 3, 4.0),
+        (2, 0, -5.0),
+        (2, 1, 1.5),
+        (2, 2, 0.5),
     ];
     let all_pos_4x4 = vec![
-        (0, 0, 1.0_f64), (0, 1, 2.0),
+        (0, 0, 1.0_f64),
+        (0, 1, 2.0),
         (1, 2, 3.0),
-        (2, 0, 4.0), (2, 3, 5.0),
+        (2, 0, 4.0),
+        (2, 3, 5.0),
         (3, 1, 6.0),
     ];
-    let all_neg_3x3 = vec![
-        (0, 0, -2.0_f64),
-        (1, 1, -3.0),
-        (2, 2, -4.0),
-    ];
+    let all_neg_3x3 = vec![(0, 0, -2.0_f64), (1, 1, -3.0), (2, 2, -4.0)];
 
     for (label, rows, cols, t) in [
         ("mixed_3x4", 3_usize, 4_usize, &a_3x4),
@@ -191,7 +191,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for row_max_min oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for row_max_min oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -209,7 +211,10 @@ fn vec_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]

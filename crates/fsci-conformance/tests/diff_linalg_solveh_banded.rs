@@ -373,7 +373,11 @@ fn diff_linalg_solveh_banded() {
                 max_rel_diff: f64::INFINITY,
                 residual_inf: f64::INFINITY,
                 pass: false,
-                note: format!("length mismatch: fsci={} scipy={}", sol.len(), expected.len()),
+                note: format!(
+                    "length mismatch: fsci={} scipy={}",
+                    sol.len(),
+                    expected.len()
+                ),
             });
             continue;
         }

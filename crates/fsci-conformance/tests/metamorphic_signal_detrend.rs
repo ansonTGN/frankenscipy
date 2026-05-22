@@ -14,7 +14,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_signal::{detrend, DetrendType};
+use fsci_signal::{DetrendType, detrend};
 use serde::Serialize;
 
 const PACKET_ID: &str = "FSCI-P2C-018";

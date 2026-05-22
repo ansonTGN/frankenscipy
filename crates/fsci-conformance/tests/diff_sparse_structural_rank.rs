@@ -78,8 +78,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize structural_rank diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize structural_rank diff log");
     fs::write(path, json).expect("write structural_rank diff log");
 }
 
@@ -98,12 +97,7 @@ fn generate_query() -> OracleQuery {
                 (2, 2, 1.0),
             ],
         ),
-        (
-            "3x3_rank2",
-            3,
-            3,
-            vec![(0, 0, 1.0), (1, 1, 1.0)],
-        ),
+        ("3x3_rank2", 3, 3, vec![(0, 0, 1.0), (1, 1, 1.0)]),
         (
             "4x4_diag",
             4,
@@ -217,9 +211,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "structural_rank oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping structural_rank oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping structural_rank oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -232,9 +224,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "structural_rank oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping structural_rank oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping structural_rank oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -245,8 +235,7 @@ fn fsci_eval(case: &PointCase) -> Option<usize> {
     let r: Vec<usize> = case.triplets.iter().map(|t| t.0).collect();
     let c: Vec<usize> = case.triplets.iter().map(|t| t.1).collect();
     let d: Vec<f64> = case.triplets.iter().map(|t| t.2).collect();
-    let coo =
-        CooMatrix::from_triplets(Shape2D::new(case.rows, case.cols), d, r, c, false).ok()?;
+    let coo = CooMatrix::from_triplets(Shape2D::new(case.rows, case.cols), d, r, c, false).ok()?;
     let csr = coo.to_csr().ok()?;
     Some(structural_rank(&csr))
 }
@@ -270,8 +259,12 @@ fn diff_sparse_structural_rank() {
 
     for case in &query.points {
         let scipy_arm = pmap.get(&case.case_id).expect("validated oracle");
-        let Some(scipy_rk) = scipy_arm.rank else { continue };
-        let Some(fsci_rk) = fsci_eval(case) else { continue };
+        let Some(scipy_rk) = scipy_arm.rank else {
+            continue;
+        };
+        let Some(fsci_rk) = fsci_eval(case) else {
+            continue;
+        };
         diffs.push(CaseDiff {
             case_id: case.case_id.clone(),
             fsci: fsci_rk,

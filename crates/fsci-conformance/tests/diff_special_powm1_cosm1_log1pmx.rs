@@ -96,7 +96,9 @@ fn generate_query() -> OracleQuery {
     for &x in &powm1_xs {
         for &y in &powm1_ys {
             points.push(Case {
-                case_id: format!("powm1_x{x}_y{y}").replace('.', "p").replace('-', "n"),
+                case_id: format!("powm1_x{x}_y{y}")
+                    .replace('.', "p")
+                    .replace('-', "n"),
                 op: "powm1".into(),
                 x,
                 y,

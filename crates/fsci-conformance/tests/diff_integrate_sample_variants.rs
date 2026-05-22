@@ -12,9 +12,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_integrate::{
-    simpson_irregular, simpson_uniform, trapezoid_irregular, trapezoid_uniform,
-};
+use fsci_integrate::{simpson_irregular, simpson_uniform, trapezoid_irregular, trapezoid_uniform};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -209,7 +207,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open sample_variants oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open sample_variants oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -217,9 +218,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "sample_variants oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping sample_variants oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping sample_variants oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -232,9 +231,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "sample_variants oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping sample_variants oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping sample_variants oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -303,10 +300,7 @@ fn diff_integrate_sample_variants() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

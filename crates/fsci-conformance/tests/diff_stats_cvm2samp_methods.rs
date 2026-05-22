@@ -24,7 +24,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_stats::{cramervonmises_2samp_with_method, Cvm2SampleMethod};
+use fsci_stats::{Cvm2SampleMethod, cramervonmises_2samp_with_method};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -83,8 +83,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create cvm2samp_methods diff output dir");
+    fs::create_dir_all(output_dir()).expect("create cvm2samp_methods diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -96,8 +95,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize cvm2samp_methods diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize cvm2samp_methods diff log");
     fs::write(path, json).expect("write cvm2samp_methods diff log");
 }
 
@@ -192,9 +190,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for cvm2samp_methods oracle: {e}"
             );
-            eprintln!(
-                "skipping cvm2samp_methods oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping cvm2samp_methods oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -210,9 +206,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "cvm2samp_methods oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping cvm2samp_methods oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping cvm2samp_methods oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -225,9 +219,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "cvm2samp_methods oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping cvm2samp_methods oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping cvm2samp_methods oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -267,27 +259,29 @@ fn diff_stats_cvm2samp_methods() {
         };
 
         if let Some(s_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - s_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: format!("{}.statistic", case.method),
-                    abs_diff,
-                    pass: abs_diff <= STAT_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - s_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: format!("{}.statistic", case.method),
+                abs_diff,
+                pass: abs_diff <= STAT_TOL,
+            });
+        }
         if let Some(s_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - s_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: format!("{}.pvalue", case.method),
-                    abs_diff,
-                    pass: abs_diff <= pvalue_tol,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - s_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: format!("{}.pvalue", case.method),
+                abs_diff,
+                pass: abs_diff <= pvalue_tol,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

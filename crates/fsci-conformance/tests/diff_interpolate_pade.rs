@@ -115,7 +115,13 @@ fn generate_query() -> OracleQuery {
     }
     // log(1+x) Taylor: 0, 1, -1/2, 1/3, -1/4, ...
     let log1p: Vec<f64> = (0..11)
-        .map(|k| if k == 0 { 0.0 } else { (-1.0_f64).powi((k + 1) as i32) / (k as f64) })
+        .map(|k| {
+            if k == 0 {
+                0.0
+            } else {
+                (-1.0_f64).powi((k + 1) as i32) / (k as f64)
+            }
+        })
         .collect();
     // 1/(1-x) Taylor: 1, 1, 1, 1, ...
     let geom: Vec<f64> = vec![1.0; 11];

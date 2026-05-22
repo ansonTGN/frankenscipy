@@ -192,7 +192,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open pearsonr_alt oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open pearsonr_alt oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -200,13 +203,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "pearsonr_alt oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping pearsonr_alt oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping pearsonr_alt oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for pearsonr_alt oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for pearsonr_alt oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -243,27 +246,29 @@ fn diff_stats_pearsonr_alt() {
         let result = pearsonr_alternative(&case.x, &case.y, &case.alternative);
 
         if let Some(scipy_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - scipy_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= STAT_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - scipy_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= STAT_TOL,
+            });
+        }
         if let Some(scipy_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= PVALUE_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= PVALUE_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

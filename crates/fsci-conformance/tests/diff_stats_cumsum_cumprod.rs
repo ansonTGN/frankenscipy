@@ -177,9 +177,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for cumsum_cumprod oracle: {e}"
             );
-            eprintln!(
-                "skipping cumsum_cumprod oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping cumsum_cumprod oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -195,9 +193,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "cumsum_cumprod oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping cumsum_cumprod oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping cumsum_cumprod oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -210,9 +206,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "cumsum_cumprod oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping cumsum_cumprod oracle: numpy not available\n{stderr}"
-        );
+        eprintln!("skipping cumsum_cumprod oracle: numpy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

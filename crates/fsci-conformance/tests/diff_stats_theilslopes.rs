@@ -128,9 +128,7 @@ fn generate_query() -> OracleQuery {
         (
             "neg_slope",
             (1..=11).map(|i| i as f64).collect(),
-            vec![
-                10.05, 9.1, 7.85, 6.9, 6.05, 5.1, 4.0, 3.05, 2.1, 0.9, 0.1,
-            ],
+            vec![10.05, 9.1, 7.85, 6.9, 6.05, 5.1, 4.0, 3.05, 2.1, 0.9, 0.1],
             0.99,
         ),
     ];
@@ -203,10 +201,7 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child
-            .stdin
-            .as_mut()
-            .expect("open theilslopes oracle stdin");
+        let stdin = child.stdin.as_mut().expect("open theilslopes oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -214,9 +209,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "theilslopes oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping theilslopes oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping theilslopes oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -259,12 +252,7 @@ fn diff_stats_theilslopes() {
         let result = theilslopes(&case.x, &case.y, case.alpha);
 
         let arms: [(&str, Option<f64>, f64, f64); 4] = [
-            (
-                "slope",
-                scipy_arm.slope,
-                result.slope,
-                TIGHT_TOL,
-            ),
+            ("slope", scipy_arm.slope, result.slope, TIGHT_TOL),
             (
                 "intercept",
                 scipy_arm.intercept,
@@ -287,16 +275,17 @@ fn diff_stats_theilslopes() {
 
         for (arm_name, scipy_v, rust_v, tol) in arms {
             if let Some(scipy_v) = scipy_v
-                && rust_v.is_finite() {
-                    let abs_diff = (rust_v - scipy_v).abs();
-                    max_overall = max_overall.max(abs_diff);
-                    diffs.push(CaseDiff {
-                        case_id: case.case_id.clone(),
-                        arm: arm_name.into(),
-                        abs_diff,
-                        pass: abs_diff <= tol,
-                    });
-                }
+                && rust_v.is_finite()
+            {
+                let abs_diff = (rust_v - scipy_v).abs();
+                max_overall = max_overall.max(abs_diff);
+                diffs.push(CaseDiff {
+                    case_id: case.case_id.clone(),
+                    arm: arm_name.into(),
+                    abs_diff,
+                    pass: abs_diff <= tol,
+                });
+            }
         }
     }
 

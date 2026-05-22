@@ -25,7 +25,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_cluster::{linkage_from_distances, LinkageMethod};
+use fsci_cluster::{LinkageMethod, linkage_from_distances};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-012";
@@ -82,8 +82,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create linkage_from_distances diff output dir");
+    fs::create_dir_all(output_dir()).expect("create linkage_from_distances diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -95,8 +94,8 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json = serde_json::to_string_pretty(log)
-        .expect("serialize linkage_from_distances diff log");
+    let json =
+        serde_json::to_string_pretty(log).expect("serialize linkage_from_distances diff log");
     fs::write(path, json).expect("write linkage_from_distances diff log");
 }
 
@@ -127,8 +126,7 @@ fn generate_query() -> OracleQuery {
             "fix_n6_distinct",
             6,
             vec![
-                1.5, 3.8, 7.2, 12.3, 18.7, 5.1, 9.4, 14.6, 21.0, 8.7, 13.9, 20.2, 17.4,
-                23.5, 26.1,
+                1.5, 3.8, 7.2, 12.3, 18.7, 5.1, 9.4, 14.6, 21.0, 8.7, 13.9, 20.2, 17.4, 23.5, 26.1,
             ],
         ),
     ];
@@ -170,8 +168,7 @@ for case in q["points"]:
     points.append({"case_id": cid, "rows": rows})
 print(json.dumps({"points": points}, allow_nan=False))
 "#;
-    let query_json = serde_json::to_string(query)
-        .expect("serialize linkage_from_distances query");
+    let query_json = serde_json::to_string(query).expect("serialize linkage_from_distances query");
     let mut child = match Command::new("python3")
         .arg("-c")
         .arg(script)
@@ -186,9 +183,7 @@ print(json.dumps({"points": points}, allow_nan=False))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for linkage_from_distances oracle: {e}"
             );
-            eprintln!(
-                "skipping linkage_from_distances oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping linkage_from_distances oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -219,16 +214,11 @@ print(json.dumps({"points": points}, allow_nan=False))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "linkage_from_distances oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping linkage_from_distances oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping linkage_from_distances oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
-    Some(
-        serde_json::from_str(&stdout)
-            .expect("parse linkage_from_distances oracle JSON"),
-    )
+    Some(serde_json::from_str(&stdout).expect("parse linkage_from_distances oracle JSON"))
 }
 
 #[test]

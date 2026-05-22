@@ -64,8 +64,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &MetamorphicLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize mean_shift metamorphic log");
+    let json = serde_json::to_string_pretty(log).expect("serialize mean_shift metamorphic log");
     fs::write(path, json).expect("write mean_shift metamorphic log");
 }
 
@@ -90,8 +89,7 @@ fn metamorphic_cluster_mean_shift() {
     let (b1, g1) = make_blob(&[(0.0, 0.0)], 12);
     let (b2, g2) = make_blob(&[(0.0, 0.0), (10.0, 10.0)], 8);
     let (b3, g3) = make_blob(&[(0.0, 0.0), (10.0, 0.0), (5.0, 8.66)], 7);
-    let (b4, g4) =
-        make_blob(&[(0.0, 0.0), (12.0, 0.0), (0.0, 12.0), (12.0, 12.0)], 6);
+    let (b4, g4) = make_blob(&[(0.0, 0.0), (12.0, 0.0), (0.0, 12.0), (12.0, 12.0)], 6);
 
     // Bandwidth chosen larger than within-cluster spread (~0.3-0.5 max
     // axis-aligned offset given per ≤ 12) but much smaller than the
@@ -191,9 +189,7 @@ fn metamorphic_cluster_mean_shift() {
             cases.push(CaseLog {
                 case_id: name.to_string(),
                 invariant: "well_separated_recovery".into(),
-                detail: format!(
-                    "within_same_label={within_ok}, cross_diff_label={cross_ok}"
-                ),
+                detail: format!("within_same_label={within_ok}, cross_diff_label={cross_ok}"),
                 pass: within_ok && cross_ok,
             });
         }

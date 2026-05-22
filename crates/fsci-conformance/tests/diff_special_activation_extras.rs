@@ -15,8 +15,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use fsci_runtime::RuntimeMode;
 use fsci_special::types::SpecialTensor;
 use fsci_special::{
-    hard_sigmoid, hard_tanh, log1mexp, log1pexp, log_cosh, logsigmoid, mish, silu, softsign,
-    xlogx,
+    hard_sigmoid, hard_tanh, log_cosh, log1mexp, log1pexp, logsigmoid, mish, silu, softsign, xlogx,
 };
 use serde::{Deserialize, Serialize};
 
@@ -247,9 +246,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "activation_extras oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping activation_extras oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping activation_extras oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }

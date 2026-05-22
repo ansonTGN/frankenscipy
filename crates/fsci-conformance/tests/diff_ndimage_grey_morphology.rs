@@ -22,8 +22,8 @@ use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use fsci_ndimage::{
-    BoundaryMode, NdArray, black_tophat, grey_closing, grey_dilation, grey_erosion,
-    grey_opening, morphological_gradient, white_tophat,
+    BoundaryMode, NdArray, black_tophat, grey_closing, grey_dilation, grey_erosion, grey_opening,
+    morphological_gradient, white_tophat,
 };
 use serde::{Deserialize, Serialize};
 
@@ -241,9 +241,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "grey_morph oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping grey_morph oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping grey_morph oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }

@@ -104,13 +104,55 @@ fn diff_opt_casp_problem_constructors() {
         let x0 = vec![1.0_f64, 2.0, 3.0];
         let opts = MinimizeOptions::default();
         let p = OptCaspProblem::unbounded_from_x0(&x0, opts);
-        check(&mut diffs, "unbounded_default", "dimension", 3usize, p.dimension);
-        check(&mut diffs, "unbounded_default", "has_box_bounds", false, p.has_box_bounds);
-        check(&mut diffs, "unbounded_default", "has_general_constraints", false, p.has_general_constraints);
-        check(&mut diffs, "unbounded_default", "gradient_available", true, p.gradient_available);
-        check(&mut diffs, "unbounded_default", "hessian_product_available", false, p.hessian_product_available);
-        check(&mut diffs, "unbounded_default", "scale_finite", true, p.variable_scale_ratio.is_finite());
-        check(&mut diffs, "unbounded_default", "scale_ge_one", true, p.variable_scale_ratio >= 1.0);
+        check(
+            &mut diffs,
+            "unbounded_default",
+            "dimension",
+            3usize,
+            p.dimension,
+        );
+        check(
+            &mut diffs,
+            "unbounded_default",
+            "has_box_bounds",
+            false,
+            p.has_box_bounds,
+        );
+        check(
+            &mut diffs,
+            "unbounded_default",
+            "has_general_constraints",
+            false,
+            p.has_general_constraints,
+        );
+        check(
+            &mut diffs,
+            "unbounded_default",
+            "gradient_available",
+            true,
+            p.gradient_available,
+        );
+        check(
+            &mut diffs,
+            "unbounded_default",
+            "hessian_product_available",
+            false,
+            p.hessian_product_available,
+        );
+        check(
+            &mut diffs,
+            "unbounded_default",
+            "scale_finite",
+            true,
+            p.variable_scale_ratio.is_finite(),
+        );
+        check(
+            &mut diffs,
+            "unbounded_default",
+            "scale_ge_one",
+            true,
+            p.variable_scale_ratio >= 1.0,
+        );
     }
 
     // Probe 2: unbounded_from_x0 ignores options.bounds and options.has_general_constraints
@@ -124,11 +166,41 @@ fn diff_opt_casp_problem_constructors() {
             ..MinimizeOptions::default()
         };
         let p = OptCaspProblem::unbounded_from_x0(&x0, opts);
-        check(&mut diffs, "unbounded_overrides", "dimension", 2usize, p.dimension);
-        check(&mut diffs, "unbounded_overrides", "has_box_bounds", false, p.has_box_bounds);
-        check(&mut diffs, "unbounded_overrides", "has_general_constraints", false, p.has_general_constraints);
-        check(&mut diffs, "unbounded_overrides", "gradient_available", false, p.gradient_available);
-        check(&mut diffs, "unbounded_overrides", "hessian_product_available", true, p.hessian_product_available);
+        check(
+            &mut diffs,
+            "unbounded_overrides",
+            "dimension",
+            2usize,
+            p.dimension,
+        );
+        check(
+            &mut diffs,
+            "unbounded_overrides",
+            "has_box_bounds",
+            false,
+            p.has_box_bounds,
+        );
+        check(
+            &mut diffs,
+            "unbounded_overrides",
+            "has_general_constraints",
+            false,
+            p.has_general_constraints,
+        );
+        check(
+            &mut diffs,
+            "unbounded_overrides",
+            "gradient_available",
+            false,
+            p.gradient_available,
+        );
+        check(
+            &mut diffs,
+            "unbounded_overrides",
+            "hessian_product_available",
+            true,
+            p.hessian_product_available,
+        );
     }
 
     // Probe 3: from_x0_and_options with finite box bounds => has_box_bounds=true
@@ -139,11 +211,41 @@ fn diff_opt_casp_problem_constructors() {
             ..MinimizeOptions::default()
         };
         let p = OptCaspProblem::from_x0_and_options(&x0, opts);
-        check(&mut diffs, "fxo_finite_bounds", "dimension", 2usize, p.dimension);
-        check(&mut diffs, "fxo_finite_bounds", "has_box_bounds", true, p.has_box_bounds);
-        check(&mut diffs, "fxo_finite_bounds", "has_general_constraints", false, p.has_general_constraints);
-        check(&mut diffs, "fxo_finite_bounds", "hessian_product_available", false, p.hessian_product_available);
-        check(&mut diffs, "fxo_finite_bounds", "gradient_available", true, p.gradient_available);
+        check(
+            &mut diffs,
+            "fxo_finite_bounds",
+            "dimension",
+            2usize,
+            p.dimension,
+        );
+        check(
+            &mut diffs,
+            "fxo_finite_bounds",
+            "has_box_bounds",
+            true,
+            p.has_box_bounds,
+        );
+        check(
+            &mut diffs,
+            "fxo_finite_bounds",
+            "has_general_constraints",
+            false,
+            p.has_general_constraints,
+        );
+        check(
+            &mut diffs,
+            "fxo_finite_bounds",
+            "hessian_product_available",
+            false,
+            p.hessian_product_available,
+        );
+        check(
+            &mut diffs,
+            "fxo_finite_bounds",
+            "gradient_available",
+            true,
+            p.gradient_available,
+        );
     }
 
     // Probe 4: from_x0_and_options with Some(bounds) but all (None, None) => has_box_bounds=false
@@ -155,7 +257,13 @@ fn diff_opt_casp_problem_constructors() {
             ..MinimizeOptions::default()
         };
         let p = OptCaspProblem::from_x0_and_options(&x0, opts);
-        check(&mut diffs, "fxo_none_bounds", "has_box_bounds", false, p.has_box_bounds);
+        check(
+            &mut diffs,
+            "fxo_none_bounds",
+            "has_box_bounds",
+            false,
+            p.has_box_bounds,
+        );
     }
 
     // Probe 5: from_x0_and_options with partial bound (one Some endpoint) => has_box_bounds=true
@@ -166,7 +274,13 @@ fn diff_opt_casp_problem_constructors() {
             ..MinimizeOptions::default()
         };
         let p = OptCaspProblem::from_x0_and_options(&x0, opts);
-        check(&mut diffs, "fxo_partial_bounds", "has_box_bounds", true, p.has_box_bounds);
+        check(
+            &mut diffs,
+            "fxo_partial_bounds",
+            "has_box_bounds",
+            true,
+            p.has_box_bounds,
+        );
     }
 
     // Probe 6: from_x0_and_options with bounds=None => has_box_bounds=false
@@ -174,9 +288,27 @@ fn diff_opt_casp_problem_constructors() {
         let x0 = vec![1.0_f64];
         let opts = MinimizeOptions::default();
         let p = OptCaspProblem::from_x0_and_options(&x0, opts);
-        check(&mut diffs, "fxo_no_bounds", "dimension", 1usize, p.dimension);
-        check(&mut diffs, "fxo_no_bounds", "has_box_bounds", false, p.has_box_bounds);
-        check(&mut diffs, "fxo_no_bounds", "has_general_constraints", false, p.has_general_constraints);
+        check(
+            &mut diffs,
+            "fxo_no_bounds",
+            "dimension",
+            1usize,
+            p.dimension,
+        );
+        check(
+            &mut diffs,
+            "fxo_no_bounds",
+            "has_box_bounds",
+            false,
+            p.has_box_bounds,
+        );
+        check(
+            &mut diffs,
+            "fxo_no_bounds",
+            "has_general_constraints",
+            false,
+            p.has_general_constraints,
+        );
     }
 
     // Probe 7: from_x0_and_options with has_general_constraints=true and hessp=Some
@@ -189,11 +321,41 @@ fn diff_opt_casp_problem_constructors() {
             ..MinimizeOptions::default()
         };
         let p = OptCaspProblem::from_x0_and_options(&x0, opts);
-        check(&mut diffs, "fxo_general_constr_hessp", "dimension", 4usize, p.dimension);
-        check(&mut diffs, "fxo_general_constr_hessp", "has_box_bounds", false, p.has_box_bounds);
-        check(&mut diffs, "fxo_general_constr_hessp", "has_general_constraints", true, p.has_general_constraints);
-        check(&mut diffs, "fxo_general_constr_hessp", "gradient_available", false, p.gradient_available);
-        check(&mut diffs, "fxo_general_constr_hessp", "hessian_product_available", true, p.hessian_product_available);
+        check(
+            &mut diffs,
+            "fxo_general_constr_hessp",
+            "dimension",
+            4usize,
+            p.dimension,
+        );
+        check(
+            &mut diffs,
+            "fxo_general_constr_hessp",
+            "has_box_bounds",
+            false,
+            p.has_box_bounds,
+        );
+        check(
+            &mut diffs,
+            "fxo_general_constr_hessp",
+            "has_general_constraints",
+            true,
+            p.has_general_constraints,
+        );
+        check(
+            &mut diffs,
+            "fxo_general_constr_hessp",
+            "gradient_available",
+            false,
+            p.gradient_available,
+        );
+        check(
+            &mut diffs,
+            "fxo_general_constr_hessp",
+            "hessian_product_available",
+            true,
+            p.hessian_product_available,
+        );
     }
 
     // Probe 8: variable_scale_ratio reflects x0 magnitude spread
@@ -204,10 +366,20 @@ fn diff_opt_casp_problem_constructors() {
         let p_a = OptCaspProblem::unbounded_from_x0(&x0_a, MinimizeOptions::default());
         let x0_b = vec![1.0_f64, 1.0];
         let p_b = OptCaspProblem::unbounded_from_x0(&x0_b, MinimizeOptions::default());
-        check(&mut diffs, "scale_spread", "ratio_a_eq_1e6",
-              true, (p_a.variable_scale_ratio - 1.0e6).abs() < 1.0e-9);
-        check(&mut diffs, "scale_spread", "ratio_b_eq_1",
-              true, (p_b.variable_scale_ratio - 1.0).abs() < 1.0e-12);
+        check(
+            &mut diffs,
+            "scale_spread",
+            "ratio_a_eq_1e6",
+            true,
+            (p_a.variable_scale_ratio - 1.0e6).abs() < 1.0e-9,
+        );
+        check(
+            &mut diffs,
+            "scale_spread",
+            "ratio_b_eq_1",
+            true,
+            (p_b.variable_scale_ratio - 1.0).abs() < 1.0e-12,
+        );
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

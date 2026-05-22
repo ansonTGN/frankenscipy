@@ -123,10 +123,7 @@ fn generate_query() -> OracleQuery {
     let hj_b = vec![1.0, 1.0, 0.0, 0.0, 1.0];
 
     for &m in &metrics {
-        for (label, a, b) in [
-            ("ab", &pair_a, &pair_b),
-            ("ef", &pair_e, &pair_f),
-        ] {
+        for (label, a, b) in [("ab", &pair_a, &pair_b), ("ef", &pair_e, &pair_f)] {
             points.push(Case {
                 case_id: format!("{m}_{label}"),
                 metric: m.into(),

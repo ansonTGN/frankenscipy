@@ -103,9 +103,7 @@ fn generate_query() -> OracleQuery {
     let b_uniform: Vec<f64> = vec![1.0, 1.0, 1.0];
 
     let m3x4: Vec<f64> = (1..=12).map(|i| (i as f64) * 0.5).collect();
-    let m3x4_b: Vec<f64> = vec![
-        1.0, 0.5, 2.0, 1.0, 0.25, 1.5, 0.75, 0.5, 1.0, 2.0, 0.5, 1.0,
-    ];
+    let m3x4_b: Vec<f64> = vec![1.0, 0.5, 2.0, 1.0, 0.25, 1.5, 0.75, 0.5, 1.0, 2.0, 0.5, 1.0];
     let m2x5: Vec<f64> = (0..10).map(|i| ((i as f64) * 0.3).sin() + 2.0).collect();
 
     let mut points = Vec::new();
@@ -345,7 +343,9 @@ fn diff_special_logsumexp_variants() {
                 (actual - expected).abs()
             }
             "lse_axis_2d" => {
-                let Some(expected) = arm.values.as_ref() else { continue };
+                let Some(expected) = arm.values.as_ref() else {
+                    continue;
+                };
                 let data = unflatten(&case.data_flat, case.rows, case.cols);
                 let Ok(actual) = logsumexp_axis_2d(&data, case.axis) else {
                     continue;
@@ -353,7 +353,9 @@ fn diff_special_logsumexp_variants() {
                 vec_max_diff(&actual, expected)
             }
             "lse_axis_2d_with_b" => {
-                let Some(expected) = arm.values.as_ref() else { continue };
+                let Some(expected) = arm.values.as_ref() else {
+                    continue;
+                };
                 let data = unflatten(&case.data_flat, case.rows, case.cols);
                 let b = unflatten(&case.b_flat, case.b_rows, case.b_cols);
                 let Ok(actual) = logsumexp_axis_2d_with_b(&data, case.axis, &b) else {

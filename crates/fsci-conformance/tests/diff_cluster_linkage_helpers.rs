@@ -112,9 +112,7 @@ fn method_of(s: &str) -> Option<LinkageMethod> {
 }
 
 fn generate_query() -> OracleQuery {
-    let points_a: Vec<f64> = vec![
-        1.0, 1.0, 1.0, 2.0, 5.0, 5.0, 5.0, 6.0, 10.0, 10.0,
-    ]; // 5×2
+    let points_a: Vec<f64> = vec![1.0, 1.0, 1.0, 2.0, 5.0, 5.0, 5.0, 6.0, 10.0, 10.0]; // 5×2
     let points_b: Vec<f64> = vec![
         0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 10.0, 10.0, 11.0, 11.0, 12.0, 10.0,
     ]; // 7×2
@@ -125,9 +123,7 @@ fn generate_query() -> OracleQuery {
     // Larger datasets (7pt/6pt with collinear or tied distances) trigger
     // tie-breaking divergences in leaves_list ordering and inconsistent
     // count column. 5pt set has no ties — used here for stable parity.
-    let inputs: &[(&str, &[f64], usize, usize)] = &[
-        ("5pt_2d", &points_a, 5, 2),
-    ];
+    let inputs: &[(&str, &[f64], usize, usize)] = &[("5pt_2d", &points_a, 5, 2)];
     let _ = (&points_b, &points_c); // keep allocations referenced
     for (label, data, n, d) in inputs {
         for method in ["single", "complete", "average", "weighted"] {
@@ -203,7 +199,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open linkage_helpers oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open linkage_helpers oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -211,9 +210,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "linkage_helpers oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping linkage_helpers oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping linkage_helpers oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -226,9 +223,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "linkage_helpers oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping linkage_helpers oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping linkage_helpers oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -366,10 +361,7 @@ fn diff_cluster_linkage_helpers() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

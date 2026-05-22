@@ -108,11 +108,7 @@ fn generate_query() -> OracleQuery {
             vec![1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0],
         ),
         // single-score input
-        (
-            "single_score",
-            vec![5.5],
-            vec![1.0, 3.0, 5.0, 7.0, 9.0],
-        ),
+        ("single_score", vec![5.5], vec![1.0, 3.0, 5.0, 7.0, 9.0]),
     ];
 
     let points = fixtures
@@ -188,9 +184,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "zmap oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping zmap oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping zmap oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }

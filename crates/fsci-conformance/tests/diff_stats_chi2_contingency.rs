@@ -95,11 +95,7 @@ fn emit_log(log: &DiffLog) {
 fn generate_query() -> OracleQuery {
     let fixtures: Vec<(&str, Vec<Vec<f64>>, bool)> = vec![
         // 2×2 with Yates correction (scipy default for 2×2)
-        (
-            "2x2_yates",
-            vec![vec![10.0, 20.0], vec![30.0, 40.0]],
-            true,
-        ),
+        ("2x2_yates", vec![vec![10.0, 20.0], vec![30.0, 40.0]], true),
         // 2×2 without Yates correction
         (
             "2x2_no_yates",
@@ -187,9 +183,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for chi2_contingency oracle: {e}"
             );
-            eprintln!(
-                "skipping chi2_contingency oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping chi2_contingency oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -205,9 +199,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "chi2_contingency oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping chi2_contingency oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping chi2_contingency oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -220,9 +212,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "chi2_contingency oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping chi2_contingency oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping chi2_contingency oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -252,27 +242,29 @@ fn diff_stats_chi2_contingency() {
         let result = chi2_contingency(&case.table, case.correction);
 
         if let Some(scipy_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - scipy_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - scipy_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(scipy_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(scipy_dof) = scipy_arm.dof {
             let abs_diff = (result.dof as i64 - scipy_dof).unsigned_abs() as f64;
             max_overall = max_overall.max(abs_diff);

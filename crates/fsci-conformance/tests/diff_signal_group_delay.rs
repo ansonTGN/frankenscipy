@@ -174,13 +174,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "group_delay oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping group_delay oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping group_delay oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for group_delay oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for group_delay oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -259,7 +259,10 @@ fn diff_signal_group_delay() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!("group_delay mismatch: {} abs_diff={}", d.case_id, d.abs_diff);
+            eprintln!(
+                "group_delay mismatch: {} abs_diff={}",
+                d.case_id, d.abs_diff
+            );
         }
     }
 

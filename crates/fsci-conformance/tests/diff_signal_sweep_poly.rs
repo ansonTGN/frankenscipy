@@ -190,13 +190,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "sweep_poly oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping sweep_poly oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping sweep_poly oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for sweep_poly oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for sweep_poly oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -271,10 +271,7 @@ fn diff_signal_sweep_poly() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "sweep_poly mismatch: {} abs_diff={}",
-                d.case_id, d.abs_diff
-            );
+            eprintln!("sweep_poly mismatch: {} abs_diff={}", d.case_id, d.abs_diff);
         }
     }
 

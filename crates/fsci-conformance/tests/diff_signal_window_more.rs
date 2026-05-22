@@ -248,7 +248,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for window_more oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for window_more oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -266,7 +268,10 @@ fn vec_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]
@@ -296,7 +301,10 @@ fn diff_signal_window_more() {
         let (window, tol) = match case.op.as_str() {
             "barthann" => (barthann(case.n), TIGHT_TOL),
             "gcos" => (general_cosine(case.n, &case.coeffs, case.sym), TIGHT_TOL),
-            "ggauss" => (general_gaussian(case.n, case.p, case.sig, case.sym), TIGHT_TOL),
+            "ggauss" => (
+                general_gaussian(case.n, case.p, case.sig, case.sym),
+                TIGHT_TOL,
+            ),
             "lanczos" => (lanczos(case.n), TIGHT_TOL),
             "chebwin" => (chebwin(case.n, case.at), CHEB_TOL),
             _ => continue,

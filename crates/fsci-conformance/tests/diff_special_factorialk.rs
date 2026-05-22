@@ -152,7 +152,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for factorialk oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for factorialk oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

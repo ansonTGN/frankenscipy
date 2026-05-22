@@ -82,8 +82,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create fowlkes_mallows diff output dir");
+    fs::create_dir_all(output_dir()).expect("create fowlkes_mallows diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -104,7 +103,11 @@ fn generate_query() -> OracleQuery {
         // Perfect agreement
         ("perfect", vec![0, 0, 1, 1, 2, 2], vec![0, 0, 1, 1, 2, 2]),
         // Slight disagreement
-        ("slight_diff", vec![0, 0, 1, 1, 2, 2], vec![0, 0, 1, 2, 2, 2]),
+        (
+            "slight_diff",
+            vec![0, 0, 1, 1, 2, 2],
+            vec![0, 0, 1, 2, 2, 2],
+        ),
         // No agreement (random shuffle)
         ("shuffled", vec![0, 0, 1, 1, 2, 2], vec![1, 2, 0, 2, 0, 1]),
         // Three-cluster vs two-cluster — partial overlap
@@ -204,14 +207,15 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for fowlkes_mallows oracle: {e}"
             );
-            eprintln!(
-                "skipping fowlkes_mallows oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping fowlkes_mallows oracle: python3 not available ({e})");
             return None;
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open fowlkes_mallows oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open fowlkes_mallows oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -219,22 +223,20 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "fowlkes_mallows oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping fowlkes_mallows oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping fowlkes_mallows oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for fowlkes_mallows oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for fowlkes_mallows oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "fowlkes_mallows oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping fowlkes_mallows oracle: numpy not available\n{stderr}"
-        );
+        eprintln!("skipping fowlkes_mallows oracle: numpy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -299,10 +301,7 @@ fn diff_cluster_fowlkes_mallows() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "fowlkes_mallows mismatch: {} abs={}",
-                d.case_id, d.abs_diff
-            );
+            eprintln!("fowlkes_mallows mismatch: {} abs={}", d.case_id, d.abs_diff);
         }
     }
 

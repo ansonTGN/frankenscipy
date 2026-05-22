@@ -116,13 +116,8 @@ fn generate_query() -> OracleQuery {
     let x_b: Vec<f64> = (0..8).map(|i| i as f64).collect();
     let y_b: Vec<f64> = (0..7).map(|i| i as f64 * 0.7).collect();
     let z_smooth = mesh_zy(&x_b, &y_b, |x, y| (x * 0.3).sin() + (y * 0.5).cos());
-    let queries_b: Vec<(f64, f64)> = vec![
-        (1.5, 1.0),
-        (3.5, 2.5),
-        (5.0, 3.0),
-        (6.5, 4.0),
-        (2.0, 0.5),
-    ];
+    let queries_b: Vec<(f64, f64)> =
+        vec![(1.5, 1.0), (3.5, 2.5), (5.0, 3.0), (6.5, 4.0), (2.0, 0.5)];
 
     OracleQuery {
         points: vec![
@@ -234,7 +229,10 @@ fn vec_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]
@@ -288,7 +286,8 @@ fn diff_interpolate_interp2d() {
 
     let log = DiffLog {
         test_id: "diff_interpolate_interp2d".into(),
-        category: "fsci_interpolate::interp2d vs scipy.interpolate.RegularGridInterpolator(linear)".into(),
+        category: "fsci_interpolate::interp2d vs scipy.interpolate.RegularGridInterpolator(linear)"
+            .into(),
         case_count: diffs.len(),
         max_abs_diff: max_overall,
         pass: all_pass,

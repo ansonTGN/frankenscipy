@@ -113,10 +113,34 @@ fn diff_integrate_validate_audit_equivalence() {
 
     // validate_tol probes — scalar rtol/atol, varied n
     let tol_probes: &[(&str, ToleranceValue, ToleranceValue, usize, RuntimeMode)] = &[
-        ("ok_strict", ToleranceValue::Scalar(1e-6), ToleranceValue::Scalar(1e-9), 3, RuntimeMode::Strict),
-        ("ok_hardened", ToleranceValue::Scalar(1e-3), ToleranceValue::Scalar(1e-6), 5, RuntimeMode::Hardened),
-        ("err_rtol_nan", ToleranceValue::Scalar(f64::NAN), ToleranceValue::Scalar(1e-9), 3, RuntimeMode::Strict),
-        ("err_atol_nan", ToleranceValue::Scalar(1e-6), ToleranceValue::Scalar(f64::NAN), 3, RuntimeMode::Strict),
+        (
+            "ok_strict",
+            ToleranceValue::Scalar(1e-6),
+            ToleranceValue::Scalar(1e-9),
+            3,
+            RuntimeMode::Strict,
+        ),
+        (
+            "ok_hardened",
+            ToleranceValue::Scalar(1e-3),
+            ToleranceValue::Scalar(1e-6),
+            5,
+            RuntimeMode::Hardened,
+        ),
+        (
+            "err_rtol_nan",
+            ToleranceValue::Scalar(f64::NAN),
+            ToleranceValue::Scalar(1e-9),
+            3,
+            RuntimeMode::Strict,
+        ),
+        (
+            "err_atol_nan",
+            ToleranceValue::Scalar(1e-6),
+            ToleranceValue::Scalar(f64::NAN),
+            3,
+            RuntimeMode::Strict,
+        ),
     ];
     for (label, rtol, atol, n, mode) in tol_probes {
         let plain = validate_tol(rtol.clone(), atol.clone(), *n, *mode);

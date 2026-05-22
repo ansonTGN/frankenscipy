@@ -264,8 +264,7 @@ fn diff_ndimage_rotate() {
             continue;
         };
 
-        let arr = NdArray::new(case.data.clone(), vec![case.rows, case.cols])
-            .expect("ndarray");
+        let arr = NdArray::new(case.data.clone(), vec![case.rows, case.cols]).expect("ndarray");
         let result = match rotate(
             &arr,
             case.angle,
@@ -336,9 +335,5 @@ fn diff_ndimage_rotate() {
         }
     }
 
-    assert!(
-        all_pass,
-        "rotate parity failed: {} cases",
-        diffs.len()
-    );
+    assert!(all_pass, "rotate parity failed: {} cases", diffs.len());
 }

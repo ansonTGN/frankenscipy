@@ -35,9 +35,9 @@ use serde::Serialize;
 const PACKET_ID: &str = "FSCI-P2C-007";
 const LINEARITY_TOL: f64 = 1.0e-12;
 const PEAK_BIN_TOL: usize = 1; // peak should be within ±1 bin of the analytic frequency
-                               // (Welch's averaged periodogram with a Hann window has a
-                               // smearing kernel that can shift the peak by up to one bin
-                               // when the tone falls between bins).
+// (Welch's averaged periodogram with a Hann window has a
+// smearing kernel that can shift the peak by up to one bin
+// when the tone falls between bins).
 
 #[derive(Debug, Clone, Serialize)]
 struct CaseLog {
@@ -64,8 +64,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create psd_welch metamorphic output dir");
+    fs::create_dir_all(output_dir()).expect("create psd_welch metamorphic output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -77,8 +76,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &MetamorphicLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize psd_welch metamorphic log");
+    let json = serde_json::to_string_pretty(log).expect("serialize psd_welch metamorphic log");
     fs::write(path, json).expect("write psd_welch metamorphic log");
 }
 
@@ -161,11 +159,7 @@ fn metamorphic_stats_psd_welch() {
         cases.push(CaseLog {
             case_id: f.case_id.to_string(),
             invariant: "length_eq_n_over_2_plus_1".into(),
-            detail: format!(
-                "psd.len()={}, expected={}",
-                psd.len(),
-                expected_len
-            ),
+            detail: format!("psd.len()={}, expected={}", psd.len(), expected_len),
             pass: length_pass,
         });
 

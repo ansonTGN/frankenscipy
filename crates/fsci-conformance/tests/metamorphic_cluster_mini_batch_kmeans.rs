@@ -56,8 +56,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create mini_batch_kmeans metamorphic output dir");
+    fs::create_dir_all(output_dir()).expect("create mini_batch_kmeans metamorphic output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -69,8 +68,8 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &MetamorphicLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json = serde_json::to_string_pretty(log)
-        .expect("serialize mini_batch_kmeans metamorphic log");
+    let json =
+        serde_json::to_string_pretty(log).expect("serialize mini_batch_kmeans metamorphic log");
     fs::write(path, json).expect("write mini_batch_kmeans metamorphic log");
 }
 
@@ -148,8 +147,7 @@ fn metamorphic_cluster_mini_batch_kmeans() {
         };
 
         // 1. centroid shape.
-        let centroid_shape_ok =
-            r.centroids.len() == *k && r.centroids.iter().all(|c| c.len() == d);
+        let centroid_shape_ok = r.centroids.len() == *k && r.centroids.iter().all(|c| c.len() == d);
         cases.push(CaseLog {
             case_id: name.to_string(),
             invariant: "centroids_shape_k_by_d".into(),
@@ -173,13 +171,15 @@ fn metamorphic_cluster_mini_batch_kmeans() {
         cases.push(CaseLog {
             case_id: name.to_string(),
             invariant: "labels_in_0_k".into(),
-            detail: format!("max_label={}, k={k}", r.labels.iter().copied().max().unwrap_or(0)),
+            detail: format!(
+                "max_label={}, k={k}",
+                r.labels.iter().copied().max().unwrap_or(0)
+            ),
             pass: labels_in_range,
         });
 
         // 4. Determinism.
-        let r2 = mini_batch_kmeans(data, *k, max_iter, batch_size, seed)
-            .expect("MBK rerun");
+        let r2 = mini_batch_kmeans(data, *k, max_iter, batch_size, seed).expect("MBK rerun");
         let determ = r.centroids == r2.centroids && r.labels == r2.labels;
         cases.push(CaseLog {
             case_id: name.to_string(),
@@ -189,9 +189,10 @@ fn metamorphic_cluster_mini_batch_kmeans() {
         });
 
         // 5. Each label is the nearest center.
-        let assignment_ok = data.iter().enumerate().all(|(i, p)| {
-            r.labels.get(i).copied() == Some(nearest_center(p, &r.centroids))
-        });
+        let assignment_ok = data
+            .iter()
+            .enumerate()
+            .all(|(i, p)| r.labels.get(i).copied() == Some(nearest_center(p, &r.centroids)));
         cases.push(CaseLog {
             case_id: name.to_string(),
             invariant: "labels_match_nearest_center".into(),

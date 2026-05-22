@@ -97,9 +97,13 @@ fn emit_log(log: &DiffLog) {
 /// Build a deterministic signal of (real, imag) values for a given shape.
 fn make_signal(rows: usize, cols: usize, seed: u64) -> (Vec<f64>, Vec<f64>) {
     // Cheap deterministic generator (LCG)
-    let mut state = seed.wrapping_mul(2_862_933_555_777_941_757_u64).wrapping_add(3037000493);
+    let mut state = seed
+        .wrapping_mul(2_862_933_555_777_941_757_u64)
+        .wrapping_add(3037000493);
     let mut next = || {
-        state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1442695040888963407);
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1442695040888963407);
         ((state >> 33) as f64) / ((1u64 << 31) as f64) - 1.0
     };
     let n = rows * cols;
@@ -115,14 +119,14 @@ fn make_signal(rows: usize, cols: usize, seed: u64) -> (Vec<f64>, Vec<f64>) {
 fn build_query() -> OracleQuery {
     let mut pts = Vec::new();
     let shapes: &[(usize, usize)] = &[
-        (4, 4),    // power-of-two square
-        (8, 8),    // larger PoT square
-        (3, 4),    // non-PoT rectangular
-        (5, 7),    // both dims non-PoT (5 is prime)
-        (16, 4),   // mixed PoT
-        (6, 8),    // non-PoT × PoT
-        (1, 16),   // degenerate row
-        (10, 10),  // mid-size non-PoT square
+        (4, 4),   // power-of-two square
+        (8, 8),   // larger PoT square
+        (3, 4),   // non-PoT rectangular
+        (5, 7),   // both dims non-PoT (5 is prime)
+        (16, 4),  // mixed PoT
+        (6, 8),   // non-PoT × PoT
+        (1, 16),  // degenerate row
+        (10, 10), // mid-size non-PoT square
     ];
     for (i, &(rows, cols)) in shapes.iter().enumerate() {
         let (re, im) = make_signal(rows, cols, 12345 + i as u64);

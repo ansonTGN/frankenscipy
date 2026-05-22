@@ -121,11 +121,7 @@ fn generate_query() -> OracleQuery {
             vec![-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
         ),
         // Small-sample asymmetric — triggers fsci's ks_2samp_exact_pvalue branch.
-        (
-            "small_asym",
-            vec![1.0, 2.0, 3.0, 4.0],
-            vec![5.0, 6.0, 7.0],
-        ),
+        ("small_asym", vec![1.0, 2.0, 3.0, 4.0], vec![5.0, 6.0, 7.0]),
         // Larger sample — asymptotic pvalue branch.
         (
             "larger",
@@ -205,9 +201,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "ks_2samp oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping ks_2samp oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping ks_2samp oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -248,27 +242,29 @@ fn diff_stats_ks_2samp() {
         let result = ks_2samp(&case.data1, &case.data2);
 
         if let Some(scipy_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - scipy_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= STAT_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - scipy_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= STAT_TOL,
+            });
+        }
         if let Some(scipy_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= PVALUE_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= PVALUE_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

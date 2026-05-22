@@ -76,8 +76,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create cov_corr_matrix diff output dir");
+    fs::create_dir_all(output_dir()).expect("create cov_corr_matrix diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -89,8 +88,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize cov_corr_matrix diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize cov_corr_matrix diff log");
     fs::write(path, json).expect("write cov_corr_matrix diff log");
 }
 
@@ -195,9 +193,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for cov_corr_matrix oracle: {e}"
             );
-            eprintln!(
-                "skipping cov_corr_matrix oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping cov_corr_matrix oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -213,9 +209,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "cov_corr_matrix oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping cov_corr_matrix oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping cov_corr_matrix oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -228,9 +222,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "cov_corr_matrix oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping cov_corr_matrix oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping cov_corr_matrix oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

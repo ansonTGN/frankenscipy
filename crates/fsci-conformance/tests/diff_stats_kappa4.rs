@@ -116,12 +116,12 @@ fn generate_query() -> OracleQuery {
     // ppf range so we stay inside whatever support the (h, k)
     // pair imposes.
     let pairs: [(f64, f64); 6] = [
-        (0.0, 0.0),    // Gumbel
-        (0.0, 0.5),    // GenExtreme-like
-        (1.0, 0.5),    // bounded both sides
-        (-1.0, -0.5),  // both unbounded, heavier
-        (0.5, 0.2),    // moderate
-        (0.5, -0.5),   // moderate, opposite skew
+        (0.0, 0.0),   // Gumbel
+        (0.0, 0.5),   // GenExtreme-like
+        (1.0, 0.5),   // bounded both sides
+        (-1.0, -0.5), // both unbounded, heavier
+        (0.5, 0.2),   // moderate
+        (0.5, -0.5),  // moderate, opposite skew
     ];
     let qs = [0.05_f64, 0.25, 0.5, 0.75, 0.95];
     let mut points = Vec::new();

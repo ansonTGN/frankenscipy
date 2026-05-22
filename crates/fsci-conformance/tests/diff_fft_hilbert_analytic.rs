@@ -128,9 +128,7 @@ fn build_query() -> OracleQuery {
 
     // Asymmetric pulse (real-world non-bandlimited signal)
     {
-        let signal: Vec<f64> = (0..20)
-            .map(|i| if i < 5 { 1.0 } else { 0.0 })
-            .collect();
+        let signal: Vec<f64> = (0..20).map(|i| if i < 5 { 1.0 } else { 0.0 }).collect();
         pts.push(CasePoint {
             case_id: "pulse_n20".into(),
             signal,
@@ -250,7 +248,11 @@ fn diff_fft_hilbert_analytic() {
                 n,
                 max_abs_diff: f64::INFINITY,
                 pass: false,
-                note: format!("length mismatch: fsci={} scipy={}", result.len(), exp_re.len()),
+                note: format!(
+                    "length mismatch: fsci={} scipy={}",
+                    result.len(),
+                    exp_re.len()
+                ),
             });
             continue;
         }
@@ -291,9 +293,5 @@ fn diff_fft_hilbert_analytic() {
         }
     }
 
-    assert!(
-        all_pass,
-        "hilbert parity failed: {} cases",
-        diffs.len()
-    );
+    assert!(all_pass, "hilbert parity failed: {} cases", diffs.len());
 }

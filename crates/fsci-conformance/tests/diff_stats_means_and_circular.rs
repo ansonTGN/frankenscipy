@@ -104,10 +104,7 @@ fn generate_query() -> OracleQuery {
             vec![0.5, 1.5, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0],
         ),
         // Circular fixture: bearings around a unit circle in radians
-        (
-            "small_angles",
-            vec![0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5],
-        ),
+        ("small_angles", vec![0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5]),
         // Wider spread covering more than one full radian range
         (
             "wide_angles",
@@ -194,9 +191,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for means_and_circular oracle: {e}"
             );
-            eprintln!(
-                "skipping means_and_circular oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping means_and_circular oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -212,9 +207,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "means_and_circular oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping means_and_circular oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping means_and_circular oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -227,9 +220,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "means_and_circular oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping means_and_circular oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping means_and_circular oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

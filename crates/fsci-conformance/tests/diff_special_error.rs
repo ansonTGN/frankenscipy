@@ -123,7 +123,17 @@ fn generate_query() -> OracleQuery {
     ];
     // erfcinv: q in (0, 2).
     let qs_erfcinv = [
-        1.0e-9_f64, 1.0e-3, 0.01, 0.1, 0.5, 1.0, 1.5, 1.9, 1.99, 1.999, 2.0 - 1.0e-9,
+        1.0e-9_f64,
+        1.0e-3,
+        0.01,
+        0.1,
+        0.5,
+        1.0,
+        1.5,
+        1.9,
+        1.99,
+        1.999,
+        2.0 - 1.0e-9,
     ];
 
     let mut points = Vec::new();
@@ -215,9 +225,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "error-function oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping error-function oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping error-function oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -259,32 +267,33 @@ fn diff_special_error() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(&case.func, case.x) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                let rel_diff = if scipy_v.abs() > 1.0 {
-                    abs_diff / scipy_v.abs()
-                } else {
-                    abs_diff
-                };
-                max_abs_overall = max_abs_overall.max(abs_diff);
-                max_rel_overall = max_rel_overall.max(rel_diff);
+            && let Some(rust_v) = fsci_eval(&case.func, case.x)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            let rel_diff = if scipy_v.abs() > 1.0 {
+                abs_diff / scipy_v.abs()
+            } else {
+                abs_diff
+            };
+            max_abs_overall = max_abs_overall.max(abs_diff);
+            max_rel_overall = max_rel_overall.max(rel_diff);
 
-                let pass = match case.func.as_str() {
-                    "erf" | "erfc" => abs_diff <= ERF_TOL,
-                    "erfinv" | "erfcinv" => {
-                        let scale = scipy_v.abs().max(1.0);
-                        abs_diff <= ERFINV_TOL_REL * scale
-                    }
-                    _ => false,
-                };
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    rel_diff,
-                    pass,
-                });
-            }
+            let pass = match case.func.as_str() {
+                "erf" | "erfc" => abs_diff <= ERF_TOL,
+                "erfinv" | "erfcinv" => {
+                    let scale = scipy_v.abs().max(1.0);
+                    abs_diff <= ERFINV_TOL_REL * scale
+                }
+                _ => false,
+            };
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                rel_diff,
+                pass,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

@@ -218,7 +218,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for fft_helpers oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for fft_helpers oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -297,10 +299,7 @@ fn diff_fft_helpers_windows_pad() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

@@ -110,7 +110,12 @@ fn generate_query() -> OracleQuery {
             vec![-2.0, -2.0],
             vec![2.0, 2.0],
         ),
-        ("xyz_unit_3d", "xyz_3d", vec![0.0, 0.0, 0.0], vec![1.0, 1.0, 1.0]),
+        (
+            "xyz_unit_3d",
+            "xyz_3d",
+            vec![0.0, 0.0, 0.0],
+            vec![1.0, 1.0, 1.0],
+        ),
         (
             "sumsq_unit_3d",
             "sumsq_3d",

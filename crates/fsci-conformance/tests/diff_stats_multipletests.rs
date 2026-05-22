@@ -101,17 +101,9 @@ fn emit_log(log: &DiffLog) {
 fn generate_query() -> OracleQuery {
     let fixtures: Vec<(&str, Vec<f64>, f64)> = vec![
         // Mixed signal — some tests clearly significant, some borderline
-        (
-            "mixed_signal",
-            vec![0.001, 0.04, 0.06, 0.2, 0.5, 0.8],
-            0.05,
-        ),
+        ("mixed_signal", vec![0.001, 0.04, 0.06, 0.2, 0.5, 0.8], 0.05),
         // All non-significant
-        (
-            "all_high",
-            vec![0.3, 0.5, 0.7, 0.85, 0.95],
-            0.05,
-        ),
+        ("all_high", vec![0.3, 0.5, 0.7, 0.85, 0.95], 0.05),
         // Mostly significant
         (
             "mostly_significant",
@@ -235,9 +227,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for multipletests oracle: {e}"
             );
-            eprintln!(
-                "skipping multipletests oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping multipletests oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -253,22 +243,20 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "multipletests oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping multipletests oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping multipletests oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for multipletests oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for multipletests oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "multipletests oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping multipletests oracle: python3 not available\n{stderr}"
-        );
+        eprintln!("skipping multipletests oracle: python3 not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -304,37 +292,39 @@ fn diff_stats_multipletests() {
         };
 
         if let Some(scipy_p) = &scipy_arm.pvalues_corrected
-            && result.pvalues_corrected.len() == scipy_p.len() {
-                let mut max_local = 0.0_f64;
-                for (r, s) in result.pvalues_corrected.iter().zip(scipy_p.iter()) {
-                    if r.is_finite() {
-                        max_local = max_local.max((r - s).abs());
-                    }
+            && result.pvalues_corrected.len() == scipy_p.len()
+        {
+            let mut max_local = 0.0_f64;
+            for (r, s) in result.pvalues_corrected.iter().zip(scipy_p.iter()) {
+                if r.is_finite() {
+                    max_local = max_local.max((r - s).abs());
                 }
-                max_overall = max_overall.max(max_local);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: format!("{}.pvalues_corrected", case.func),
-                    abs_diff: max_local,
-                    pass: max_local <= ABS_TOL,
-                });
             }
+            max_overall = max_overall.max(max_local);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: format!("{}.pvalues_corrected", case.func),
+                abs_diff: max_local,
+                pass: max_local <= ABS_TOL,
+            });
+        }
         if let Some(scipy_r) = &scipy_arm.reject
-            && result.reject.len() == scipy_r.len() {
-                let mismatches = result
-                    .reject
-                    .iter()
-                    .zip(scipy_r.iter())
-                    .filter(|(r, s)| r != s)
-                    .count() as f64;
-                max_overall = max_overall.max(mismatches);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: format!("{}.reject", case.func),
-                    abs_diff: mismatches,
-                    pass: mismatches == 0.0,
-                });
-            }
+            && result.reject.len() == scipy_r.len()
+        {
+            let mismatches = result
+                .reject
+                .iter()
+                .zip(scipy_r.iter())
+                .filter(|(r, s)| r != s)
+                .count() as f64;
+            max_overall = max_overall.max(mismatches);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: format!("{}.reject", case.func),
+                abs_diff: mismatches,
+                pass: mismatches == 0.0,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

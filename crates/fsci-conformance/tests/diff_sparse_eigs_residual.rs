@@ -28,9 +28,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_sparse::{
-    CooMatrix, CsrMatrix, EigsOptions, FormatConvertible, Shape2D, eigs,
-};
+use fsci_sparse::{CooMatrix, CsrMatrix, EigsOptions, FormatConvertible, Shape2D, eigs};
 use serde::Serialize;
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -143,7 +141,12 @@ fn diff_sparse_eigs_residual() {
         }
 
         let mut residual_max = 0.0_f64;
-        for (i, lam) in result.eigenvalues.iter().enumerate().take(result.eigenvectors.len()) {
+        for (i, lam) in result
+            .eigenvalues
+            .iter()
+            .enumerate()
+            .take(result.eigenvectors.len())
+        {
             let v = &result.eigenvectors[i];
             let av = csr_matvec(&a, v);
             let lv: Vec<f64> = v.iter().map(|&x| x * lam).collect();

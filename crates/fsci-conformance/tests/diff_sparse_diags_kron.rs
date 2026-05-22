@@ -336,7 +336,9 @@ print(json.dumps({"diags": diags_out, "kron": kron_out}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for diags_kron oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for diags_kron oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -473,10 +475,7 @@ fn diff_sparse_diags_kron() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

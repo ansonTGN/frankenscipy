@@ -97,13 +97,7 @@ fn emit_log(log: &DiffLog) {
     fs::write(path, json).expect("write log");
 }
 
-fn fsci_eval(
-    op: &str,
-    a_re: f64,
-    a_im: f64,
-    b_re: f64,
-    b_im: f64,
-) -> Option<(f64, f64)> {
+fn fsci_eval(op: &str, a_re: f64, a_im: f64, b_re: f64, b_im: f64) -> Option<(f64, f64)> {
     let a = SpecialTensor::ComplexScalar(FsciComplex::new(a_re, a_im));
     let b = SpecialTensor::ComplexScalar(FsciComplex::new(b_re, b_im));
     let result = match op {
@@ -213,7 +207,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for beta_complex oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for beta_complex oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -250,12 +246,9 @@ fn diff_special_beta_complex() {
         let Some(arm) = pmap.get(&case.case_id) else {
             continue;
         };
-        let (Some(eb_re), Some(eb_im), Some(ebv_re), Some(ebv_im)) = (
-            arm.betaln_re,
-            arm.betaln_im,
-            arm.beta_re,
-            arm.beta_im,
-        ) else {
+        let (Some(eb_re), Some(eb_im), Some(ebv_re), Some(ebv_im)) =
+            (arm.betaln_re, arm.betaln_im, arm.beta_re, arm.beta_im)
+        else {
             continue;
         };
 

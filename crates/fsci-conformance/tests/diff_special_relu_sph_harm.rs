@@ -122,7 +122,12 @@ fn generate_query() -> OracleQuery {
         ("pos_neg", vec![-3.0_f64, -1.0, 0.0, 1.0, 2.5, -0.5]),
         ("all_neg", vec![-5.0_f64, -4.0, -3.0, -2.0, -1.0]),
         ("zeros_and_pos", vec![0.0_f64, 1.0, 2.0, 3.0, 4.0, 5.0]),
-        ("mixed", (0..32).map(|i| (i as f64 * 0.5 - 8.0).sin() * (i as f64 - 16.0)).collect()),
+        (
+            "mixed",
+            (0..32)
+                .map(|i| (i as f64 * 0.5 - 8.0).sin() * (i as f64 - 16.0))
+                .collect(),
+        ),
     ];
     for (label, v) in vecs {
         points.push(Case {
@@ -139,7 +144,16 @@ fn generate_query() -> OracleQuery {
     // sph_harm probes: m ≥ 0, l in 0..4, varied θ (azimuthal) and φ (polar)
     // fsci's sph_harm signature: (m, l, theta=azimuthal, phi=polar)
     // scipy.special.sph_harm_y(n, m, theta=polar, phi=azimuthal)
-    let lm: &[(u32, i32)] = &[(0, 0), (1, 0), (1, 1), (2, 0), (2, 1), (2, 2), (3, 0), (3, 2)];
+    let lm: &[(u32, i32)] = &[
+        (0, 0),
+        (1, 0),
+        (1, 1),
+        (2, 0),
+        (2, 1),
+        (2, 2),
+        (3, 0),
+        (3, 2),
+    ];
     let angles: &[(f64, f64)] = &[
         (0.0, std::f64::consts::FRAC_PI_2),
         (std::f64::consts::FRAC_PI_4, std::f64::consts::FRAC_PI_3),
@@ -248,7 +262,10 @@ fn vec_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]

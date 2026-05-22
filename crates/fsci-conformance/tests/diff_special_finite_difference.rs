@@ -555,8 +555,7 @@ fn diff_special_finite_difference() {
     // jacobian_approx
     for case in &query.jacobian {
         let arm = j_map.get(&case.case_id).expect("validated jacobian arm");
-        let (Some(expected), Some(rows), Some(cols)) =
-            (arm.values.clone(), arm.rows, arm.cols)
+        let (Some(expected), Some(rows), Some(cols)) = (arm.values.clone(), arm.rows, arm.cols)
         else {
             continue;
         };
@@ -586,8 +585,7 @@ fn diff_special_finite_difference() {
     let h_tol = 1.0e-3;
     for case in &query.hessian {
         let arm = h_map.get(&case.case_id).expect("validated hessian arm");
-        let (Some(expected), Some(rows), Some(cols)) =
-            (arm.values.clone(), arm.rows, arm.cols)
+        let (Some(expected), Some(rows), Some(cols)) = (arm.values.clone(), arm.rows, arm.cols)
         else {
             continue;
         };
@@ -627,10 +625,7 @@ fn diff_special_finite_difference() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

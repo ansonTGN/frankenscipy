@@ -29,7 +29,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_stats::{cramervonmises, ContinuousDistribution, Normal};
+use fsci_stats::{ContinuousDistribution, Normal, cramervonmises};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -117,15 +117,11 @@ fn generate_query() -> OracleQuery {
         ),
         (
             "uniform_mapped",
-            vec![
-                -1.5, -1.0, -0.7, -0.4, -0.1, 0.1, 0.4, 0.7, 1.0, 1.5,
-            ],
+            vec![-1.5, -1.0, -0.7, -0.4, -0.1, 0.1, 0.4, 0.7, 1.0, 1.5],
         ),
         (
             "bimodal",
-            vec![
-                -2.5, -2.0, -1.6, -1.4, -1.2, 1.2, 1.4, 1.6, 2.0, 2.5,
-            ],
+            vec![-2.5, -2.0, -1.6, -1.4, -1.2, 1.2, 1.4, 1.6, 2.0, 2.5],
         ),
     ];
 
@@ -242,27 +238,29 @@ fn diff_stats_cramervonmises() {
         let result = cramervonmises(&case.data, &cdf_norm);
 
         if let Some(scipy_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - scipy_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= STAT_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - scipy_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= STAT_TOL,
+            });
+        }
         if let Some(scipy_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= PVALUE_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= PVALUE_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

@@ -122,10 +122,7 @@ fn generate_query() -> OracleQuery {
                 2.0, 3.0, 4.0, 6.0, 12.0,
             ],
         ),
-        (
-            "uniform_like",
-            (1..=20).map(|i| i as f64).collect(),
-        ),
+        ("uniform_like", (1..=20).map(|i| i as f64).collect()),
     ];
 
     let mut points = Vec::new();
@@ -200,9 +197,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "skew_kurt oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping skew_kurt oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping skew_kurt oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }

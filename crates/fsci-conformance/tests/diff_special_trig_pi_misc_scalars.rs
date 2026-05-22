@@ -128,7 +128,14 @@ fn generate_query() -> OracleQuery {
     }
 
     // isposinf / isneginf
-    for &x in &[1.0_f64, -1.0, f64::INFINITY, f64::NEG_INFINITY, 0.0, f64::NAN] {
+    for &x in &[
+        1.0_f64,
+        -1.0,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        0.0,
+        f64::NAN,
+    ] {
         for op in ["isposinf", "isneginf"] {
             points.push(Case {
                 case_id: format!("{op}_x{x}"),
@@ -244,7 +251,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for trig_pi_misc oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for trig_pi_misc oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -313,13 +322,21 @@ fn diff_special_trig_pi_misc_scalars() {
                 let Some(expected) = arm.boolean else {
                     continue;
                 };
-                if isposinf(case.x) == expected { 0.0 } else { 1.0 }
+                if isposinf(case.x) == expected {
+                    0.0
+                } else {
+                    1.0
+                }
             }
             "isneginf" => {
                 let Some(expected) = arm.boolean else {
                     continue;
                 };
-                if isneginf(case.x) == expected { 0.0 } else { 1.0 }
+                if isneginf(case.x) == expected {
+                    0.0
+                } else {
+                    1.0
+                }
             }
             _ => continue,
         };

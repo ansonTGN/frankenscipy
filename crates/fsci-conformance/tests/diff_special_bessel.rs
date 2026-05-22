@@ -21,8 +21,8 @@ use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use fsci_runtime::RuntimeMode;
-use fsci_special::{j0, j1, y0, y1};
 use fsci_special::types::SpecialTensor;
+use fsci_special::{j0, j1, y0, y1};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -255,16 +255,17 @@ fn diff_special_bessel() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(&case.func, case.x) {
-                let d = (rust_v - scipy_v).abs();
-                max_overall = max_overall.max(d);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff: d,
-                    pass: d <= ABS_TOL,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(&case.func, case.x)
+        {
+            let d = (rust_v - scipy_v).abs();
+            max_overall = max_overall.max(d);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff: d,
+                pass: d <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

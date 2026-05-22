@@ -139,10 +139,7 @@ print(json.dumps(results))
     };
 
     {
-        let stdin = child
-            .stdin
-            .as_mut()
-            .expect("open skewcauchy oracle stdin");
+        let stdin = child.stdin.as_mut().expect("open skewcauchy oracle stdin");
         if let Err(err) = stdin.write_all(cases_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);

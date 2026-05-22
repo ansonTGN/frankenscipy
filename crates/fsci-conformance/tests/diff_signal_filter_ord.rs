@@ -175,9 +175,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "filter_ord oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping filter_ord oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping filter_ord oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -227,7 +225,9 @@ fn diff_signal_filter_ord() {
     for case in &query.points {
         let scipy_arm = pmap.get(&case.case_id).expect("validated oracle");
         let Some(scipy_n) = scipy_arm.n else { continue };
-        let Some(scipy_wn) = scipy_arm.wn else { continue };
+        let Some(scipy_wn) = scipy_arm.wn else {
+            continue;
+        };
         let Some((fsci_n, fsci_wn)) = fsci_eval(case) else {
             continue;
         };

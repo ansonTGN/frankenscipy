@@ -87,8 +87,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize brunnermunzel diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize brunnermunzel diff log");
     fs::write(path, json).expect("write brunnermunzel diff log");
 }
 
@@ -106,7 +105,9 @@ fn generate_query() -> OracleQuery {
         ),
         (
             "unequal_n",
-            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
+            vec![
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+            ],
             vec![3.0, 5.0, 7.0, 9.0, 11.0, 13.0],
         ),
         (
@@ -185,9 +186,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for brunnermunzel oracle: {e}"
             );
-            eprintln!(
-                "skipping brunnermunzel oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping brunnermunzel oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -203,9 +202,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "brunnermunzel oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping brunnermunzel oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping brunnermunzel oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -218,9 +215,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "brunnermunzel oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping brunnermunzel oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping brunnermunzel oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -250,27 +245,29 @@ fn diff_stats_brunnermunzel() {
         let result = brunnermunzel_alternative(&case.x, &case.y, &case.alternative);
 
         if let Some(scipy_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - scipy_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - scipy_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(scipy_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

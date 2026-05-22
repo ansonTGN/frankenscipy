@@ -91,12 +91,7 @@ fn generate_query() -> OracleQuery {
             4,
             vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
         ),
-        (
-            "4x4_increasing",
-            4,
-            4,
-            (1..=16).map(|i| i as f64).collect(),
-        ),
+        ("4x4_increasing", 4, 4, (1..=16).map(|i| i as f64).collect()),
         (
             "4x4_alternating",
             4,

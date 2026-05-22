@@ -164,7 +164,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open roots_quadrature oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open roots_quadrature oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -172,9 +175,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "roots_quadrature oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping roots_quadrature oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping roots_quadrature oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -187,9 +188,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "roots_quadrature oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping roots_quadrature oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping roots_quadrature oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -199,7 +198,11 @@ print(json.dumps({"points": points}))
 fn sort_pairs(nodes: Vec<f64>, weights: Vec<f64>) -> (Vec<f64>, Vec<f64>) {
     let n = nodes.len();
     let mut idx: Vec<usize> = (0..n).collect();
-    idx.sort_by(|&a, &b| nodes[a].partial_cmp(&nodes[b]).unwrap_or(std::cmp::Ordering::Equal));
+    idx.sort_by(|&a, &b| {
+        nodes[a]
+            .partial_cmp(&nodes[b])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let sorted_nodes: Vec<f64> = idx.iter().map(|&i| nodes[i]).collect();
     let sorted_weights: Vec<f64> = idx.iter().map(|&i| weights[i]).collect();
     (sorted_nodes, sorted_weights)

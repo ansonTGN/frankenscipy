@@ -14,9 +14,7 @@ use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use fsci_runtime::RuntimeMode;
-use fsci_special::{
-    HyperCaspProblem, HypergeometricBranch, select_hypergeometric_branch,
-};
+use fsci_special::{HyperCaspProblem, HypergeometricBranch, select_hypergeometric_branch};
 use serde::Serialize;
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -66,24 +64,25 @@ fn emit_log(log: &DiffLog) {
 fn diff_special_select_hypergeometric_branch_casp() {
     let start = Instant::now();
     let mut diffs: Vec<CaseDiff> = Vec::new();
-    let mut probe = |id: &str, problem: HyperCaspProblem, mode: RuntimeMode, expected: HypergeometricBranch| {
-        let actual_res = select_hypergeometric_branch(problem, mode);
-        let (actual_str, pass, note) = match actual_res {
-            Ok(d) => (
-                format!("{:?}", d.branch),
-                d.branch == expected,
-                String::new(),
-            ),
-            Err(e) => ("Err".into(), false, format!("err: {e:?}")),
+    let mut probe =
+        |id: &str, problem: HyperCaspProblem, mode: RuntimeMode, expected: HypergeometricBranch| {
+            let actual_res = select_hypergeometric_branch(problem, mode);
+            let (actual_str, pass, note) = match actual_res {
+                Ok(d) => (
+                    format!("{:?}", d.branch),
+                    d.branch == expected,
+                    String::new(),
+                ),
+                Err(e) => ("Err".into(), false, format!("err: {e:?}")),
+            };
+            diffs.push(CaseDiff {
+                case_id: id.into(),
+                expected: format!("{expected:?}"),
+                actual: actual_str,
+                pass,
+                note,
+            });
         };
-        diffs.push(CaseDiff {
-            case_id: id.into(),
-            expected: format!("{expected:?}"),
-            actual: actual_str,
-            pass,
-            note,
-        });
-    };
 
     // === Hyp0f1 ===
     // Small z_abs → DirectSeries

@@ -98,11 +98,7 @@ fn emit_log(log: &DiffLog) {
 fn fsci_eval(bandwidth: f64, data: &[f64], x: f64) -> Option<f64> {
     let kde = GaussianKde::with_bandwidth(data, bandwidth);
     let v = kde.evaluate(x);
-    if v.is_finite() {
-        Some(v)
-    } else {
-        None
-    }
+    if v.is_finite() { Some(v) } else { None }
 }
 
 fn generate_query() -> OracleQuery {
@@ -215,9 +211,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "gaussian-kde oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping gaussian-kde oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping gaussian-kde oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -258,15 +252,16 @@ fn diff_stats_gaussian_kde() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(case.bandwidth, &case.data, case.x) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(case.bandwidth, &case.data, case.x)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

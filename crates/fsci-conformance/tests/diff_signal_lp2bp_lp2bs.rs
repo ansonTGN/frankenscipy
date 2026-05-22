@@ -327,9 +327,5 @@ fn diff_signal_lp2bp_lp2bs() {
         }
     }
 
-    assert!(
-        all_pass,
-        "lp2bp/lp2bs parity failed: {} cases",
-        diffs.len()
-    );
+    assert!(all_pass, "lp2bp/lp2bs parity failed: {} cases", diffs.len());
 }

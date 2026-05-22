@@ -313,7 +313,11 @@ fn diff_linalg_lu_factor_lu_solve() {
                 max_rel_diff: f64::INFINITY,
                 residual_inf: f64::INFINITY,
                 pass: false,
-                note: format!("length mismatch: fsci={} scipy={}", sol.len(), expected.len()),
+                note: format!(
+                    "length mismatch: fsci={} scipy={}",
+                    sol.len(),
+                    expected.len()
+                ),
             });
             continue;
         }
@@ -374,5 +378,9 @@ fn diff_linalg_lu_factor_lu_solve() {
         }
     }
 
-    assert!(all_pass, "lu_factor/lu_solve parity failed: {} cases", diffs.len());
+    assert!(
+        all_pass,
+        "lu_factor/lu_solve parity failed: {} cases",
+        diffs.len()
+    );
 }

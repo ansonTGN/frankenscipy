@@ -128,7 +128,10 @@ fn diff_integrate_romb_func_quad_explain() {
         check(
             "romb_func_sqrt_low_order_imperfect",
             (r.integral - 2.0 / 3.0).abs() < 1e-2,
-            format!("integral={} converged={} (allowed-not-converge)", r.integral, r.converged),
+            format!(
+                "integral={} converged={} (allowed-not-converge)",
+                r.integral, r.converged
+            ),
         );
     }
 
@@ -189,7 +192,10 @@ fn diff_integrate_romb_func_quad_explain() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!("romb_func/quad_explain mismatch: {} — {}", d.case_id, d.note);
+            eprintln!(
+                "romb_func/quad_explain mismatch: {} — {}",
+                d.case_id, d.note
+            );
         }
     }
 

@@ -10,8 +10,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_opt::minimize::{OptCaspProblem, select_minimize_method};
 use fsci_opt::OptimizeMethod;
+use fsci_opt::minimize::{OptCaspProblem, select_minimize_method};
 use serde::Serialize;
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -176,7 +176,11 @@ fn diff_opt_select_minimize_method() {
     diffs.push(CaseDiff {
         case_id: "dim_zero_err".into(),
         expected: "Err".into(),
-        actual: if r7.is_err() { "Err".into() } else { "Ok".into() },
+        actual: if r7.is_err() {
+            "Err".into()
+        } else {
+            "Ok".into()
+        },
         pass: r7.is_err(),
     });
 
@@ -195,7 +199,10 @@ fn diff_opt_select_minimize_method() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!("casp mismatch: {} got {} (expected {})", d.case_id, d.actual, d.expected);
+            eprintln!(
+                "casp mismatch: {} got {} (expected {})",
+                d.case_id, d.actual, d.expected
+            );
         }
     }
 

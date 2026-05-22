@@ -75,7 +75,10 @@ fn diff_arrayapi_broadcast_audit_equivalence() {
             "incompat_mismatch",
             vec![Shape::new(vec![3, 4]), Shape::new(vec![5, 4])],
         ),
-        ("incompat_dim", vec![Shape::new(vec![2, 3]), Shape::new(vec![2, 4])]),
+        (
+            "incompat_dim",
+            vec![Shape::new(vec![2, 3]), Shape::new(vec![2, 4])],
+        ),
         ("empty", vec![]),
     ];
 
@@ -98,7 +101,8 @@ fn diff_arrayapi_broadcast_audit_equivalence() {
 
     let log = DiffLog {
         test_id: "diff_arrayapi_broadcast_audit_equivalence".into(),
-        category: "fsci_arrayapi::broadcast_shapes_with_audit equivalent to broadcast_shapes".into(),
+        category: "fsci_arrayapi::broadcast_shapes_with_audit equivalent to broadcast_shapes"
+            .into(),
         case_count: diffs.len(),
         pass: all_pass,
         timestamp_ms: timestamp_ms(),

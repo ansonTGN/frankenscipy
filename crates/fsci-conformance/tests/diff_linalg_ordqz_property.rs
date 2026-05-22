@@ -70,7 +70,9 @@ fn emit_log(log: &DiffLog) {
 }
 
 fn transpose(m: &[Vec<f64>]) -> Vec<Vec<f64>> {
-    if m.is_empty() { return vec![]; }
+    if m.is_empty() {
+        return vec![];
+    }
     let r = m.len();
     let c = m[0].len();
     let mut t = vec![vec![0.0; r]; c];
@@ -83,10 +85,14 @@ fn transpose(m: &[Vec<f64>]) -> Vec<Vec<f64>> {
 }
 
 fn frob_diff(a: &[Vec<f64>], b: &[Vec<f64>]) -> f64 {
-    if a.len() != b.len() { return f64::INFINITY; }
+    if a.len() != b.len() {
+        return f64::INFINITY;
+    }
     let mut max = 0.0_f64;
     for (r_a, r_b) in a.iter().zip(b.iter()) {
-        if r_a.len() != r_b.len() { return f64::INFINITY; }
+        if r_a.len() != r_b.len() {
+            return f64::INFINITY;
+        }
         for (va, vb) in r_a.iter().zip(r_b.iter()) {
             max = max.max((va - vb).abs());
         }
@@ -95,7 +101,9 @@ fn frob_diff(a: &[Vec<f64>], b: &[Vec<f64>]) -> f64 {
 }
 
 fn ident(n: usize) -> Vec<Vec<f64>> {
-    (0..n).map(|i| (0..n).map(|j| if i == j { 1.0 } else { 0.0 }).collect()).collect()
+    (0..n)
+        .map(|i| (0..n).map(|j| if i == j { 1.0 } else { 0.0 }).collect())
+        .collect()
 }
 
 #[test]
@@ -198,12 +206,18 @@ fn diff_linalg_ordqz_property() {
             (OrdQzSort::LeftHalfPlane, "lhp"),
             (OrdQzSort::InsideUnitCircle, "iuc"),
         ] {
-            let Ok(r) = ordqz(a, b, sort, opts) else { continue };
+            let Ok(r) = ordqz(a, b, sort, opts) else {
+                continue;
+            };
             let qt = transpose(&r.q);
             let Ok(qta) = matmul(&qt, a) else { continue };
-            let Ok(qtaz) = matmul(&qta, &r.z) else { continue };
+            let Ok(qtaz) = matmul(&qta, &r.z) else {
+                continue;
+            };
             let Ok(qtb) = matmul(&qt, b) else { continue };
-            let Ok(qtbz) = matmul(&qtb, &r.z) else { continue };
+            let Ok(qtbz) = matmul(&qtb, &r.z) else {
+                continue;
+            };
             let d_aa = frob_diff(&qtaz, &r.aa);
             let d_bb = frob_diff(&qtbz, &r.bb);
             let n = r.q.len();

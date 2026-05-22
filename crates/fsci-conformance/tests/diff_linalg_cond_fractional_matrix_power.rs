@@ -137,11 +137,7 @@ fn generate_query() -> OracleQuery {
 
     // fractional_matrix_power: positive-definite matrices for which A^p is well-defined.
     let fmp_cases: &[(&str, Vec<Vec<f64>>, f64)] = &[
-        (
-            "diag2x2_p0.5",
-            vec![vec![4.0, 0.0], vec![0.0, 9.0]],
-            0.5,
-        ),
+        ("diag2x2_p0.5", vec![vec![4.0, 0.0], vec![0.0, 9.0]], 0.5),
         (
             "diag3_p0.5",
             vec![
@@ -278,7 +274,9 @@ print(json.dumps({"points": points}))
 
 fn fsci_eval(case: &PointCase) -> Option<Vec<f64>> {
     match case.op.as_str() {
-        "cond" => cond(&case.matrix, DecompOptions::default()).ok().map(|v| vec![v]),
+        "cond" => cond(&case.matrix, DecompOptions::default())
+            .ok()
+            .map(|v| vec![v]),
         "fmp" => fractional_matrix_power(&case.matrix, case.p, DecompOptions::default())
             .ok()
             .map(|m| m.into_iter().flatten().collect()),
@@ -309,7 +307,9 @@ fn diff_linalg_cond_fractional_matrix_power() {
         let Some(scipy_v) = scipy_arm.values.as_ref() else {
             continue;
         };
-        let Some(fsci_v) = fsci_eval(case) else { continue };
+        let Some(fsci_v) = fsci_eval(case) else {
+            continue;
+        };
         let tol = match case.op.as_str() {
             "cond" => COND_TOL,
             "fmp" => FMP_TOL,
@@ -330,10 +330,7 @@ fn diff_linalg_cond_fractional_matrix_power() {
             .zip(scipy_v.iter())
             .map(|(a, b)| (a - b).abs())
             .fold(0.0_f64, f64::max);
-        let scale = scipy_v
-            .iter()
-            .map(|b| b.abs())
-            .fold(1.0_f64, f64::max);
+        let scale = scipy_v.iter().map(|b| b.abs()).fold(1.0_f64, f64::max);
         let rel_d = abs_d / scale;
         max_overall = max_overall.max(abs_d);
         diffs.push(CaseDiff {

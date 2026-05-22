@@ -165,9 +165,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "inv_boxcox1p oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping inv_boxcox1p oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping inv_boxcox1p oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -180,9 +178,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "inv_boxcox1p oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping inv_boxcox1p oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping inv_boxcox1p oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -209,7 +205,9 @@ fn diff_special_inv_boxcox1p() {
 
     for case in &query.points {
         let scipy_arm = pmap.get(&case.case_id).expect("validated oracle");
-        let Some(scipy_v) = scipy_arm.value else { continue };
+        let Some(scipy_v) = scipy_arm.value else {
+            continue;
+        };
         let fsci_v = inv_boxcox1p_scalar(case.y, case.lam);
         if !fsci_v.is_finite() {
             continue;

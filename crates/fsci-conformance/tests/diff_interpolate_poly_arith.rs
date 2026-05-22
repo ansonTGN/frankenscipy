@@ -131,12 +131,7 @@ fn generate_query() -> OracleQuery {
     // pade — Taylor series, LOW-FIRST
     let pade_cases: &[(&str, Vec<f64>, usize, usize)] = &[
         // exp(x) ≈ 1 + x + x²/2! + x³/3! + x⁴/4!  →  pade(2,2)
-        (
-            "exp_2_2",
-            vec![1.0, 1.0, 0.5, 1.0 / 6.0, 1.0 / 24.0],
-            2,
-            2,
-        ),
+        ("exp_2_2", vec![1.0, 1.0, 0.5, 1.0 / 6.0, 1.0 / 24.0], 2, 2),
         // log(1+x) ≈ x - x²/2 + x³/3 - x⁴/4 + x⁵/5  →  pade(2,2)
         (
             "log1p_2_2",
@@ -166,18 +161,8 @@ fn generate_query() -> OracleQuery {
 
     // ratval — LOW-FIRST p, q, evaluated at x
     let ratval_cases: &[(&str, Vec<f64>, Vec<f64>, f64)] = &[
-        (
-            "rat_simple",
-            vec![1.0, 0.0, 1.0],
-            vec![1.0, 1.0],
-            2.0,
-        ),
-        (
-            "rat_at_zero",
-            vec![3.0, 2.0, 1.0],
-            vec![1.0, 0.0, 1.0],
-            0.0,
-        ),
+        ("rat_simple", vec![1.0, 0.0, 1.0], vec![1.0, 1.0], 2.0),
+        ("rat_at_zero", vec![3.0, 2.0, 1.0], vec![1.0, 0.0, 1.0], 0.0),
         (
             "rat_neg_x",
             vec![1.0, -1.0, 0.5],
@@ -302,7 +287,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for poly_arith oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for poly_arith oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -427,10 +414,7 @@ fn diff_interpolate_poly_arith() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

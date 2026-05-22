@@ -196,7 +196,10 @@ print(json.dumps({"sobol": sobol_out, "scale": scale_out}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open qmc_sobol_scale oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open qmc_sobol_scale oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -204,9 +207,7 @@ print(json.dumps({"sobol": sobol_out, "scale": scale_out}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "qmc_sobol_scale oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping qmc_sobol_scale oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping qmc_sobol_scale oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -219,9 +220,7 @@ print(json.dumps({"sobol": sobol_out, "scale": scale_out}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "qmc_sobol_scale oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping qmc_sobol_scale oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping qmc_sobol_scale oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -323,10 +322,7 @@ fn diff_stats_qmc_sobol_scale() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

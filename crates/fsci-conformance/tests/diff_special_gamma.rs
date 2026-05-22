@@ -201,7 +201,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open gamma family oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open gamma family oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -209,13 +212,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "gamma family oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping gamma family oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping gamma family oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for gamma family oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for gamma family oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -251,32 +254,33 @@ fn diff_special_gamma() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(&case.func, case.x) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                let rel_diff = if scipy_v.abs() > 1.0 {
-                    abs_diff / scipy_v.abs()
-                } else {
-                    abs_diff
-                };
-                max_abs_overall = max_abs_overall.max(abs_diff);
-                max_rel_overall = max_rel_overall.max(rel_diff);
+            && let Some(rust_v) = fsci_eval(&case.func, case.x)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            let rel_diff = if scipy_v.abs() > 1.0 {
+                abs_diff / scipy_v.abs()
+            } else {
+                abs_diff
+            };
+            max_abs_overall = max_abs_overall.max(abs_diff);
+            max_rel_overall = max_rel_overall.max(rel_diff);
 
-                let scale = scipy_v.abs().max(1.0);
-                let pass = match case.func.as_str() {
-                    "gamma" | "gammaln" => {
-                        abs_diff <= GAMMA_TOL_ABS || rel_diff <= GAMMA_TOL_REL * scale
-                    }
-                    "digamma" | "rgamma" => abs_diff <= DIGAMMA_TOL_REL * scale,
-                    _ => false,
-                };
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    rel_diff,
-                    pass,
-                });
-            }
+            let scale = scipy_v.abs().max(1.0);
+            let pass = match case.func.as_str() {
+                "gamma" | "gammaln" => {
+                    abs_diff <= GAMMA_TOL_ABS || rel_diff <= GAMMA_TOL_REL * scale
+                }
+                "digamma" | "rgamma" => abs_diff <= DIGAMMA_TOL_REL * scale,
+                _ => false,
+            };
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                rel_diff,
+                pass,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

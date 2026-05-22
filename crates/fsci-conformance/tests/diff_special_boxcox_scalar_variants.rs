@@ -14,7 +14,7 @@ use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use fsci_special::{
-    boxcox1p_scalar, boxcox_transform_scalar, inv_boxcox1p_scalar, inv_boxcox_scalar,
+    boxcox_transform_scalar, boxcox1p_scalar, inv_boxcox_scalar, inv_boxcox1p_scalar,
 };
 use serde::{Deserialize, Serialize};
 

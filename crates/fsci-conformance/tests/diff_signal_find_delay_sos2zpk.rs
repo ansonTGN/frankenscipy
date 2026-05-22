@@ -107,7 +107,9 @@ fn synth_signal(n: usize, seed: u64) -> Vec<f64> {
     let mut s = seed;
     (0..n)
         .map(|_| {
-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            s = s
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let u = ((s >> 11) as f64) / (1u64 << 53) as f64;
             u - 0.5
         })
@@ -120,13 +122,17 @@ fn shift_right(x: &[f64], lag: i64) -> Vec<f64> {
     let mut y = vec![0.0_f64; n];
     if lag >= 0 {
         let lag_u = lag as usize;
-        if lag_u >= n { return y; }
+        if lag_u >= n {
+            return y;
+        }
         for i in lag_u..n {
             y[i] = x[i - lag_u];
         }
     } else {
         let lag_u = (-lag) as usize;
-        if lag_u >= n { return y; }
+        if lag_u >= n {
+            return y;
+        }
         for i in 0..(n - lag_u) {
             y[i] = x[i + lag_u];
         }
@@ -135,9 +141,12 @@ fn shift_right(x: &[f64], lag: i64) -> Vec<f64> {
 }
 
 fn sort_complex_pairs(re: &[f64], im: &[f64]) -> Vec<(f64, f64)> {
-    let mut pairs: Vec<(f64, f64)> =
-        re.iter().zip(im.iter()).map(|(&r, &i)| (r, i)).collect();
-    pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap().then(a.1.partial_cmp(&b.1).unwrap()));
+    let mut pairs: Vec<(f64, f64)> = re.iter().zip(im.iter()).map(|(&r, &i)| (r, i)).collect();
+    pairs.sort_by(|a, b| {
+        a.0.partial_cmp(&b.0)
+            .unwrap()
+            .then(a.1.partial_cmp(&b.1).unwrap())
+    });
     pairs
 }
 
@@ -167,12 +176,9 @@ fn generate_query() -> OracleQuery {
     // root finder reports as a single zero "at infinity" that scipy
     // doesn't add (different handling of degenerate FIR sections).
     let sos_a: Vec<f64> = vec![
-        1.0, 0.5, 0.1, 1.0, -0.7, 0.2,
-        0.5, 0.4, 0.05, 1.0, 0.1, -0.3,
+        1.0, 0.5, 0.1, 1.0, -0.7, 0.2, 0.5, 0.4, 0.05, 1.0, 0.1, -0.3,
     ];
-    let sos_b: Vec<f64> = vec![
-        0.25, 0.5, 0.25, 1.0, -1.2, 0.5,
-    ];
+    let sos_b: Vec<f64> = vec![0.25, 0.5, 0.25, 1.0, -1.2, 0.5];
     points.push(Case {
         case_id: "sos_2sec".into(),
         op: "sos".into(),

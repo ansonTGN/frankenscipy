@@ -12,9 +12,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_sparse::{
-    CsrMatrix, Shape2D, average_clustering, degree_sequence, is_connected,
-};
+use fsci_sparse::{CsrMatrix, Shape2D, average_clustering, degree_sequence, is_connected};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -109,25 +107,15 @@ fn dense_to_csr(rows: usize, cols: usize, dense: &[f64]) -> CsrMatrix {
 
 fn generate_query() -> OracleQuery {
     let adj_6_connected = vec![
-        0.0, 1.0, 1.0, 0.0, 0.0, 0.0,
-        1.0, 0.0, 1.0, 1.0, 0.0, 0.0,
-        1.0, 1.0, 0.0, 0.0, 0.0, 0.0,
-        0.0, 1.0, 0.0, 0.0, 1.0, 1.0,
-        0.0, 0.0, 0.0, 1.0, 0.0, 1.0,
-        0.0, 0.0, 0.0, 1.0, 1.0, 0.0,
+        0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0,
     ];
     let adj_5_two_comp = vec![
-        0.0, 1.0, 0.0, 0.0, 0.0,
-        1.0, 0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 1.0, 1.0,
-        0.0, 0.0, 1.0, 0.0, 0.0,
-        0.0, 0.0, 1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0,
+        0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
     ];
     let adj_4_complete = vec![
-        0.0, 1.0, 1.0, 1.0,
-        1.0, 0.0, 1.0, 1.0,
-        1.0, 1.0, 0.0, 1.0,
-        1.0, 1.0, 1.0, 0.0,
+        0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0,
     ];
 
     OracleQuery {
@@ -213,7 +201,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open graph_summary oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open graph_summary oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -221,9 +212,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "graph_summary oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping graph_summary oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping graph_summary oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -324,10 +313,7 @@ fn diff_sparse_graph_summary() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

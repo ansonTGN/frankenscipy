@@ -339,7 +339,10 @@ fn diff_sparse_iterative_bicg_cgs_qmr_lgmres() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!("{} mismatch: {} abs_diff={}", d.solver, d.case_id, d.abs_diff);
+            eprintln!(
+                "{} mismatch: {} abs_diff={}",
+                d.solver, d.case_id, d.abs_diff
+            );
         }
     }
 

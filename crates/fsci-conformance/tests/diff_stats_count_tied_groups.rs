@@ -96,7 +96,9 @@ fn generate_query() -> OracleQuery {
         // Mixed: pairs and triples and singletons
         (
             "mixed",
-            vec![1.0, 1.0, 2.0, 3.0, 3.0, 3.0, 4.0, 5.0, 5.0, 6.0, 7.0, 7.0, 7.0, 7.0],
+            vec![
+                1.0, 1.0, 2.0, 3.0, 3.0, 3.0, 4.0, 5.0, 5.0, 6.0, 7.0, 7.0, 7.0, 7.0,
+            ],
         ),
         // Float equality with negatives
         (
@@ -168,9 +170,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "count_tied_groups oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping count_tied_groups oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping count_tied_groups oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -183,9 +183,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "count_tied_groups oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping count_tied_groups oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping count_tied_groups oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

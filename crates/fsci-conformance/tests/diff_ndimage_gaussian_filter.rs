@@ -117,9 +117,7 @@ fn generate_query() -> OracleQuery {
         (
             "1d_len15",
             vec![15],
-            (0..15)
-                .map(|i| ((i as f64) * 0.5).sin() * 5.0)
-                .collect(),
+            (0..15).map(|i| ((i as f64) * 0.5).sin() * 5.0).collect(),
         ),
     ];
     let sigmas: &[f64] = &[0.5, 1.0, 1.3, 2.0];
@@ -197,7 +195,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open gauss_filter oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open gauss_filter oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -205,9 +206,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "gauss_filter oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping gauss_filter oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping gauss_filter oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }

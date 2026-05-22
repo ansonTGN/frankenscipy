@@ -8,9 +8,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_opt::{
-    MinimizeOptions, OptimizeMethod, minimize, minimize_with_audit, sync_audit_ledger,
-};
+use fsci_opt::{MinimizeOptions, OptimizeMethod, minimize, minimize_with_audit, sync_audit_ledger};
 use serde::Serialize;
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -60,7 +58,10 @@ fn vec_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]
@@ -71,20 +72,47 @@ fn diff_opt_minimize_audit_equivalence() {
 
     // Three test objectives
     let quadratic = |x: &[f64]| x.iter().map(|v| v * v).sum::<f64>();
-    let rosen = |x: &[f64]| {
-        (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0] * x[0]).powi(2)
-    };
-    let shifted_quad = |x: &[f64]| {
-        (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2) + (x[2] + 0.5).powi(2)
-    };
+    let rosen = |x: &[f64]| (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0] * x[0]).powi(2);
+    let shifted_quad =
+        |x: &[f64]| (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2) + (x[2] + 0.5).powi(2);
 
     let probes: Vec<(&str, Vec<f64>, OptimizeMethod, fn(&[f64]) -> f64)> = vec![
-        ("quad_neldermead", vec![1.0, 1.0], OptimizeMethod::NelderMead, quadratic),
-        ("quad_bfgs", vec![2.0, -1.0], OptimizeMethod::Bfgs, quadratic),
-        ("rosen_neldermead", vec![0.0, 0.0], OptimizeMethod::NelderMead, rosen),
-        ("rosen_powell", vec![0.0, 0.0], OptimizeMethod::Powell, rosen),
-        ("shifted_neldermead", vec![0.0, 0.0, 0.0], OptimizeMethod::NelderMead, shifted_quad),
-        ("shifted_bfgs", vec![0.0, 0.0, 0.0], OptimizeMethod::Bfgs, shifted_quad),
+        (
+            "quad_neldermead",
+            vec![1.0, 1.0],
+            OptimizeMethod::NelderMead,
+            quadratic,
+        ),
+        (
+            "quad_bfgs",
+            vec![2.0, -1.0],
+            OptimizeMethod::Bfgs,
+            quadratic,
+        ),
+        (
+            "rosen_neldermead",
+            vec![0.0, 0.0],
+            OptimizeMethod::NelderMead,
+            rosen,
+        ),
+        (
+            "rosen_powell",
+            vec![0.0, 0.0],
+            OptimizeMethod::Powell,
+            rosen,
+        ),
+        (
+            "shifted_neldermead",
+            vec![0.0, 0.0, 0.0],
+            OptimizeMethod::NelderMead,
+            shifted_quad,
+        ),
+        (
+            "shifted_bfgs",
+            vec![0.0, 0.0, 0.0],
+            OptimizeMethod::Bfgs,
+            shifted_quad,
+        ),
     ];
 
     for (label, x0, method, f) in probes {
@@ -102,13 +130,15 @@ fn diff_opt_minimize_audit_equivalence() {
                 let d_f = if pf.is_finite() && af.is_finite() {
                     (pf - af).abs()
                 } else {
-                    if pf.is_nan() && af.is_nan() { 0.0 } else { f64::INFINITY }
+                    if pf.is_nan() && af.is_nan() {
+                        0.0
+                    } else {
+                        f64::INFINITY
+                    }
                 };
                 d_x <= ABS_TOL && d_f <= ABS_TOL && p.status == a.status
             }
-            (Err(pe), Err(ae)) => {
-                format!("{pe:?}") == format!("{ae:?}")
-            }
+            (Err(pe), Err(ae)) => format!("{pe:?}") == format!("{ae:?}"),
             _ => false,
         };
         let d = match (&plain, &audited) {

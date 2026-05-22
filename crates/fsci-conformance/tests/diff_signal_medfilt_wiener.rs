@@ -249,7 +249,9 @@ print(json.dumps({"medfilt": med_out, "wiener": wn_out}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for medfilt/wiener oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for medfilt/wiener oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

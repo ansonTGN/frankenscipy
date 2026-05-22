@@ -102,29 +102,15 @@ fn fsci_eval(func: &str, k: f64, n: f64, arg: f64) -> Option<f64> {
         "nbdtri" => nbdtri(k, n, arg),
         _ => return None,
     };
-    if v.is_finite() {
-        Some(v)
-    } else {
-        None
-    }
+    if v.is_finite() { Some(v) } else { None }
 }
 
 fn generate_query() -> OracleQuery {
     // Binomial: (n, p) trials, k successes.
-    let bdtr_cases = [
-        (10.0_f64, 0.3),
-        (20.0, 0.5),
-        (50.0, 0.1),
-        (100.0, 0.95),
-    ];
+    let bdtr_cases = [(10.0_f64, 0.3), (20.0, 0.5), (50.0, 0.1), (100.0, 0.95)];
     let ks_bdtr = [0_u32, 2, 5, 10, 20];
     // Negative binomial: (n, p) waiting for n successes, k failures.
-    let nbdtr_cases = [
-        (1.0_f64, 0.5),
-        (5.0, 0.5),
-        (10.0, 0.3),
-        (3.0, 0.9),
-    ];
+    let nbdtr_cases = [(1.0_f64, 0.5), (5.0, 0.5), (10.0, 0.3), (3.0, 0.9)];
     let ks_nbdtr = [0_u32, 1, 5, 10, 20];
     // y/p in (0, 1).
     let ys = [0.05_f64, 0.25, 0.5, 0.75, 0.95];
@@ -253,13 +239,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "bdtr/nbdtr oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping bdtr/nbdtr oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping bdtr/nbdtr oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for bdtr/nbdtr oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for bdtr/nbdtr oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -295,26 +281,27 @@ fn diff_special_bdtr() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(&case.func, case.k, case.n, case.arg) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                let scale = scipy_v.abs().max(1.0);
-                let rel_diff = abs_diff / scale;
-                max_abs_overall = max_abs_overall.max(abs_diff);
-                max_rel_overall = max_rel_overall.max(rel_diff);
+            && let Some(rust_v) = fsci_eval(&case.func, case.k, case.n, case.arg)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            let scale = scipy_v.abs().max(1.0);
+            let rel_diff = abs_diff / scale;
+            max_abs_overall = max_abs_overall.max(abs_diff);
+            max_rel_overall = max_rel_overall.max(rel_diff);
 
-                let pass = match case.func.as_str() {
-                    "bdtr" | "bdtrc" | "nbdtr" | "nbdtrc" => abs_diff <= CDF_TOL,
-                    "bdtri" | "nbdtri" => abs_diff <= PPF_TOL_REL * scale,
-                    _ => false,
-                };
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    rel_diff,
-                    pass,
-                });
-            }
+            let pass = match case.func.as_str() {
+                "bdtr" | "bdtrc" | "nbdtr" | "nbdtrc" => abs_diff <= CDF_TOL,
+                "bdtri" | "nbdtri" => abs_diff <= PPF_TOL_REL * scale,
+                _ => false,
+            };
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                rel_diff,
+                pass,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

@@ -186,14 +186,15 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for obrientransform oracle: {e}"
             );
-            eprintln!(
-                "skipping obrientransform oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping obrientransform oracle: python3 not available ({e})");
             return None;
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open obrientransform oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open obrientransform oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -201,13 +202,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "obrientransform oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping obrientransform oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping obrientransform oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for obrientransform oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for obrientransform oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

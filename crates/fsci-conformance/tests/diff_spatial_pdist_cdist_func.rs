@@ -106,8 +106,7 @@ fn diff_spatial_pdist_cdist_func() {
         let from_enum = pdist(&data, DistanceMetric::Euclidean).expect("pdist");
         check(
             "pdist_func_eq_pdist_euclidean",
-            from_func.len() == from_enum.len()
-                && max_abs(&from_func, &from_enum) <= ABS_TOL,
+            from_func.len() == from_enum.len() && max_abs(&from_func, &from_enum) <= ABS_TOL,
             format!(
                 "func_len={} enum_len={} max_abs={}",
                 from_func.len(),
@@ -128,12 +127,10 @@ fn diff_spatial_pdist_cdist_func() {
         let xa: Vec<Vec<f64>> = vec![vec![0.0, 0.0], vec![1.0, 1.0], vec![3.0, 4.0]];
         let xb: Vec<Vec<f64>> = vec![vec![0.0, 0.0], vec![2.0, 0.0]];
         let from_func = cdist_func(&xa, &xb, euclidean);
-        let from_enum =
-            cdist_metric(&xa, &xb, DistanceMetric::Euclidean).expect("cdist_metric");
+        let from_enum = cdist_metric(&xa, &xb, DistanceMetric::Euclidean).expect("cdist_metric");
         check(
             "cdist_func_eq_cdist_metric_euclidean",
-            from_func.len() == from_enum.len()
-                && matrix_max_abs(&from_func, &from_enum) <= ABS_TOL,
+            from_func.len() == from_enum.len() && matrix_max_abs(&from_func, &from_enum) <= ABS_TOL,
             format!("max_abs={}", matrix_max_abs(&from_func, &from_enum)),
         );
         check(
@@ -204,9 +201,8 @@ fn diff_spatial_pdist_cdist_func() {
     let all_pass = diffs.iter().all(|d| d.pass);
     let log = DiffLog {
         test_id: "diff_spatial_pdist_cdist_func".into(),
-        category:
-            "fsci_spatial::{pdist_func, cdist_func, distance_matrix} closure-metric coverage"
-                .into(),
+        category: "fsci_spatial::{pdist_func, cdist_func, distance_matrix} closure-metric coverage"
+            .into(),
         case_count: diffs.len(),
         pass: all_pass,
         timestamp_ms: timestamp_ms(),

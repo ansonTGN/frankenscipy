@@ -89,11 +89,7 @@ fn generate_query() -> OracleQuery {
         vec![2.0, 2.0],
         vec![3.0, 3.0],
     ];
-    let pts2_2d = vec![
-        vec![0.5, 0.5],
-        vec![1.5, 1.5],
-        vec![2.5, 2.5],
-    ];
+    let pts2_2d = vec![vec![0.5, 0.5], vec![1.5, 1.5], vec![2.5, 2.5]];
     let pts1_3d = vec![
         vec![0.0_f64, 0.0, 0.0],
         vec![1.0, 0.0, 0.0],
@@ -166,7 +162,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open count_neighbors oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open count_neighbors oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -174,9 +173,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "count_neighbors oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping count_neighbors oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping count_neighbors oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -189,9 +186,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "count_neighbors oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping count_neighbors oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping count_neighbors oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

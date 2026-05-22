@@ -229,13 +229,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "aic_bic_fdr oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping aic_bic_fdr oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping aic_bic_fdr oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for aic_bic_fdr oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for aic_bic_fdr oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -306,11 +306,11 @@ fn diff_stats_aic_bic_fdr() {
             }
             "false_discovery_control" => {
                 if let Some(scipy_vec) = &scipy_arm.vector {
-                    let rust_vec =
-                        match false_discovery_control(&case.pvalues, Some(&case.method)) {
-                            Ok(v) => v,
-                            Err(_) => continue,
-                        };
+                    let rust_vec = match false_discovery_control(&case.pvalues, Some(&case.method))
+                    {
+                        Ok(v) => v,
+                        Err(_) => continue,
+                    };
                     if rust_vec.len() == scipy_vec.len() {
                         let mut max_local = 0.0_f64;
                         for (a, b) in rust_vec.iter().zip(scipy_vec.iter()) {

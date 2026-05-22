@@ -13,9 +13,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_signal::{
-    FilterType, IirFamily, bessel, butter, cheby1, cheby2, ellip, iirfilter,
-};
+use fsci_signal::{FilterType, IirFamily, bessel, butter, cheby1, cheby2, ellip, iirfilter};
 use serde::Serialize;
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -130,8 +128,8 @@ fn diff_signal_iirfilter_dispatch() {
     // === Bessel ===
     {
         let direct = bessel(order, &wn, btype).expect("bessel");
-        let dispatched = iirfilter(order, &wn, btype, IirFamily::Bessel, None, None)
-            .expect("iirfilter bessel");
+        let dispatched =
+            iirfilter(order, &wn, btype, IirFamily::Bessel, None, None).expect("iirfilter bessel");
         let mab = max_abs(&direct.b, &dispatched.b);
         let maa = max_abs(&direct.a, &dispatched.a);
         check(

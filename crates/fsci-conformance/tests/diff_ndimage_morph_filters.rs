@@ -13,8 +13,8 @@ use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use fsci_ndimage::{
-    BoundaryMode, NdArray, black_tophat, maximum_filter, minimum_filter,
-    morphological_gradient, rotate, white_tophat,
+    BoundaryMode, NdArray, black_tophat, maximum_filter, minimum_filter, morphological_gradient,
+    rotate, white_tophat,
 };
 use serde::{Deserialize, Serialize};
 
@@ -236,7 +236,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open morph_filters oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open morph_filters oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -244,13 +247,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "morph_filters oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping morph_filters oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping morph_filters oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for morph_filters oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for morph_filters oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -296,9 +299,7 @@ fn diff_ndimage_morph_filters() {
         let fsci_result = match case.op.as_str() {
             "minimum_filter" => minimum_filter(&input, case.size, mode, case.cval),
             "maximum_filter" => maximum_filter(&input, case.size, mode, case.cval),
-            "morphological_gradient" => {
-                morphological_gradient(&input, case.size, mode, case.cval)
-            }
+            "morphological_gradient" => morphological_gradient(&input, case.size, mode, case.cval),
             "white_tophat" => white_tophat(&input, case.size, mode, case.cval),
             "black_tophat" => black_tophat(&input, case.size, mode, case.cval),
             "rotate" => rotate(&input, case.angle, false, case.order, mode, case.cval),
@@ -341,10 +342,7 @@ fn diff_ndimage_morph_filters() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

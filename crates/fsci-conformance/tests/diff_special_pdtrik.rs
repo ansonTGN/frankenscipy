@@ -200,7 +200,9 @@ fn diff_special_pdtrik() {
 
     for case in &query.points {
         let scipy_arm = pmap.get(&case.case_id).expect("validated oracle");
-        let Some(scipy_v) = scipy_arm.value else { continue };
+        let Some(scipy_v) = scipy_arm.value else {
+            continue;
+        };
         let fsci_v = pdtrik(case.p, case.m);
         if !fsci_v.is_finite() {
             continue;

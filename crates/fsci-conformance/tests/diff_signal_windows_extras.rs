@@ -98,8 +98,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize windows_extras diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize windows_extras diff log");
     fs::write(path, json).expect("write windows_extras diff log");
 }
 
@@ -226,9 +225,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "windows_extras oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping windows_extras oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping windows_extras oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }

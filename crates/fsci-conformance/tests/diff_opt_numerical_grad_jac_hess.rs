@@ -111,11 +111,7 @@ fn diff_opt_numerical_grad_jac_hess() {
     // f(x, y, z) = x² + y² + z² at (1, 2, 3): ∇f = (2, 4, 6)
     {
         let x = vec![1.0_f64, 2.0, 3.0];
-        let g = numerical_gradient(
-            |v: &[f64]| v[0] * v[0] + v[1] * v[1] + v[2] * v[2],
-            &x,
-            eps,
-        );
+        let g = numerical_gradient(|v: &[f64]| v[0] * v[0] + v[1] * v[1] + v[2] * v[2], &x, eps);
         let expected = vec![2.0_f64, 4.0, 6.0];
         let d = frob_max_vec(&g, &expected);
         max_overall = max_overall.max(d);
@@ -131,11 +127,7 @@ fn diff_opt_numerical_grad_jac_hess() {
     // f: R^2 -> R^2, f(x, y) = (x² + y, x*y); at (1.5, 2): J = [[3, 1], [2, 1.5]]
     {
         let x = vec![1.5_f64, 2.0_f64];
-        let j = numerical_jacobian(
-            |v: &[f64]| vec![v[0] * v[0] + v[1], v[0] * v[1]],
-            &x,
-            eps,
-        );
+        let j = numerical_jacobian(|v: &[f64]| vec![v[0] * v[0] + v[1], v[0] * v[1]], &x, eps);
         let expected = vec![vec![2.0 * x[0], 1.0], vec![x[1], x[0]]];
         let d = frob_max_mat(&j, &expected);
         max_overall = max_overall.max(d);
@@ -174,7 +166,11 @@ fn diff_opt_numerical_grad_jac_hess() {
             &x,
             eps,
         );
-        let expected = vec![vec![2.0, 1.0, 0.0], vec![1.0, 2.0, 0.0], vec![0.0, 0.0, 2.0]];
+        let expected = vec![
+            vec![2.0, 1.0, 0.0],
+            vec![1.0, 2.0, 0.0],
+            vec![0.0, 0.0, 2.0],
+        ];
         let d = frob_max_mat(&h, &expected);
         max_overall = max_overall.max(d);
         diffs.push(CaseDiff {
@@ -201,10 +197,7 @@ fn diff_opt_numerical_grad_jac_hess() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

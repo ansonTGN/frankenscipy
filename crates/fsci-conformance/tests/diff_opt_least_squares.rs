@@ -423,8 +423,13 @@ fn diff_opt_least_squares() {
         if !d.pass {
             eprintln!(
                 "least_squares mismatch: {} fsci_conv={} scipy_conv={} fsci_cost={} scipy_cost={} max_param_abs={} note={}",
-                d.case_id, d.fsci_converged, d.scipy_converged,
-                d.fsci_cost, d.scipy_cost, d.max_param_abs_diff, d.note
+                d.case_id,
+                d.fsci_converged,
+                d.scipy_converged,
+                d.fsci_cost,
+                d.scipy_cost,
+                d.max_param_abs_diff,
+                d.note
             );
         }
     }

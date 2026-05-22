@@ -99,8 +99,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize mannwhitneyu_alt diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize mannwhitneyu_alt diff log");
     fs::write(path, json).expect("write mannwhitneyu_alt diff log");
 }
 
@@ -205,9 +204,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for mannwhitneyu_alt oracle: {e}"
             );
-            eprintln!(
-                "skipping mannwhitneyu_alt oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping mannwhitneyu_alt oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -223,9 +220,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "mannwhitneyu_alt oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping mannwhitneyu_alt oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping mannwhitneyu_alt oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -238,9 +233,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "mannwhitneyu_alt oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping mannwhitneyu_alt oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping mannwhitneyu_alt oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -270,27 +263,29 @@ fn diff_stats_mannwhitneyu_alt() {
         let result = mannwhitneyu_alternative(&case.x, &case.y, &case.alternative);
 
         if let Some(scipy_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - scipy_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - scipy_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(scipy_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

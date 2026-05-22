@@ -188,7 +188,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for betaincinv oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for betaincinv oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -224,19 +226,20 @@ fn diff_special_betaincinv() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(case.a, case.b, case.q) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                let scale = scipy_v.abs().max(1.0);
-                let rel_diff = abs_diff / scale;
-                max_abs_overall = max_abs_overall.max(abs_diff);
-                max_rel_overall = max_rel_overall.max(rel_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    abs_diff,
-                    rel_diff,
-                    pass: abs_diff <= TOL_REL * scale,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(case.a, case.b, case.q)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            let scale = scipy_v.abs().max(1.0);
+            let rel_diff = abs_diff / scale;
+            max_abs_overall = max_abs_overall.max(abs_diff);
+            max_rel_overall = max_rel_overall.max(rel_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                abs_diff,
+                rel_diff,
+                pass: abs_diff <= TOL_REL * scale,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

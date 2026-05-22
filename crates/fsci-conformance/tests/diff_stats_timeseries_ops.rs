@@ -113,10 +113,7 @@ fn fsci_eval(case: &PointCase) -> Option<Vec<f64>> {
 
 fn generate_query() -> OracleQuery {
     let datasets: Vec<(&str, Vec<f64>)> = vec![
-        (
-            "compact",
-            (1..=10).map(|i| i as f64).collect(),
-        ),
+        ("compact", (1..=10).map(|i| i as f64).collect()),
         (
             "noisy",
             vec![1.5, 2.0, 1.8, 2.5, 2.2, 3.0, 2.7, 3.5, 3.2, 4.0, 3.8, 4.5],
@@ -245,9 +242,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for timeseries_ops oracle: {e}"
             );
-            eprintln!(
-                "skipping timeseries_ops oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping timeseries_ops oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -263,9 +258,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "timeseries_ops oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping timeseries_ops oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping timeseries_ops oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -278,9 +271,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "timeseries_ops oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping timeseries_ops oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping timeseries_ops oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

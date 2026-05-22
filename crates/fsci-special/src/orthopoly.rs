@@ -23,7 +23,7 @@
 
 use std::f64::consts::PI;
 
-use fsci_linalg::{eigh, DecompOptions};
+use fsci_linalg::{DecompOptions, eigh};
 
 /// Evaluate the Legendre polynomial P_n(x) of degree n at point x.
 ///
@@ -2035,7 +2035,12 @@ mod tests {
             (2, -2, -0.036_947_463_710_166_74, -0.080_731_681_053_122_66),
             (3, -1, 0.238_650_704_669_713_22, -0.371_676_450_946_947_1),
             (3, -2, -0.085_787_030_722_668_29, -0.187_448_081_879_870_83),
-            (3, -3, -0.045_516_042_712_139_326, -0.006_488_154_543_036_636),
+            (
+                3,
+                -3,
+                -0.045_516_042_712_139_326,
+                -0.006_488_154_543_036_636,
+            ),
         ];
         for &(n, m, re, im) in cases {
             let y = sph_harm_y(n, m, 0.5, 1.0);
@@ -2565,10 +2570,7 @@ mod tests {
         let check = |label: &str, got: &[f64], want: &[f64]| {
             assert_eq!(got.len(), want.len(), "{label}: length");
             for (i, (g, w)) in got.iter().zip(want.iter()).enumerate() {
-                assert!(
-                    (g - w).abs() < 1e-13,
-                    "{label}[{i}]: got {g}, want {w}"
-                );
+                assert!((g - w).abs() < 1e-13, "{label}[{i}]: got {g}, want {w}");
             }
         };
 

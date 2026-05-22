@@ -61,12 +61,28 @@ fn diff_runtime_decision_signals_is_finite() {
     let probes: &[(&str, DecisionSignals, bool)] = &[
         ("all_finite", DecisionSignals::new(8.0, 0.0, 0.1), true),
         ("nan_first", DecisionSignals::new(f64::NAN, 0.0, 0.1), false),
-        ("nan_second", DecisionSignals::new(8.0, f64::NAN, 0.1), false),
+        (
+            "nan_second",
+            DecisionSignals::new(8.0, f64::NAN, 0.1),
+            false,
+        ),
         ("nan_third", DecisionSignals::new(8.0, 0.0, f64::NAN), false),
-        ("pos_inf", DecisionSignals::new(f64::INFINITY, 0.0, 0.1), false),
-        ("neg_inf", DecisionSignals::new(8.0, 0.0, f64::NEG_INFINITY), false),
+        (
+            "pos_inf",
+            DecisionSignals::new(f64::INFINITY, 0.0, 0.1),
+            false,
+        ),
+        (
+            "neg_inf",
+            DecisionSignals::new(8.0, 0.0, f64::NEG_INFINITY),
+            false,
+        ),
         ("zeros", DecisionSignals::new(0.0, 0.0, 0.0), true),
-        ("very_large_finite", DecisionSignals::new(1.0e300, 1.0e10, 0.5), true),
+        (
+            "very_large_finite",
+            DecisionSignals::new(1.0e300, 1.0e10, 0.5),
+            true,
+        ),
     ];
 
     for (label, sig, expected) in probes {

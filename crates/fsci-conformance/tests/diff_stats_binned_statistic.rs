@@ -79,8 +79,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create binned_statistic diff output dir");
+    fs::create_dir_all(output_dir()).expect("create binned_statistic diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -92,8 +91,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize binned_statistic diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize binned_statistic diff log");
     fs::write(path, json).expect("write binned_statistic diff log");
 }
 
@@ -202,9 +200,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for binned_statistic oracle: {e}"
             );
-            eprintln!(
-                "skipping binned_statistic oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping binned_statistic oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -220,9 +216,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "binned_statistic oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping binned_statistic oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping binned_statistic oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -235,9 +229,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "binned_statistic oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping binned_statistic oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping binned_statistic oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -274,52 +266,54 @@ fn diff_stats_binned_statistic() {
         // in numpy); fsci returns NaN. Compare per-element only when
         // both are finite-or-both-NaN.
         if let Some(scipy_stats) = &scipy_arm.stats
-            && rust_stats.len() == scipy_stats.len() {
-                let mut max_local = 0.0_f64;
-                let mut shape_ok = true;
-                for (a, b_opt) in rust_stats.iter().zip(scipy_stats.iter()) {
-                    match (a.is_finite(), b_opt) {
-                        (true, Some(b)) => {
-                            max_local = max_local.max((a - b).abs());
-                        }
-                        (false, None) => {
-                            // Both NaN/empty-bin; OK.
-                        }
-                        _ => {
-                            shape_ok = false;
-                            break;
-                        }
-                    }
-                }
-                if shape_ok {
-                    max_overall = max_overall.max(max_local);
-                    diffs.push(CaseDiff {
-                        case_id: case.case_id.clone(),
-                        statistic: case.statistic.clone(),
-                        arm: "stats_max".into(),
-                        abs_diff: max_local,
-                        pass: max_local <= ABS_TOL,
-                    });
-                }
-            }
-
-        if let Some(scipy_edges) = &scipy_arm.bin_edges
-            && rust_edges.len() == scipy_edges.len() {
-                let mut max_local = 0.0_f64;
-                for (a, b) in rust_edges.iter().zip(scipy_edges.iter()) {
-                    if a.is_finite() {
+            && rust_stats.len() == scipy_stats.len()
+        {
+            let mut max_local = 0.0_f64;
+            let mut shape_ok = true;
+            for (a, b_opt) in rust_stats.iter().zip(scipy_stats.iter()) {
+                match (a.is_finite(), b_opt) {
+                    (true, Some(b)) => {
                         max_local = max_local.max((a - b).abs());
                     }
+                    (false, None) => {
+                        // Both NaN/empty-bin; OK.
+                    }
+                    _ => {
+                        shape_ok = false;
+                        break;
+                    }
                 }
+            }
+            if shape_ok {
                 max_overall = max_overall.max(max_local);
                 diffs.push(CaseDiff {
                     case_id: case.case_id.clone(),
                     statistic: case.statistic.clone(),
-                    arm: "edges_max".into(),
+                    arm: "stats_max".into(),
                     abs_diff: max_local,
                     pass: max_local <= ABS_TOL,
                 });
             }
+        }
+
+        if let Some(scipy_edges) = &scipy_arm.bin_edges
+            && rust_edges.len() == scipy_edges.len()
+        {
+            let mut max_local = 0.0_f64;
+            for (a, b) in rust_edges.iter().zip(scipy_edges.iter()) {
+                if a.is_finite() {
+                    max_local = max_local.max((a - b).abs());
+                }
+            }
+            max_overall = max_overall.max(max_local);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                statistic: case.statistic.clone(),
+                arm: "edges_max".into(),
+                abs_diff: max_local,
+                pass: max_local <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

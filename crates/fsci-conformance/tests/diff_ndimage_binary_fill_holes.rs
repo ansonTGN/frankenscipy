@@ -116,16 +116,8 @@ fn generate_query() -> OracleQuery {
                 0.0, 0.0, 0.0, 0.0, //
             ],
         ),
-        (
-            "all_zeros_4x4",
-            vec![4, 4],
-            vec![0.0; 16],
-        ),
-        (
-            "all_ones_4x4",
-            vec![4, 4],
-            vec![1.0; 16],
-        ),
+        ("all_zeros_4x4", vec![4, 4], vec![0.0; 16]),
+        ("all_ones_4x4", vec![4, 4], vec![1.0; 16]),
         (
             "u_shape_6x6",
             vec![6, 6],
@@ -199,13 +191,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "fill_holes oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping fill_holes oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping fill_holes oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for fill_holes oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for fill_holes oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -248,7 +240,9 @@ fn diff_ndimage_binary_fill_holes() {
         let Some(scipy_v) = scipy_arm.values.as_ref() else {
             continue;
         };
-        let Some(fsci_v) = fsci_eval(case) else { continue };
+        let Some(fsci_v) = fsci_eval(case) else {
+            continue;
+        };
         let mismatched = if fsci_v.len() != scipy_v.len() {
             fsci_v.len()
         } else {

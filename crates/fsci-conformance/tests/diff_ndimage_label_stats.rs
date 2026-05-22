@@ -20,8 +20,7 @@ use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use fsci_ndimage::{
-    NdArray, center_of_mass, mean_labels, standard_deviation_labels, sum_labels,
-    variance_labels,
+    NdArray, center_of_mass, mean_labels, standard_deviation_labels, sum_labels, variance_labels,
 };
 use serde::{Deserialize, Serialize};
 
@@ -241,9 +240,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "label_stats oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping label_stats oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping label_stats oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -256,9 +253,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "label_stats oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping label_stats oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping label_stats oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

@@ -229,28 +229,29 @@ fn diff_special_airy() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(&case.func, case.x) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                let rel_diff = if scipy_v.abs() > 1.0 {
-                    abs_diff / scipy_v.abs()
-                } else {
-                    abs_diff
-                };
-                max_abs_overall = max_abs_overall.max(abs_diff);
-                max_rel_overall = max_rel_overall.max(rel_diff);
-                let pass = if scipy_v.abs() > 1.0 {
-                    rel_diff <= REL_TOL
-                } else {
-                    abs_diff <= ABS_TOL
-                };
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    rel_diff,
-                    pass,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(&case.func, case.x)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            let rel_diff = if scipy_v.abs() > 1.0 {
+                abs_diff / scipy_v.abs()
+            } else {
+                abs_diff
+            };
+            max_abs_overall = max_abs_overall.max(abs_diff);
+            max_rel_overall = max_rel_overall.max(rel_diff);
+            let pass = if scipy_v.abs() > 1.0 {
+                rel_diff <= REL_TOL
+            } else {
+                abs_diff <= ABS_TOL
+            };
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                rel_diff,
+                pass,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

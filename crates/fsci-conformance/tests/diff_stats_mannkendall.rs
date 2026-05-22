@@ -98,15 +98,9 @@ fn emit_log(log: &DiffLog) {
 fn generate_query() -> OracleQuery {
     let fixtures: Vec<(&str, Vec<f64>)> = vec![
         // Strong increasing trend
-        (
-            "increasing",
-            (1..=15).map(|i| i as f64).collect(),
-        ),
+        ("increasing", (1..=15).map(|i| i as f64).collect()),
         // Strong decreasing trend
-        (
-            "decreasing",
-            (1..=15).rev().map(|i| i as f64).collect(),
-        ),
+        ("decreasing", (1..=15).rev().map(|i| i as f64).collect()),
         // No trend (alternating)
         (
             "no_trend",
@@ -212,13 +206,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "mannkendall oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping mannkendall oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping mannkendall oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for mannkendall oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for mannkendall oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -255,27 +249,29 @@ fn diff_stats_mannkendall() {
         let (rust_tau, rust_p, rust_trend) = mannkendall(&case.data);
 
         if let Some(scipy_tau) = scipy_arm.tau
-            && rust_tau.is_finite() {
-                let abs_diff = (rust_tau - scipy_tau).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "tau".into(),
-                    abs_diff,
-                    pass: abs_diff <= TAU_TOL,
-                });
-            }
+            && rust_tau.is_finite()
+        {
+            let abs_diff = (rust_tau - scipy_tau).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "tau".into(),
+                abs_diff,
+                pass: abs_diff <= TAU_TOL,
+            });
+        }
         if let Some(scipy_p) = scipy_arm.pvalue
-            && rust_p.is_finite() {
-                let abs_diff = (rust_p - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= PVALUE_TOL,
-                });
-            }
+            && rust_p.is_finite()
+        {
+            let abs_diff = (rust_p - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= PVALUE_TOL,
+            });
+        }
         if let Some(scipy_trend) = scipy_arm.trend {
             let abs_diff = (rust_trend as i64 - scipy_trend).unsigned_abs() as f64;
             max_overall = max_overall.max(abs_diff);

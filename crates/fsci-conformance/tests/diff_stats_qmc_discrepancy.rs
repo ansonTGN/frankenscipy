@@ -89,13 +89,13 @@ fn emit_log(log: &DiffLog) {
 fn generate_query() -> OracleQuery {
     let mut points = Vec::new();
 
-    let s_5x2: Vec<f64> = vec![
-        0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.1,
-    ];
-    let s_8x3: Vec<f64> = (0..24).map(|i| ((i as f64) * 0.137).fract().abs()).collect();
+    let s_5x2: Vec<f64> = vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.1];
+    let s_8x3: Vec<f64> = (0..24)
+        .map(|i| ((i as f64) * 0.137).fract().abs())
+        .collect();
     let s_10x2: Vec<f64> = vec![
-        0.05, 0.5, 0.15, 0.95, 0.25, 0.15, 0.35, 0.65, 0.45, 0.35,
-        0.55, 0.85, 0.65, 0.05, 0.75, 0.55, 0.85, 0.25, 0.95, 0.75,
+        0.05, 0.5, 0.15, 0.95, 0.25, 0.15, 0.35, 0.65, 0.45, 0.35, 0.55, 0.85, 0.65, 0.05, 0.75,
+        0.55, 0.85, 0.25, 0.95, 0.75,
     ];
 
     let samples: &[(&str, &[f64], usize, usize)] = &[
@@ -165,7 +165,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open qmc_discrepancy oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open qmc_discrepancy oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -173,9 +176,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "qmc_discrepancy oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping qmc_discrepancy oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping qmc_discrepancy oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -188,9 +189,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "qmc_discrepancy oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping qmc_discrepancy oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping qmc_discrepancy oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

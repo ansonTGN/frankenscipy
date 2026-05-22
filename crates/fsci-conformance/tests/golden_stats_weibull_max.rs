@@ -47,8 +47,7 @@ struct GoldenTable {
 }
 
 fn fixture_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures/FSCI-P2C-007_weibull_max_golden.json")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/FSCI-P2C-007_weibull_max_golden.json")
 }
 
 #[test]
@@ -56,8 +55,7 @@ fn golden_stats_weibull_max() {
     let path = fixture_path();
     let raw = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("read weibull_max golden fixture {path:?}: {e}"));
-    let table: GoldenTable =
-        serde_json::from_str(&raw).expect("parse weibull_max golden fixture");
+    let table: GoldenTable = serde_json::from_str(&raw).expect("parse weibull_max golden fixture");
     assert_eq!(table.packet_id, "FSCI-P2C-007");
     assert_eq!(table.family, "stats.weibull_max");
     assert_eq!(table.oracle, "scipy.stats.weibull_max");

@@ -96,8 +96,7 @@ fn generate_query() -> OracleQuery {
         (
             "spread_n15",
             vec![
-                -3.0, -1.5, 0.0, 0.5, 1.5, 2.5, 3.5, 5.0, 7.0, 9.0, 12.0, 16.0, 21.0, 27.0,
-                34.0,
+                -3.0, -1.5, 0.0, 0.5, 1.5, 2.5, 3.5, 5.0, 7.0, 9.0, 12.0, 16.0, 21.0, 27.0, 34.0,
             ],
         ),
         (
@@ -106,10 +105,7 @@ fn generate_query() -> OracleQuery {
                 1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 4.0, 5.0, 5.0, 5.0, 6.0,
             ],
         ),
-        (
-            "small_n5",
-            vec![1.0, 4.0, 7.0, 9.0, 13.0],
-        ),
+        ("small_n5", vec![1.0, 4.0, 7.0, 9.0, 13.0]),
     ];
 
     let points = datasets
@@ -172,9 +168,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for idealfourths oracle: {e}"
             );
-            eprintln!(
-                "skipping idealfourths oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping idealfourths oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -190,22 +184,20 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "idealfourths oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping idealfourths oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping idealfourths oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for idealfourths oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for idealfourths oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "idealfourths oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping idealfourths oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping idealfourths oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -236,38 +228,41 @@ fn diff_stats_idealfourths() {
         let rust_iqr = iqr(&case.data);
 
         if let Some(s_qlo) = scipy_arm.qlo
-            && rust_qlo.is_finite() {
-                let abs_diff = (rust_qlo - s_qlo).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "qlo".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_qlo.is_finite()
+        {
+            let abs_diff = (rust_qlo - s_qlo).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "qlo".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(s_qup) = scipy_arm.qup
-            && rust_qup.is_finite() {
-                let abs_diff = (rust_qup - s_qup).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "qup".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_qup.is_finite()
+        {
+            let abs_diff = (rust_qup - s_qup).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "qup".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(s_iqr) = scipy_arm.iqr
-            && rust_iqr.is_finite() {
-                let abs_diff = (rust_iqr - s_iqr).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "iqr".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_iqr.is_finite()
+        {
+            let abs_diff = (rust_iqr - s_iqr).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "iqr".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

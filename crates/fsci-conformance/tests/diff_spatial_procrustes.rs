@@ -88,8 +88,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create procrustes diff output dir");
+    fs::create_dir_all(output_dir()).expect("create procrustes diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -291,13 +290,13 @@ print(json.dumps({"points": points}, allow_nan=False))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "procrustes oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping procrustes oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping procrustes oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for procrustes oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for procrustes oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

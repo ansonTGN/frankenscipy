@@ -101,10 +101,7 @@ fn emit_log(log: &DiffLog) {
 
 fn generate_query() -> OracleQuery {
     let datasets: Vec<(&str, Vec<f64>)> = vec![
-        (
-            "compact",
-            (1..=20).map(|i| i as f64).collect(),
-        ),
+        ("compact", (1..=20).map(|i| i as f64).collect()),
         (
             "spread",
             vec![
@@ -260,51 +257,54 @@ fn diff_stats_freq() {
 
         // frequency vector
         if let Some(scipy_freq) = &scipy_arm.frequency
-            && rust_freq.len() == scipy_freq.len() {
-                let mut max_local = 0.0_f64;
-                for (a, b) in rust_freq.iter().zip(scipy_freq.iter()) {
-                    if a.is_finite() {
-                        max_local = max_local.max((a - b).abs());
-                    }
+            && rust_freq.len() == scipy_freq.len()
+        {
+            let mut max_local = 0.0_f64;
+            for (a, b) in rust_freq.iter().zip(scipy_freq.iter()) {
+                if a.is_finite() {
+                    max_local = max_local.max((a - b).abs());
                 }
-                max_overall = max_overall.max(max_local);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    arm: "frequency_max".into(),
-                    abs_diff: max_local,
-                    pass: max_local <= ABS_TOL,
-                });
             }
+            max_overall = max_overall.max(max_local);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                arm: "frequency_max".into(),
+                abs_diff: max_local,
+                pass: max_local <= ABS_TOL,
+            });
+        }
 
         // lowerlimit = edges[0]
         if let Some(scipy_lo) = scipy_arm.lowerlimit
-            && let Some(&rust_lo) = rust_edges.first() {
-                let abs_diff = (rust_lo - scipy_lo).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    arm: "lowerlimit".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && let Some(&rust_lo) = rust_edges.first()
+        {
+            let abs_diff = (rust_lo - scipy_lo).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                arm: "lowerlimit".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
 
         // binsize = edges[1] - edges[0]
         if let Some(scipy_bs) = scipy_arm.binsize
-            && rust_edges.len() >= 2 {
-                let rust_bs = rust_edges[1] - rust_edges[0];
-                let abs_diff = (rust_bs - scipy_bs).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    arm: "binsize".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_edges.len() >= 2
+        {
+            let rust_bs = rust_edges[1] - rust_edges[0];
+            let abs_diff = (rust_bs - scipy_bs).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                arm: "binsize".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

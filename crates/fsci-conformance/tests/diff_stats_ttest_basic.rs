@@ -198,9 +198,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for ttest_basic oracle: {e}"
             );
-            eprintln!(
-                "skipping ttest_basic oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping ttest_basic oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -213,13 +211,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "ttest_basic oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping ttest_basic oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping ttest_basic oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for ttest_basic oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for ttest_basic oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -270,27 +268,29 @@ fn diff_stats_ttest_basic() {
         };
 
         if let Some(s_stat) = scipy_arm.statistic
-            && rust_stat.is_finite() {
-                let abs_diff = (rust_stat - s_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: format!("{}.statistic", case.func),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_stat.is_finite()
+        {
+            let abs_diff = (rust_stat - s_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: format!("{}.statistic", case.func),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(s_p) = scipy_arm.pvalue
-            && rust_p.is_finite() {
-                let abs_diff = (rust_p - s_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: format!("{}.pvalue", case.func),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_p.is_finite()
+        {
+            let abs_diff = (rust_p - s_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: format!("{}.pvalue", case.func),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

@@ -186,9 +186,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "log_arith oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping log_arith oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping log_arith oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -199,9 +197,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "log_arith oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping log_arith oracle: numpy not available\n{stderr}"
-        );
+        eprintln!("skipping log_arith oracle: numpy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -264,10 +260,7 @@ fn diff_special_log_arith() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

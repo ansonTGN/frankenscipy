@@ -109,7 +109,9 @@ fn synth_x(n: usize, fs: f64, freqs: &[f64], seed: u64) -> Vec<f64> {
     let mut s = seed;
     (0..n)
         .map(|i| {
-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            s = s
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let noise = (((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5) * 0.2;
             let t = i as f64 / fs;
             let mut acc = noise;
@@ -288,7 +290,10 @@ fn vec_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]

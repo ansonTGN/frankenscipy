@@ -211,7 +211,9 @@ print(json.dumps({"points": points, "ppf": ppf}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for loguniform oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for loguniform oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

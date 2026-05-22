@@ -23,7 +23,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_stats::{ks_distance, theil_sen, ContinuousDistribution, Normal};
+use fsci_stats::{ContinuousDistribution, Normal, ks_distance, theil_sen};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -82,8 +82,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create theil_ks_distance diff output dir");
+    fs::create_dir_all(output_dir()).expect("create theil_ks_distance diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -95,8 +94,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize theil_ks_distance diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize theil_ks_distance diff log");
     fs::write(path, json).expect("write theil_ks_distance diff log");
 }
 
@@ -134,22 +132,10 @@ fn generate_query() -> OracleQuery {
         ),
         (
             "skewed",
-            vec![
-                0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 0.9, 1.2, 1.6, 2.1, 2.8, 3.7,
-            ],
+            vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 0.9, 1.2, 1.6, 2.1, 2.8, 3.7],
         ),
-        (
-            "uniform",
-            vec![
-                -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5,
-            ],
-        ),
-        (
-            "bimodal",
-            vec![
-                -2.5, -2.0, -1.5, 1.5, 2.0, 2.5,
-            ],
-        ),
+        ("uniform", vec![-1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5]),
+        ("bimodal", vec![-2.5, -2.0, -1.5, 1.5, 2.0, 2.5]),
     ];
 
     let mut points = Vec::new();
@@ -230,8 +216,7 @@ for case in q["points"]:
     points.append(out)
 print(json.dumps({"points": points}))
 "#;
-    let query_json =
-        serde_json::to_string(query).expect("serialize theil_ks_distance query");
+    let query_json = serde_json::to_string(query).expect("serialize theil_ks_distance query");
     let mut child = match Command::new("python3")
         .arg("-c")
         .arg(script)
@@ -246,9 +231,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for theil_ks_distance oracle: {e}"
             );
-            eprintln!(
-                "skipping theil_ks_distance oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping theil_ks_distance oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -264,9 +247,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "theil_ks_distance oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping theil_ks_distance oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping theil_ks_distance oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -279,9 +260,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "theil_ks_distance oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping theil_ks_distance oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping theil_ks_distance oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -315,44 +294,47 @@ fn diff_stats_theil_ks_distance() {
             "theil_sen" => {
                 let (rs, ri) = theil_sen(&case.x, &case.y);
                 if let Some(scipy_s) = scipy_arm.slope
-                    && rs.is_finite() {
-                        let abs_diff = (rs - scipy_s).abs();
-                        max_overall = max_overall.max(abs_diff);
-                        diffs.push(CaseDiff {
-                            case_id: case.case_id.clone(),
-                            func: case.func.clone(),
-                            arm: "slope".into(),
-                            abs_diff,
-                            pass: abs_diff <= ABS_TOL,
-                        });
-                    }
+                    && rs.is_finite()
+                {
+                    let abs_diff = (rs - scipy_s).abs();
+                    max_overall = max_overall.max(abs_diff);
+                    diffs.push(CaseDiff {
+                        case_id: case.case_id.clone(),
+                        func: case.func.clone(),
+                        arm: "slope".into(),
+                        abs_diff,
+                        pass: abs_diff <= ABS_TOL,
+                    });
+                }
                 if let Some(scipy_i) = scipy_arm.intercept
-                    && ri.is_finite() {
-                        let abs_diff = (ri - scipy_i).abs();
-                        max_overall = max_overall.max(abs_diff);
-                        diffs.push(CaseDiff {
-                            case_id: case.case_id.clone(),
-                            func: case.func.clone(),
-                            arm: "intercept".into(),
-                            abs_diff,
-                            pass: abs_diff <= ABS_TOL,
-                        });
-                    }
+                    && ri.is_finite()
+                {
+                    let abs_diff = (ri - scipy_i).abs();
+                    max_overall = max_overall.max(abs_diff);
+                    diffs.push(CaseDiff {
+                        case_id: case.case_id.clone(),
+                        func: case.func.clone(),
+                        arm: "intercept".into(),
+                        abs_diff,
+                        pass: abs_diff <= ABS_TOL,
+                    });
+                }
             }
             "ks_distance" => {
                 let rd = ks_distance(&case.x, &cdf_norm);
                 if let Some(scipy_d) = scipy_arm.distance
-                    && rd.is_finite() {
-                        let abs_diff = (rd - scipy_d).abs();
-                        max_overall = max_overall.max(abs_diff);
-                        diffs.push(CaseDiff {
-                            case_id: case.case_id.clone(),
-                            func: case.func.clone(),
-                            arm: "distance".into(),
-                            abs_diff,
-                            pass: abs_diff <= ABS_TOL,
-                        });
-                    }
+                    && rd.is_finite()
+                {
+                    let abs_diff = (rd - scipy_d).abs();
+                    max_overall = max_overall.max(abs_diff);
+                    diffs.push(CaseDiff {
+                        case_id: case.case_id.clone(),
+                        func: case.func.clone(),
+                        arm: "distance".into(),
+                        abs_diff,
+                        pass: abs_diff <= ABS_TOL,
+                    });
+                }
             }
             _ => {}
         }

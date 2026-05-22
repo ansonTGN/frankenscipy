@@ -122,7 +122,11 @@ fn diff_linalg_qr_multiply_property() {
         (
             "rand_5x4",
             (0..5)
-                .map(|i| (0..4).map(|j| (i * j) as f64 * 0.3 + (i + j) as f64 * 0.1).collect())
+                .map(|i| {
+                    (0..4)
+                        .map(|j| (i * j) as f64 * 0.3 + (i + j) as f64 * 0.1)
+                        .collect()
+                })
                 .collect(),
             (0..5)
                 .map(|i| (0..3).map(|j| (i + j) as f64 * 0.2 - 0.5).collect())
@@ -132,8 +136,12 @@ fn diff_linalg_qr_multiply_property() {
 
     for (label, a, c) in probes {
         let Ok(qr_res) = qr(a, opts) else { continue };
-        let Ok(via_mul) = matmul(&qr_res.q, c) else { continue };
-        let Ok(via_qrm) = qr_multiply(&qr_res.q, &qr_res.r, c, opts) else { continue };
+        let Ok(via_mul) = matmul(&qr_res.q, c) else {
+            continue;
+        };
+        let Ok(via_qrm) = qr_multiply(&qr_res.q, &qr_res.r, c, opts) else {
+            continue;
+        };
         let abs_d = frob_diff(&via_qrm, &via_mul);
         max_overall = max_overall.max(abs_d);
         diffs.push(CaseDiff {
@@ -159,7 +167,10 @@ fn diff_linalg_qr_multiply_property() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!("qr_multiply mismatch: {} abs_diff={}", d.case_id, d.abs_diff);
+            eprintln!(
+                "qr_multiply mismatch: {} abs_diff={}",
+                d.case_id, d.abs_diff
+            );
         }
     }
 

@@ -91,7 +91,9 @@ fn rect_dense(rows: usize, cols: usize, seed: u64) -> Vec<(usize, usize, f64)> {
     let mut s = seed;
     for r in 0..rows {
         for c in 0..cols {
-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            s = s
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let u = ((s >> 11) as f64) / (1u64 << 53) as f64;
             let v = (u - 0.5) * 4.0;
             // Skip occasional zeros to make it sparse-ish but ensure full rank.

@@ -92,7 +92,9 @@ fn generate_query() -> OracleQuery {
         // X: 2D, Y: 2D, n=8 obs
         (
             "two_two",
-            (1..=8).map(|i| vec![i as f64, (i as f64).powi(2)]).collect(),
+            (1..=8)
+                .map(|i| vec![i as f64, (i as f64).powi(2)])
+                .collect(),
             (1..=8)
                 .map(|i| vec![(i as f64).sqrt(), -(i as f64)])
                 .collect(),
@@ -196,9 +198,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "cross_cov oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping cross_cov oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping cross_cov oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }

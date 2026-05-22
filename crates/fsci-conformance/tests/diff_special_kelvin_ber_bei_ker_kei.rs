@@ -238,5 +238,9 @@ fn diff_special_kelvin_ber_bei_ker_kei() {
         }
     }
 
-    assert!(all_pass, "Kelvin function parity failed: {} cases", diffs.len());
+    assert!(
+        all_pass,
+        "Kelvin function parity failed: {} cases",
+        diffs.len()
+    );
 }

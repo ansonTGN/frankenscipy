@@ -245,7 +245,10 @@ print(json.dumps(results))
     };
 
     {
-        let stdin = child.stdin.as_mut().expect("open distributions oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open distributions oracle stdin");
         if let Err(err) = stdin.write_all(cases_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -253,14 +256,14 @@ print(json.dumps(results))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "distributions oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping distributions oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping distributions oracle: stdin write failed ({err})\n{stderr}");
             return Vec::new();
         }
     }
 
-    let output = child.wait_with_output().expect("wait for distributions oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for distributions oracle");
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

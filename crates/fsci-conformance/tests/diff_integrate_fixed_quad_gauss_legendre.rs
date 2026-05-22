@@ -140,7 +140,7 @@ fn generate_query() -> OracleQuery {
         ("x_cubed", -2.0, 3.0, 2),
         ("quintic", 0.0, 1.5, 3), // GL3 exact for degree ≤ 5
         ("quintic", -1.0, 2.0, 3),
-        ("septic", 0.0, 1.0, 4), // GL4 exact for degree ≤ 7
+        ("septic", 0.0, 1.0, 4),  // GL4 exact for degree ≤ 7
         ("septic", -1.0, 1.0, 5), // GL5 exact for degree ≤ 9
     ];
     for &(fname, a, b, n) in probes_1d {
@@ -309,7 +309,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for fixed_quad_gl oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for fixed_quad_gl oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -369,9 +371,7 @@ fn diff_integrate_fixed_quad_gauss_legendre() {
             "tpl" => {
                 let fname = case.func.clone();
                 let f = move |x: f64, y: f64, z: f64| f3d(&fname, x, y, z);
-                tplquad_rect(
-                    &f, case.a, case.b, case.c, case.d, case.e, case.g, case.n,
-                )
+                tplquad_rect(&f, case.a, case.b, case.c, case.d, case.e, case.g, case.n)
             }
             _ => continue,
         };

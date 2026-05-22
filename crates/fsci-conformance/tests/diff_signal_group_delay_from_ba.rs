@@ -314,9 +314,5 @@ fn diff_signal_group_delay_from_ba() {
         }
     }
 
-    assert!(
-        all_pass,
-        "group_delay parity failed: {} cases",
-        diffs.len()
-    );
+    assert!(all_pass, "group_delay parity failed: {} cases", diffs.len());
 }

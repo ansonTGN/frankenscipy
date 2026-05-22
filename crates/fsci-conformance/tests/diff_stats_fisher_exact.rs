@@ -164,9 +164,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for fisher_exact oracle: {e}"
             );
-            eprintln!(
-                "skipping fisher_exact oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping fisher_exact oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -182,9 +180,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "fisher_exact oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping fisher_exact oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping fisher_exact oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -227,7 +223,8 @@ fn diff_stats_fisher_exact() {
         let result = fisher_exact(&case.table);
 
         if let Some(scipy_or) = scipy_arm.odds_ratio {
-            let abs_diff = if scipy_or.is_infinite() && result.odds_ratio.is_infinite()
+            let abs_diff = if scipy_or.is_infinite()
+                && result.odds_ratio.is_infinite()
                 && scipy_or.signum() == result.odds_ratio.signum()
             {
                 0.0
@@ -245,16 +242,18 @@ fn diff_stats_fisher_exact() {
             });
         }
         if let Some(scipy_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() && scipy_p.is_finite() {
-                let abs_diff = (result.pvalue - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+            && scipy_p.is_finite()
+        {
+            let abs_diff = (result.pvalue - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

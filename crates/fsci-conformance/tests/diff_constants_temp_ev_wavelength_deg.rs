@@ -199,7 +199,14 @@ fn generate_query() -> OracleQuery {
             arg: d,
         });
     }
-    let rads: &[f64] = &[0.0, 0.5, 1.0, std::f64::consts::PI, 2.0 * std::f64::consts::PI, -1.5];
+    let rads: &[f64] = &[
+        0.0,
+        0.5,
+        1.0,
+        std::f64::consts::PI,
+        2.0 * std::f64::consts::PI,
+        -1.5,
+    ];
     for &r in rads {
         p.push(ConvCase {
             case_id: format!("r2d_{r}").replace('.', "p").replace('-', "n"),
@@ -277,13 +284,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "constants conv oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping constants conv oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping constants conv oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for constants conv oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for constants conv oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

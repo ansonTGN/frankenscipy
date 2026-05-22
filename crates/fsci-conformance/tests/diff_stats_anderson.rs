@@ -113,8 +113,8 @@ fn generate_query() -> OracleQuery {
         (
             "near_normal_n20",
             vec![
-                -2.1, -1.6, -1.2, -0.9, -0.7, -0.4, -0.2, 0.0, 0.1, 0.3, 0.4, 0.6, 0.8, 1.0,
-                1.1, 1.3, 1.5, 1.8, 2.0, 2.4,
+                -2.1, -1.6, -1.2, -0.9, -0.7, -0.4, -0.2, 0.0, 0.1, 0.3, 0.4, 0.6, 0.8, 1.0, 1.1,
+                1.3, 1.5, 1.8, 2.0, 2.4,
             ],
         ),
         (
@@ -212,9 +212,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "anderson oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping anderson oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping anderson oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -255,16 +253,17 @@ fn diff_stats_anderson() {
         let result = anderson(&case.data, "norm");
 
         if let Some(scipy_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - scipy_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= STAT_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - scipy_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= STAT_TOL,
+            });
+        }
 
         if let Some(scipy_crit) = &scipy_arm.critical_values {
             for (idx, &scipy_v) in scipy_crit.iter().enumerate() {

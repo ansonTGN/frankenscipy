@@ -100,12 +100,24 @@ fn build_query() -> OracleQuery {
         ("ones_n3", vec![1.0, 1.0, 1.0], vec![1.0, 0.5, -1.0]),
         ("ones_n5", vec![1.0; 5], vec![1.0, -1.0, 1.0, -1.0, 1.0]),
         ("standard_init_n2", vec![-1.2, 1.0], vec![0.5, 0.3]),
-        ("standard_init_n5", vec![-1.2, 1.0, -1.2, 1.0, -1.2], vec![0.1, 0.2, 0.3, 0.4, 0.5]),
+        (
+            "standard_init_n5",
+            vec![-1.2, 1.0, -1.2, 1.0, -1.2],
+            vec![0.1, 0.2, 0.3, 0.4, 0.5],
+        ),
         ("near_zero_n3", vec![0.1, 0.05, -0.02], vec![1.0, 1.0, 1.0]),
         ("large_negative_n2", vec![-3.0, -2.0], vec![-0.5, 2.0]),
-        ("mixed_sign_n4", vec![1.5, -0.5, 0.25, -1.0], vec![0.7, -0.3, 1.2, 0.8]),
+        (
+            "mixed_sign_n4",
+            vec![1.5, -0.5, 0.25, -1.0],
+            vec![0.7, -0.3, 1.2, 0.8],
+        ),
         ("zero_vec_n3", vec![0.0, 0.0, 0.0], vec![1.0, 1.0, 1.0]),
-        ("near_minimum_n4", vec![1.0, 1.0, 1.0, 1.0], vec![1.0, 1.0, 1.0, 1.0]),
+        (
+            "near_minimum_n4",
+            vec![1.0, 1.0, 1.0, 1.0],
+            vec![1.0, 1.0, 1.0, 1.0],
+        ),
     ]
     .into_iter()
     .map(|(case_id, x, p)| CasePoint {
@@ -231,7 +243,11 @@ fn diff_opt_rosen_hess_and_prod() {
                 max_abs_diff_prod: f64::INFINITY,
                 max_rel_diff_prod: f64::INFINITY,
                 pass: false,
-                note: format!("hess shape mismatch: fsci {}x{}", h_fsci.len(), h_fsci.first().map_or(0, |r| r.len())),
+                note: format!(
+                    "hess shape mismatch: fsci {}x{}",
+                    h_fsci.len(),
+                    h_fsci.first().map_or(0, |r| r.len())
+                ),
             });
             continue;
         }
@@ -270,7 +286,11 @@ fn diff_opt_rosen_hess_and_prod() {
                 max_abs_diff_prod: f64::INFINITY,
                 max_rel_diff_prod: f64::INFINITY,
                 pass: false,
-                note: format!("hess_prod length mismatch: fsci={} scipy={}", p_fsci.len(), exp_prod.len()),
+                note: format!(
+                    "hess_prod length mismatch: fsci={} scipy={}",
+                    p_fsci.len(),
+                    exp_prod.len()
+                ),
             });
             continue;
         }
@@ -311,8 +331,12 @@ fn diff_opt_rosen_hess_and_prod() {
         if !d.pass {
             eprintln!(
                 "rosen_hess mismatch: {} hess_rel={} hess_abs={} prod_rel={} prod_abs={} note={}",
-                d.case_id, d.max_rel_diff_hess, d.max_abs_diff_hess,
-                d.max_rel_diff_prod, d.max_abs_diff_prod, d.note
+                d.case_id,
+                d.max_rel_diff_hess,
+                d.max_abs_diff_hess,
+                d.max_rel_diff_prod,
+                d.max_abs_diff_prod,
+                d.note
             );
         }
     }

@@ -112,7 +112,11 @@ fn generate_query() -> OracleQuery {
         // 0, 1, 2, 3, inf, -inf
         for ord in [0.0_f64, 1.0, 2.0, 3.0, f64::INFINITY, f64::NEG_INFINITY] {
             let ord_label = if ord.is_infinite() {
-                if ord > 0.0 { "inf".to_string() } else { "neginf".to_string() }
+                if ord > 0.0 {
+                    "inf".to_string()
+                } else {
+                    "neginf".to_string()
+                }
             } else {
                 format!("{ord}")
             };
@@ -165,10 +169,7 @@ fn generate_query() -> OracleQuery {
         .map(|i| (0..4).map(|j| (i + j) as f64 * 0.3 - 0.7).collect())
         .collect();
 
-    for (label, a, b) in [
-        ("2x3", &m_a, &m_b),
-        ("3x4", &m_a2, &m_b2),
-    ] {
+    for (label, a, b) in [("2x3", &m_a, &m_b), ("3x4", &m_a2, &m_b2)] {
         points.push(Case {
             case_id: format!("hadamard_{label}"),
             op: "hadamard".into(),
@@ -308,7 +309,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for vector_misc oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for vector_misc oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -326,7 +329,10 @@ fn vec_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]

@@ -121,14 +121,8 @@ fn generate_query() -> OracleQuery {
         ),
     ];
     let yj_datasets: Vec<(&str, Vec<f64>)> = vec![
-        (
-            "centered",
-            vec![-3.0, -1.5, -0.5, 0.0, 0.5, 1.5, 3.0],
-        ),
-        (
-            "asymmetric",
-            vec![-2.0, -1.0, 0.5, 1.0, 2.5, 4.0, 6.0, 8.0],
-        ),
+        ("centered", vec![-3.0, -1.5, -0.5, 0.0, 0.5, 1.5, 3.0]),
+        ("asymmetric", vec![-2.0, -1.0, 0.5, 1.0, 2.5, 4.0, 6.0, 8.0]),
         (
             "all_negative",
             vec![-5.0, -4.0, -3.0, -2.0, -1.5, -1.0, -0.5],
@@ -211,9 +205,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for power_forward oracle: {e}"
             );
-            eprintln!(
-                "skipping power_forward oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping power_forward oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -229,9 +221,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "power_forward oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping power_forward oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping power_forward oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -244,9 +234,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "power_forward oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping power_forward oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping power_forward oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

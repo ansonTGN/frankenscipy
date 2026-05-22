@@ -87,8 +87,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize ridge_regression diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize ridge_regression diff log");
     fs::write(path, json).expect("write ridge_regression diff log");
 }
 
@@ -103,9 +102,7 @@ fn generate_query() -> OracleQuery {
         // Two correlated features
         (
             "two_correlated",
-            (1..=15)
-                .map(|i| vec![i as f64, i as f64 + 0.1])
-                .collect(),
+            (1..=15).map(|i| vec![i as f64, i as f64 + 0.1]).collect(),
             (1..=15).map(|i| 1.0 + 1.5 * i as f64).collect(),
         ),
         // Three features, y has noise
@@ -195,9 +192,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for ridge_regression oracle: {e}"
             );
-            eprintln!(
-                "skipping ridge_regression oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping ridge_regression oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -213,9 +208,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "ridge_regression oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping ridge_regression oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping ridge_regression oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -228,9 +221,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "ridge_regression oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping ridge_regression oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping ridge_regression oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -300,7 +291,10 @@ fn diff_stats_ridge_regression() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!("ridge_regression mismatch: {} abs={}", d.case_id, d.abs_diff);
+            eprintln!(
+                "ridge_regression mismatch: {} abs={}",
+                d.case_id, d.abs_diff
+            );
         }
     }
 

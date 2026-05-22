@@ -257,7 +257,8 @@ fn diff_sparse_strongly_connected_components() {
             rows.push(u);
             cols.push(v);
         }
-        let Ok(coo) = CooMatrix::from_triplets(Shape2D::new(case.n, case.n), data, rows, cols, true)
+        let Ok(coo) =
+            CooMatrix::from_triplets(Shape2D::new(case.n, case.n), data, rows, cols, true)
         else {
             continue;
         };
@@ -306,9 +307,5 @@ fn diff_sparse_strongly_connected_components() {
         }
     }
 
-    assert!(
-        all_pass,
-        "scc conformance failed: {} cases",
-        diffs.len()
-    );
+    assert!(all_pass, "scc conformance failed: {} cases", diffs.len());
 }

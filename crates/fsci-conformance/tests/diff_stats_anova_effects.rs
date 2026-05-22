@@ -156,11 +156,14 @@ fn generate_query() -> OracleQuery {
     let cramers_fixtures: Vec<(&str, Vec<Vec<f64>>)> = vec![
         ("indep_2x2", vec![vec![10.0, 10.0], vec![10.0, 10.0]]),
         ("strong_2x2", vec![vec![15.0, 5.0], vec![3.0, 17.0]]),
-        ("3x3", vec![
-            vec![10.0, 5.0, 0.0],
-            vec![5.0, 15.0, 5.0],
-            vec![0.0, 5.0, 10.0],
-        ]),
+        (
+            "3x3",
+            vec![
+                vec![10.0, 5.0, 0.0],
+                vec![5.0, 15.0, 5.0],
+                vec![0.0, 5.0, 10.0],
+            ],
+        ),
     ];
 
     let mut points = Vec::new();
@@ -270,14 +273,15 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for anova_effects oracle: {e}"
             );
-            eprintln!(
-                "skipping anova_effects oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping anova_effects oracle: python3 not available ({e})");
             return None;
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open anova_effects oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open anova_effects oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -285,9 +289,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "anova_effects oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping anova_effects oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping anova_effects oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -300,9 +302,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "anova_effects oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping anova_effects oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping anova_effects oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -331,34 +331,35 @@ fn diff_stats_anova_effects() {
         let scipy_arm = pmap.get(&case.case_id).expect("validated oracle");
         match case.func.as_str() {
             "f_oneway" => {
-                let groups: Vec<&[f64]> =
-                    case.groups.iter().map(|g| g.as_slice()).collect();
+                let groups: Vec<&[f64]> = case.groups.iter().map(|g| g.as_slice()).collect();
                 let r = f_oneway(&groups);
                 let (rust_stat, rust_p) = (r.statistic, r.pvalue);
                 if let Some(scipy_stat) = scipy_arm.statistic
-                    && rust_stat.is_finite() {
-                        let abs_diff = (rust_stat - scipy_stat).abs();
-                        max_overall = max_overall.max(abs_diff);
-                        diffs.push(CaseDiff {
-                            case_id: case.case_id.clone(),
-                            func: case.func.clone(),
-                            arm: "statistic".into(),
-                            abs_diff,
-                            pass: abs_diff <= STAT_TOL,
-                        });
-                    }
+                    && rust_stat.is_finite()
+                {
+                    let abs_diff = (rust_stat - scipy_stat).abs();
+                    max_overall = max_overall.max(abs_diff);
+                    diffs.push(CaseDiff {
+                        case_id: case.case_id.clone(),
+                        func: case.func.clone(),
+                        arm: "statistic".into(),
+                        abs_diff,
+                        pass: abs_diff <= STAT_TOL,
+                    });
+                }
                 if let Some(scipy_p) = scipy_arm.pvalue
-                    && rust_p.is_finite() {
-                        let abs_diff = (rust_p - scipy_p).abs();
-                        max_overall = max_overall.max(abs_diff);
-                        diffs.push(CaseDiff {
-                            case_id: case.case_id.clone(),
-                            func: case.func.clone(),
-                            arm: "pvalue".into(),
-                            abs_diff,
-                            pass: abs_diff <= STAT_TOL,
-                        });
-                    }
+                    && rust_p.is_finite()
+                {
+                    let abs_diff = (rust_p - scipy_p).abs();
+                    max_overall = max_overall.max(abs_diff);
+                    diffs.push(CaseDiff {
+                        case_id: case.case_id.clone(),
+                        func: case.func.clone(),
+                        arm: "pvalue".into(),
+                        abs_diff,
+                        pass: abs_diff <= STAT_TOL,
+                    });
+                }
             }
             "cohens_d" => {
                 if let Some(scipy_v) = scipy_arm.scalar {

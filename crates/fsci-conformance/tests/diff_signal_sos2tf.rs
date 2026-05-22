@@ -98,8 +98,8 @@ fn generate_query() -> OracleQuery {
         PointCase {
             case_id: "three_sections".into(),
             sos_flat: vec![
-                0.5, 0.0, 0.0, 1.0, 0.1, 0.0, 1.0, -0.1, 0.05, 1.0, 0.4, 0.2, 1.0, 0.3, 0.1,
-                1.0, -0.5, 0.25,
+                0.5, 0.0, 0.0, 1.0, 0.1, 0.0, 1.0, -0.1, 0.05, 1.0, 0.4, 0.2, 1.0, 0.3, 0.1, 1.0,
+                -0.5, 0.25,
             ],
         },
         PointCase {
@@ -111,9 +111,7 @@ fn generate_query() -> OracleQuery {
         },
         PointCase {
             case_id: "iir_resonator".into(),
-            sos_flat: vec![
-                0.049, 0.099, 0.049, 1.0, -1.279, 0.478,
-            ],
+            sos_flat: vec![0.049, 0.099, 0.049, 1.0, -1.279, 0.478],
         },
     ];
     OracleQuery { points }
@@ -230,18 +228,16 @@ fn diff_signal_sos2tf() {
         let abs_d = if ba.b.len() != b_exp.len() || ba.a.len() != a_exp.len() {
             f64::INFINITY
         } else {
-            let db = ba
-                .b
-                .iter()
-                .zip(b_exp.iter())
-                .map(|(a, b)| (a - b).abs())
-                .fold(0.0_f64, f64::max);
-            let da = ba
-                .a
-                .iter()
-                .zip(a_exp.iter())
-                .map(|(a, b)| (a - b).abs())
-                .fold(0.0_f64, f64::max);
+            let db =
+                ba.b.iter()
+                    .zip(b_exp.iter())
+                    .map(|(a, b)| (a - b).abs())
+                    .fold(0.0_f64, f64::max);
+            let da =
+                ba.a.iter()
+                    .zip(a_exp.iter())
+                    .map(|(a, b)| (a - b).abs())
+                    .fold(0.0_f64, f64::max);
             db.max(da)
         };
         max_overall = max_overall.max(abs_d);

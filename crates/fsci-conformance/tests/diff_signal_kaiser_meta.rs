@@ -212,7 +212,9 @@ print(json.dumps({"atten": atten_results, "beta": beta_results}))
         }
     }
 
-    let output = child.wait_with_output().expect("wait for kaiser_meta oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for kaiser_meta oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

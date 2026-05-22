@@ -102,11 +102,7 @@ fn fsci_eval(func: &str, x: f64) -> Option<f64> {
         "cotdg" => cotdg(x),
         _ => return None,
     };
-    if v.is_finite() {
-        Some(v)
-    } else {
-        None
-    }
+    if v.is_finite() { Some(v) } else { None }
 }
 
 fn generate_query() -> OracleQuery {
@@ -232,25 +228,26 @@ fn diff_special_trig_deg() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(&case.func, case.x) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                let scale = scipy_v.abs().max(1.0);
-                let rel_diff = abs_diff / scale;
-                max_abs_overall = max_abs_overall.max(abs_diff);
-                max_rel_overall = max_rel_overall.max(rel_diff);
-                let pass = match case.func.as_str() {
-                    "sindg" | "cosdg" => abs_diff <= SC_TOL,
-                    "tandg" | "cotdg" => abs_diff <= TC_TOL_REL * scale,
-                    _ => false,
-                };
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    rel_diff,
-                    pass,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(&case.func, case.x)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            let scale = scipy_v.abs().max(1.0);
+            let rel_diff = abs_diff / scale;
+            max_abs_overall = max_abs_overall.max(abs_diff);
+            max_rel_overall = max_rel_overall.max(rel_diff);
+            let pass = match case.func.as_str() {
+                "sindg" | "cosdg" => abs_diff <= SC_TOL,
+                "tandg" | "cotdg" => abs_diff <= TC_TOL_REL * scale,
+                _ => false,
+            };
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                rel_diff,
+                pass,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

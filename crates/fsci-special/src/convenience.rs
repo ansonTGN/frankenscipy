@@ -3237,6 +3237,10 @@ pub fn cosm1_scalar(x: f64) -> f64 {
     -2.0 * s * s
 }
 
+pub fn cosm1(x_tensor: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
+    map_real("cosm1", x_tensor, mode, |x| Ok(cosm1_scalar(x)))
+}
+
 /// Arithmetic-geometric mean of two positive numbers.
 pub fn agm(a: f64, b: f64) -> f64 {
     if a <= 0.0 || b <= 0.0 {
@@ -8664,6 +8668,28 @@ mod tests {
         assert!(cosm1_scalar(f64::NAN).is_nan());
         // Exactly π: cos(π) - 1 = -2.
         assert!((cosm1_scalar(std::f64::consts::PI) - (-2.0)).abs() < 1e-15);
+    }
+
+    #[test]
+    fn cosm1_supports_real_tensor_dispatch() -> Result<(), String> {
+        let scalar = cosm1(&SpecialTensor::RealScalar(0.5), RuntimeMode::Strict)
+            .map_err(|err| err.to_string())?;
+        assert!((expect_real_scalar(scalar)? - cosm1_scalar(0.5)).abs() < 1e-15);
+
+        let input = vec![-1.0e-8, 0.0, 0.5, std::f64::consts::PI, f64::INFINITY];
+        let result = cosm1(&SpecialTensor::RealVec(input.clone()), RuntimeMode::Strict)
+            .map_err(|err| err.to_string())?;
+        let values = expect_real_vec(result)?;
+        assert_eq!(values.len(), input.len());
+        for (actual, x) in values.iter().zip(input) {
+            let expected = cosm1_scalar(x);
+            if expected.is_nan() {
+                assert!(actual.is_nan(), "cosm1({x}) should be NaN");
+            } else {
+                assert!((actual - expected).abs() < 1e-15, "cosm1({x})");
+            }
+        }
+        Ok(())
     }
 
     #[test]

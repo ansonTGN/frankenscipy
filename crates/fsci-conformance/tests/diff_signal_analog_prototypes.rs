@@ -195,9 +195,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "analog_proto oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping analog_proto oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping analog_proto oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -210,9 +208,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "analog_proto oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping analog_proto oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping analog_proto oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -263,7 +259,9 @@ fn diff_signal_analog_prototypes() {
         let Some(scipy_v) = scipy_arm.values.as_ref() else {
             continue;
         };
-        let Some(fsci_v) = fsci_eval(case) else { continue };
+        let Some(fsci_v) = fsci_eval(case) else {
+            continue;
+        };
         if fsci_v.len() != scipy_v.len() {
             diffs.push(CaseDiff {
                 case_id: case.case_id.clone(),

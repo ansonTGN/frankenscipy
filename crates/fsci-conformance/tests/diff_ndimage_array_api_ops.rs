@@ -13,8 +13,7 @@ use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use fsci_ndimage::{
-    NdArray, greater_than, log_array, power_array, scale_array, sqrt_array, threshold,
-    where_cond,
+    NdArray, greater_than, log_array, power_array, scale_array, sqrt_array, threshold, where_cond,
 };
 use serde::{Deserialize, Serialize};
 
@@ -93,9 +92,7 @@ fn emit_log(log: &DiffLog) {
 fn generate_query() -> OracleQuery {
     let pos_mat: Vec<f64> = (1..=12).map(|i| i as f64).collect(); // 3x4
     let mixed_mat = vec![
-        1.0, -2.0, 3.0, -4.0,
-        5.0, -6.0, 7.0, -8.0,
-        9.0, -10.0, 11.0, -12.0,
+        1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0, -8.0, 9.0, -10.0, 11.0, -12.0,
     ];
 
     let mut points = Vec::new();
@@ -171,15 +168,18 @@ fn generate_query() -> OracleQuery {
     });
 
     // where_cond — picks between a and b based on cond. Use threshold(pos, 5) as cond.
-    let cond: Vec<f64> = pos_mat.iter().map(|&v| if v > 5.0 { 1.0 } else { 0.0 }).collect();
+    let cond: Vec<f64> = pos_mat
+        .iter()
+        .map(|&v| if v > 5.0 { 1.0 } else { 0.0 })
+        .collect();
     // where treats cond as 1-d input
     let _ = cond;
     points.push(PointCase {
         case_id: "where_pos_vs_neg".into(),
         op: "where_cond".into(),
         shape: vec![3, 4],
-        a: pos_mat.clone(),       // also stored as cond marker (where uses cond, a, b in that order)
-        b: mixed_mat.clone(),     // alternative selection
+        a: pos_mat.clone(), // also stored as cond marker (where uses cond, a, b in that order)
+        b: mixed_mat.clone(), // alternative selection
         scalar: 0.0,
     });
 
@@ -333,8 +333,11 @@ fn diff_ndimage_array_api_ops() {
             "where_cond" => {
                 let b_arr = b_arr.as_ref().expect("where_cond needs b");
                 // Build cond from a > 5.0
-                let cond_data: Vec<f64> =
-                    case.a.iter().map(|&v| if v > 5.0 { 1.0 } else { 0.0 }).collect();
+                let cond_data: Vec<f64> = case
+                    .a
+                    .iter()
+                    .map(|&v| if v > 5.0 { 1.0 } else { 0.0 })
+                    .collect();
                 let Ok(cond_arr) = NdArray::new(cond_data, case.shape.clone()) else {
                     continue;
                 };
@@ -392,10 +395,7 @@ fn diff_ndimage_array_api_ops() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

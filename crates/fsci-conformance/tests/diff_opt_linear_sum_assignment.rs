@@ -106,19 +106,12 @@ fn generate_query() -> OracleQuery {
                 vec![12.0, 19.0, 8.0, 18.0],
             ],
         ),
-        (
-            "2x2_trivial",
-            vec![vec![1.0, 5.0], vec![3.0, 2.0]],
-        ),
+        ("2x2_trivial", vec![vec![1.0, 5.0], vec![3.0, 2.0]]),
         (
             "5x5_identity_min",
             // Diagonal is the unique minimum; expect col[i] = i.
             (0..5)
-                .map(|i| {
-                    (0..5)
-                        .map(|j| if i == j { 1.0 } else { 10.0 })
-                        .collect()
-                })
+                .map(|i| (0..5).map(|j| if i == j { 1.0 } else { 10.0 }).collect())
                 .collect(),
         ),
         (
@@ -139,10 +132,7 @@ fn generate_query() -> OracleQuery {
                 vec![4.0, 2.0, 1.0],
             ],
         ),
-        (
-            "1x1",
-            vec![vec![42.0]],
-        ),
+        ("1x1", vec![vec![42.0]]),
         (
             "negative_costs",
             vec![

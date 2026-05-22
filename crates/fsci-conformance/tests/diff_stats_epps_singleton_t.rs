@@ -86,8 +86,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create epps_singleton_t diff output dir");
+    fs::create_dir_all(output_dir()).expect("create epps_singleton_t diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -99,8 +98,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize epps_singleton_t diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize epps_singleton_t diff log");
     fs::write(path, json).expect("write epps_singleton_t diff log");
 }
 
@@ -122,12 +120,10 @@ fn generate_query() -> OracleQuery {
         (
             "diff_scale_n16",
             vec![
-                4.0, 5.0, 4.5, 5.2, 4.8, 5.1, 4.9, 5.3, 4.7, 5.0, 4.6, 5.4, 4.5, 5.5, 4.4,
-                5.6,
+                4.0, 5.0, 4.5, 5.2, 4.8, 5.1, 4.9, 5.3, 4.7, 5.0, 4.6, 5.4, 4.5, 5.5, 4.4, 5.6,
             ],
             vec![
-                -2.0, 12.0, -1.0, 11.0, 0.0, 10.0, 1.0, 9.0, 2.0, 8.0, 3.0, 7.0, 4.0, 6.0,
-                4.5, 5.5,
+                -2.0, 12.0, -1.0, 11.0, 0.0, 10.0, 1.0, 9.0, 2.0, 8.0, 3.0, 7.0, 4.0, 6.0, 4.5, 5.5,
             ],
         ),
     ];
@@ -197,9 +193,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for epps_singleton_t oracle: {e}"
             );
-            eprintln!(
-                "skipping epps_singleton_t oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping epps_singleton_t oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -215,9 +209,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "epps_singleton_t oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping epps_singleton_t oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping epps_singleton_t oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -230,9 +222,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "epps_singleton_t oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping epps_singleton_t oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping epps_singleton_t oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -265,27 +255,29 @@ fn diff_stats_epps_singleton_t() {
         };
 
         if let Some(s_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - s_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= STAT_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - s_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= STAT_TOL,
+            });
+        }
         if let Some(s_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - s_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= PVALUE_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - s_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= PVALUE_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

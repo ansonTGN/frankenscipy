@@ -109,9 +109,7 @@ fn diff_signal_mel_mfcc_chroma() {
             String::new(),
         );
         // Each filter has at least one non-zero entry (peaks at center)
-        let all_have_peak = fb
-            .iter()
-            .all(|r| r.iter().any(|&v| v > 0.0));
+        let all_have_peak = fb.iter().all(|r| r.iter().any(|&v| v > 0.0));
         check(
             "mel_filterbank_each_filter_nonzero",
             all_have_peak,

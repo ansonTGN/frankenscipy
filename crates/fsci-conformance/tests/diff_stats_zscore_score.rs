@@ -193,9 +193,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for zscore_score oracle: {e}"
             );
-            eprintln!(
-                "skipping zscore_score oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping zscore_score oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -211,9 +209,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "zscore_score oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping zscore_score oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping zscore_score oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -226,9 +222,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "zscore_score oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping zscore_score oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping zscore_score oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

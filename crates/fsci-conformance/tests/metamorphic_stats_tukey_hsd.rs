@@ -71,8 +71,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &MetamorphicLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize tukey_hsd metamorphic log");
+    let json = serde_json::to_string_pretty(log).expect("serialize tukey_hsd metamorphic log");
     fs::write(path, json).expect("write tukey_hsd metamorphic log");
 }
 
@@ -102,13 +101,10 @@ fn metamorphic_stats_tukey_hsd() {
             ],
         ),
         // Three IDENTICAL groups — same data each
-        (
-            "three_identical",
-            {
-                let g: Vec<f64> = (1..=8).map(|i| i as f64).collect();
-                vec![g.clone(), g.clone(), g]
-            },
-        ),
+        ("three_identical", {
+            let g: Vec<f64> = (1..=8).map(|i| i as f64).collect();
+            vec![g.clone(), g.clone(), g]
+        }),
         // Two well-separated groups
         (
             "two_separated",

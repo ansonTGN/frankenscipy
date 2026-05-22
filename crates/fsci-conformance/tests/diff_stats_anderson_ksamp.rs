@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_stats::{anderson_ksamp, AndersonKSampleVariant};
+use fsci_stats::{AndersonKSampleVariant, anderson_ksamp};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -193,9 +193,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for anderson_ksamp oracle: {e}"
             );
-            eprintln!(
-                "skipping anderson_ksamp oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping anderson_ksamp oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -211,9 +209,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "anderson_ksamp oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping anderson_ksamp oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping anderson_ksamp oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -226,9 +222,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "anderson_ksamp oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping anderson_ksamp oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping anderson_ksamp oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -255,25 +249,23 @@ fn diff_stats_anderson_ksamp() {
 
     for case in &query.points {
         let scipy_arm = pmap.get(&case.case_id).expect("validated oracle");
-        let result = match anderson_ksamp(
-            &case.samples,
-            Some(AndersonKSampleVariant::Midrank),
-        ) {
+        let result = match anderson_ksamp(&case.samples, Some(AndersonKSampleVariant::Midrank)) {
             Ok(r) => r,
             Err(_) => continue,
         };
 
         if let Some(scipy_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - scipy_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= STAT_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - scipy_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= STAT_TOL,
+            });
+        }
         if let Some(scipy_crit) = &scipy_arm.critical_values {
             for (idx, &scipy_v) in scipy_crit.iter().enumerate() {
                 if idx >= result.critical_values.len() {

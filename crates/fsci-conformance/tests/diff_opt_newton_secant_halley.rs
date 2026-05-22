@@ -234,9 +234,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "newton/secant/halley oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping newton/secant/halley oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping newton/secant/halley oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -282,12 +280,7 @@ fn diff_opt_newton_secant_halley() {
             continue;
         };
         let res = match case.method.as_str() {
-            "newton" => newton_scalar(
-                |x| f(&case.func, x),
-                |x| fp(&case.func, x),
-                case.x0,
-                opts,
-            ),
+            "newton" => newton_scalar(|x| f(&case.func, x), |x| fp(&case.func, x), case.x0, opts),
             "secant" => secant(|x| f(&case.func, x), case.x0, Some(case.x1), opts),
             "halley" => halley(
                 |x| f(&case.func, x),

@@ -116,17 +116,12 @@ fn dense_to_csr(rows: usize, cols: usize, dense: &[f64]) -> CsrMatrix {
 fn generate_query() -> OracleQuery {
     let dense_3x3 = vec![1.0, 0.0, 2.0, 0.0, 3.0, 0.0, 4.0, 0.0, 5.0];
     let dense_4x5 = vec![
-        1.0, 0.0, 0.0, 0.0, 0.5,
-        0.0, 2.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 3.0, 0.0, 0.7,
-        0.0, 0.0, 0.0, 4.0, 0.0,
+        1.0, 0.0, 0.0, 0.0, 0.5, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.7, 0.0, 0.0, 0.0,
+        4.0, 0.0,
     ];
     let dense_5x5_dense = vec![
-        1.0, 2.0, 3.0, 4.0, 5.0,
-        2.0, 3.0, 4.0, 5.0, 6.0,
-        3.0, 4.0, 5.0, 6.0, 7.0,
-        4.0, 5.0, 6.0, 7.0, 8.0,
-        5.0, 6.0, 7.0, 8.0, 9.0,
+        1.0, 2.0, 3.0, 4.0, 5.0, 2.0, 3.0, 4.0, 5.0, 6.0, 3.0, 4.0, 5.0, 6.0, 7.0, 4.0, 5.0, 6.0,
+        7.0, 8.0, 5.0, 6.0, 7.0, 8.0, 9.0,
     ];
 
     let density = vec![
@@ -151,18 +146,12 @@ fn generate_query() -> OracleQuery {
     ];
 
     let a_5x5_alt = vec![
-        1.0, 0.0, 0.0, 0.0, 0.0,
-        0.0, 2.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 3.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 4.0, 0.0,
-        0.0, 0.0, 0.0, 0.0, 5.0,
+        1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        4.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.0,
     ];
     let b_5x5_alt = vec![
-        2.0, 0.0, 0.0, 0.0, 0.0,
-        0.0, 1.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.5, 0.0, 0.0,
-        0.0, 0.0, 0.0, 2.0, 0.0,
-        0.0, 0.0, 0.0, 0.0, 3.0,
+        2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0,
+        2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0,
     ];
     let frob = vec![
         FrobCase {
@@ -257,7 +246,10 @@ print(json.dumps({"density": density, "frob": frob}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open density_frob oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open density_frob oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -265,9 +257,7 @@ print(json.dumps({"density": density, "frob": frob}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "density_frob oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping density_frob oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping density_frob oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -362,10 +352,7 @@ fn diff_sparse_density_frob_inner() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

@@ -113,9 +113,7 @@ fn generate_query() -> OracleQuery {
         (3.0, 20.0),
         (0.7, 100.0),
     ];
-    let xs_for = |c: f64| -> Vec<f64> {
-        vec![1.0, 1.1, 1.5, 2.0, c.sqrt(), c * 0.7, c]
-    };
+    let xs_for = |c: f64| -> Vec<f64> { vec![1.0, 1.1, 1.5, 2.0, c.sqrt(), c * 0.7, c] };
     let qs = [0.05_f64, 0.25, 0.5, 0.75, 0.95];
     let mut points = Vec::new();
     for &(b, c) in shape_pairs {
@@ -208,7 +206,9 @@ print(json.dumps({"points": points, "ppf": ppf}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for truncpareto oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for truncpareto oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -231,10 +231,16 @@ fn diff_stats_truncpareto() {
     assert_eq!(oracle.points.len(), query.points.len());
     assert_eq!(oracle.ppf.len(), query.ppf.len());
 
-    let pmap: HashMap<String, PointArm> =
-        oracle.points.into_iter().map(|r| (r.case_id.clone(), r)).collect();
-    let ppfmap: HashMap<String, PpfArm> =
-        oracle.ppf.into_iter().map(|r| (r.case_id.clone(), r)).collect();
+    let pmap: HashMap<String, PointArm> = oracle
+        .points
+        .into_iter()
+        .map(|r| (r.case_id.clone(), r))
+        .collect();
+    let ppfmap: HashMap<String, PpfArm> = oracle
+        .ppf
+        .into_iter()
+        .map(|r| (r.case_id.clone(), r))
+        .collect();
 
     let start = Instant::now();
     let mut diffs = Vec::new();

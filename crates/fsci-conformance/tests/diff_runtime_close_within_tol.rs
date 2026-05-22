@@ -143,7 +143,10 @@ fn diff_runtime_close_within_tol() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!("close_within_tol mismatch: {} got {} (expected {})", d.case_id, d.actual, d.expected);
+            eprintln!(
+                "close_within_tol mismatch: {} got {} (expected {})",
+                d.case_id, d.actual, d.expected
+            );
         }
     }
 

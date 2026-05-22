@@ -26,7 +26,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_cluster::{fclusterdata, LinkageMethod};
+use fsci_cluster::{LinkageMethod, fclusterdata};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-012";
@@ -220,7 +220,10 @@ print(json.dumps({"points": points}, allow_nan=False))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open fclusterdata oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open fclusterdata oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -232,7 +235,9 @@ print(json.dumps({"points": points}, allow_nan=False))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for fclusterdata oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for fclusterdata oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

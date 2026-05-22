@@ -108,7 +108,9 @@ fn build_query() -> OracleQuery {
     // 6x6 test image with a clear gradient pattern
     let rows = 6;
     let cols = 6;
-    let data: Vec<f64> = (0..rows * cols).map(|i| (i as f64).sin() * 10.0 + i as f64).collect();
+    let data: Vec<f64> = (0..rows * cols)
+        .map(|i| (i as f64).sin() * 10.0 + i as f64)
+        .collect();
 
     let modes = ["reflect", "constant", "nearest", "wrap"];
     let mut pts = Vec::new();
@@ -246,8 +248,8 @@ fn diff_ndimage_sobel_prewitt_laplace() {
             continue;
         };
 
-        let arr = NdArray::new(case.data.clone(), vec![case.rows, case.cols])
-            .expect("NdArray build");
+        let arr =
+            NdArray::new(case.data.clone(), vec![case.rows, case.cols]).expect("NdArray build");
         let mode = mode_from_str(&case.mode);
         let result = match case.func.as_str() {
             "sobel" => sobel(&arr, case.axis, mode, 0.0),
@@ -277,7 +279,11 @@ fn diff_ndimage_sobel_prewitt_laplace() {
                 max_abs_diff: f64::INFINITY,
                 max_rel_diff: f64::INFINITY,
                 pass: false,
-                note: format!("length mismatch: fsci={} scipy={}", actual.data.len(), expected.len()),
+                note: format!(
+                    "length mismatch: fsci={} scipy={}",
+                    actual.data.len(),
+                    expected.len()
+                ),
             });
             continue;
         }

@@ -18,9 +18,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_sparse::{
-    CooMatrix, FormatConvertible, IluOptions, Shape2D, spilu,
-};
+use fsci_sparse::{CooMatrix, FormatConvertible, IluOptions, Shape2D, spilu};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -385,5 +383,9 @@ fn diff_sparse_spilu_solve() {
         }
     }
 
-    assert!(all_pass, "spilu residual coverage failed: {} cases", diffs.len());
+    assert!(
+        all_pass,
+        "spilu residual coverage failed: {} cases",
+        diffs.len()
+    );
 }

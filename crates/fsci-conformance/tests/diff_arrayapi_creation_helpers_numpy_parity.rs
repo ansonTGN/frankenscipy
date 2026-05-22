@@ -17,9 +17,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use fsci_arrayapi::{
     ArangeRequest, CreationRequest, DType, ExecutionMode, LinspaceRequest, MemoryOrder,
-    ScalarValue, Shape, arange,
-    backend::CoreArrayBackend,
-    linspace, ones, zeros,
+    ScalarValue, Shape, arange, backend::CoreArrayBackend, linspace, ones, zeros,
 };
 use serde::{Deserialize, Serialize};
 
@@ -170,10 +168,7 @@ fn build_query() -> OracleQuery {
     }
 
     // ones shape
-    for (label, shape) in [
-        ("ones_5", vec![5]),
-        ("ones_3x3", vec![3, 3]),
-    ] {
+    for (label, shape) in [("ones_5", vec![5]), ("ones_3x3", vec![3, 3])] {
         pts.push(CasePoint {
             case_id: label.into(),
             op: "ones_shape".into(),
@@ -398,7 +393,10 @@ fn diff_arrayapi_creation_helpers_numpy_parity() {
                     .fold(0.0_f64, f64::max)
             }
             "zeros_shape" => actual.iter().map(|v| v.abs()).fold(0.0_f64, f64::max),
-            "ones_shape" => actual.iter().map(|v| (v - 1.0).abs()).fold(0.0_f64, f64::max),
+            "ones_shape" => actual
+                .iter()
+                .map(|v| (v - 1.0).abs())
+                .fold(0.0_f64, f64::max),
             _ => f64::INFINITY,
         };
         let pass = max_abs <= ABS_TOL;

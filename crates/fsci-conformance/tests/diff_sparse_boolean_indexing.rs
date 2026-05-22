@@ -97,8 +97,7 @@ fn diff_sparse_boolean_indexing() {
     let data: Vec<f64> = trips.iter().map(|t| t.2).collect();
     let rs: Vec<usize> = trips.iter().map(|t| t.0).collect();
     let cs: Vec<usize> = trips.iter().map(|t| t.1).collect();
-    let coo =
-        CooMatrix::from_triplets(Shape2D::new(3, 4), data, rs, cs, true).expect("coo");
+    let coo = CooMatrix::from_triplets(Shape2D::new(3, 4), data, rs, cs, true).expect("coo");
     let csc = coo.to_csc().expect("csc");
     let dense = csc_to_dense(&csc);
 
@@ -131,10 +130,7 @@ fn diff_sparse_boolean_indexing() {
             result.shape().rows == 3 && result.shape().cols == 2,
             format!("shape={:?}", result.shape()),
         );
-        let expected: Vec<Vec<f64>> = dense
-            .iter()
-            .map(|row| vec![row[1], row[2]])
-            .collect();
+        let expected: Vec<Vec<f64>> = dense.iter().map(|row| vec![row[1], row[2]]).collect();
         check(
             "col_index_values",
             result_dense == expected,

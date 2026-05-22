@@ -97,10 +97,20 @@ fn flatten(rows: &[Vec<f64>]) -> Vec<f64> {
 }
 
 fn generate_query() -> OracleQuery {
-    let c1 = vec![vec![0.0, 0.0], vec![0.1, 0.2], vec![0.2, 0.1], vec![0.15, 0.05]];
+    let c1 = vec![
+        vec![0.0, 0.0],
+        vec![0.1, 0.2],
+        vec![0.2, 0.1],
+        vec![0.15, 0.05],
+    ];
     let c2 = vec![vec![5.0, 5.0], vec![5.2, 5.1], vec![4.9, 5.0]];
     let c3 = vec![vec![-3.0, -2.0], vec![-2.9, -2.1], vec![-3.1, -1.9]];
-    let well_sep: Vec<Vec<f64>> = c1.iter().chain(c2.iter()).chain(c3.iter()).cloned().collect();
+    let well_sep: Vec<Vec<f64>> = c1
+        .iter()
+        .chain(c2.iter())
+        .chain(c3.iter())
+        .cloned()
+        .collect();
     let well_labels: Vec<usize> = vec![0, 0, 0, 0, 1, 1, 1, 2, 2, 2];
 
     let o1 = vec![vec![0.0, 0.0], vec![0.5, 0.3], vec![0.2, 0.8]];
@@ -109,8 +119,12 @@ fn generate_query() -> OracleQuery {
     let overlap_labels: Vec<usize> = vec![0, 0, 0, 1, 1, 1];
 
     let d3 = vec![
-        vec![0.0, 0.0, 0.0], vec![0.1, 0.2, -0.1], vec![-0.1, 0.0, 0.1],
-        vec![5.0, 5.0, 5.0], vec![5.2, 4.9, 5.1], vec![4.8, 5.1, 4.9],
+        vec![0.0, 0.0, 0.0],
+        vec![0.1, 0.2, -0.1],
+        vec![-0.1, 0.0, 0.1],
+        vec![5.0, 5.0, 5.0],
+        vec![5.2, 4.9, 5.1],
+        vec![4.8, 5.1, 4.9],
     ];
     let d3_labels: Vec<usize> = vec![0, 0, 0, 1, 1, 1];
 
@@ -229,7 +243,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for silhouette oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for silhouette oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

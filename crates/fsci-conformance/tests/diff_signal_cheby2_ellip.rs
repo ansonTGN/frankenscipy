@@ -209,9 +209,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "cheby2_ellip oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping cheby2_ellip oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping cheby2_ellip oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -224,9 +222,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "cheby2_ellip oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping cheby2_ellip oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping cheby2_ellip oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

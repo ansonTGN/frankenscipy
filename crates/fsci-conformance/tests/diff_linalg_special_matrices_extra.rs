@@ -388,7 +388,8 @@ fn diff_linalg_special_matrices_extra() {
     let all_pass = diffs.iter().all(|d| d.pass);
     let log = DiffLog {
         test_id: "diff_linalg_special_matrices_extra".into(),
-        category: "fsci_linalg::{leslie, pascal, vander, hankel, helmert*} vs scipy.linalg/numpy".into(),
+        category: "fsci_linalg::{leslie, pascal, vander, hankel, helmert*} vs scipy.linalg/numpy"
+            .into(),
         case_count: diffs.len(),
         pass: all_pass,
         timestamp_ms: timestamp_ms(),

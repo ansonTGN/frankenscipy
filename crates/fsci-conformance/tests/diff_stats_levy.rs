@@ -254,11 +254,7 @@ fn diff_stats_levy() {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         let (pdf_v, cdf_v, sf_v) = match case.variant.as_str() {
             "levy" => (levy.pdf(case.x), levy.cdf(case.x), levy.sf(case.x)),
-            "levy_l" => (
-                levy_l.pdf(case.x),
-                levy_l.cdf(case.x),
-                levy_l.sf(case.x),
-            ),
+            "levy_l" => (levy_l.pdf(case.x), levy_l.cdf(case.x), levy_l.sf(case.x)),
             other => panic!("unknown variant: {other}"),
         };
         if let Some(spdf) = oracle.pdf {

@@ -79,8 +79,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create chi2_contingency_lambda diff output dir");
+    fs::create_dir_all(output_dir()).expect("create chi2_contingency_lambda diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -180,8 +179,7 @@ for case in q["points"]:
     points.append(out)
 print(json.dumps({"points": points}))
 "#;
-    let query_json =
-        serde_json::to_string(query).expect("serialize chi2_contingency_lambda query");
+    let query_json = serde_json::to_string(query).expect("serialize chi2_contingency_lambda query");
     let mut child = match Command::new("python3")
         .arg("-c")
         .arg(script)
@@ -196,9 +194,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for chi2_contingency_lambda oracle: {e}"
             );
-            eprintln!(
-                "skipping chi2_contingency_lambda oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping chi2_contingency_lambda oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -229,9 +225,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "chi2_contingency_lambda oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping chi2_contingency_lambda oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping chi2_contingency_lambda oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -261,27 +255,29 @@ fn diff_stats_chi2_contingency_lambda() {
         let result = chi2_contingency_with_lambda(&case.table, false, case.lambda_);
 
         if let Some(s_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - s_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - s_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(s_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - s_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - s_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(s_dof) = scipy_arm.dof {
             let abs_diff = (result.dof as i64 - s_dof).unsigned_abs() as f64;
             max_overall = max_overall.max(abs_diff);

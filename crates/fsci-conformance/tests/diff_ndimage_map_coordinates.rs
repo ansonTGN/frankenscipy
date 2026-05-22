@@ -106,19 +106,13 @@ fn generate_query() -> OracleQuery {
             "5x5_integer_coords",
             vec![5, 5],
             (1..=25).map(|i| i as f64).collect(),
-            vec![
-                vec![0.0, 1.0, 2.0, 3.0, 4.0],
-                vec![0.0, 1.0, 2.0, 3.0, 4.0],
-            ],
+            vec![vec![0.0, 1.0, 2.0, 3.0, 4.0], vec![0.0, 1.0, 2.0, 3.0, 4.0]],
         ),
         (
             "5x5_fractional_coords",
             vec![5, 5],
             (1..=25).map(|i| i as f64).collect(),
-            vec![
-                vec![0.5, 1.5, 2.5, 3.5],
-                vec![0.5, 1.5, 2.5, 3.5],
-            ],
+            vec![vec![0.5, 1.5, 2.5, 3.5], vec![0.5, 1.5, 2.5, 3.5]],
         ),
         (
             "1d_len10_coords",
@@ -130,10 +124,7 @@ fn generate_query() -> OracleQuery {
             "4x4_corner_probes",
             vec![4, 4],
             (1..=16).map(|i| i as f64).collect(),
-            vec![
-                vec![0.0, 0.0, 3.0, 3.0, 1.5],
-                vec![0.0, 3.0, 0.0, 3.0, 1.5],
-            ],
+            vec![vec![0.0, 0.0, 3.0, 3.0, 1.5], vec![0.0, 3.0, 0.0, 3.0, 1.5]],
         ),
     ];
     let orders = [0usize, 1];
@@ -223,13 +214,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "map_coords oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping map_coords oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping map_coords oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for map_coords oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for map_coords oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

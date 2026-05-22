@@ -17,9 +17,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_fft::{
-    FftOptions, dct, dct_i, dct_iii, dct_iv, dst_i, dst_ii, dst_iii, dst_iv,
-};
+use fsci_fft::{FftOptions, dct, dct_i, dct_iii, dct_iv, dst_i, dst_ii, dst_iii, dst_iv};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-005";
@@ -93,18 +91,9 @@ fn emit_log(log: &DiffLog) {
 fn generate_query() -> OracleQuery {
     // Input signals: arithmetic series, constant, alternating, decaying.
     let inputs: &[(&str, Vec<f64>)] = &[
-        (
-            "linear_n8",
-            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
-        ),
-        (
-            "constant_n6",
-            vec![3.5, 3.5, 3.5, 3.5, 3.5, 3.5],
-        ),
-        (
-            "alternating_n6",
-            vec![1.0, -1.0, 1.0, -1.0, 1.0, -1.0],
-        ),
+        ("linear_n8", vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
+        ("constant_n6", vec![3.5, 3.5, 3.5, 3.5, 3.5, 3.5]),
+        ("alternating_n6", vec![1.0, -1.0, 1.0, -1.0, 1.0, -1.0]),
         (
             "decay_n8",
             (0..8).map(|i| (-(i as f64) / 3.0).exp()).collect(),

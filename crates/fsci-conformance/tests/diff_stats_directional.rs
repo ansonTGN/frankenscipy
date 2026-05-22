@@ -209,9 +209,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for directional oracle: {e}"
             );
-            eprintln!(
-                "skipping directional oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping directional oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -224,13 +222,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "directional oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping directional oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping directional oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for directional oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for directional oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -286,16 +284,17 @@ fn diff_stats_directional() {
 
         for (arm_name, scipy_v, rust_v) in arms {
             if let (Some(scipy_v), Some(rust_v)) = (scipy_v, rust_v)
-                && rust_v.is_finite() {
-                    let abs_diff = (rust_v - scipy_v).abs();
-                    max_overall = max_overall.max(abs_diff);
-                    diffs.push(CaseDiff {
-                        case_id: case.case_id.clone(),
-                        arm: arm_name.into(),
-                        abs_diff,
-                        pass: abs_diff <= ABS_TOL,
-                    });
-                }
+                && rust_v.is_finite()
+            {
+                let abs_diff = (rust_v - scipy_v).abs();
+                max_overall = max_overall.max(abs_diff);
+                diffs.push(CaseDiff {
+                    case_id: case.case_id.clone(),
+                    arm: arm_name.into(),
+                    abs_diff,
+                    pass: abs_diff <= ABS_TOL,
+                });
+            }
         }
     }
 

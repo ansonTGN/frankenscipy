@@ -61,8 +61,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create perm_bootstrap_mean metamorphic output dir");
+    fs::create_dir_all(output_dir()).expect("create perm_bootstrap_mean metamorphic output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -74,8 +73,8 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &MetamorphicLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json = serde_json::to_string_pretty(log)
-        .expect("serialize perm_bootstrap_mean metamorphic log");
+    let json =
+        serde_json::to_string_pretty(log).expect("serialize perm_bootstrap_mean metamorphic log");
     fs::write(path, json).expect("write perm_bootstrap_mean metamorphic log");
 }
 
@@ -127,9 +126,7 @@ fn metamorphic_stats_perm_bootstrap_mean() {
         cases.push(CaseLog {
             case_id: format!("perm_{name}"),
             invariant: "pvalue_in_floor_1_range".into(),
-            detail: format!(
-                "pval={pval}, floor={perm_floor}"
-            ),
+            detail: format!("pval={pval}, floor={perm_floor}"),
             pass: pval.is_finite() && pval >= perm_floor && pval <= 1.0,
         });
 
@@ -159,9 +156,7 @@ fn metamorphic_stats_perm_bootstrap_mean() {
         cases.push(CaseLog {
             case_id: format!("perm_{name}"),
             invariant: "deterministic_same_seed".into(),
-            detail: format!(
-                "stat=({stat}, {stat2}), pval=({pval}, {pval2})"
-            ),
+            detail: format!("stat=({stat}, {stat2}), pval=({pval}, {pval2})"),
             pass: stat == stat2 && pval == pval2,
         });
     }

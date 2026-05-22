@@ -15,9 +15,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_linalg::{
-    DecompOptions, solve_continuous_lyapunov, solve_discrete_lyapunov,
-};
+use fsci_linalg::{DecompOptions, solve_continuous_lyapunov, solve_discrete_lyapunov};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-009";

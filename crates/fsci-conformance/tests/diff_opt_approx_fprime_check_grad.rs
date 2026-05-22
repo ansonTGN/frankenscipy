@@ -104,10 +104,7 @@ fn grad_quad_sum(x: &[f64]) -> Vec<f64> {
 
 fn f_dot_const(x: &[f64]) -> f64 {
     // f(x) = sum (i+1) * x[i]
-    x.iter()
-        .enumerate()
-        .map(|(i, &v)| (i + 1) as f64 * v)
-        .sum()
+    x.iter().enumerate().map(|(i, &v)| (i + 1) as f64 * v).sum()
 }
 
 fn grad_dot_const(x: &[f64]) -> Vec<f64> {
@@ -271,7 +268,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open approx_fprime oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open approx_fprime oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -279,9 +279,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "approx_fprime oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping approx_fprime oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping approx_fprime oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -294,9 +292,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "approx_fprime oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping approx_fprime oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping approx_fprime oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

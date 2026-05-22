@@ -301,10 +301,7 @@ fn diff_linalg_eigvalsh() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "eigvalsh mismatch: {} abs_diff={}",
-                d.case_id, d.abs_diff
-            );
+            eprintln!("eigvalsh mismatch: {} abs_diff={}", d.case_id, d.abs_diff);
         }
     }
 

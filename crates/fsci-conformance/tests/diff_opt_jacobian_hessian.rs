@@ -83,11 +83,7 @@ fn diff_opt_jacobian_hessian() {
     //   J = [[2x, 1], [y, x]]
     {
         let x = vec![1.5_f64, 2.0_f64];
-        let Ok(res) = jacobian(
-            |v: &[f64]| vec![v[0] * v[0] + v[1], v[0] * v[1]],
-            &x,
-            opts,
-        ) else {
+        let Ok(res) = jacobian(|v: &[f64]| vec![v[0] * v[0] + v[1], v[0] * v[1]], &x, opts) else {
             panic!("jacobian failed");
         };
         let expected = vec![vec![2.0 * x[0], 1.0], vec![x[1], x[0]]];
@@ -160,7 +156,11 @@ fn diff_opt_jacobian_hessian() {
         ) else {
             panic!("hessian failed");
         };
-        let expected = vec![vec![2.0, 1.0, 0.0], vec![1.0, 2.0, 0.0], vec![0.0, 0.0, 2.0]];
+        let expected = vec![
+            vec![2.0, 1.0, 0.0],
+            vec![1.0, 2.0, 0.0],
+            vec![0.0, 0.0, 2.0],
+        ];
         let d = frob_max(&res.ddf, &expected);
         max_overall = max_overall.max(d);
         diffs.push(CaseDiff {
@@ -214,10 +214,7 @@ fn diff_opt_jacobian_hessian() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

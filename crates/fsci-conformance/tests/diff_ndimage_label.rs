@@ -116,16 +116,8 @@ fn generate_query() -> OracleQuery {
             vec![12],
             vec![1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0],
         ),
-        (
-            "4x4_all_zeros",
-            vec![4, 4],
-            vec![0.0; 16],
-        ),
-        (
-            "4x4_all_ones",
-            vec![4, 4],
-            vec![1.0; 16],
-        ),
+        ("4x4_all_zeros", vec![4, 4], vec![0.0; 16]),
+        ("4x4_all_ones", vec![4, 4], vec![1.0; 16]),
         (
             "6x6_chain",
             vec![6, 6],

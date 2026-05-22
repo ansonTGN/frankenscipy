@@ -210,9 +210,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "misc_scalars oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping misc_scalars oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping misc_scalars oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -225,9 +223,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "misc_scalars oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping misc_scalars oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping misc_scalars oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

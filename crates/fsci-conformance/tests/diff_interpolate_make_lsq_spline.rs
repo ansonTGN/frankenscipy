@@ -120,7 +120,9 @@ fn build_query() -> OracleQuery {
         let pad = (b - a) * 0.02;
         let lo = a + pad;
         let hi = b - pad;
-        (0..n).map(|i| lo + (hi - lo) * i as f64 / (n - 1) as f64).collect()
+        (0..n)
+            .map(|i| lo + (hi - lo) * i as f64 / (n - 1) as f64)
+            .collect()
     };
 
     // Dataset 1: sine on [0, 2π], 40 samples

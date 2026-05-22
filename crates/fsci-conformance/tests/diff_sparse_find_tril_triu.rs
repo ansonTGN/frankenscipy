@@ -87,8 +87,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize find_tril_triu diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize find_tril_triu diff log");
     fs::write(path, json).expect("write find_tril_triu diff log");
 }
 
@@ -263,9 +262,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "find_tril_triu oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping find_tril_triu oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping find_tril_triu oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -278,9 +275,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "find_tril_triu oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping find_tril_triu oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping find_tril_triu oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -356,7 +351,9 @@ fn diff_sparse_find_tril_triu() {
         let Some(scipy_v) = scipy_arm.values.as_ref() else {
             continue;
         };
-        let Some(fsci_v) = fsci_eval(case) else { continue };
+        let Some(fsci_v) = fsci_eval(case) else {
+            continue;
+        };
         if fsci_v.len() != scipy_v.len() {
             diffs.push(CaseDiff {
                 case_id: case.case_id.clone(),

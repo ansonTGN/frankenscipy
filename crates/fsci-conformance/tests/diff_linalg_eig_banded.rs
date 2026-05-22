@@ -200,13 +200,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "eig_banded oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping eig_banded oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping eig_banded oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for eig_banded oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for eig_banded oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

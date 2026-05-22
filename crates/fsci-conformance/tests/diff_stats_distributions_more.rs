@@ -260,9 +260,7 @@ print(json.dumps(results))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for distributions_more oracle: {e}"
             );
-            eprintln!(
-                "skipping distributions_more oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping distributions_more oracle: python3 not available ({e})");
             return Vec::new();
         }
     };
@@ -279,9 +277,7 @@ print(json.dumps(results))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "distributions_more oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping distributions_more oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping distributions_more oracle: stdin write failed ({err})\n{stderr}");
             return Vec::new();
         }
     }
@@ -295,9 +291,7 @@ print(json.dumps(results))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "distributions_more oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping distributions_more oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping distributions_more oracle: scipy not available\n{stderr}");
         return Vec::new();
     }
 

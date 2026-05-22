@@ -221,7 +221,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open roots_extras oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open roots_extras oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -233,7 +236,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for roots_extras oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for roots_extras oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

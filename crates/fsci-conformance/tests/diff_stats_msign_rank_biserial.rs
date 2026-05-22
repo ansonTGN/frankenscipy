@@ -83,8 +83,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create msign_rank_biserial diff output dir");
+    fs::create_dir_all(output_dir()).expect("create msign_rank_biserial diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -96,8 +95,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize msign_rank_biserial diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize msign_rank_biserial diff log");
     fs::write(path, json).expect("write msign_rank_biserial diff log");
 }
 
@@ -108,11 +106,11 @@ fn generate_query() -> OracleQuery {
             "mixed_signs",
             vec![-3.0, -1.5, 0.0, 0.5, 1.5, -2.0, 4.0, -0.1, 2.5, 0.0],
         ),
-        ("with_zeros_n8", vec![0.0, 1.0, 0.0, -1.0, 2.0, 0.0, -3.0, 0.0]),
         (
-            "all_negative_n6",
-            vec![-1.0, -2.0, -3.0, -4.0, -5.0, -10.0],
+            "with_zeros_n8",
+            vec![0.0, 1.0, 0.0, -1.0, 2.0, 0.0, -3.0, 0.0],
         ),
+        ("all_negative_n6", vec![-1.0, -2.0, -3.0, -4.0, -5.0, -10.0]),
     ];
     // (label, u_stat, n1, n2)
     let rb_fixtures: Vec<(&str, f64, usize, usize)> = vec![
@@ -209,9 +207,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for msign_rank_biserial oracle: {e}"
             );
-            eprintln!(
-                "skipping msign_rank_biserial oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping msign_rank_biserial oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -227,9 +223,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "msign_rank_biserial oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping msign_rank_biserial oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping msign_rank_biserial oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -242,9 +236,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "msign_rank_biserial oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping msign_rank_biserial oracle: numpy not available\n{stderr}"
-        );
+        eprintln!("skipping msign_rank_biserial oracle: numpy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

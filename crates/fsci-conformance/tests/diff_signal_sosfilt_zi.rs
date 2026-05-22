@@ -87,10 +87,7 @@ fn generate_query() -> OracleQuery {
             "1section_lp",
             vec![[0.0675, 0.135, 0.0675, 1.0, -1.143, 0.4128]],
         ),
-        (
-            "1section_resonator",
-            vec![[1.0, 0.0, 0.0, 1.0, -1.5, 0.85]],
-        ),
+        ("1section_resonator", vec![[1.0, 0.0, 0.0, 1.0, -1.5, 0.85]]),
         (
             "2section_cascade",
             vec![
@@ -173,9 +170,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "sosfilt_zi oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping sosfilt_zi oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping sosfilt_zi oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -263,10 +258,7 @@ fn diff_signal_sosfilt_zi() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "sosfilt_zi mismatch: {} abs_diff={}",
-                d.case_id, d.abs_diff
-            );
+            eprintln!("sosfilt_zi mismatch: {} abs_diff={}", d.case_id, d.abs_diff);
         }
     }
 

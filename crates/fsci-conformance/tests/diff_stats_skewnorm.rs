@@ -224,10 +224,16 @@ fn diff_stats_skewnorm() {
     assert_eq!(oracle.points.len(), query.points.len());
     assert_eq!(oracle.moments.len(), query.moments.len());
 
-    let pmap: HashMap<String, PointArm> =
-        oracle.points.into_iter().map(|r| (r.case_id.clone(), r)).collect();
-    let mmap: HashMap<String, MomentArm> =
-        oracle.moments.into_iter().map(|r| (r.case_id.clone(), r)).collect();
+    let pmap: HashMap<String, PointArm> = oracle
+        .points
+        .into_iter()
+        .map(|r| (r.case_id.clone(), r))
+        .collect();
+    let mmap: HashMap<String, MomentArm> = oracle
+        .moments
+        .into_iter()
+        .map(|r| (r.case_id.clone(), r))
+        .collect();
 
     let start = Instant::now();
     let mut diffs = Vec::new();

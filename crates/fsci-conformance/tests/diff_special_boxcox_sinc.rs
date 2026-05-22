@@ -210,10 +210,7 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child
-            .stdin
-            .as_mut()
-            .expect("open boxcox/sinc oracle stdin");
+        let stdin = child.stdin.as_mut().expect("open boxcox/sinc oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -221,9 +218,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "boxcox/sinc oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping boxcox/sinc oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping boxcox/sinc oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -264,16 +259,17 @@ fn diff_special_boxcox_sinc() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(&case.func, case.arg1, case.arg2) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(&case.func, case.arg1, case.arg2)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

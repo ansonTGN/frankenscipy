@@ -327,10 +327,11 @@ fn diff_signal_butter_sos_output() {
         // === butter_sos == butter_with_output(Sos) (convenience wrapper) ===
         let sos_direct = butter_sos(c.order, &c.wn, ftype).expect("butter_sos");
         let sos_match = sos_direct.len() == sos.len()
-            && sos_direct
-                .iter()
-                .zip(sos.iter())
-                .all(|(a, b)| a.iter().zip(b.iter()).all(|(x, y)| (x - y).abs() <= ABS_TOL));
+            && sos_direct.iter().zip(sos.iter()).all(|(a, b)| {
+                a.iter()
+                    .zip(b.iter())
+                    .all(|(x, y)| (x - y).abs() <= ABS_TOL)
+            });
         diffs.push(CaseDiff {
             case_id: format!("{}_butter_sos_eq_with_output", c.case_id),
             max_abs_diff_b: 0.0,
@@ -343,8 +344,7 @@ fn diff_signal_butter_sos_output() {
     let all_pass = diffs.iter().all(|d| d.pass);
     let log = DiffLog {
         test_id: "diff_signal_butter_sos_output".into(),
-        category:
-            "fsci_signal::{butter_with_output, butter_sos} vs scipy.signal.butter".into(),
+        category: "fsci_signal::{butter_with_output, butter_sos} vs scipy.signal.butter".into(),
         case_count: diffs.len(),
         pass: all_pass,
         timestamp_ms: timestamp_ms(),

@@ -233,8 +233,13 @@ fn diff_signal_bessel_filter() {
                 max_abs_diff_b: f64::INFINITY,
                 max_abs_diff_a: f64::INFINITY,
                 pass: false,
-                note: format!("length mismatch: fsci b={} a={} scipy b={} a={}",
-                    ba.b.len(), ba.a.len(), exp_b.len(), exp_a.len()),
+                note: format!(
+                    "length mismatch: fsci b={} a={} scipy b={} a={}",
+                    ba.b.len(),
+                    ba.a.len(),
+                    exp_b.len(),
+                    exp_a.len()
+                ),
             });
             continue;
         }
@@ -271,9 +276,5 @@ fn diff_signal_bessel_filter() {
         }
     }
 
-    assert!(
-        all_pass,
-        "bessel parity failed: {} cases",
-        diffs.len()
-    );
+    assert!(all_pass, "bessel parity failed: {} cases", diffs.len());
 }

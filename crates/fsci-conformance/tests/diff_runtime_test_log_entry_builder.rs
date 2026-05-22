@@ -101,26 +101,14 @@ fn diff_runtime_test_log_entry_builder() {
             entry.timestamp_ms > 1_700_000_000_000,
             format!("ts={}", entry.timestamp_ms),
         );
-        check(
-            "new_seed_none",
-            entry.seed.is_none(),
-            String::new(),
-        );
+        check("new_seed_none", entry.seed.is_none(), String::new());
         check(
             "new_fixture_none",
             entry.fixture_id.is_none(),
             String::new(),
         );
-        check(
-            "new_mode_none",
-            entry.mode.is_none(),
-            String::new(),
-        );
-        check(
-            "new_result_none",
-            entry.result.is_none(),
-            String::new(),
-        );
+        check("new_mode_none", entry.mode.is_none(), String::new());
+        check("new_result_none", entry.result.is_none(), String::new());
     }
 
     // === 2. Builder chain populates Optional fields ===
@@ -195,11 +183,7 @@ fn diff_runtime_test_log_entry_builder() {
             !obj.contains_key("fixture_id"),
             String::new(),
         );
-        check(
-            "json_mode_elided",
-            !obj.contains_key("mode"),
-            String::new(),
-        );
+        check("json_mode_elided", !obj.contains_key("mode"), String::new());
         check(
             "json_result_elided",
             !obj.contains_key("result"),
@@ -232,11 +216,7 @@ fn diff_runtime_test_log_entry_builder() {
             obj.get("fixture_id").and_then(|x| x.as_str()) == Some("fix5"),
             String::new(),
         );
-        check(
-            "json_mode_present",
-            obj.contains_key("mode"),
-            String::new(),
-        );
+        check("json_mode_present", obj.contains_key("mode"), String::new());
         check(
             "json_result_skip",
             obj.get("result").and_then(|x| x.as_str()) == Some("skip"),

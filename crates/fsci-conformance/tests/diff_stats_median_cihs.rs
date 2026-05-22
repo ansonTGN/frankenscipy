@@ -101,8 +101,8 @@ fn generate_query() -> OracleQuery {
         (
             "ties_n20",
             vec![
-                1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 4.0, 5.0, 5.0, 5.0, 6.0, 6.0,
-                7.0, 7.0, 8.0, 9.0, 10.0,
+                1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 4.0, 5.0, 5.0, 5.0, 6.0, 6.0, 7.0,
+                7.0, 8.0, 9.0, 10.0,
             ],
         ),
     ];
@@ -180,13 +180,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "median_cihs oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping median_cihs oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping median_cihs oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for median_cihs oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for median_cihs oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -223,27 +223,29 @@ fn diff_stats_median_cihs() {
         let (rust_lo, rust_hi) = median_cihs(&case.data, case.alpha);
 
         if let Some(s_lo) = scipy_arm.lo
-            && rust_lo.is_finite() {
-                let abs_diff = (rust_lo - s_lo).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "lo".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_lo.is_finite()
+        {
+            let abs_diff = (rust_lo - s_lo).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "lo".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(s_hi) = scipy_arm.hi
-            && rust_hi.is_finite() {
-                let abs_diff = (rust_hi - s_hi).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "hi".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_hi.is_finite()
+        {
+            let abs_diff = (rust_hi - s_hi).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "hi".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

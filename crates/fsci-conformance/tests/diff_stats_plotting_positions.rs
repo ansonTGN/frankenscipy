@@ -100,9 +100,7 @@ fn generate_query() -> OracleQuery {
         ),
         (
             "ties_n12",
-            vec![
-                1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0, 5.0, 6.0,
-            ],
+            vec![1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0, 5.0, 6.0],
         ),
     ];
 
@@ -187,9 +185,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for plotting_positions oracle: {e}"
             );
-            eprintln!(
-                "skipping plotting_positions oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping plotting_positions oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -205,9 +201,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "plotting_positions oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping plotting_positions oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping plotting_positions oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -220,9 +214,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "plotting_positions oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping plotting_positions oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping plotting_positions oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

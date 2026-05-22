@@ -95,26 +95,20 @@ fn generate_query() -> OracleQuery {
     // n ≥ 20 ensures all three asymptotic z-tests are valid.
     let datasets: Vec<(&str, Vec<f64>)> = vec![
         // Near-uniform 20 points (light tails)
-        (
-            "uniform_n20",
-            (1..=20).map(|i| (i as f64) - 10.5).collect(),
-        ),
+        ("uniform_n20", (1..=20).map(|i| (i as f64) - 10.5).collect()),
         // Near-normal: deterministic inverse-CDF samples.
-        (
-            "near_normal_n30",
-            {
-                // map (i+0.5)/n through a smooth probit-ish polynomial — gives a
-                // near-normal-shape deterministic sequence without needing scipy.
-                (0..30)
-                    .map(|i| {
-                        let p = (i as f64 + 0.5) / 30.0;
-                        let q = p - 0.5;
-                        // Approximate probit via cubic — symmetric, monotone.
-                        2.5 * (q + 4.0 * q * q * q)
-                    })
-                    .collect()
-            },
-        ),
+        ("near_normal_n30", {
+            // map (i+0.5)/n through a smooth probit-ish polynomial — gives a
+            // near-normal-shape deterministic sequence without needing scipy.
+            (0..30)
+                .map(|i| {
+                    let p = (i as f64 + 0.5) / 30.0;
+                    let q = p - 0.5;
+                    // Approximate probit via cubic — symmetric, monotone.
+                    2.5 * (q + 4.0 * q * q * q)
+                })
+                .collect()
+        }),
         // Right-skewed exponential-like
         (
             "exp_like_n25",
@@ -198,9 +192,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for normality_tests oracle: {e}"
             );
-            eprintln!(
-                "skipping normality_tests oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping normality_tests oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -216,9 +208,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "normality_tests oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping normality_tests oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping normality_tests oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -231,9 +221,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "normality_tests oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping normality_tests oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping normality_tests oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -277,27 +265,29 @@ fn diff_stats_normality_tests() {
         };
 
         if let Some(s_stat) = scipy_arm.statistic
-            && rust_stat.is_finite() {
-                let abs_diff = (rust_stat - s_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: format!("{}.statistic", case.func),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_stat.is_finite()
+        {
+            let abs_diff = (rust_stat - s_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: format!("{}.statistic", case.func),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(s_p) = scipy_arm.pvalue
-            && rust_p.is_finite() {
-                let abs_diff = (rust_p - s_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: format!("{}.pvalue", case.func),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_p.is_finite()
+        {
+            let abs_diff = (rust_p - s_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: format!("{}.pvalue", case.func),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

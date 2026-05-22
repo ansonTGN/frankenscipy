@@ -113,19 +113,7 @@ fn generate_query() -> OracleQuery {
     // E(m=1)=1. Stop the K probe at m=0.999999 to avoid the
     // divergence at exactly 1.
     let ms = [
-        0.0_f64,
-        0.001,
-        0.01,
-        0.1,
-        0.25,
-        0.4,
-        0.5,
-        0.6,
-        0.75,
-        0.9,
-        0.99,
-        0.999,
-        0.999999,
+        0.0_f64, 0.001, 0.01, 0.1, 0.25, 0.4, 0.5, 0.6, 0.75, 0.9, 0.99, 0.999, 0.999999,
         // E is finite at m=1; include for E only.
         1.0,
     ];
@@ -220,13 +208,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "ellipk/ellipe oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping ellipk/ellipe oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping ellipk/ellipe oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for ellipk/ellipe oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for ellipk/ellipe oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -261,16 +249,17 @@ fn diff_special_ellipk_ellipe() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(&case.func, case.m) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(&case.func, case.m)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

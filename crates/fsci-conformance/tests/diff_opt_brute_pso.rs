@@ -77,21 +77,41 @@ fn diff_opt_brute_pso() {
     if let Ok(res) = brute(quadratic, &[(-2.0, 2.0), (-2.0, 2.0)], 21) {
         let f = res.fun.unwrap_or(f64::INFINITY);
         max_overall = max_overall.max(f);
-        diffs.push(CaseDiff { case_id: "brute_quad".into(), op: "brute".into(), abs_diff: f, pass: f <= BRUTE_TOL });
+        diffs.push(CaseDiff {
+            case_id: "brute_quad".into(),
+            op: "brute".into(),
+            abs_diff: f,
+            pass: f <= BRUTE_TOL,
+        });
     }
     if let Ok(res) = brute(shifted_quadratic, &[(-2.0, 2.0), (-2.0, 2.0)], 41) {
         let f = res.fun.unwrap_or(f64::INFINITY);
         max_overall = max_overall.max(f);
-        diffs.push(CaseDiff { case_id: "brute_shifted".into(), op: "brute".into(), abs_diff: f, pass: f <= BRUTE_TOL });
+        diffs.push(CaseDiff {
+            case_id: "brute_shifted".into(),
+            op: "brute".into(),
+            abs_diff: f,
+            pass: f <= BRUTE_TOL,
+        });
     }
 
     // pso — quadratic on [-3, 3]² with 30 particles and 100 iters
     let (_, f1) = pso(quadratic, &[-3.0, -3.0], &[3.0, 3.0], 30, 100, 42);
     max_overall = max_overall.max(f1);
-    diffs.push(CaseDiff { case_id: "pso_quad".into(), op: "pso".into(), abs_diff: f1, pass: f1 <= PSO_TOL });
+    diffs.push(CaseDiff {
+        case_id: "pso_quad".into(),
+        op: "pso".into(),
+        abs_diff: f1,
+        pass: f1 <= PSO_TOL,
+    });
     let (_, f2) = pso(shifted_quadratic, &[-3.0, -3.0], &[3.0, 3.0], 30, 100, 42);
     max_overall = max_overall.max(f2);
-    diffs.push(CaseDiff { case_id: "pso_shifted".into(), op: "pso".into(), abs_diff: f2, pass: f2 <= PSO_TOL });
+    diffs.push(CaseDiff {
+        case_id: "pso_shifted".into(),
+        op: "pso".into(),
+        abs_diff: f2,
+        pass: f2 <= PSO_TOL,
+    });
 
     let all_pass = diffs.iter().all(|d| d.pass);
 

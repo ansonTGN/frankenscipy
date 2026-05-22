@@ -20,8 +20,7 @@ use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use fsci_spatial::{
-    is_valid_dm, is_valid_y, num_obs_dm, num_obs_y, squareform_to_condensed,
-    squareform_to_matrix,
+    is_valid_dm, is_valid_y, num_obs_dm, num_obs_y, squareform_to_condensed, squareform_to_matrix,
 };
 use serde::{Deserialize, Serialize};
 
@@ -281,13 +280,13 @@ print(json.dumps(
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "squareform oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping squareform oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping squareform oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for squareform oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for squareform oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -359,31 +358,33 @@ fn diff_spatial_squareform() {
 
         // squareform_to_matrix (round-trip on the condensed)
         if let Some(scipy_mat) = scipy_arm.matrix.as_ref()
-            && let Ok(rust_cond) = squareform_to_condensed(&case.matrix) {
-                match squareform_to_matrix(&rust_cond) {
-                    Ok(rust_mat) => {
-                        let pass = rust_mat.len() == scipy_mat.len()
-                            && rust_mat.iter().zip(scipy_mat.iter()).all(|(rr, sr)| {
-                                rr.len() == sr.len()
-                                    && rr.iter().zip(sr.iter()).all(|(r, s)| {
-                                        (r - s).abs() <= ABS_TOL
-                                    })
-                            });
-                        cases.push(CaseDiff {
-                            case_id: case.case_id.clone(),
-                            sub_check: "squareform_to_matrix".into(),
-                            pass,
-                            detail: format!("rust_n={}", rust_mat.len()),
+            && let Ok(rust_cond) = squareform_to_condensed(&case.matrix)
+        {
+            match squareform_to_matrix(&rust_cond) {
+                Ok(rust_mat) => {
+                    let pass = rust_mat.len() == scipy_mat.len()
+                        && rust_mat.iter().zip(scipy_mat.iter()).all(|(rr, sr)| {
+                            rr.len() == sr.len()
+                                && rr
+                                    .iter()
+                                    .zip(sr.iter())
+                                    .all(|(r, s)| (r - s).abs() <= ABS_TOL)
                         });
-                    }
-                    Err(e) => cases.push(CaseDiff {
+                    cases.push(CaseDiff {
                         case_id: case.case_id.clone(),
                         sub_check: "squareform_to_matrix".into(),
-                        pass: false,
-                        detail: format!("rust err: {e:?}"),
-                    }),
+                        pass,
+                        detail: format!("rust_n={}", rust_mat.len()),
+                    });
                 }
+                Err(e) => cases.push(CaseDiff {
+                    case_id: case.case_id.clone(),
+                    sub_check: "squareform_to_matrix".into(),
+                    pass: false,
+                    detail: format!("rust err: {e:?}"),
+                }),
             }
+        }
 
         // num_obs_dm
         if let Some(scipy_n) = scipy_arm.num_obs_dm {
@@ -398,15 +399,16 @@ fn diff_spatial_squareform() {
 
         // num_obs_y
         if let Some(scipy_n) = scipy_arm.num_obs_y
-            && let Ok(rust_cond) = squareform_to_condensed(&case.matrix) {
-                let rust_n = num_obs_y(&rust_cond) as i64;
-                cases.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    sub_check: "num_obs_y".into(),
-                    pass: rust_n == scipy_n,
-                    detail: format!("rust={rust_n}, scipy={scipy_n}"),
-                });
-            }
+            && let Ok(rust_cond) = squareform_to_condensed(&case.matrix)
+        {
+            let rust_n = num_obs_y(&rust_cond) as i64;
+            cases.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                sub_check: "num_obs_y".into(),
+                pass: rust_n == scipy_n,
+                detail: format!("rust={rust_n}, scipy={scipy_n}"),
+            });
+        }
 
         // is_valid_dm — both should agree (true on valid fixtures).
         if let Some(scipy_b) = scipy_arm.is_valid_dm {
@@ -421,15 +423,16 @@ fn diff_spatial_squareform() {
 
         // is_valid_y — both should agree on the condensed form.
         if let Some(scipy_b) = scipy_arm.is_valid_y
-            && let Ok(rust_cond) = squareform_to_condensed(&case.matrix) {
-                let rust_b = is_valid_y(&rust_cond);
-                cases.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    sub_check: "is_valid_y_valid_input".into(),
-                    pass: rust_b == scipy_b,
-                    detail: format!("rust={rust_b}, scipy={scipy_b}"),
-                });
-            }
+            && let Ok(rust_cond) = squareform_to_condensed(&case.matrix)
+        {
+            let rust_b = is_valid_y(&rust_cond);
+            cases.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                sub_check: "is_valid_y_valid_input".into(),
+                pass: rust_b == scipy_b,
+                detail: format!("rust={rust_b}, scipy={scipy_b}"),
+            });
+        }
     }
 
     for case in &query.invalid_dms {

@@ -230,7 +230,9 @@ print(json.dumps({"debye": debye_out, "clausen": clausen_out}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for debye/clausen oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for debye/clausen oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

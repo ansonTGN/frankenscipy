@@ -91,10 +91,7 @@ fn emit_log(log: &DiffLog) {
 fn generate_query() -> OracleQuery {
     let fixtures: Vec<(&str, Vec<f64>)> = vec![
         // No repeats
-        (
-            "no_repeats",
-            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
-        ),
+        ("no_repeats", vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
         // Light repeats — 2 values appear twice
         (
             "light_repeats",
@@ -103,15 +100,10 @@ fn generate_query() -> OracleQuery {
         // Heavy repeats — many values appear 3+ times
         (
             "heavy_repeats",
-            vec![
-                1.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0,
-            ],
+            vec![1.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0],
         ),
         // All same — single value repeated
-        (
-            "all_same",
-            vec![7.5, 7.5, 7.5, 7.5, 7.5, 7.5],
-        ),
+        ("all_same", vec![7.5, 7.5, 7.5, 7.5, 7.5, 7.5]),
     ];
 
     let points = fixtures
@@ -170,9 +162,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for find_repeats oracle: {e}"
             );
-            eprintln!(
-                "skipping find_repeats oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping find_repeats oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -188,9 +178,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "find_repeats oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping find_repeats oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping find_repeats oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -203,9 +191,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "find_repeats oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping find_repeats oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping find_repeats oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -244,8 +230,7 @@ fn diff_stats_find_repeats() {
         };
 
         // n_values arm
-        let n_diff = (result.values.len() as i64 - scipy_values.len() as i64)
-            .unsigned_abs() as f64;
+        let n_diff = (result.values.len() as i64 - scipy_values.len() as i64).unsigned_abs() as f64;
         max_overall = max_overall.max(n_diff);
         diffs.push(CaseDiff {
             case_id: case.case_id.clone(),

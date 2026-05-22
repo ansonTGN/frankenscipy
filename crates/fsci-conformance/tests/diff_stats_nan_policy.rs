@@ -204,9 +204,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for nan_policy oracle: {e}"
             );
-            eprintln!(
-                "skipping nan_policy oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping nan_policy oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -219,13 +217,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "nan_policy oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping nan_policy oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping nan_policy oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for nan_policy oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for nan_policy oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -290,16 +288,17 @@ fn diff_stats_nan_policy() {
                 pass: true,
             });
         } else if let Some(s_stat) = scipy_arm.statistic
-            && rust_stat.is_finite() {
-                let abs_diff = (rust_stat - s_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: format!("{}.statistic", case.func),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_stat.is_finite()
+        {
+            let abs_diff = (rust_stat - s_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: format!("{}.statistic", case.func),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if !rust_p.is_finite() && scipy_arm.pvalue.is_none() {
             diffs.push(CaseDiff {
                 case_id: case.case_id.clone(),
@@ -308,16 +307,17 @@ fn diff_stats_nan_policy() {
                 pass: true,
             });
         } else if let Some(s_p) = scipy_arm.pvalue
-            && rust_p.is_finite() {
-                let abs_diff = (rust_p - s_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: format!("{}.pvalue", case.func),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_p.is_finite()
+        {
+            let abs_diff = (rust_p - s_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: format!("{}.pvalue", case.func),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

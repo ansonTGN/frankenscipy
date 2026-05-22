@@ -82,8 +82,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create variance_normality_tests diff output dir");
+    fs::create_dir_all(output_dir()).expect("create variance_normality_tests diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -247,9 +246,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for variance_normality oracle: {e}"
             );
-            eprintln!(
-                "skipping variance_normality oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping variance_normality oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -265,9 +262,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "variance_normality oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping variance_normality oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping variance_normality oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -280,9 +275,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "variance_normality oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping variance_normality oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping variance_normality oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -328,27 +321,29 @@ fn diff_stats_variance_normality_tests() {
         };
 
         if let Some(s_stat) = scipy_arm.statistic
-            && rust_stat.is_finite() {
-                let abs_diff = (rust_stat - s_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: format!("{}.statistic", case.func),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_stat.is_finite()
+        {
+            let abs_diff = (rust_stat - s_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: format!("{}.statistic", case.func),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(s_p) = scipy_arm.pvalue
-            && rust_p.is_finite() {
-                let abs_diff = (rust_p - s_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: format!("{}.pvalue", case.func),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_p.is_finite()
+        {
+            let abs_diff = (rust_p - s_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: format!("{}.pvalue", case.func),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

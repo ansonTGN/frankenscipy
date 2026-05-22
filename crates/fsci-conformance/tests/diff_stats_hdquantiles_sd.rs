@@ -99,19 +99,16 @@ fn generate_query() -> OracleQuery {
             (1..=30).map(|i| (i as f64).sqrt() * 3.0).collect(),
         ),
         // Bimodal-ish: two cluster heaps
-        (
-            "bimodal_n25",
-            {
-                let mut v = Vec::new();
-                for i in 0..12 {
-                    v.push(1.0 + i as f64 * 0.1);
-                }
-                for i in 0..13 {
-                    v.push(10.0 + i as f64 * 0.1);
-                }
-                v
-            },
-        ),
+        ("bimodal_n25", {
+            let mut v = Vec::new();
+            for i in 0..12 {
+                v.push(1.0 + i as f64 * 0.1);
+            }
+            for i in 0..13 {
+                v.push(10.0 + i as f64 * 0.1);
+            }
+            v
+        }),
     ];
 
     let points = datasets
@@ -191,9 +188,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "hdquantiles_sd oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping hdquantiles_sd oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping hdquantiles_sd oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -206,9 +201,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "hdquantiles_sd oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping hdquantiles_sd oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping hdquantiles_sd oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

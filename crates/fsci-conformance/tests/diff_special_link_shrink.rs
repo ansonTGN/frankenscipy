@@ -155,7 +155,9 @@ fn generate_query() -> OracleQuery {
             });
         }
         points.push(PointCase {
-            case_id: format!("tanhshrink_x{x}").replace('.', "p").replace('-', "n"),
+            case_id: format!("tanhshrink_x{x}")
+                .replace('.', "p")
+                .replace('-', "n"),
             op: "tanhshrink".into(),
             x,
             lambda: 0.0,
@@ -245,7 +247,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for link_shrink oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for link_shrink oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

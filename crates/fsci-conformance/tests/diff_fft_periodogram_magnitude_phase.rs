@@ -92,10 +92,7 @@ fn emit_log(log: &DiffLog) {
 
 fn generate_query() -> OracleQuery {
     let signals: &[(&str, Vec<f64>)] = &[
-        (
-            "linear_n8",
-            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
-        ),
+        ("linear_n8", vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
         (
             "sin_n16",
             (0..16).map(|i| ((i as f64) * 0.4).sin()).collect(),
@@ -216,9 +213,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "fft_helpers oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping fft_helpers oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping fft_helpers oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -231,9 +226,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "fft_helpers oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping fft_helpers oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping fft_helpers oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

@@ -108,12 +108,48 @@ fn emit_log(log: &DiffLog) {
 
 fn generate_query() -> OracleQuery {
     let cheb = vec![
-        ChebCase { case_id: "cheb1_n5_0_1".into(), op: "cheb1".into(), n: 5, a: 0.0, b: 1.0 },
-        ChebCase { case_id: "cheb1_n7_n1_1".into(), op: "cheb1".into(), n: 7, a: -1.0, b: 1.0 },
-        ChebCase { case_id: "cheb1_n10_n2_3".into(), op: "cheb1".into(), n: 10, a: -2.0, b: 3.0 },
-        ChebCase { case_id: "cheb2_n5_0_1".into(), op: "cheb2".into(), n: 5, a: 0.0, b: 1.0 },
-        ChebCase { case_id: "cheb2_n6_n1_1".into(), op: "cheb2".into(), n: 6, a: -1.0, b: 1.0 },
-        ChebCase { case_id: "cheb2_n8_n5_5".into(), op: "cheb2".into(), n: 8, a: -5.0, b: 5.0 },
+        ChebCase {
+            case_id: "cheb1_n5_0_1".into(),
+            op: "cheb1".into(),
+            n: 5,
+            a: 0.0,
+            b: 1.0,
+        },
+        ChebCase {
+            case_id: "cheb1_n7_n1_1".into(),
+            op: "cheb1".into(),
+            n: 7,
+            a: -1.0,
+            b: 1.0,
+        },
+        ChebCase {
+            case_id: "cheb1_n10_n2_3".into(),
+            op: "cheb1".into(),
+            n: 10,
+            a: -2.0,
+            b: 3.0,
+        },
+        ChebCase {
+            case_id: "cheb2_n5_0_1".into(),
+            op: "cheb2".into(),
+            n: 5,
+            a: 0.0,
+            b: 1.0,
+        },
+        ChebCase {
+            case_id: "cheb2_n6_n1_1".into(),
+            op: "cheb2".into(),
+            n: 6,
+            a: -1.0,
+            b: 1.0,
+        },
+        ChebCase {
+            case_id: "cheb2_n8_n5_5".into(),
+            op: "cheb2".into(),
+            n: 8,
+            a: -5.0,
+            b: 5.0,
+        },
     ];
 
     // Use known nodes/values for interpolation; interior x.
@@ -142,7 +178,9 @@ fn generate_query() -> OracleQuery {
         }
         for &x in &xs_b {
             interp.push(InterpCase {
-                case_id: format!("{op}_cubic_x{x}").replace('.', "p").replace('-', "n"),
+                case_id: format!("{op}_cubic_x{x}")
+                    .replace('.', "p")
+                    .replace('-', "n"),
                 op: op.into(),
                 nodes: nodes_b.clone(),
                 values: vals_b.clone(),

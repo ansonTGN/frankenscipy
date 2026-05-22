@@ -62,6 +62,7 @@ pub use convenience::{
     cloglog_inv,
     copysign,
     cosdg,
+    cosm1,
     cosm1_scalar,
     cospi,
     cotdg,

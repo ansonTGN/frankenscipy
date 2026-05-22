@@ -84,8 +84,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create kendalltau_alts diff output dir");
+    fs::create_dir_all(output_dir()).expect("create kendalltau_alts diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -197,9 +196,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for kendalltau_alts oracle: {e}"
             );
-            eprintln!(
-                "skipping kendalltau_alts oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping kendalltau_alts oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -215,9 +212,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "kendalltau_alts oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping kendalltau_alts oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping kendalltau_alts oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -230,9 +225,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "kendalltau_alts oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping kendalltau_alts oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping kendalltau_alts oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -262,27 +255,29 @@ fn diff_stats_kendalltau_alts() {
         let result = kendalltau_alternative(&case.x, &case.y, &case.alternative);
 
         if let Some(s_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - s_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= STAT_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - s_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= STAT_TOL,
+            });
+        }
         if let Some(s_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - s_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= PVALUE_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - s_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= PVALUE_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

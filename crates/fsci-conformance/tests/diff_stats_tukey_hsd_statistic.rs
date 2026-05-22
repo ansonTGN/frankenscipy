@@ -99,7 +99,11 @@ fn pack(groups: &[Vec<f64>]) -> (Vec<f64>, Vec<usize>) {
 }
 
 fn generate_query() -> OracleQuery {
-    let g1 = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0], vec![7.0, 8.0, 9.0]];
+    let g1 = vec![
+        vec![1.0, 2.0, 3.0],
+        vec![4.0, 5.0, 6.0],
+        vec![7.0, 8.0, 9.0],
+    ];
     let g2 = vec![
         vec![10.0, 11.0, 12.0, 13.0],
         vec![5.0, 6.0, 7.0],

@@ -109,7 +109,10 @@ fn generate_query() -> OracleQuery {
             })
         })
         .collect();
-    let vals_lin: Vec<f64> = pts_grid.iter().map(|p| 2.0 * p[0] + 3.0 * p[1] + 1.0).collect();
+    let vals_lin: Vec<f64> = pts_grid
+        .iter()
+        .map(|p| 2.0 * p[0] + 3.0 * p[1] + 1.0)
+        .collect();
     let vals_nonlin: Vec<f64> = pts_grid
         .iter()
         .map(|p| (p[0] - 0.5).powi(2) + (p[1] - 0.5).powi(2))
@@ -176,10 +179,14 @@ fn generate_query() -> OracleQuery {
 
     // CubicHermiteSpline probes — exact-curve, exact-slope inputs
     // f(x) = sin(x), f'(x) = cos(x) on [0, 2π]
-    let xs1: Vec<f64> = (0..9).map(|i| i as f64 * std::f64::consts::PI / 4.0).collect();
+    let xs1: Vec<f64> = (0..9)
+        .map(|i| i as f64 * std::f64::consts::PI / 4.0)
+        .collect();
     let ys1: Vec<f64> = xs1.iter().map(|x| x.sin()).collect();
     let dy1: Vec<f64> = xs1.iter().map(|x| x.cos()).collect();
-    let xn1: Vec<f64> = (0..21).map(|i| i as f64 * 0.1 * std::f64::consts::PI).collect();
+    let xn1: Vec<f64> = (0..21)
+        .map(|i| i as f64 * 0.1 * std::f64::consts::PI)
+        .collect();
 
     // f(x) = x^3 - 2x + 1
     let xs2: Vec<f64> = vec![-2.0, -1.0, 0.0, 1.0, 2.0, 3.0];
@@ -288,7 +295,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for griddata_chermite oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for griddata_chermite oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -306,7 +315,10 @@ fn vec_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]

@@ -78,8 +78,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create 2x2_effect_sizes diff output dir");
+    fs::create_dir_all(output_dir()).expect("create 2x2_effect_sizes diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -177,9 +176,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for 2x2_effect_sizes oracle: {e}"
             );
-            eprintln!(
-                "skipping 2x2_effect_sizes oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping 2x2_effect_sizes oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -195,9 +192,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "2x2_effect_sizes oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping 2x2_effect_sizes oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping 2x2_effect_sizes oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -210,9 +205,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "2x2_effect_sizes oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping 2x2_effect_sizes oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping 2x2_effect_sizes oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

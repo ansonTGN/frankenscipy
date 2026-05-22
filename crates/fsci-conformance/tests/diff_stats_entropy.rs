@@ -111,11 +111,7 @@ fn fsci_entropy(dist: &str, params: &[f64]) -> Option<f64> {
         "rayleigh" => Rayleigh::new(params[0]).entropy(),
         _ => return None,
     };
-    if v.is_finite() {
-        Some(v)
-    } else {
-        None
-    }
+    if v.is_finite() { Some(v) } else { None }
 }
 
 fn generate_query() -> OracleQuery {
@@ -257,21 +253,22 @@ fn diff_stats_entropy() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_entropy(&case.dist, &case.params) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                let scale = scipy_v.abs().max(1.0);
-                let rel_diff = abs_diff / scale;
-                max_abs_overall = max_abs_overall.max(abs_diff);
-                max_rel_overall = max_rel_overall.max(rel_diff);
-                let pass = abs_diff <= ABS_TOL || abs_diff <= REL_TOL * scale;
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    dist: case.dist.clone(),
-                    abs_diff,
-                    rel_diff,
-                    pass,
-                });
-            }
+            && let Some(rust_v) = fsci_entropy(&case.dist, &case.params)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            let scale = scipy_v.abs().max(1.0);
+            let rel_diff = abs_diff / scale;
+            max_abs_overall = max_abs_overall.max(abs_diff);
+            max_rel_overall = max_rel_overall.max(rel_diff);
+            let pass = abs_diff <= ABS_TOL || abs_diff <= REL_TOL * scale;
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                dist: case.dist.clone(),
+                abs_diff,
+                rel_diff,
+                pass,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

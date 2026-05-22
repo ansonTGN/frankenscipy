@@ -78,12 +78,22 @@ fn diff_opt_tnc_slsqp_newton_cg_trust_constr() {
     if let Ok(res) = tnc(&quadratic, &q_x0, opts.clone()) {
         let fval = res.fun.unwrap_or(f64::INFINITY);
         max_overall = max_overall.max(fval);
-        diffs.push(CaseDiff { case_id: "tnc_quad".into(), op: "tnc".into(), abs_diff: fval, pass: fval <= TOL });
+        diffs.push(CaseDiff {
+            case_id: "tnc_quad".into(),
+            op: "tnc".into(),
+            abs_diff: fval,
+            pass: fval <= TOL,
+        });
     }
     if let Ok(res) = trust_constr(&quadratic, &q_x0, opts.clone()) {
         let fval = res.fun.unwrap_or(f64::INFINITY);
         max_overall = max_overall.max(fval);
-        diffs.push(CaseDiff { case_id: "trust_constr_quad".into(), op: "trust_constr".into(), abs_diff: fval, pass: fval <= TOL });
+        diffs.push(CaseDiff {
+            case_id: "trust_constr_quad".into(),
+            op: "trust_constr".into(),
+            abs_diff: fval,
+            pass: fval <= TOL,
+        });
     }
 
     // slsqp, newton_cg, trust_exact: both quadratic and Rosen.
@@ -94,17 +104,32 @@ fn diff_opt_tnc_slsqp_newton_cg_trust_constr() {
         if let Ok(res) = slsqp(&f, &x0, opts.clone()) {
             let fval = res.fun.unwrap_or(f64::INFINITY);
             max_overall = max_overall.max(fval);
-            diffs.push(CaseDiff { case_id: format!("slsqp_{label}"), op: "slsqp".into(), abs_diff: fval, pass: fval <= TOL });
+            diffs.push(CaseDiff {
+                case_id: format!("slsqp_{label}"),
+                op: "slsqp".into(),
+                abs_diff: fval,
+                pass: fval <= TOL,
+            });
         }
         if let Ok(res) = newton_cg(&f, &x0, opts.clone()) {
             let fval = res.fun.unwrap_or(f64::INFINITY);
             max_overall = max_overall.max(fval);
-            diffs.push(CaseDiff { case_id: format!("newton_cg_{label}"), op: "newton_cg".into(), abs_diff: fval, pass: fval <= TOL });
+            diffs.push(CaseDiff {
+                case_id: format!("newton_cg_{label}"),
+                op: "newton_cg".into(),
+                abs_diff: fval,
+                pass: fval <= TOL,
+            });
         }
         if let Ok(res) = trust_exact(&f, &x0, opts.clone()) {
             let fval = res.fun.unwrap_or(f64::INFINITY);
             max_overall = max_overall.max(fval);
-            diffs.push(CaseDiff { case_id: format!("trust_exact_{label}"), op: "trust_exact".into(), abs_diff: fval, pass: fval <= TOL });
+            diffs.push(CaseDiff {
+                case_id: format!("trust_exact_{label}"),
+                op: "trust_exact".into(),
+                abs_diff: fval,
+                pass: fval <= TOL,
+            });
         }
     }
 
@@ -112,9 +137,8 @@ fn diff_opt_tnc_slsqp_newton_cg_trust_constr() {
 
     let log = DiffLog {
         test_id: "diff_opt_tnc_slsqp_newton_cg_trust_constr".into(),
-        category:
-            "fsci_opt::{tnc, slsqp, newton_cg, trust_constr, trust_exact} property test"
-                .into(),
+        category: "fsci_opt::{tnc, slsqp, newton_cg, trust_constr, trust_exact} property test"
+            .into(),
         case_count: diffs.len(),
         max_abs_diff: max_overall,
         pass: all_pass,

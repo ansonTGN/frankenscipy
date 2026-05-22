@@ -97,7 +97,13 @@ fn diff_integrate_monte_carlo_qmc_quad() {
     // 2D: π estimate via indicator of unit disk in [-1,1]² → π
     {
         let (est, se) = monte_carlo_integrate(
-            |x| if x[0] * x[0] + x[1] * x[1] <= 1.0 { 1.0 } else { 0.0 },
+            |x| {
+                if x[0] * x[0] + x[1] * x[1] <= 1.0 {
+                    1.0
+                } else {
+                    0.0
+                }
+            },
             &[(-1.0, 1.0), (-1.0, 1.0)],
             100_000,
             12345,
@@ -142,8 +148,7 @@ fn diff_integrate_monte_carlo_qmc_quad() {
 
     // 2D: ∫∫_{[0,1]²} x + y dxdy = 1
     {
-        let r = qmc_quad(|v| v[0] + v[1], &[0.0, 0.0], &[1.0, 1.0], 5, 256)
-            .expect("qmc 2d sum");
+        let r = qmc_quad(|v| v[0] + v[1], &[0.0, 0.0], &[1.0, 1.0], 5, 256).expect("qmc 2d sum");
         check(
             "qmc_2d_sum_close",
             (r.integral - 1.0).abs() <= 4.0 * r.standard_error.max(1e-3),
@@ -216,9 +221,5 @@ fn diff_integrate_monte_carlo_qmc_quad() {
         }
     }
 
-    assert!(
-        all_pass,
-        "mc/qmc coverage failed: {} cases",
-        diffs.len()
-    );
+    assert!(all_pass, "mc/qmc coverage failed: {} cases", diffs.len());
 }

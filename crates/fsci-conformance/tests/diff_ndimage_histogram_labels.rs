@@ -80,8 +80,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize histogram_labels diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize histogram_labels diff log");
     fs::write(path, json).expect("write histogram_labels diff log");
 }
 
@@ -116,7 +115,9 @@ fn generate_query() -> OracleQuery {
         (
             "1d_len12_3bins",
             vec![12],
-            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
+            vec![
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+            ],
             vec![1.0, 1.0, 0.0, 0.0, 2.0, 2.0, 2.0, 0.0, 1.0, 1.0, 0.0, 0.0],
             2,
             1.0,
@@ -126,18 +127,16 @@ fn generate_query() -> OracleQuery {
     ];
     let points = scenarios
         .iter()
-        .map(
-            |(name, shape, input, labels, num, lo, hi, nb)| PointCase {
-                case_id: (*name).into(),
-                input_shape: shape.clone(),
-                input: input.clone(),
-                labels: labels.clone(),
-                num_labels: *num,
-                min_val: *lo,
-                max_val: *hi,
-                nbins: *nb,
-            },
-        )
+        .map(|(name, shape, input, labels, num, lo, hi, nb)| PointCase {
+            case_id: (*name).into(),
+            input_shape: shape.clone(),
+            input: input.clone(),
+            labels: labels.clone(),
+            num_labels: *num,
+            min_val: *lo,
+            max_val: *hi,
+            nbins: *nb,
+        })
         .collect();
     OracleQuery { points }
 }
@@ -169,8 +168,7 @@ for case in q["points"]:
         points.append({"case_id": cid, "counts": None})
 print(json.dumps({"points": points}))
 "#;
-    let query_json =
-        serde_json::to_string(query).expect("serialize histogram_labels query");
+    let query_json = serde_json::to_string(query).expect("serialize histogram_labels query");
     let mut child = match Command::new("python3")
         .arg("-c")
         .arg(script)
@@ -201,9 +199,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "histogram_labels oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping histogram_labels oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping histogram_labels oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -216,9 +212,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "histogram_labels oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping histogram_labels oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping histogram_labels oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

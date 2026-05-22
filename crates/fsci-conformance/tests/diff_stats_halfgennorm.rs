@@ -183,10 +183,7 @@ print(json.dumps({"points": points, "ppf": ppf}))
         }
     };
     {
-        let stdin = child
-            .stdin
-            .as_mut()
-            .expect("open halfgennorm oracle stdin");
+        let stdin = child.stdin.as_mut().expect("open halfgennorm oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);

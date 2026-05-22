@@ -73,8 +73,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create distribution_distances diff output dir");
+    fs::create_dir_all(output_dir()).expect("create distribution_distances diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -171,8 +170,7 @@ for case in q["points"]:
     points.append({"case_id": cid, "value": fnone(val)})
 print(json.dumps({"points": points}))
 "#;
-    let query_json =
-        serde_json::to_string(query).expect("serialize distribution_distances query");
+    let query_json = serde_json::to_string(query).expect("serialize distribution_distances query");
     let mut child = match Command::new("python3")
         .arg("-c")
         .arg(script)
@@ -187,9 +185,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for distribution_distances oracle: {e}"
             );
-            eprintln!(
-                "skipping distribution_distances oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping distribution_distances oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -220,9 +216,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "distribution_distances oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping distribution_distances oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping distribution_distances oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

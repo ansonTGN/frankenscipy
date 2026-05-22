@@ -20,9 +20,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_linalg::{
-    DecompOptions, cholesky, mat_allclose, random_matrix, random_spd,
-};
+use fsci_linalg::{DecompOptions, cholesky, mat_allclose, random_matrix, random_spd};
 use serde::Serialize;
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -102,7 +100,11 @@ fn diff_linalg_matrix_random_allclose() {
             String::new(),
         );
 
-        let e = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0], vec![7.0, 8.0, 9.0]];
+        let e = vec![
+            vec![1.0, 2.0, 3.0],
+            vec![4.0, 5.0, 6.0],
+            vec![7.0, 8.0, 9.0],
+        ];
         let f = vec![vec![1.0, 2.0], vec![4.0, 5.0], vec![7.0, 8.0]];
         check(
             "mat_allclose_shape_mismatch_cols_false",
@@ -200,11 +202,7 @@ fn diff_linalg_matrix_random_allclose() {
 
         // Determinism
         let s2 = random_spd(n, 123);
-        check(
-            "random_spd_deterministic_same_seed",
-            s == s2,
-            String::new(),
-        );
+        check("random_spd_deterministic_same_seed", s == s2, String::new());
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);
@@ -225,9 +223,5 @@ fn diff_linalg_matrix_random_allclose() {
         }
     }
 
-    assert!(
-        all_pass,
-        "matrand coverage failed: {} cases",
-        diffs.len()
-    );
+    assert!(all_pass, "matrand coverage failed: {} cases", diffs.len());
 }

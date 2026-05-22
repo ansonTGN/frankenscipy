@@ -98,15 +98,13 @@ fn emit_log(log: &DiffLog) {
 fn generate_query() -> OracleQuery {
     let fixtures: Vec<(&str, Vec<f64>, u64)> = vec![
         // Smooth ramp (strong positive autocorrelation)
-        (
-            "ramp",
-            (1..=20).map(|i| i as f64).collect(),
-            4,
-        ),
+        ("ramp", (1..=20).map(|i| i as f64).collect(), 4),
         // Alternating (strong negative lag-1 autocorrelation)
         (
             "alternating",
-            (0..20).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect(),
+            (0..20)
+                .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
+                .collect(),
             4,
         ),
         // Noisy (mild correlation)
@@ -239,13 +237,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "pacf_ljung oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping pacf_ljung oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping pacf_ljung oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for pacf_ljung oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for pacf_ljung oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -303,27 +301,29 @@ fn diff_stats_pacf_ljung() {
         // ljung_box
         let (rust_q, rust_p) = ljung_box(&case.data, case.max_lag as usize);
         if let Some(scipy_q) = scipy_arm.ljung_q
-            && rust_q.is_finite() {
-                let abs_diff = (rust_q - scipy_q).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "ljung_q".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_q.is_finite()
+        {
+            let abs_diff = (rust_q - scipy_q).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "ljung_q".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(scipy_p) = scipy_arm.ljung_p
-            && rust_p.is_finite() {
-                let abs_diff = (rust_p - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "ljung_p".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_p.is_finite()
+        {
+            let abs_diff = (rust_p - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "ljung_p".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

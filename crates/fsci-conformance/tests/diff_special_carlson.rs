@@ -380,10 +380,7 @@ fn diff_special_carlson() {
     let mut max_rel_overall = 0.0_f64;
 
     for case in &cases {
-        let scipy_value = match oracle_map
-            .get(&case.case_id)
-            .and_then(|r| r.value)
-        {
+        let scipy_value = match oracle_map.get(&case.case_id).and_then(|r| r.value) {
             Some(v) if v.is_finite() => v,
             _ => continue, // SciPy refused (e.g., divergent corner) — skip.
         };

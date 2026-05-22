@@ -13,8 +13,8 @@ use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use fsci_sparse::{
-    CooMatrix, CsrMatrix, FormatConvertible, Shape2D, sparse_add, sparse_is_symmetric,
-    sparse_nnz, sparse_scale, sparse_transpose,
+    CooMatrix, CsrMatrix, FormatConvertible, Shape2D, sparse_add, sparse_is_symmetric, sparse_nnz,
+    sparse_scale, sparse_transpose,
 };
 use serde::{Deserialize, Serialize};
 
@@ -140,12 +140,7 @@ fn generate_query() -> OracleQuery {
         (2, 0, 1.0),
         (2, 2, 4.0),
     ];
-    let b_3x3 = vec![
-        (0, 1, 1.0_f64),
-        (1, 0, 0.5),
-        (1, 2, -0.3),
-        (2, 1, 2.0),
-    ];
+    let b_3x3 = vec![(0, 1, 1.0_f64), (1, 0, 0.5), (1, 2, -0.3), (2, 1, 2.0)];
     let a_5x4 = vec![
         (0, 0, 1.0_f64),
         (0, 2, 2.0),
@@ -164,9 +159,15 @@ fn generate_query() -> OracleQuery {
     ];
     // symmetric
     let sym_3 = vec![
-        (0, 0, 2.0_f64), (0, 1, 1.0), (0, 2, -0.5),
-        (1, 0, 1.0), (1, 1, 3.0), (1, 2, 0.7),
-        (2, 0, -0.5), (2, 1, 0.7), (2, 2, 4.0),
+        (0, 0, 2.0_f64),
+        (0, 1, 1.0),
+        (0, 2, -0.5),
+        (1, 0, 1.0),
+        (1, 1, 3.0),
+        (1, 2, 0.7),
+        (2, 0, -0.5),
+        (2, 1, 0.7),
+        (2, 2, 4.0),
     ];
     // not symmetric
     let asym_3 = vec![(0, 1, 1.0_f64), (1, 0, -1.0), (1, 2, 2.0)];
@@ -175,15 +176,23 @@ fn generate_query() -> OracleQuery {
     points.push(Case {
         case_id: "add_3x3".into(),
         op: "add".into(),
-        a_rows: 3, a_cols: 3, a_triplets: a_3x3.clone(),
-        b_rows: 3, b_cols: 3, b_triplets: b_3x3.clone(),
+        a_rows: 3,
+        a_cols: 3,
+        a_triplets: a_3x3.clone(),
+        b_rows: 3,
+        b_cols: 3,
+        b_triplets: b_3x3.clone(),
         alpha: 0.0,
     });
     points.push(Case {
         case_id: "add_5x4".into(),
         op: "add".into(),
-        a_rows: 5, a_cols: 4, a_triplets: a_5x4.clone(),
-        b_rows: 5, b_cols: 4, b_triplets: b_5x4.clone(),
+        a_rows: 5,
+        a_cols: 4,
+        a_triplets: a_5x4.clone(),
+        b_rows: 5,
+        b_cols: 4,
+        b_triplets: b_5x4.clone(),
         alpha: 0.0,
     });
 
@@ -192,8 +201,12 @@ fn generate_query() -> OracleQuery {
         points.push(Case {
             case_id: format!("scale_3x3_a{alpha}"),
             op: "scale".into(),
-            a_rows: 3, a_cols: 3, a_triplets: a_3x3.clone(),
-            b_rows: 0, b_cols: 0, b_triplets: vec![],
+            a_rows: 3,
+            a_cols: 3,
+            a_triplets: a_3x3.clone(),
+            b_rows: 0,
+            b_cols: 0,
+            b_triplets: vec![],
             alpha,
         });
     }
@@ -202,42 +215,72 @@ fn generate_query() -> OracleQuery {
     points.push(Case {
         case_id: "transpose_3x3".into(),
         op: "transpose".into(),
-        a_rows: 3, a_cols: 3, a_triplets: a_3x3.clone(),
-        b_rows: 0, b_cols: 0, b_triplets: vec![], alpha: 0.0,
+        a_rows: 3,
+        a_cols: 3,
+        a_triplets: a_3x3.clone(),
+        b_rows: 0,
+        b_cols: 0,
+        b_triplets: vec![],
+        alpha: 0.0,
     });
     points.push(Case {
         case_id: "transpose_5x4".into(),
         op: "transpose".into(),
-        a_rows: 5, a_cols: 4, a_triplets: a_5x4.clone(),
-        b_rows: 0, b_cols: 0, b_triplets: vec![], alpha: 0.0,
+        a_rows: 5,
+        a_cols: 4,
+        a_triplets: a_5x4.clone(),
+        b_rows: 0,
+        b_cols: 0,
+        b_triplets: vec![],
+        alpha: 0.0,
     });
 
     // sparse_nnz
     points.push(Case {
         case_id: "nnz_3x3".into(),
         op: "nnz".into(),
-        a_rows: 3, a_cols: 3, a_triplets: a_3x3.clone(),
-        b_rows: 0, b_cols: 0, b_triplets: vec![], alpha: 0.0,
+        a_rows: 3,
+        a_cols: 3,
+        a_triplets: a_3x3.clone(),
+        b_rows: 0,
+        b_cols: 0,
+        b_triplets: vec![],
+        alpha: 0.0,
     });
     points.push(Case {
         case_id: "nnz_5x4".into(),
         op: "nnz".into(),
-        a_rows: 5, a_cols: 4, a_triplets: a_5x4.clone(),
-        b_rows: 0, b_cols: 0, b_triplets: vec![], alpha: 0.0,
+        a_rows: 5,
+        a_cols: 4,
+        a_triplets: a_5x4.clone(),
+        b_rows: 0,
+        b_cols: 0,
+        b_triplets: vec![],
+        alpha: 0.0,
     });
 
     // is_symmetric
     points.push(Case {
         case_id: "is_sym_yes".into(),
         op: "is_sym".into(),
-        a_rows: 3, a_cols: 3, a_triplets: sym_3,
-        b_rows: 0, b_cols: 0, b_triplets: vec![], alpha: 0.0,
+        a_rows: 3,
+        a_cols: 3,
+        a_triplets: sym_3,
+        b_rows: 0,
+        b_cols: 0,
+        b_triplets: vec![],
+        alpha: 0.0,
     });
     points.push(Case {
         case_id: "is_sym_no".into(),
         op: "is_sym".into(),
-        a_rows: 3, a_cols: 3, a_triplets: asym_3,
-        b_rows: 0, b_cols: 0, b_triplets: vec![], alpha: 0.0,
+        a_rows: 3,
+        a_cols: 3,
+        a_triplets: asym_3,
+        b_rows: 0,
+        b_cols: 0,
+        b_triplets: vec![],
+        alpha: 0.0,
     });
 
     OracleQuery { points }
@@ -332,7 +375,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for sparse_basic oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for sparse_basic oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -383,7 +428,10 @@ fn diff_sparse_basic_ops() {
                 if d.len() != expected.len() {
                     f64::INFINITY
                 } else {
-                    d.iter().zip(expected.iter()).map(|(a, b)| (a - b).abs()).fold(0.0_f64, f64::max)
+                    d.iter()
+                        .zip(expected.iter())
+                        .map(|(a, b)| (a - b).abs())
+                        .fold(0.0_f64, f64::max)
                 }
             }
             "scale" => {
@@ -395,7 +443,10 @@ fn diff_sparse_basic_ops() {
                 if d.len() != expected.len() {
                     f64::INFINITY
                 } else {
-                    d.iter().zip(expected.iter()).map(|(a, b)| (a - b).abs()).fold(0.0_f64, f64::max)
+                    d.iter()
+                        .zip(expected.iter())
+                        .map(|(a, b)| (a - b).abs())
+                        .fold(0.0_f64, f64::max)
                 }
             }
             "transpose" => {
@@ -407,7 +458,10 @@ fn diff_sparse_basic_ops() {
                 if d.len() != expected.len() {
                     f64::INFINITY
                 } else {
-                    d.iter().zip(expected.iter()).map(|(a, b)| (a - b).abs()).fold(0.0_f64, f64::max)
+                    d.iter()
+                        .zip(expected.iter())
+                        .map(|(a, b)| (a - b).abs())
+                        .fold(0.0_f64, f64::max)
                 }
             }
             "nnz" => {
@@ -415,7 +469,11 @@ fn diff_sparse_basic_ops() {
                     continue;
                 };
                 let actual = sparse_nnz(&csr_a);
-                if actual == expected { 0.0 } else { (actual as i64 - expected as i64).abs() as f64 }
+                if actual == expected {
+                    0.0
+                } else {
+                    (actual as i64 - expected as i64).abs() as f64
+                }
             }
             "is_sym" => {
                 let Some(expected) = arm.is_sym else {

@@ -265,7 +265,13 @@ print(json.dumps({"points": points}))
     Some(serde_json::from_str(&stdout).expect("parse submatrix oracle JSON"))
 }
 
-fn csr_to_dense(rows: usize, cols: usize, indptr: &[usize], indices: &[usize], data: &[f64]) -> Vec<f64> {
+fn csr_to_dense(
+    rows: usize,
+    cols: usize,
+    indptr: &[usize],
+    indices: &[usize],
+    data: &[f64],
+) -> Vec<f64> {
     let mut out = vec![0.0; rows * cols];
     for i in 0..rows {
         for idx in indptr[i]..indptr[i + 1] {
@@ -296,8 +302,7 @@ fn diff_sparse_submatrix() {
         let Some(arm) = pmap.get(&case.case_id) else {
             continue;
         };
-        let (Some(eor), Some(eoc), Some(edense)) =
-            (arm.out_rows, arm.out_cols, arm.dense.as_ref())
+        let (Some(eor), Some(eoc), Some(edense)) = (arm.out_rows, arm.out_cols, arm.dense.as_ref())
         else {
             continue;
         };
@@ -309,7 +314,8 @@ fn diff_sparse_submatrix() {
             rs.push(r);
             cs.push(c);
         }
-        let Ok(coo) = CooMatrix::from_triplets(Shape2D::new(case.rows, case.cols), data, rs, cs, true)
+        let Ok(coo) =
+            CooMatrix::from_triplets(Shape2D::new(case.rows, case.cols), data, rs, cs, true)
         else {
             continue;
         };
@@ -319,17 +325,24 @@ fn diff_sparse_submatrix() {
         let sub = sparse_submatrix(&csr, case.r_start, case.r_end, case.c_start, case.c_end);
         let actual_rows = sub.shape().rows;
         let actual_cols = sub.shape().cols;
-        let actual_dense = csr_to_dense(actual_rows, actual_cols, sub.indptr(), sub.indices(), sub.data());
+        let actual_dense = csr_to_dense(
+            actual_rows,
+            actual_cols,
+            sub.indptr(),
+            sub.indices(),
+            sub.data(),
+        );
 
-        let abs_d = if actual_rows != eor || actual_cols != eoc || actual_dense.len() != edense.len() {
-            f64::INFINITY
-        } else {
-            actual_dense
-                .iter()
-                .zip(edense.iter())
-                .map(|(a, b)| (a - b).abs())
-                .fold(0.0_f64, f64::max)
-        };
+        let abs_d =
+            if actual_rows != eor || actual_cols != eoc || actual_dense.len() != edense.len() {
+                f64::INFINITY
+            } else {
+                actual_dense
+                    .iter()
+                    .zip(edense.iter())
+                    .map(|(a, b)| (a - b).abs())
+                    .fold(0.0_f64, f64::max)
+            };
         max_overall = max_overall.max(abs_d);
         diffs.push(CaseDiff {
             case_id: case.case_id.clone(),

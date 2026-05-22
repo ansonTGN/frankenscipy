@@ -112,21 +112,14 @@ fn generate_query() -> OracleQuery {
         b_ub: vec![-2.0, -1.0],
         a_eq: vec![vec![1.0, 1.0, 1.0]],
         b_eq: vec![6.0],
-        bounds: vec![
-            (Some(0.0), None),
-            (Some(0.0), None),
-            (Some(0.0), None),
-        ],
+        bounds: vec![(Some(0.0), None), (Some(0.0), None), (Some(0.0), None)],
     });
 
     // 3. Diet problem (4 var): min nutritional cost.
     points.push(PointCase {
         case_id: "diet_4var".into(),
         c: vec![10.0, 15.0, 8.0, 12.0],
-        a_ub: vec![
-            vec![-2.0, -1.0, -3.0, -1.0],
-            vec![-1.0, -3.0, -1.0, -2.0],
-        ],
+        a_ub: vec![vec![-2.0, -1.0, -3.0, -1.0], vec![-1.0, -3.0, -1.0, -2.0]],
         b_ub: vec![-10.0, -8.0],
         a_eq: vec![],
         b_eq: vec![],
@@ -172,11 +165,7 @@ fn generate_query() -> OracleQuery {
         b_ub: vec![],
         a_eq: vec![vec![1.0, 1.0, 1.0], vec![1.0, -1.0, 0.0]],
         b_eq: vec![10.0, 2.0],
-        bounds: vec![
-            (Some(0.0), None),
-            (Some(0.0), None),
-            (Some(0.0), None),
-        ],
+        bounds: vec![(Some(0.0), None), (Some(0.0), None), (Some(0.0), None)],
     });
 
     OracleQuery { points }

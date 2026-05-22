@@ -95,11 +95,7 @@ fn fsci_eval(func: &str, n: u32) -> Option<f64> {
         "euler" => euler(n),
         _ => return None,
     };
-    if v.is_finite() {
-        Some(v)
-    } else {
-        None
-    }
+    if v.is_finite() { Some(v) } else { None }
 }
 
 fn generate_query() -> OracleQuery {
@@ -186,9 +182,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "bernoulli/euler oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping bernoulli/euler oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping bernoulli/euler oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -229,18 +223,19 @@ fn diff_special_bernoulli_euler() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(&case.func, case.n) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                max_overall = max_overall.max(abs_diff);
-                let scale = scipy_v.abs().max(1.0);
-                let pass = abs_diff <= ABS_TOL || abs_diff <= REL_TOL * scale;
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    pass,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(&case.func, case.n)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            max_overall = max_overall.max(abs_diff);
+            let scale = scipy_v.abs().max(1.0);
+            let pass = abs_diff <= ABS_TOL || abs_diff <= REL_TOL * scale;
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                pass,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

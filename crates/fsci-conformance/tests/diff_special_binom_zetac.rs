@@ -182,7 +182,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for binom_zetac oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for binom_zetac oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -256,10 +258,7 @@ fn diff_special_binom_zetac() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} rel_diff={}",
-                d.op, d.case_id, d.rel_diff
-            );
+            eprintln!("{} mismatch: {} rel_diff={}", d.op, d.case_id, d.rel_diff);
         }
     }
 

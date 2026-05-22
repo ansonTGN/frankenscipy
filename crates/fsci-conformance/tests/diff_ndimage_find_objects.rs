@@ -80,8 +80,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize find_objects diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize find_objects diff log");
     fs::write(path, json).expect("write find_objects diff log");
 }
 
@@ -194,7 +193,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open find_objects oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open find_objects oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -202,9 +204,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "find_objects oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping find_objects oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping find_objects oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -217,9 +217,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "find_objects oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping find_objects oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping find_objects oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

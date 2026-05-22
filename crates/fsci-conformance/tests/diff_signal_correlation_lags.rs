@@ -245,8 +245,5 @@ fn diff_signal_correlation_lags() {
 
     emit_log(&log);
 
-    assert!(
-        all_pass,
-        "scipy.signal.correlation_lags conformance failed"
-    );
+    assert!(all_pass, "scipy.signal.correlation_lags conformance failed");
 }

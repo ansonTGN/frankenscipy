@@ -185,9 +185,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for rank_distances oracle: {e}"
             );
-            eprintln!(
-                "skipping rank_distances oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping rank_distances oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -203,9 +201,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "rank_distances oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping rank_distances oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping rank_distances oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -218,9 +214,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "rank_distances oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping rank_distances oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping rank_distances oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

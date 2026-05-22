@@ -115,8 +115,8 @@ fn generate_query() -> OracleQuery {
         (
             "near_normal_n20",
             vec![
-                -2.1, -1.6, -1.2, -0.9, -0.7, -0.4, -0.2, 0.0, 0.1, 0.3, 0.4, 0.6, 0.8, 1.0,
-                1.1, 1.3, 1.5, 1.8, 2.0, 2.4,
+                -2.1, -1.6, -1.2, -0.9, -0.7, -0.4, -0.2, 0.0, 0.1, 0.3, 0.4, 0.6, 0.8, 1.0, 1.1,
+                1.3, 1.5, 1.8, 2.0, 2.4,
             ],
         ),
         // Near-normal, larger n=40
@@ -218,9 +218,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for normality-battery oracle: {e}"
             );
-            eprintln!(
-                "skipping normality-battery oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping normality-battery oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -236,9 +234,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "normality-battery oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping normality-battery oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping normality-battery oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -251,9 +247,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "normality-battery oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping normality-battery oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping normality-battery oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

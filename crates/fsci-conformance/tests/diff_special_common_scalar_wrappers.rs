@@ -101,35 +101,90 @@ fn generate_query() -> OracleQuery {
     let mut points = Vec::new();
     // dawsn — real
     for &x in &[-3.0_f64, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 5.0] {
-        points.push(Case { case_id: format!("dawsn_x{x}"), op: "dawsn".into(), x, a: 0.0, s: 0.0 });
+        points.push(Case {
+            case_id: format!("dawsn_x{x}"),
+            op: "dawsn".into(),
+            x,
+            a: 0.0,
+            s: 0.0,
+        });
     }
     // digamma — real, away from poles (negative integers)
     for &x in &[0.5_f64, 1.0, 1.5, 2.0, 3.0, 5.0, 10.0] {
-        points.push(Case { case_id: format!("digamma_x{x}"), op: "digamma".into(), x, a: 0.0, s: 0.0 });
+        points.push(Case {
+            case_id: format!("digamma_x{x}"),
+            op: "digamma".into(),
+            x,
+            a: 0.0,
+            s: 0.0,
+        });
     }
     // expi — real
     for &x in &[-3.0_f64, -1.0, -0.5, 0.5, 1.0, 2.0, 5.0] {
-        points.push(Case { case_id: format!("expi_x{x}"), op: "expi".into(), x, a: 0.0, s: 0.0 });
+        points.push(Case {
+            case_id: format!("expi_x{x}"),
+            op: "expi".into(),
+            x,
+            a: 0.0,
+            s: 0.0,
+        });
     }
     // gammaincinv(a, y) — a > 0, y ∈ (0, 1)
-    for &(a, y) in &[(0.5_f64, 0.25), (1.0, 0.5), (2.0, 0.5), (3.0, 0.75), (5.0, 0.5), (10.0, 0.9)] {
-        points.push(Case { case_id: format!("ginv_a{a}_y{y}"), op: "ginv".into(), x: y, a, s: 0.0 });
+    for &(a, y) in &[
+        (0.5_f64, 0.25),
+        (1.0, 0.5),
+        (2.0, 0.5),
+        (3.0, 0.75),
+        (5.0, 0.5),
+        (10.0, 0.9),
+    ] {
+        points.push(Case {
+            case_id: format!("ginv_a{a}_y{y}"),
+            op: "ginv".into(),
+            x: y,
+            a,
+            s: 0.0,
+        });
     }
     // log_expit(x) = log(1/(1+exp(-x))) — real, anywhere
     for &x in &[-5.0_f64, -2.0, -1.0, 0.0, 1.0, 2.0, 5.0] {
-        points.push(Case { case_id: format!("log_expit_x{x}"), op: "log_expit".into(), x, a: 0.0, s: 0.0 });
+        points.push(Case {
+            case_id: format!("log_expit_x{x}"),
+            op: "log_expit".into(),
+            x,
+            a: 0.0,
+            s: 0.0,
+        });
     }
     // log_ndtr — real, anywhere
     for &x in &[-5.0_f64, -2.0, -1.0, 0.0, 1.0, 2.0, 5.0] {
-        points.push(Case { case_id: format!("log_ndtr_x{x}"), op: "log_ndtr".into(), x, a: 0.0, s: 0.0 });
+        points.push(Case {
+            case_id: format!("log_ndtr_x{x}"),
+            op: "log_ndtr".into(),
+            x,
+            a: 0.0,
+            s: 0.0,
+        });
     }
     // spence(x) — x ≥ 0
     for &x in &[0.0_f64, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 5.0] {
-        points.push(Case { case_id: format!("spence_x{x}"), op: "spence".into(), x, a: 0.0, s: 0.0 });
+        points.push(Case {
+            case_id: format!("spence_x{x}"),
+            op: "spence".into(),
+            x,
+            a: 0.0,
+            s: 0.0,
+        });
     }
     // zeta(s) — s > 1 (or s != 1)
     for &s in &[2.0_f64, 3.0, 4.0, 1.5, 5.0, 10.0] {
-        points.push(Case { case_id: format!("zeta_s{s}"), op: "zeta".into(), x: 0.0, a: 0.0, s });
+        points.push(Case {
+            case_id: format!("zeta_s{s}"),
+            op: "zeta".into(),
+            x: 0.0,
+            a: 0.0,
+            s,
+        });
     }
     OracleQuery { points }
 }
@@ -197,7 +252,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for scalar_wrap oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for scalar_wrap oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

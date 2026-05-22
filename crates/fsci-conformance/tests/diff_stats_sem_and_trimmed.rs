@@ -81,8 +81,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create sem_and_trimmed diff output dir");
+    fs::create_dir_all(output_dir()).expect("create sem_and_trimmed diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -104,8 +103,7 @@ fn generate_query() -> OracleQuery {
         (
             "spread_n15",
             vec![
-                -3.0, -1.5, 0.0, 0.5, 1.5, 2.5, 3.5, 5.0, 7.0, 9.0, 12.0, 16.0, 21.0, 27.0,
-                34.0,
+                -3.0, -1.5, 0.0, 0.5, 1.5, 2.5, 3.5, 5.0, 7.0, 9.0, 12.0, 16.0, 21.0, 27.0, 34.0,
             ],
         ),
         (
@@ -209,9 +207,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for sem_and_trimmed oracle: {e}"
             );
-            eprintln!(
-                "skipping sem_and_trimmed oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping sem_and_trimmed oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -227,9 +223,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "sem_and_trimmed oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping sem_and_trimmed oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping sem_and_trimmed oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -242,9 +236,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "sem_and_trimmed oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping sem_and_trimmed oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping sem_and_trimmed oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

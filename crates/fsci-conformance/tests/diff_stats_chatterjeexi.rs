@@ -177,14 +177,15 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for chatterjeexi oracle: {e}"
             );
-            eprintln!(
-                "skipping chatterjeexi oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping chatterjeexi oracle: python3 not available ({e})");
             return None;
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open chatterjeexi oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open chatterjeexi oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -192,9 +193,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "chatterjeexi oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping chatterjeexi oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping chatterjeexi oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -207,9 +206,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "chatterjeexi oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping chatterjeexi oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping chatterjeexi oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -239,27 +236,29 @@ fn diff_stats_chatterjeexi() {
         let result = chatterjeexi(&case.x, &case.y);
 
         if let Some(scipy_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - scipy_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= STAT_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - scipy_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= STAT_TOL,
+            });
+        }
         if let Some(scipy_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= PVALUE_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= PVALUE_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

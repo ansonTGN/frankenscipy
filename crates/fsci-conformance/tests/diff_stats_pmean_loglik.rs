@@ -105,7 +105,9 @@ fn generate_query() -> OracleQuery {
         ("compact_positive_n10", (1..=10).map(|i| i as f64).collect()),
         (
             "spread_positive_n12",
-            vec![0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0, 34.0, 55.0, 89.0],
+            vec![
+                0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0, 34.0, 55.0, 89.0,
+            ],
         ),
         (
             "near_one_n8",
@@ -127,12 +129,7 @@ fn generate_query() -> OracleQuery {
             0.0,
             1.0,
         ),
-        (
-            "shifted",
-            (1..=12).map(|i| i as f64).collect(),
-            6.5,
-            3.5,
-        ),
+        ("shifted", (1..=12).map(|i| i as f64).collect(), 6.5, 3.5),
         (
             "tight_sigma",
             vec![5.0, 4.95, 5.05, 5.0, 4.98, 5.02, 4.97, 5.03, 5.0, 4.99],
@@ -233,14 +230,15 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for pmean_loglik oracle: {e}"
             );
-            eprintln!(
-                "skipping pmean_loglik oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping pmean_loglik oracle: python3 not available ({e})");
             return None;
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open pmean_loglik oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open pmean_loglik oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -248,13 +246,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "pmean_loglik oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping pmean_loglik oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping pmean_loglik oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for pmean_loglik oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for pmean_loglik oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

@@ -21,7 +21,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_stats::{anderson_ksamp, AndersonKSampleVariant};
+use fsci_stats::{AndersonKSampleVariant, anderson_ksamp};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -78,8 +78,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create anderson_ksamp_variants diff output dir");
+    fs::create_dir_all(output_dir()).expect("create anderson_ksamp_variants diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -91,8 +90,8 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json = serde_json::to_string_pretty(log)
-        .expect("serialize anderson_ksamp_variants diff log");
+    let json =
+        serde_json::to_string_pretty(log).expect("serialize anderson_ksamp_variants diff log");
     fs::write(path, json).expect("write anderson_ksamp_variants diff log");
 }
 
@@ -189,8 +188,7 @@ for case in q["points"]:
         points.append({"case_id": cid, "statistic": None, "critical_values": None})
 print(json.dumps({"points": points}))
 "#;
-    let query_json =
-        serde_json::to_string(query).expect("serialize anderson_ksamp_variants query");
+    let query_json = serde_json::to_string(query).expect("serialize anderson_ksamp_variants query");
     let mut child = match Command::new("python3")
         .arg("-c")
         .arg(script)
@@ -205,9 +203,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for anderson_ksamp_variants oracle: {e}"
             );
-            eprintln!(
-                "skipping anderson_ksamp_variants oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping anderson_ksamp_variants oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -238,9 +234,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "anderson_ksamp_variants oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping anderson_ksamp_variants oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping anderson_ksamp_variants oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -278,16 +272,17 @@ fn diff_stats_anderson_ksamp_variants() {
         };
 
         if let Some(scipy_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - scipy_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= STAT_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - scipy_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= STAT_TOL,
+            });
+        }
         if let Some(scipy_crit) = &scipy_arm.critical_values {
             for (idx, &scipy_v) in scipy_crit.iter().enumerate() {
                 if idx >= result.critical_values.len() {

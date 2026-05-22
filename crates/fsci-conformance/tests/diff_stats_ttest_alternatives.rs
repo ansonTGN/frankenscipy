@@ -102,9 +102,21 @@ fn emit_log(log: &DiffLog) {
 fn generate_query() -> OracleQuery {
     // 3 one-sample fixtures: (data, popmean)
     let one_sample: Vec<(&str, Vec<f64>, f64)> = vec![
-        ("os_zero_mean", vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0], 5.5),
-        ("os_below_pop", vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0], 8.0),
-        ("os_above_pop", vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0], 3.0),
+        (
+            "os_zero_mean",
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0],
+            5.5,
+        ),
+        (
+            "os_below_pop",
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0],
+            8.0,
+        ),
+        (
+            "os_above_pop",
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0],
+            3.0,
+        ),
     ];
     // 3 two-sample fixtures: (a, b)
     let two_sample: Vec<(&str, Vec<f64>, Vec<f64>)> = vec![
@@ -224,13 +236,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "ttest_alts oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping ttest_alts oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping ttest_alts oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for ttest_alts oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for ttest_alts oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -277,16 +289,17 @@ fn diff_stats_ttest_alternatives() {
         ];
         for (arm_name, scipy_v, rust_v) in arms {
             if let Some(scipy_v) = scipy_v
-                && rust_v.is_finite() {
-                    let abs_diff = (rust_v - scipy_v).abs();
-                    max_overall = max_overall.max(abs_diff);
-                    diffs.push(CaseDiff {
-                        case_id: case.case_id.clone(),
-                        arm: arm_name.into(),
-                        abs_diff,
-                        pass: abs_diff <= ABS_TOL,
-                    });
-                }
+                && rust_v.is_finite()
+            {
+                let abs_diff = (rust_v - scipy_v).abs();
+                max_overall = max_overall.max(abs_diff);
+                diffs.push(CaseDiff {
+                    case_id: case.case_id.clone(),
+                    arm: arm_name.into(),
+                    abs_diff,
+                    pass: abs_diff <= ABS_TOL,
+                });
+            }
         }
     }
 

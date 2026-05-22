@@ -22,9 +22,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_signal::{
-    bilinear_zpk, buttap, lp2bp_zpk, lp2bs_zpk, lp2hp_zpk, lp2lp_zpk,
-};
+use fsci_signal::{bilinear_zpk, buttap, lp2bp_zpk, lp2bs_zpk, lp2hp_zpk, lp2lp_zpk};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -323,7 +321,9 @@ fn diff_signal_lp2_zpk_transforms() {
         ) else {
             continue;
         };
-        let Ok((z, p, k)) = buttap(case.n) else { continue };
+        let Ok((z, p, k)) = buttap(case.n) else {
+            continue;
+        };
         let res = match case.op.as_str() {
             "lplp" => lp2lp_zpk(&z, &p, k, case.wo),
             "lphp" => lp2hp_zpk(&z, &p, k, case.wo),
@@ -332,11 +332,11 @@ fn diff_signal_lp2_zpk_transforms() {
             "bilinear" => bilinear_zpk(&z, &p, k, case.fs),
             _ => continue,
         };
-        let Ok((zout, pout, kout)) = res else { continue };
-        let scipy_z: Vec<(f64, f64)> =
-            z_re.iter().copied().zip(z_im.iter().copied()).collect();
-        let scipy_p: Vec<(f64, f64)> =
-            p_re.iter().copied().zip(p_im.iter().copied()).collect();
+        let Ok((zout, pout, kout)) = res else {
+            continue;
+        };
+        let scipy_z: Vec<(f64, f64)> = z_re.iter().copied().zip(z_im.iter().copied()).collect();
+        let scipy_p: Vec<(f64, f64)> = p_re.iter().copied().zip(p_im.iter().copied()).collect();
         let max_d = root_set_max_diff(&zout, &scipy_z)
             .max(root_set_max_diff(&pout, &scipy_p))
             .max((kout - k_exp).abs());

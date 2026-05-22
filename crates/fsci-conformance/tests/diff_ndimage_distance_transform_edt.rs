@@ -310,10 +310,7 @@ fn diff_ndimage_distance_transform_edt() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "edt mismatch: {} abs_diff={}",
-                d.case_id, d.abs_diff
-            );
+            eprintln!("edt mismatch: {} abs_diff={}", d.case_id, d.abs_diff);
         }
     }
 

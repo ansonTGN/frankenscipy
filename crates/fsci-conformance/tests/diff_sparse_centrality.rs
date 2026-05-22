@@ -11,9 +11,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_sparse::{
-    CsrMatrix, Shape2D, betweenness_centrality, closeness_centrality,
-};
+use fsci_sparse::{CsrMatrix, Shape2D, betweenness_centrality, closeness_centrality};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -107,25 +105,15 @@ fn dense_to_csr(rows: usize, cols: usize, dense: &[f64]) -> CsrMatrix {
 
 fn generate_query() -> OracleQuery {
     let adj_6 = vec![
-        0.0, 1.0, 1.0, 0.0, 0.0, 0.0,
-        1.0, 0.0, 1.0, 1.0, 0.0, 0.0,
-        1.0, 1.0, 0.0, 0.0, 0.0, 0.0,
-        0.0, 1.0, 0.0, 0.0, 1.0, 1.0,
-        0.0, 0.0, 0.0, 1.0, 0.0, 1.0,
-        0.0, 0.0, 0.0, 1.0, 1.0, 0.0,
+        0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0,
     ];
     let adj_5_path = vec![
-        0.0, 1.0, 0.0, 0.0, 0.0,
-        1.0, 0.0, 1.0, 0.0, 0.0,
-        0.0, 1.0, 0.0, 1.0, 0.0,
-        0.0, 0.0, 1.0, 0.0, 1.0,
-        0.0, 0.0, 0.0, 1.0, 0.0,
+        0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0,
+        0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0,
     ];
     let adj_4_complete = vec![
-        0.0, 1.0, 1.0, 1.0,
-        1.0, 0.0, 1.0, 1.0,
-        1.0, 1.0, 0.0, 1.0,
-        1.0, 1.0, 1.0, 0.0,
+        0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0,
     ];
 
     OracleQuery {
@@ -228,7 +216,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for centrality oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for centrality oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -321,10 +311,7 @@ fn diff_sparse_centrality() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

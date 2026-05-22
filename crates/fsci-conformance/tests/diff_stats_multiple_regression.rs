@@ -78,8 +78,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create multiple_regression diff output dir");
+    fs::create_dir_all(output_dir()).expect("create multiple_regression diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -91,8 +90,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize multiple_regression diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize multiple_regression diff log");
     fs::write(path, json).expect("write multiple_regression diff log");
 }
 
@@ -123,12 +121,10 @@ fn generate_query() -> OracleQuery {
         // Two features with mild noise residuals
         (
             "two_feat_noisy",
-            (1..=15)
-                .map(|i| vec![i as f64, ((i % 3) as f64)])
-                .collect(),
+            (1..=15).map(|i| vec![i as f64, ((i % 3) as f64)]).collect(),
             vec![
-                4.05, 6.95, 9.05, 11.95, 14.05, 16.95, 19.05, 21.95, 24.05, 26.95, 29.05,
-                31.95, 34.05, 36.95, 39.05,
+                4.05, 6.95, 9.05, 11.95, 14.05, 16.95, 19.05, 21.95, 24.05, 26.95, 29.05, 31.95,
+                34.05, 36.95, 39.05,
             ],
         ),
     ];
@@ -202,8 +198,7 @@ for case in q["points"]:
     points.append(out)
 print(json.dumps({"points": points}))
 "#;
-    let query_json =
-        serde_json::to_string(query).expect("serialize multiple_regression query");
+    let query_json = serde_json::to_string(query).expect("serialize multiple_regression query");
     let mut child = match Command::new("python3")
         .arg("-c")
         .arg(script)
@@ -218,9 +213,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for multiple_regression oracle: {e}"
             );
-            eprintln!(
-                "skipping multiple_regression oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping multiple_regression oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -236,9 +229,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "multiple_regression oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping multiple_regression oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping multiple_regression oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -251,9 +242,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "multiple_regression oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping multiple_regression oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping multiple_regression oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -280,75 +269,78 @@ fn diff_stats_multiple_regression() {
 
     for case in &query.points {
         let scipy_arm = pmap.get(&case.case_id).expect("validated oracle");
-        let (rust_coeffs, rust_resid, rust_r2, rust_se) =
-            multiple_regression(&case.x, &case.y);
+        let (rust_coeffs, rust_resid, rust_r2, rust_se) = multiple_regression(&case.x, &case.y);
 
         // coeffs vector
         if let Some(scipy_coeffs) = &scipy_arm.coeffs
-            && rust_coeffs.len() == scipy_coeffs.len() {
-                let mut max_local = 0.0_f64;
-                for (a, b) in rust_coeffs.iter().zip(scipy_coeffs.iter()) {
-                    if a.is_finite() {
-                        max_local = max_local.max((a - b).abs());
-                    }
+            && rust_coeffs.len() == scipy_coeffs.len()
+        {
+            let mut max_local = 0.0_f64;
+            for (a, b) in rust_coeffs.iter().zip(scipy_coeffs.iter()) {
+                if a.is_finite() {
+                    max_local = max_local.max((a - b).abs());
                 }
-                max_overall = max_overall.max(max_local);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "coeffs_max".into(),
-                    abs_diff: max_local,
-                    pass: max_local <= ABS_TOL,
-                });
             }
+            max_overall = max_overall.max(max_local);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "coeffs_max".into(),
+                abs_diff: max_local,
+                pass: max_local <= ABS_TOL,
+            });
+        }
 
         // r_squared
         if let Some(scipy_r2) = scipy_arm.r_squared
-            && rust_r2.is_finite() {
-                let abs_diff = (rust_r2 - scipy_r2).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "r_squared".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_r2.is_finite()
+        {
+            let abs_diff = (rust_r2 - scipy_r2).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "r_squared".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
 
         // residuals (vector)
         if let Some(scipy_resid) = &scipy_arm.residuals
-            && rust_resid.len() == scipy_resid.len() {
-                let mut max_local = 0.0_f64;
-                for (a, b) in rust_resid.iter().zip(scipy_resid.iter()) {
-                    if a.is_finite() {
-                        max_local = max_local.max((a - b).abs());
-                    }
+            && rust_resid.len() == scipy_resid.len()
+        {
+            let mut max_local = 0.0_f64;
+            for (a, b) in rust_resid.iter().zip(scipy_resid.iter()) {
+                if a.is_finite() {
+                    max_local = max_local.max((a - b).abs());
                 }
-                max_overall = max_overall.max(max_local);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "residuals_max".into(),
-                    abs_diff: max_local,
-                    pass: max_local <= ABS_TOL,
-                });
             }
+            max_overall = max_overall.max(max_local);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "residuals_max".into(),
+                abs_diff: max_local,
+                pass: max_local <= ABS_TOL,
+            });
+        }
 
         // std_errors (vector)
         if let Some(scipy_se) = &scipy_arm.std_errors
-            && rust_se.len() == scipy_se.len() {
-                let mut max_local = 0.0_f64;
-                for (a, b) in rust_se.iter().zip(scipy_se.iter()) {
-                    if a.is_finite() {
-                        max_local = max_local.max((a - b).abs());
-                    }
+            && rust_se.len() == scipy_se.len()
+        {
+            let mut max_local = 0.0_f64;
+            for (a, b) in rust_se.iter().zip(scipy_se.iter()) {
+                if a.is_finite() {
+                    max_local = max_local.max((a - b).abs());
                 }
-                max_overall = max_overall.max(max_local);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "std_errors_max".into(),
-                    abs_diff: max_local,
-                    pass: max_local <= ABS_TOL,
-                });
             }
+            max_overall = max_overall.max(max_local);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "std_errors_max".into(),
+                abs_diff: max_local,
+                pass: max_local <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

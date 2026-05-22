@@ -19,9 +19,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_linalg::{
-    coshm, cosm, expm, logm, sinhm, sinm, sqrtm, tanhm, tanm, DecompOptions,
-};
+use fsci_linalg::{DecompOptions, coshm, cosm, expm, logm, sinhm, sinm, sqrtm, tanhm, tanm};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-013";
@@ -77,8 +75,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create matrix-functions diff output dir");
+    fs::create_dir_all(output_dir()).expect("create matrix-functions diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -248,9 +245,7 @@ print(json.dumps({"points": points}, allow_nan=False))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for matrix-functions oracle: {e}"
             );
-            eprintln!(
-                "skipping matrix-functions oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping matrix-functions oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -266,9 +261,7 @@ print(json.dumps({"points": points}, allow_nan=False))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "matrix-functions oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping matrix-functions oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping matrix-functions oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -281,9 +274,7 @@ print(json.dumps({"points": points}, allow_nan=False))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "matrix-functions oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping matrix-functions oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping matrix-functions oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

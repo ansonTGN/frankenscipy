@@ -84,7 +84,13 @@ fn emit_log(log: &DiffLog) {
 }
 
 fn generate_query() -> OracleQuery {
-    let cases: &[(&str, Vec<Vec<f64>>, Vec<Vec<f64>>, Vec<Vec<f64>>, Vec<Vec<f64>>)] = &[
+    let cases: &[(
+        &str,
+        Vec<Vec<f64>>,
+        Vec<Vec<f64>>,
+        Vec<Vec<f64>>,
+        Vec<Vec<f64>>,
+    )] = &[
         (
             "2x2_diag_stable",
             vec![vec![0.5, 0.0], vec![0.0, 0.3]],
@@ -232,13 +238,9 @@ fn diff_linalg_solve_discrete_are() {
         let Some(scipy_v) = scipy_arm.values.as_ref() else {
             continue;
         };
-        let Ok(x) = solve_discrete_are(
-            &case.a,
-            &case.b,
-            &case.q,
-            &case.r,
-            DecompOptions::default(),
-        ) else {
+        let Ok(x) =
+            solve_discrete_are(&case.a, &case.b, &case.q, &case.r, DecompOptions::default())
+        else {
             continue;
         };
         let fsci_v: Vec<f64> = x.into_iter().flatten().collect();

@@ -95,7 +95,9 @@ fn emit_log(log: &DiffLog) {
 fn generate_query() -> OracleQuery {
     let mut points = Vec::new();
     // wofz real argument samples
-    let wofz_xs: &[f64] = &[-3.0, -2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0];
+    let wofz_xs: &[f64] = &[
+        -3.0, -2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0,
+    ];
     for (i, x) in wofz_xs.iter().enumerate() {
         points.push(PointCase {
             case_id: format!("wofz_real_{i:02}_x{x}"),
@@ -181,9 +183,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "wofz_wrightomega oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping wofz_wrightomega oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping wofz_wrightomega oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -196,9 +196,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "wofz_wrightomega oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping wofz_wrightomega oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping wofz_wrightomega oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

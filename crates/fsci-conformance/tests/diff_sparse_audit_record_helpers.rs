@@ -93,7 +93,12 @@ fn diff_sparse_audit_record_helpers() {
     // Multiple calls accumulate
     let before = ledger_len(&ledger);
     for i in 0..5 {
-        record_fail_closed(&ledger, format!("input-{i}").as_bytes(), "loop_reason", "rejected");
+        record_fail_closed(
+            &ledger,
+            format!("input-{i}").as_bytes(),
+            "loop_reason",
+            "rejected",
+        );
     }
     let after = ledger_len(&ledger);
     diffs.push(CaseDiff {
@@ -107,7 +112,8 @@ fn diff_sparse_audit_record_helpers() {
 
     let log = DiffLog {
         test_id: "diff_sparse_audit_record_helpers".into(),
-        category: "fsci_sparse::{record_fail_closed, record_bounded_recovery} append behavior".into(),
+        category: "fsci_sparse::{record_fail_closed, record_bounded_recovery} append behavior"
+            .into(),
         case_count: diffs.len(),
         pass: all_pass,
         timestamp_ms: timestamp_ms(),

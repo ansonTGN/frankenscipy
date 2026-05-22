@@ -102,10 +102,7 @@ fn emit_log(log: &DiffLog) {
 
 fn generate_query() -> OracleQuery {
     let datasets: Vec<(&str, Vec<f64>)> = vec![
-        (
-            "compact",
-            (1..=20).map(|i| i as f64).collect(),
-        ),
+        ("compact", (1..=20).map(|i| i as f64).collect()),
         (
             "spread",
             vec![
@@ -238,9 +235,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "trim_mode oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping trim_mode oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping trim_mode oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -326,17 +321,18 @@ fn diff_stats_trim_mode() {
             "mode" => {
                 let r = mode_full(&case.data);
                 if let Some(scipy_v) = scipy_arm.mode_value
-                    && r.mode.is_finite() {
-                        let abs_diff = (r.mode - scipy_v).abs();
-                        max_overall = max_overall.max(abs_diff);
-                        diffs.push(CaseDiff {
-                            case_id: case.case_id.clone(),
-                            func: case.func.clone(),
-                            arm: "mode_value".into(),
-                            abs_diff,
-                            pass: abs_diff <= ABS_TOL,
-                        });
-                    }
+                    && r.mode.is_finite()
+                {
+                    let abs_diff = (r.mode - scipy_v).abs();
+                    max_overall = max_overall.max(abs_diff);
+                    diffs.push(CaseDiff {
+                        case_id: case.case_id.clone(),
+                        func: case.func.clone(),
+                        arm: "mode_value".into(),
+                        abs_diff,
+                        pass: abs_diff <= ABS_TOL,
+                    });
+                }
                 if let Some(scipy_c) = scipy_arm.mode_count {
                     let abs_diff = (r.count as i64 - scipy_c).unsigned_abs() as f64;
                     max_overall = max_overall.max(abs_diff);

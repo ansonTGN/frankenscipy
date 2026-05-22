@@ -98,10 +98,7 @@ fn emit_log(log: &DiffLog) {
 
 fn generate_query() -> OracleQuery {
     let datasets: Vec<(&str, Vec<f64>)> = vec![
-        (
-            "compact",
-            (1..=10).map(|i| i as f64).collect(),
-        ),
+        ("compact", (1..=10).map(|i| i as f64).collect()),
         (
             "spread",
             vec![
@@ -110,9 +107,7 @@ fn generate_query() -> OracleQuery {
         ),
         (
             "ties",
-            vec![
-                1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0,
-            ],
+            vec![1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0],
         ),
     ];
 
@@ -210,14 +205,15 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for hd_expectile oracle: {e}"
             );
-            eprintln!(
-                "skipping hd_expectile oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping hd_expectile oracle: python3 not available ({e})");
             return None;
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open hd_expectile oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open hd_expectile oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -225,9 +221,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "hd_expectile oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping hd_expectile oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping hd_expectile oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -240,9 +234,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "hd_expectile oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping hd_expectile oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping hd_expectile oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

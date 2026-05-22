@@ -103,9 +103,7 @@ fn emit_log(log: &DiffLog) {
 
 fn generate_query() -> OracleQuery {
     let s_2d_4: Vec<f64> = vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
-    let s_2d_5: Vec<f64> = vec![
-        0.05, 0.15, 0.25, 0.35, 0.55, 0.45, 0.75, 0.65, 0.95, 0.85,
-    ];
+    let s_2d_5: Vec<f64> = vec![0.05, 0.15, 0.25, 0.35, 0.55, 0.45, 0.75, 0.65, 0.95, 0.85];
     let s_3d_4: Vec<f64> = vec![
         0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.15, 0.25, 0.35,
     ];
@@ -231,7 +229,9 @@ print(json.dumps({"update": update_out, "geom": geom_out}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for qmc upd/geom oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for qmc upd/geom oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -324,8 +324,9 @@ fn diff_stats_qmc_update_geom_disc() {
 
     let log = DiffLog {
         test_id: "diff_stats_qmc_update_geom_disc".into(),
-        category: "fsci_stats qmc update_centered_discrepancy + geometric_discrepancy vs scipy.stats.qmc"
-            .into(),
+        category:
+            "fsci_stats qmc update_centered_discrepancy + geometric_discrepancy vs scipy.stats.qmc"
+                .into(),
         case_count: diffs.len(),
         max_abs_diff: max_overall,
         pass: all_pass,

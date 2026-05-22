@@ -101,7 +101,10 @@ fn vec_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]
@@ -114,17 +117,26 @@ fn diff_sparse_conv_with_mode() {
     let probes: &[(&str, usize, usize, Vec<(usize, usize, f64)>)] = &[
         (
             "small_3x3",
-            3, 3,
-            vec![(0, 0, 1.0), (0, 2, 2.0), (1, 1, 3.0), (2, 0, 4.0), (2, 2, 5.0)],
+            3,
+            3,
+            vec![
+                (0, 0, 1.0),
+                (0, 2, 2.0),
+                (1, 1, 3.0),
+                (2, 0, 4.0),
+                (2, 2, 5.0),
+            ],
         ),
         (
             "tall_5x3",
-            5, 3,
+            5,
+            3,
             vec![(0, 0, 1.0), (1, 2, 2.0), (3, 1, 3.0), (4, 0, 4.0)],
         ),
         (
             "wide_3x5",
-            3, 5,
+            3,
+            5,
             vec![(0, 4, 1.0), (1, 2, 2.0), (2, 0, 3.0), (2, 3, 4.0)],
         ),
     ];
@@ -146,16 +158,30 @@ fn diff_sparse_conv_with_mode() {
         let plain_dense_csr = csr_to_dense(&plain_csr);
 
         // coo_to_csr_with_mode under Strict
-        if let Ok((mode_csr, _log)) = coo_to_csr_with_mode(&coo, RuntimeMode::Strict, "test-c2c-strict") {
+        if let Ok((mode_csr, _log)) =
+            coo_to_csr_with_mode(&coo, RuntimeMode::Strict, "test-c2c-strict")
+        {
             let d = vec_diff(&csr_to_dense(&mode_csr), &plain_dense_csr);
             max_overall = max_overall.max(d);
-            diffs.push(CaseDiff { case_id: format!("coo2csr_strict_{label}"), op: "coo_to_csr".into(), abs_diff: d, pass: d <= ABS_TOL });
+            diffs.push(CaseDiff {
+                case_id: format!("coo2csr_strict_{label}"),
+                op: "coo_to_csr".into(),
+                abs_diff: d,
+                pass: d <= ABS_TOL,
+            });
         }
         // coo_to_csr_with_mode under Hardened
-        if let Ok((mode_csr, _log)) = coo_to_csr_with_mode(&coo, RuntimeMode::Hardened, "test-c2c-hard") {
+        if let Ok((mode_csr, _log)) =
+            coo_to_csr_with_mode(&coo, RuntimeMode::Hardened, "test-c2c-hard")
+        {
             let d = vec_diff(&csr_to_dense(&mode_csr), &plain_dense_csr);
             max_overall = max_overall.max(d);
-            diffs.push(CaseDiff { case_id: format!("coo2csr_hard_{label}"), op: "coo_to_csr".into(), abs_diff: d, pass: d <= ABS_TOL });
+            diffs.push(CaseDiff {
+                case_id: format!("coo2csr_hard_{label}"),
+                op: "coo_to_csr".into(),
+                abs_diff: d,
+                pass: d <= ABS_TOL,
+            });
         }
 
         // csr_to_csc_with_mode
@@ -166,7 +192,12 @@ fn diff_sparse_conv_with_mode() {
         {
             let d = vec_diff(&csc_to_dense(&mode_csc), &plain_dense_csc);
             max_overall = max_overall.max(d);
-            diffs.push(CaseDiff { case_id: format!("csr2csc_strict_{label}"), op: "csr_to_csc".into(), abs_diff: d, pass: d <= ABS_TOL });
+            diffs.push(CaseDiff {
+                case_id: format!("csr2csc_strict_{label}"),
+                op: "csr_to_csc".into(),
+                abs_diff: d,
+                pass: d <= ABS_TOL,
+            });
         }
         // csr_to_csc_with_mode_and_audit (Strict — never emits, output identical)
         if let Ok((mode_csc, _log)) = csr_to_csc_with_mode_and_audit(
@@ -193,7 +224,12 @@ fn diff_sparse_conv_with_mode() {
         {
             let d = vec_diff(&csr_to_dense(&mode_csr2), &plain_dense_csr2);
             max_overall = max_overall.max(d);
-            diffs.push(CaseDiff { case_id: format!("csc2csr_strict_{label}"), op: "csc_to_csr".into(), abs_diff: d, pass: d <= ABS_TOL });
+            diffs.push(CaseDiff {
+                case_id: format!("csc2csr_strict_{label}"),
+                op: "csc_to_csr".into(),
+                abs_diff: d,
+                pass: d <= ABS_TOL,
+            });
         }
     }
 
@@ -201,7 +237,8 @@ fn diff_sparse_conv_with_mode() {
 
     let log = DiffLog {
         test_id: "diff_sparse_conv_with_mode".into(),
-        category: "fsci_sparse with-mode conversion variants equivalent to plain to_csr/to_csc".into(),
+        category: "fsci_sparse with-mode conversion variants equivalent to plain to_csr/to_csc"
+            .into(),
         case_count: diffs.len(),
         max_abs_diff: max_overall,
         pass: all_pass,

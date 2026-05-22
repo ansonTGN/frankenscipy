@@ -98,7 +98,10 @@ fn generate_query() -> OracleQuery {
             "spread",
             vec![-3.0, -1.5, 0.0, 1.5, 3.0, 5.0, 8.0, 12.0, 18.0, 25.0],
         ),
-        ("ties", vec![1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0]),
+        (
+            "ties",
+            vec![1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0],
+        ),
     ];
 
     let mut points = Vec::new();
@@ -182,14 +185,15 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for misc_summary oracle: {e}"
             );
-            eprintln!(
-                "skipping misc_summary oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping misc_summary oracle: python3 not available ({e})");
             return None;
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open misc_summary oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open misc_summary oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -197,9 +201,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "misc_summary oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping misc_summary oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping misc_summary oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -298,8 +300,7 @@ fn diff_stats_misc_summary() {
 
     let log = DiffLog {
         test_id: "diff_stats_misc_summary".into(),
-        category: "coefficient_of_variation + excess_kurtosis + expected_freq_uniform"
-            .into(),
+        category: "coefficient_of_variation + excess_kurtosis + expected_freq_uniform".into(),
         case_count: diffs.len(),
         max_abs_diff: max_overall,
         pass: all_pass,

@@ -113,19 +113,13 @@ fn generate_query() -> OracleQuery {
         ),
         (
             "2x4_rect",
-            vec![
-                vec![1.0, -2.0, 3.0, -4.0],
-                vec![-5.0, 6.0, -7.0, 8.0],
-            ],
+            vec![vec![1.0, -2.0, 3.0, -4.0], vec![-5.0, 6.0, -7.0, 8.0]],
         ),
         (
             "3x2_rect_signs",
             vec![vec![1.0, -2.0], vec![-3.0, 4.0], vec![5.0, -6.0]],
         ),
-        (
-            "2x2_simple",
-            vec![vec![3.0, 4.0], vec![0.0, 5.0]],
-        ),
+        ("2x2_simple", vec![vec![3.0, 4.0], vec![0.0, 5.0]]),
     ];
     let kinds = ["fro", "spectral", "one", "inf"];
 
@@ -242,7 +236,9 @@ fn diff_linalg_norm() {
 
     for case in &query.points {
         let scipy_arm = pmap.get(&case.case_id).expect("validated oracle");
-        let Some(scipy_v) = scipy_arm.value else { continue };
+        let Some(scipy_v) = scipy_arm.value else {
+            continue;
+        };
         let Ok(fsci_v) = norm(&case.a, parse_kind(&case.kind), DecompOptions::default()) else {
             continue;
         };

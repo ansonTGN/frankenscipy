@@ -107,8 +107,7 @@ fn metamorphic_cluster_kmedoids() {
 
     let (b2, g2) = make_blob(&[(0.0, 0.0), (10.0, 10.0)], 8);
     let (b3, g3) = make_blob(&[(0.0, 0.0), (10.0, 0.0), (5.0, 8.66)], 7);
-    let (b4, g4) =
-        make_blob(&[(0.0, 0.0), (12.0, 0.0), (0.0, 12.0), (12.0, 12.0)], 6);
+    let (b4, g4) = make_blob(&[(0.0, 0.0), (12.0, 0.0), (0.0, 12.0), (12.0, 12.0)], 6);
     let single: Vec<Vec<f64>> = (0..15)
         .map(|i| vec![(i as f64) * 0.05, (i as f64) * 0.04])
         .collect();
@@ -145,7 +144,10 @@ fn metamorphic_cluster_kmedoids() {
         cases.push(CaseLog {
             case_id: name.to_string(),
             invariant: "centroids_shape_k_by_d".into(),
-            detail: format!("centroids.len()={}, expected_k={k}, d={d}", r.centroids.len()),
+            detail: format!(
+                "centroids.len()={}, expected_k={k}, d={d}",
+                r.centroids.len()
+            ),
             pass: shape_ok,
         });
 
@@ -230,9 +232,7 @@ fn metamorphic_cluster_kmedoids() {
             cases.push(CaseLog {
                 case_id: name.to_string(),
                 invariant: "well_separated_recovery".into(),
-                detail: format!(
-                    "within_same_label={within_ok}, cross_diff_label={cross_ok}"
-                ),
+                detail: format!("within_same_label={within_ok}, cross_diff_label={cross_ok}"),
                 pass: within_ok && cross_ok,
             });
         }

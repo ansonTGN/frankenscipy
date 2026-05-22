@@ -89,11 +89,17 @@ fn generate_query() -> OracleQuery {
     let mut points = Vec::new();
     // gammainc / gammaincc: a in (0, large], x in [0, large]
     let ginc: &[(f64, f64)] = &[
-        (0.5, 0.3), (0.5, 1.0), (0.5, 5.0),
-        (1.0, 0.5), (1.0, 2.0),
-        (2.0, 1.0), (2.0, 3.5),
-        (5.0, 1.0), (5.0, 7.0),
-        (10.0, 5.0), (10.0, 15.0),
+        (0.5, 0.3),
+        (0.5, 1.0),
+        (0.5, 5.0),
+        (1.0, 0.5),
+        (1.0, 2.0),
+        (2.0, 1.0),
+        (2.0, 3.5),
+        (5.0, 1.0),
+        (5.0, 7.0),
+        (10.0, 5.0),
+        (10.0, 15.0),
     ];
     for &(a, x) in ginc {
         points.push(Case {
@@ -215,7 +221,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for conv_scalar oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for conv_scalar oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

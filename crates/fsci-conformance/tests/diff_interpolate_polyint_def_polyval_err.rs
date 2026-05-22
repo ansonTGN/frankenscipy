@@ -98,12 +98,8 @@ fn generate_query() -> OracleQuery {
     let p3 = vec![1.0_f64, -2.0, 3.0]; // x^2 - 2x + 3
     let p4 = vec![0.5_f64, -1.0, 0.25, 2.0]; // 0.5x^3 - x^2 + 0.25x + 2
 
-    let polys: Vec<(&str, Vec<f64>)> = vec![
-        ("x", p1),
-        ("xsq", p2),
-        ("x2_m2x_3", p3),
-        ("cubic_4t", p4),
-    ];
+    let polys: Vec<(&str, Vec<f64>)> =
+        vec![("x", p1), ("xsq", p2), ("x2_m2x_3", p3), ("cubic_4t", p4)];
 
     let mut points = Vec::new();
     let intervals = [(-1.0_f64, 1.0), (0.0, 2.0), (-2.0, 3.0)];
@@ -112,7 +108,9 @@ fn generate_query() -> OracleQuery {
     for (label, coeffs) in &polys {
         for &(a, b) in &intervals {
             points.push(Case {
-                case_id: format!("polyint_def_{label}_{a}_{b}").replace('.', "p").replace('-', "n"),
+                case_id: format!("polyint_def_{label}_{a}_{b}")
+                    .replace('.', "p")
+                    .replace('-', "n"),
                 op: "polyint_def".into(),
                 coeffs: coeffs.clone(),
                 a,
@@ -122,7 +120,9 @@ fn generate_query() -> OracleQuery {
         }
         for &x in &xs {
             points.push(Case {
-                case_id: format!("polyval_err_{label}_x{x}").replace('.', "p").replace('-', "n"),
+                case_id: format!("polyval_err_{label}_x{x}")
+                    .replace('.', "p")
+                    .replace('-', "n"),
                 op: "polyval_err".into(),
                 coeffs: coeffs.clone(),
                 a: 0.0,
@@ -196,7 +196,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for polyint_def oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for polyint_def oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

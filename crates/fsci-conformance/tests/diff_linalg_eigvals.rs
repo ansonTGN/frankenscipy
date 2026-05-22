@@ -250,7 +250,11 @@ fn diff_linalg_eigvals() {
             continue;
         }
         let mut pairs: Vec<(f64, f64)> = re.iter().zip(im.iter()).map(|(&r, &i)| (r, i)).collect();
-        pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap().then(a.1.partial_cmp(&b.1).unwrap()));
+        pairs.sort_by(|a, b| {
+            a.0.partial_cmp(&b.0)
+                .unwrap()
+                .then(a.1.partial_cmp(&b.1).unwrap())
+        });
         let mut flat = Vec::with_capacity(pairs.len() * 2);
         for &(r, i) in &pairs {
             flat.push(r);

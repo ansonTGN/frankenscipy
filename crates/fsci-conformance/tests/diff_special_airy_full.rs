@@ -222,8 +222,7 @@ fn diff_special_airy_full() {
         let Some(arm) = pmap.get(&case.case_id) else {
             continue;
         };
-        let (Some(eai), Some(eaip), Some(ebi), Some(ebip)) =
-            (arm.ai, arm.aip, arm.bi, arm.bip)
+        let (Some(eai), Some(eaip), Some(ebi), Some(ebip)) = (arm.ai, arm.aip, arm.bi, arm.bip)
         else {
             continue;
         };

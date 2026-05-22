@@ -69,8 +69,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &MetamorphicLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize bootstrap_ci metamorphic log");
+    let json = serde_json::to_string_pretty(log).expect("serialize bootstrap_ci metamorphic log");
     fs::write(path, json).expect("write bootstrap_ci metamorphic log");
 }
 
@@ -124,9 +123,7 @@ fn metamorphic_stats_bootstrap_ci() {
         cases.push(CaseLog {
             case_id: name.to_string(),
             invariant: "covers_empirical_mean".into(),
-            detail: format!(
-                "lo={lo}, mean={orig_mean}, hi={hi}, bracketed={bracket}"
-            ),
+            detail: format!("lo={lo}, mean={orig_mean}, hi={hi}, bracketed={bracket}"),
             pass: bracket,
         });
 

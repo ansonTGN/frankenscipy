@@ -90,24 +90,13 @@ fn emit_log(log: &DiffLog) {
 
 fn fsci_eval(m: i32, l: u32, x: f64) -> Option<f64> {
     let v = lpmv(m, l, x);
-    if v.is_finite() {
-        Some(v)
-    } else {
-        None
-    }
+    if v.is_finite() { Some(v) } else { None }
 }
 
 fn generate_query() -> OracleQuery {
     // (l, m) pairs covering low orders and m ≤ l (otherwise = 0).
     // Include m = 0 (regular Legendre P_l) and m > 0 (associated).
-    let pairs: [(u32, i32); 6] = [
-        (1, 0),
-        (1, 1),
-        (2, 0),
-        (2, 1),
-        (3, 2),
-        (5, 3),
-    ];
+    let pairs: [(u32, i32); 6] = [(1, 0), (1, 1), (2, 0), (2, 1), (3, 2), (5, 3)];
     // x ∈ [-1, 1] (canonical Legendre support).
     let xs = [
         -0.99_f64, -0.7, -0.3, -0.1, 0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 0.99,
@@ -220,15 +209,16 @@ fn diff_special_lpmv() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(case.m, case.l, case.x) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(case.m, case.l, case.x)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

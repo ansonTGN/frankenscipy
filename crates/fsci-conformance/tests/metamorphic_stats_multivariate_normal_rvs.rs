@@ -29,8 +29,8 @@ use fsci_stats::multivariate_normal_rvs;
 use serde::Serialize;
 
 const PACKET_ID: &str = "FSCI-P2C-007";
-const MEAN_TOL: f64 = 0.05;  // LLN convergence at n=50_000 for unit-scale cov
-const COV_TOL: f64 = 0.10;   // LLN convergence — sample cov is noisier than sample mean
+const MEAN_TOL: f64 = 0.05; // LLN convergence at n=50_000 for unit-scale cov
+const COV_TOL: f64 = 0.10; // LLN convergence — sample cov is noisier than sample mean
 
 #[derive(Debug, Clone, Serialize)]
 struct CaseLog {
@@ -167,8 +167,7 @@ fn metamorphic_stats_multivariate_normal_rvs() {
         let samples = multivariate_normal_rvs(mean, cov, n_samples, *seed);
 
         // Invariant 1: shape n_samples × d.
-        let shape_pass = samples.len() == n_samples
-            && samples.iter().all(|row| row.len() == d);
+        let shape_pass = samples.len() == n_samples && samples.iter().all(|row| row.len() == d);
         cases.push(CaseLog {
             case_id: name.to_string(),
             invariant: "shape_n_by_d".into(),
@@ -189,7 +188,11 @@ fn metamorphic_stats_multivariate_normal_rvs() {
             invariant: "deterministic_under_fixed_seed".into(),
             detail: format!(
                 "first_eq_second={determ_pass}; first[0][0]={}",
-                samples.first().and_then(|r| r.first()).copied().unwrap_or(f64::NAN)
+                samples
+                    .first()
+                    .and_then(|r| r.first())
+                    .copied()
+                    .unwrap_or(f64::NAN)
             ),
             pass: determ_pass,
         });

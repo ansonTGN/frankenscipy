@@ -167,7 +167,11 @@ fn diff_runtime_solver_portfolio_calibrator() {
     {
         let mut p = SolverPortfolio::new(RuntimeMode::Strict, 2);
         for (i, _) in (0..4).enumerate() {
-            p.record_evidence(mk_entry(SolverAction::DirectLU, 1e-3 * (i + 1) as f64, None));
+            p.record_evidence(mk_entry(
+                SolverAction::DirectLU,
+                1e-3 * (i + 1) as f64,
+                None,
+            ));
         }
         check(
             "record_capacity_2",
@@ -203,7 +207,11 @@ fn diff_runtime_solver_portfolio_calibrator() {
     {
         let mut p = SolverPortfolio::new(RuntimeMode::Strict, 8);
         for i in 0..3 {
-            p.record_evidence(mk_entry(SolverAction::DirectLU, 1e-3 * (i + 1) as f64, Some(1e-12)));
+            p.record_evidence(mk_entry(
+                SolverAction::DirectLU,
+                1e-3 * (i + 1) as f64,
+                Some(1e-12),
+            ));
         }
         let jsonl = p.serialize_jsonl();
         let n_lines = jsonl.lines().filter(|l| !l.is_empty()).count();
@@ -216,11 +224,7 @@ fn diff_runtime_solver_portfolio_calibrator() {
             .lines()
             .filter(|l| !l.is_empty())
             .all(|l| serde_json::from_str::<serde_json::Value>(l).is_ok());
-        check(
-            "jsonl_each_parseable",
-            all_ok,
-            String::new(),
-        );
+        check("jsonl_each_parseable", all_ok, String::new());
     }
 
     // === 9. ConformalCalibrator::set_violation_threshold recomputes count ===

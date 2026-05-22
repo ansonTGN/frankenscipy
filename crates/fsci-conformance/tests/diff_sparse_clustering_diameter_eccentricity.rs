@@ -11,9 +11,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_sparse::{
-    CsrMatrix, Shape2D, clustering_coefficient, eccentricity, graph_diameter,
-};
+use fsci_sparse::{CsrMatrix, Shape2D, clustering_coefficient, eccentricity, graph_diameter};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -108,25 +106,15 @@ fn dense_to_csr(rows: usize, cols: usize, dense: &[f64]) -> CsrMatrix {
 
 fn generate_query() -> OracleQuery {
     let adj_6 = vec![
-        0.0, 1.0, 1.0, 0.0, 0.0, 0.0,
-        1.0, 0.0, 1.0, 1.0, 0.0, 0.0,
-        1.0, 1.0, 0.0, 0.0, 0.0, 0.0,
-        0.0, 1.0, 0.0, 0.0, 1.0, 1.0,
-        0.0, 0.0, 0.0, 1.0, 0.0, 1.0,
-        0.0, 0.0, 0.0, 1.0, 1.0, 0.0,
+        0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0,
     ];
     let adj_5_cycle = vec![
-        0.0, 1.0, 0.0, 0.0, 1.0,
-        1.0, 0.0, 1.0, 0.0, 0.0,
-        0.0, 1.0, 0.0, 1.0, 0.0,
-        0.0, 0.0, 1.0, 0.0, 1.0,
-        1.0, 0.0, 0.0, 1.0, 0.0,
+        0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0,
+        0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0,
     ];
     let adj_4_complete = vec![
-        0.0, 1.0, 1.0, 1.0,
-        1.0, 0.0, 1.0, 1.0,
-        1.0, 1.0, 0.0, 1.0,
-        1.0, 1.0, 1.0, 0.0,
+        0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0,
     ];
 
     OracleQuery {
@@ -224,7 +212,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open graph_metrics oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open graph_metrics oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -232,9 +223,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "graph_metrics oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping graph_metrics oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping graph_metrics oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -247,9 +236,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "graph_metrics oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping graph_metrics oracle: networkx not available\n{stderr}"
-        );
+        eprintln!("skipping graph_metrics oracle: networkx not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -347,10 +334,7 @@ fn diff_sparse_clustering_diameter_eccentricity() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

@@ -316,9 +316,7 @@ fn diff_signal_magnitude_phase_response() {
             phase_units
                 .iter()
                 .zip(expected_units.iter())
-                .map(|(&(ac, as_), &(ec, es))| {
-                    ((ac - ec).powi(2) + (as_ - es).powi(2)).sqrt()
-                })
+                .map(|(&(ac, as_), &(ec, es))| ((ac - ec).powi(2) + (as_ - es).powi(2)).sqrt())
                 .fold(0.0_f64, f64::max)
         };
         max_overall = max_overall.max(p_diff);

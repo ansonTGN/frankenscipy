@@ -13,9 +13,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_sparse::{
-    CooMatrix, ExpmOptions, FormatConvertible, Shape2D, expm,
-};
+use fsci_sparse::{CooMatrix, ExpmOptions, FormatConvertible, Shape2D, expm};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-004";
@@ -264,7 +262,9 @@ fn diff_sparse_expm() {
         let Some(scipy_v) = scipy_arm.values.as_ref() else {
             continue;
         };
-        let Some(fsci_v) = fsci_eval(case) else { continue };
+        let Some(fsci_v) = fsci_eval(case) else {
+            continue;
+        };
         if fsci_v.len() != scipy_v.len() {
             diffs.push(CaseDiff {
                 case_id: case.case_id.clone(),

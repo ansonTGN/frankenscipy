@@ -85,10 +85,24 @@ fn emit_log(log: &DiffLog) {
 fn generate_query() -> OracleQuery {
     let signals: &[(&str, Vec<f64>)] = &[
         ("ramp_n8", (1..=8).map(|i| i as f64).collect()),
-        ("decay_n16", (0..16).map(|i| (-(i as f64) / 4.0).exp()).collect()),
-        ("sine_with_offset_n20", (0..20).map(|i| ((i as f64) * 0.3).sin() + 2.0).collect()),
-        ("step_n12", (0..12).map(|i| if i < 6 { 0.0 } else { 5.0 }).collect()),
-        ("linear_trend_n16", (0..16).map(|i| 1.0 + 0.5 * (i as f64) + 0.1 * ((i as f64) * 0.4).sin()).collect()),
+        (
+            "decay_n16",
+            (0..16).map(|i| (-(i as f64) / 4.0).exp()).collect(),
+        ),
+        (
+            "sine_with_offset_n20",
+            (0..20).map(|i| ((i as f64) * 0.3).sin() + 2.0).collect(),
+        ),
+        (
+            "step_n12",
+            (0..12).map(|i| if i < 6 { 0.0 } else { 5.0 }).collect(),
+        ),
+        (
+            "linear_trend_n16",
+            (0..16)
+                .map(|i| 1.0 + 0.5 * (i as f64) + 0.1 * ((i as f64) * 0.4).sin())
+                .collect(),
+        ),
     ];
     let mut points = Vec::new();
     for (label, data) in signals {

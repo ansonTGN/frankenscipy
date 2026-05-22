@@ -169,11 +169,7 @@ fn fsci_eval(dist: &str, moment: &str, params: &[f64]) -> Option<f64> {
         }
         _ => return None,
     };
-    if v.is_finite() {
-        Some(v)
-    } else {
-        None
-    }
+    if v.is_finite() { Some(v) } else { None }
 }
 
 fn generate_query() -> OracleQuery {
@@ -285,9 +281,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "discrete-moments oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping discrete-moments oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping discrete-moments oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -329,22 +323,23 @@ fn diff_stats_discrete_moments() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(&case.dist, &case.moment, &case.params) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                let scale = scipy_v.abs().max(1.0);
-                let rel_diff = abs_diff / scale;
-                max_abs_overall = max_abs_overall.max(abs_diff);
-                max_rel_overall = max_rel_overall.max(rel_diff);
-                let pass = abs_diff <= ABS_TOL || abs_diff <= REL_TOL * scale;
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    dist: case.dist.clone(),
-                    moment: case.moment.clone(),
-                    abs_diff,
-                    rel_diff,
-                    pass,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(&case.dist, &case.moment, &case.params)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            let scale = scipy_v.abs().max(1.0);
+            let rel_diff = abs_diff / scale;
+            max_abs_overall = max_abs_overall.max(abs_diff);
+            max_rel_overall = max_rel_overall.max(rel_diff);
+            let pass = abs_diff <= ABS_TOL || abs_diff <= REL_TOL * scale;
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                dist: case.dist.clone(),
+                moment: case.moment.clone(),
+                abs_diff,
+                rel_diff,
+                pass,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

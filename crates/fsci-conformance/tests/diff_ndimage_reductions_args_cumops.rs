@@ -196,7 +196,11 @@ fn generate_query() -> OracleQuery {
     // equal_within: identical and slightly different fixtures
     let a_eq = strictly_pos.clone();
     let b_eq_same = strictly_pos.clone();
-    let b_eq_diff: Vec<f64> = strictly_pos.iter().enumerate().map(|(i, &v)| if i % 2 == 0 { v + 0.01 } else { v }).collect();
+    let b_eq_diff: Vec<f64> = strictly_pos
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| if i % 2 == 0 { v + 0.01 } else { v })
+        .collect();
     points.push(Case {
         case_id: "equal_within_identical".into(),
         op: "equal_within".into(),
@@ -308,7 +312,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for reductions oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for reductions oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -375,17 +381,23 @@ fn diff_ndimage_reductions_args_cumops() {
             }
             "cumsum" => {
                 let actual = cumsum_array(&arr);
-                let Some(e) = arm.values.as_ref() else { continue };
+                let Some(e) = arm.values.as_ref() else {
+                    continue;
+                };
                 vec_max_diff(&actual.data, e)
             }
             "cumprod" => {
                 let actual = cumprod_array(&arr);
-                let Some(e) = arm.values.as_ref() else { continue };
+                let Some(e) = arm.values.as_ref() else {
+                    continue;
+                };
                 vec_max_diff(&actual.data, e)
             }
             "diff" => {
                 let actual = diff_array(&arr);
-                let Some(e) = arm.values.as_ref() else { continue };
+                let Some(e) = arm.values.as_ref() else {
+                    continue;
+                };
                 vec_max_diff(&actual.data, e)
             }
             "equal_within" => {
@@ -395,7 +407,9 @@ fn diff_ndimage_reductions_args_cumops() {
                 let Ok(actual) = equal_within(&arr, &arr_b, case.tol) else {
                     continue;
                 };
-                let Some(e) = arm.values.as_ref() else { continue };
+                let Some(e) = arm.values.as_ref() else {
+                    continue;
+                };
                 vec_max_diff(&actual.data, e)
             }
             _ => continue,
@@ -414,8 +428,9 @@ fn diff_ndimage_reductions_args_cumops() {
 
     let log = DiffLog {
         test_id: "diff_ndimage_reductions_args_cumops".into(),
-        category: "fsci_ndimage count_nonzero/argmax/argmin/cumsum/cumprod/diff/equal_within vs numpy"
-            .into(),
+        category:
+            "fsci_ndimage count_nonzero/argmax/argmin/cumsum/cumprod/diff/equal_within vs numpy"
+                .into(),
         case_count: diffs.len(),
         max_abs_diff: max_overall,
         pass: all_pass,

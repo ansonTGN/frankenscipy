@@ -78,10 +78,7 @@ fn diff_opt_cobyla() {
     // Problem 2: min (x-2)² + (y-1)² s.t. x >= 0, y >= 0
     // Analytical: (2, 1), f* = 0
     let f2 = |x: &[f64]| (x[0] - 2.0).powi(2) + (x[1] - 1.0).powi(2);
-    let c2: [fn(&[f64]) -> f64; 2] = [
-        |x: &[f64]| x[0],
-        |x: &[f64]| x[1],
-    ];
+    let c2: [fn(&[f64]) -> f64; 2] = [|x: &[f64]| x[0], |x: &[f64]| x[1]];
     let res2 = cobyla(f2, &[1.0_f64, 0.5], &c2, 500, 0.5).expect("cobyla p2");
     let f_at2 = f2(&res2.x);
     max_overall = max_overall.max(f_at2);

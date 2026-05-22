@@ -98,10 +98,20 @@ fn flatten(rows: &[Vec<f64>]) -> Vec<f64> {
 
 fn generate_query() -> OracleQuery {
     // 3 well-separated clusters in 2D
-    let c1 = vec![vec![0.1, 0.2], vec![0.2, 0.1], vec![0.0, 0.0], vec![0.15, 0.15]];
+    let c1 = vec![
+        vec![0.1, 0.2],
+        vec![0.2, 0.1],
+        vec![0.0, 0.0],
+        vec![0.15, 0.15],
+    ];
     let c2 = vec![vec![5.0, 5.0], vec![5.1, 5.2], vec![4.9, 5.0]];
     let c3 = vec![vec![-3.0, -2.0], vec![-2.9, -2.1], vec![-3.1, -2.0]];
-    let well_separated: Vec<Vec<f64>> = c1.iter().chain(c2.iter()).chain(c3.iter()).cloned().collect();
+    let well_separated: Vec<Vec<f64>> = c1
+        .iter()
+        .chain(c2.iter())
+        .chain(c3.iter())
+        .cloned()
+        .collect();
     let well_labels: Vec<usize> = vec![0, 0, 0, 0, 1, 1, 1, 2, 2, 2];
 
     // Overlapping clusters (less well-separated)
@@ -112,8 +122,12 @@ fn generate_query() -> OracleQuery {
 
     // 3D fixture
     let d3 = vec![
-        vec![0.0, 0.0, 0.0], vec![0.1, 0.2, -0.1], vec![-0.1, 0.0, 0.1],
-        vec![5.0, 5.0, 5.0], vec![5.2, 4.9, 5.1], vec![4.8, 5.1, 4.9],
+        vec![0.0, 0.0, 0.0],
+        vec![0.1, 0.2, -0.1],
+        vec![-0.1, 0.0, 0.1],
+        vec![5.0, 5.0, 5.0],
+        vec![5.2, 4.9, 5.1],
+        vec![4.8, 5.1, 4.9],
     ];
     let d3_labels: Vec<usize> = vec![0, 0, 0, 1, 1, 1];
 
@@ -249,9 +263,7 @@ print(json.dumps({"points": points}))
 }
 
 fn unflatten(flat: &[f64], n: usize, d: usize) -> Vec<Vec<f64>> {
-    (0..n)
-        .map(|i| flat[i * d..(i + 1) * d].to_vec())
-        .collect()
+    (0..n).map(|i| flat[i * d..(i + 1) * d].to_vec()).collect()
 }
 
 #[test]
@@ -286,10 +298,8 @@ fn diff_cluster_davies_bouldin_calinski_harabasz() {
             continue;
         };
 
-        for (op, actual, expected) in [
-            ("davies_bouldin", db, edb),
-            ("calinski_harabasz", ch, ech),
-        ] {
+        for (op, actual, expected) in [("davies_bouldin", db, edb), ("calinski_harabasz", ch, ech)]
+        {
             let abs_d = (actual - expected).abs();
             max_overall = max_overall.max(abs_d);
             diffs.push(CaseDiff {

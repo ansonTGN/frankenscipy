@@ -12,9 +12,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_signal::{
-    short_time_energy, snr, spectral_entropy, spectral_flatness, thd,
-};
+use fsci_signal::{short_time_energy, snr, spectral_entropy, spectral_flatness, thd};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -163,7 +161,10 @@ fn generate_query() -> OracleQuery {
         ("uniform_8", vec![1.0; 8]),
         ("peaked_5", vec![0.1, 0.5, 4.0, 0.5, 0.1]),
         ("ramp_6", vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
-        ("decay_10", (0..10).map(|i| (-(i as f64) / 3.0).exp()).collect()),
+        (
+            "decay_10",
+            (0..10).map(|i| (-(i as f64) / 3.0).exp()).collect(),
+        ),
     ];
     let mut entropy = Vec::new();
     for (label, m) in entropy_inputs {
@@ -333,9 +334,7 @@ print(json.dumps({"snr": snr_out, "thd": thd_out, "entropy": entropy_out, "energ
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "snr_thd_entropy oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping snr_thd_entropy oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping snr_thd_entropy oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -348,9 +347,7 @@ print(json.dumps({"snr": snr_out, "thd": thd_out, "entropy": entropy_out, "energ
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "snr_thd_entropy oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping snr_thd_entropy oracle: numpy not available\n{stderr}"
-        );
+        eprintln!("skipping snr_thd_entropy oracle: numpy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -485,10 +482,7 @@ fn diff_signal_snr_thd_entropy() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

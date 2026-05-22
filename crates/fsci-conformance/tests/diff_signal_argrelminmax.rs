@@ -96,10 +96,7 @@ fn generate_query() -> OracleQuery {
             "sine_24",
             (0..24).map(|i| ((i as f64) * 0.5).sin()).collect(),
         ),
-        (
-            "monotone_8",
-            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
-        ),
+        ("monotone_8", vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
     ];
 
     // Order ≥ 2 narrows to extrema where the window touches the data
@@ -170,7 +167,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open argrelminmax oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open argrelminmax oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -178,22 +178,20 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "argrelminmax oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping argrelminmax oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping argrelminmax oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for argrelminmax oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for argrelminmax oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "argrelminmax oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping argrelminmax oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping argrelminmax oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

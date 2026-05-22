@@ -186,7 +186,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for digamma_complex oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for digamma_complex oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -252,7 +254,10 @@ fn diff_special_digamma_complex() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!("digamma_complex mismatch: {} abs_diff={}", d.case_id, d.abs_diff);
+            eprintln!(
+                "digamma_complex mismatch: {} abs_diff={}",
+                d.case_id, d.abs_diff
+            );
         }
     }
 

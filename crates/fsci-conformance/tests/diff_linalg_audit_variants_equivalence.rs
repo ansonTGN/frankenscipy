@@ -12,9 +12,8 @@ use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use fsci_linalg::{
-    InvOptions, LstsqOptions, PinvOptions, SolveOptions, det, det_with_audit, inv,
-    inv_with_audit, lstsq, lstsq_with_audit, pinv, pinv_with_audit, solve, solve_with_audit,
-    sync_audit_ledger,
+    InvOptions, LstsqOptions, PinvOptions, SolveOptions, det, det_with_audit, inv, inv_with_audit,
+    lstsq, lstsq_with_audit, pinv, pinv_with_audit, solve, solve_with_audit, sync_audit_ledger,
 };
 use fsci_runtime::{RuntimeMode, SolverPortfolio};
 use serde::Serialize;
@@ -83,7 +82,10 @@ fn vec_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]
@@ -122,28 +124,60 @@ fn diff_linalg_audit_variants_equivalence() {
 
     for (label, a, b) in matrices {
         // inv
-        if let (Ok(p), Ok(q)) = (inv(a, InvOptions::default()), inv_with_audit(a, InvOptions::default(), &ledger)) {
+        if let (Ok(p), Ok(q)) = (
+            inv(a, InvOptions::default()),
+            inv_with_audit(a, InvOptions::default(), &ledger),
+        ) {
             let d = mat_max_diff(&p.inverse, &q.inverse);
             max_overall = max_overall.max(d);
-            diffs.push(CaseDiff { case_id: format!("inv_{label}"), op: "inv".into(), abs_diff: d, pass: d <= ABS_TOL });
+            diffs.push(CaseDiff {
+                case_id: format!("inv_{label}"),
+                op: "inv".into(),
+                abs_diff: d,
+                pass: d <= ABS_TOL,
+            });
         }
         // det
-        if let (Ok(p), Ok(q)) = (det(a, RuntimeMode::Strict, false), det_with_audit(a, RuntimeMode::Strict, false, &ledger)) {
+        if let (Ok(p), Ok(q)) = (
+            det(a, RuntimeMode::Strict, false),
+            det_with_audit(a, RuntimeMode::Strict, false, &ledger),
+        ) {
             let d = (p - q).abs();
             max_overall = max_overall.max(d);
-            diffs.push(CaseDiff { case_id: format!("det_{label}"), op: "det".into(), abs_diff: d, pass: d <= ABS_TOL });
+            diffs.push(CaseDiff {
+                case_id: format!("det_{label}"),
+                op: "det".into(),
+                abs_diff: d,
+                pass: d <= ABS_TOL,
+            });
         }
         // lstsq
-        if let (Ok(p), Ok(q)) = (lstsq(a, b, LstsqOptions::default()), lstsq_with_audit(a, b, LstsqOptions::default(), &ledger)) {
+        if let (Ok(p), Ok(q)) = (
+            lstsq(a, b, LstsqOptions::default()),
+            lstsq_with_audit(a, b, LstsqOptions::default(), &ledger),
+        ) {
             let d = vec_max_diff(&p.x, &q.x);
             max_overall = max_overall.max(d);
-            diffs.push(CaseDiff { case_id: format!("lstsq_{label}"), op: "lstsq".into(), abs_diff: d, pass: d <= ABS_TOL });
+            diffs.push(CaseDiff {
+                case_id: format!("lstsq_{label}"),
+                op: "lstsq".into(),
+                abs_diff: d,
+                pass: d <= ABS_TOL,
+            });
         }
         // pinv
-        if let (Ok(p), Ok(q)) = (pinv(a, PinvOptions::default()), pinv_with_audit(a, PinvOptions::default(), &ledger)) {
+        if let (Ok(p), Ok(q)) = (
+            pinv(a, PinvOptions::default()),
+            pinv_with_audit(a, PinvOptions::default(), &ledger),
+        ) {
             let d = mat_max_diff(&p.pseudo_inverse, &q.pseudo_inverse);
             max_overall = max_overall.max(d);
-            diffs.push(CaseDiff { case_id: format!("pinv_{label}"), op: "pinv".into(), abs_diff: d, pass: d <= ABS_TOL });
+            diffs.push(CaseDiff {
+                case_id: format!("pinv_{label}"),
+                op: "pinv".into(),
+                abs_diff: d,
+                pass: d <= ABS_TOL,
+            });
         }
         // solve
         let mut portfolio = SolverPortfolio::new(RuntimeMode::Strict, 1);
@@ -153,7 +187,12 @@ fn diff_linalg_audit_variants_equivalence() {
         ) {
             let d = vec_max_diff(&p.x, &q.x);
             max_overall = max_overall.max(d);
-            diffs.push(CaseDiff { case_id: format!("solve_{label}"), op: "solve".into(), abs_diff: d, pass: d <= ABS_TOL });
+            diffs.push(CaseDiff {
+                case_id: format!("solve_{label}"),
+                op: "solve".into(),
+                abs_diff: d,
+                pass: d <= ABS_TOL,
+            });
         }
     }
 

@@ -81,8 +81,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create trim_mode_full diff output dir");
+    fs::create_dir_all(output_dir()).expect("create trim_mode_full diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -104,15 +103,12 @@ fn generate_query() -> OracleQuery {
         (
             "spread_n15",
             vec![
-                -3.0, -1.5, 0.0, 0.5, 1.5, 2.5, 3.5, 5.0, 7.0, 9.0, 12.0, 16.0, 21.0, 27.0,
-                34.0,
+                -3.0, -1.5, 0.0, 0.5, 1.5, 2.5, 3.5, 5.0, 7.0, 9.0, 12.0, 16.0, 21.0, 27.0, 34.0,
             ],
         ),
         (
             "ties_n12",
-            vec![
-                1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 5.0, 5.0, 6.0,
-            ],
+            vec![1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 5.0, 5.0, 6.0],
         ),
         (
             "double_mode_n10",
@@ -226,9 +222,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for trim_mode_full oracle: {e}"
             );
-            eprintln!(
-                "skipping trim_mode_full oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping trim_mode_full oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -244,9 +238,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "trim_mode_full oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping trim_mode_full oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping trim_mode_full oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -259,9 +251,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "trim_mode_full oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping trim_mode_full oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping trim_mode_full oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -332,16 +322,17 @@ fn diff_stats_trim_mode_full() {
             "mode_full" => {
                 let r = mode_full(&case.data);
                 if let Some(s_mode) = scipy_arm.mode
-                    && r.mode.is_finite() {
-                        let abs_diff = (r.mode - s_mode).abs();
-                        max_overall = max_overall.max(abs_diff);
-                        diffs.push(CaseDiff {
-                            case_id: case.case_id.clone(),
-                            arm: "mode_full.mode".into(),
-                            abs_diff,
-                            pass: abs_diff <= ABS_TOL,
-                        });
-                    }
+                    && r.mode.is_finite()
+                {
+                    let abs_diff = (r.mode - s_mode).abs();
+                    max_overall = max_overall.max(abs_diff);
+                    diffs.push(CaseDiff {
+                        case_id: case.case_id.clone(),
+                        arm: "mode_full.mode".into(),
+                        abs_diff,
+                        pass: abs_diff <= ABS_TOL,
+                    });
+                }
                 if let Some(s_count) = scipy_arm.count {
                     let abs_diff = (r.count as i64 - s_count).unsigned_abs() as f64;
                     max_overall = max_overall.max(abs_diff);

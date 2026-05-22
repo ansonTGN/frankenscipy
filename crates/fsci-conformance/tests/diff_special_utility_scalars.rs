@@ -96,7 +96,13 @@ fn generate_query() -> OracleQuery {
     let mut points = Vec::new();
 
     // kl_div(x, y)
-    for &(x, y) in &[(1.0_f64, 2.0_f64), (2.0, 1.0), (0.5, 0.5), (3.0, 7.0), (0.0, 5.0)] {
+    for &(x, y) in &[
+        (1.0_f64, 2.0_f64),
+        (2.0, 1.0),
+        (0.5, 0.5),
+        (3.0, 7.0),
+        (0.0, 5.0),
+    ] {
         points.push(PointCase {
             case_id: format!("kl_div_{x}_{y}"),
             op: "kl_div".into(),
@@ -118,7 +124,13 @@ fn generate_query() -> OracleQuery {
     }
 
     // log_comb(n, k)
-    for &(n, k) in &[(10_f64, 3_f64), (5.0, 2.0), (20.0, 7.0), (4.0, 0.0), (100.0, 50.0)] {
+    for &(n, k) in &[
+        (10_f64, 3_f64),
+        (5.0, 2.0),
+        (20.0, 7.0),
+        (4.0, 0.0),
+        (100.0, 50.0),
+    ] {
         points.push(PointCase {
             case_id: format!("log_comb_{n}_{k}"),
             op: "log_comb".into(),
@@ -129,7 +141,13 @@ fn generate_query() -> OracleQuery {
     }
 
     // copysign(x, y)
-    for &(x, y) in &[(3.0_f64, -2.0_f64), (3.0, 2.0), (-3.0, 5.0), (0.0, -1.0), (1.5, 0.0)] {
+    for &(x, y) in &[
+        (3.0_f64, -2.0_f64),
+        (3.0, 2.0),
+        (-3.0, 5.0),
+        (0.0, -1.0),
+        (1.5, 0.0),
+    ] {
         points.push(PointCase {
             case_id: format!("copysign_{x}_{y}"),
             op: "copysign".into(),
@@ -195,7 +213,12 @@ fn generate_query() -> OracleQuery {
     }
 
     // radian(deg, min, sec)
-    for &(d, m, s) in &[(45.0_f64, 30.0_f64, 0.0_f64), (90.0, 0.0, 0.0), (180.0, 0.0, 0.0), (45.0, 0.0, 30.0)] {
+    for &(d, m, s) in &[
+        (45.0_f64, 30.0_f64, 0.0_f64),
+        (90.0, 0.0, 0.0),
+        (180.0, 0.0, 0.0),
+        (45.0, 0.0, 30.0),
+    ] {
         points.push(PointCase {
             case_id: format!("radian_{d}_{m}_{s}"),
             op: "radian".into(),
@@ -281,7 +304,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open utility_scalars oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open utility_scalars oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -289,9 +315,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "utility_scalars oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping utility_scalars oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping utility_scalars oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -304,9 +328,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "utility_scalars oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping utility_scalars oracle: python not available\n{stderr}"
-        );
+        eprintln!("skipping utility_scalars oracle: python not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -380,10 +402,7 @@ fn diff_special_utility_scalars() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

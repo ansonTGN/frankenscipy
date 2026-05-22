@@ -108,11 +108,7 @@ fn fsci_eval(func: &str, n: i32, arg: f64) -> Option<f64> {
         }
         "smirnov" => {
             let v = smirnov(n, arg);
-            if v.is_finite() {
-                Some(v)
-            } else {
-                None
-            }
+            if v.is_finite() { Some(v) } else { None }
         }
         _ => None,
     }
@@ -251,21 +247,22 @@ fn diff_special_ks() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(&case.func, case.n, case.arg) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                max_overall = max_overall.max(abs_diff);
-                let tol = match case.func.as_str() {
-                    "kolmogorov" => KOLMOGOROV_TOL,
-                    "smirnov" => SMIRNOV_TOL,
-                    _ => 0.0,
-                };
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    pass: abs_diff <= tol,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(&case.func, case.n, case.arg)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            max_overall = max_overall.max(abs_diff);
+            let tol = match case.func.as_str() {
+                "kolmogorov" => KOLMOGOROV_TOL,
+                "smirnov" => SMIRNOV_TOL,
+                _ => 0.0,
+            };
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                pass: abs_diff <= tol,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

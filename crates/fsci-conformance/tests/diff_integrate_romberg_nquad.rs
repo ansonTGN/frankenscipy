@@ -95,38 +95,87 @@ fn diff_integrate_romberg_nquad() {
     // (a) constant: ∫_{0}^{2} 5 dx = 10
     {
         let r = romberg(|_| 5.0, 0.0, 2.0, 1.0e-10, 12);
-        push(&mut diffs, "romberg_constant", r.integral, 10.0, r.converged, 1e-10);
+        push(
+            &mut diffs,
+            "romberg_constant",
+            r.integral,
+            10.0,
+            r.converged,
+            1e-10,
+        );
     }
     // (b) linear: ∫_{0}^{3} (2x + 1) dx = x² + x |_0^3 = 9 + 3 = 12
     {
         let r = romberg(|x| 2.0 * x + 1.0, 0.0, 3.0, 1.0e-10, 12);
-        push(&mut diffs, "romberg_linear", r.integral, 12.0, r.converged, 1e-10);
+        push(
+            &mut diffs,
+            "romberg_linear",
+            r.integral,
+            12.0,
+            r.converged,
+            1e-10,
+        );
     }
     // (c) quadratic: ∫_{0}^{1} x² dx = 1/3
     {
         let r = romberg(|x| x * x, 0.0, 1.0, 1.0e-10, 12);
-        push(&mut diffs, "romberg_quadratic", r.integral, 1.0 / 3.0, r.converged, 1e-10);
+        push(
+            &mut diffs,
+            "romberg_quadratic",
+            r.integral,
+            1.0 / 3.0,
+            r.converged,
+            1e-10,
+        );
     }
     // (d) cubic: ∫_{0}^{2} x³ dx = 4
     {
         let r = romberg(|x| x * x * x, 0.0, 2.0, 1.0e-10, 12);
-        push(&mut diffs, "romberg_cubic", r.integral, 4.0, r.converged, 1e-10);
+        push(
+            &mut diffs,
+            "romberg_cubic",
+            r.integral,
+            4.0,
+            r.converged,
+            1e-10,
+        );
     }
     // (e) sine: ∫_{0}^{π} sin(x) dx = 2
     {
         let r = romberg(|x: f64| x.sin(), 0.0, PI, 1.0e-10, 12);
-        push(&mut diffs, "romberg_sin", r.integral, 2.0, r.converged, 1e-9);
+        push(
+            &mut diffs,
+            "romberg_sin",
+            r.integral,
+            2.0,
+            r.converged,
+            1e-9,
+        );
     }
     // (f) cosine: ∫_{0}^{π} cos(x) dx = 0
     {
         let r = romberg(|x: f64| x.cos(), 0.0, PI, 1.0e-10, 12);
-        push(&mut diffs, "romberg_cos", r.integral, 0.0, r.converged, 1e-9);
+        push(
+            &mut diffs,
+            "romberg_cos",
+            r.integral,
+            0.0,
+            r.converged,
+            1e-9,
+        );
     }
     // (g) exp: ∫_{0}^{1} exp(x) dx = e - 1
     {
         let r = romberg(|x: f64| x.exp(), 0.0, 1.0, 1.0e-10, 12);
         let expected = std::f64::consts::E - 1.0;
-        push(&mut diffs, "romberg_exp", r.integral, expected, r.converged, 1e-9);
+        push(
+            &mut diffs,
+            "romberg_exp",
+            r.integral,
+            expected,
+            r.converged,
+            1e-9,
+        );
     }
     // (h) NaN tolerance returns non-converged with NaN integral
     {
@@ -141,7 +190,10 @@ fn diff_integrate_romberg_nquad() {
             converged: r.converged,
             tol: 0.0,
             pass,
-            note: format!("NaN tol → converged={} integral={}", r.converged, r.integral),
+            note: format!(
+                "NaN tol → converged={} integral={}",
+                r.converged, r.integral
+            ),
         });
     }
 
@@ -151,13 +203,27 @@ fn diff_integrate_romberg_nquad() {
     // 2D: ∫∫_{[0,1]^2} 1 dxdy = 1
     {
         let r = nquad(|_x| 1.0, &[(0.0, 1.0), (0.0, 1.0)], opts).expect("nquad const");
-        push(&mut diffs, "nquad_2d_const", r.integral, 1.0, r.converged, 1e-8);
+        push(
+            &mut diffs,
+            "nquad_2d_const",
+            r.integral,
+            1.0,
+            r.converged,
+            1e-8,
+        );
     }
     // 2D: ∫∫_{[0,1]^2} (x + y) dxdy = 1
     // ∫₀¹ ∫₀¹ x + y dxdy = 0.5 + 0.5 = 1
     {
         let r = nquad(|v| v[0] + v[1], &[(0.0, 1.0), (0.0, 1.0)], opts).expect("nquad sum");
-        push(&mut diffs, "nquad_2d_xpy", r.integral, 1.0, r.converged, 1e-8);
+        push(
+            &mut diffs,
+            "nquad_2d_xpy",
+            r.integral,
+            1.0,
+            r.converged,
+            1e-8,
+        );
     }
     // 2D: ∫∫_{[0,π]×[0,π]} sin(x)*sin(y) dxdy = 2 * 2 = 4
     {
@@ -167,7 +233,14 @@ fn diff_integrate_romberg_nquad() {
             opts,
         )
         .expect("nquad sin*sin");
-        push(&mut diffs, "nquad_2d_sin_sin", r.integral, 4.0, r.converged, 1e-7);
+        push(
+            &mut diffs,
+            "nquad_2d_sin_sin",
+            r.integral,
+            4.0,
+            r.converged,
+            1e-7,
+        );
     }
     // 3D: ∫∫∫_{[0,1]^3} xyz dxdydz = (1/2)^3 = 1/8
     {
@@ -177,12 +250,26 @@ fn diff_integrate_romberg_nquad() {
             opts,
         )
         .expect("nquad xyz");
-        push(&mut diffs, "nquad_3d_xyz", r.integral, 1.0 / 8.0, r.converged, 1e-7);
+        push(
+            &mut diffs,
+            "nquad_3d_xyz",
+            r.integral,
+            1.0 / 8.0,
+            r.converged,
+            1e-7,
+        );
     }
     // 0D (empty ranges) returns func() with neval=1
     {
         let r = nquad(|_| 7.5, &[], opts).expect("nquad 0d");
-        push(&mut diffs, "nquad_0d_const", r.integral, 7.5, r.converged, 1e-12);
+        push(
+            &mut diffs,
+            "nquad_0d_const",
+            r.integral,
+            7.5,
+            r.converged,
+            1e-12,
+        );
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

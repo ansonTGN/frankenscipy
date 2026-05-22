@@ -7,10 +7,10 @@
 //! integration with parity gates and risk notes.
 
 use blake3::hash;
-use fsci_conformance::{generate_raptorq_sidecar, RaptorQSidecar};
+use fsci_conformance::{RaptorQSidecar, generate_raptorq_sidecar};
 use fsci_integrate::{
-    solve_ivp, validate_first_step, validate_max_step, validate_tol, SolveIvpOptions, SolverKind,
-    ToleranceValue,
+    SolveIvpOptions, SolverKind, ToleranceValue, solve_ivp, validate_first_step, validate_max_step,
+    validate_tol,
 };
 use fsci_runtime::RuntimeMode;
 use serde::Serialize;

@@ -69,7 +69,14 @@ fn diff_opt_scalar_bounded_trisection() {
     let probes: &[(&str, fn(f64) -> f64, f64, f64, f64, f64)] = &[
         ("quad_min2", |x| (x - 2.0).powi(2), 0.0, 5.0, 2.0, 0.0),
         ("quad_min0", |x| x * x + 1.0, -3.0, 3.0, 0.0, 1.0),
-        ("cubic_min", |x| (x - 1.5).powi(2) + 0.3 * (x - 1.5).abs(), 0.0, 3.0, 1.5, 0.0),
+        (
+            "cubic_min",
+            |x| (x - 1.5).powi(2) + 0.3 * (x - 1.5).abs(),
+            0.0,
+            3.0,
+            1.5,
+            0.0,
+        ),
     ];
 
     for (label, f, a, b, x_star, f_star) in probes {

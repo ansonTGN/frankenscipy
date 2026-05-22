@@ -299,7 +299,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for matrix_power_kronsum oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for matrix_power_kronsum oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -334,8 +336,7 @@ fn diff_sparse_matrix_power_kronsum() {
         let Some(arm) = pmap.get(&case.case_id) else {
             continue;
         };
-        let (Some(expected), Some(or), Some(oc)) =
-            (arm.dense.as_ref(), arm.out_rows, arm.out_cols)
+        let (Some(expected), Some(or), Some(oc)) = (arm.dense.as_ref(), arm.out_rows, arm.out_cols)
         else {
             continue;
         };
@@ -370,7 +371,9 @@ fn diff_sparse_matrix_power_kronsum() {
         let abs_d = if dense.len() != expected.len() {
             f64::INFINITY
         } else {
-            dense.iter().zip(expected.iter())
+            dense
+                .iter()
+                .zip(expected.iter())
                 .map(|(a, b)| (a - b).abs())
                 .fold(0.0_f64, f64::max)
         };

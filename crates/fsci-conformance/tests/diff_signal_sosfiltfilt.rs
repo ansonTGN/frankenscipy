@@ -166,9 +166,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "sosfiltfilt oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping sosfiltfilt oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping sosfiltfilt oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -252,7 +250,10 @@ fn diff_signal_sosfiltfilt() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!("sosfiltfilt mismatch: {} abs_diff={}", d.case_id, d.abs_diff);
+            eprintln!(
+                "sosfiltfilt mismatch: {} abs_diff={}",
+                d.case_id, d.abs_diff
+            );
         }
     }
 

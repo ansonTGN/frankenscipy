@@ -97,7 +97,19 @@ fn generate_query() -> OracleQuery {
     // e (W(e)=1), and increasing magnitudes including 1e6 to probe the
     // logarithmic large-z regime.
     let zs: &[f64] = &[
-        -0.36, -0.3, -0.1, -0.01, 0.0, 0.1, 0.5, 1.0, std::f64::consts::E, 5.0, 10.0, 100.0, 1.0e6,
+        -0.36,
+        -0.3,
+        -0.1,
+        -0.01,
+        0.0,
+        0.1,
+        0.5,
+        1.0,
+        std::f64::consts::E,
+        5.0,
+        10.0,
+        100.0,
+        1.0e6,
     ];
     let points = zs
         .iter()

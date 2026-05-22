@@ -169,13 +169,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "lfilter_zi oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping lfilter_zi oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping lfilter_zi oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for lfilter_zi oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for lfilter_zi oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

@@ -116,9 +116,7 @@ fn generate_query() -> OracleQuery {
         (
             "neg_slope",
             (1..=11).map(|i| i as f64).collect(),
-            vec![
-                10.05, 9.1, 7.85, 6.9, 6.05, 5.1, 4.0, 3.05, 2.1, 0.9, 0.1,
-            ],
+            vec![10.05, 9.1, 7.85, 6.9, 6.05, 5.1, 4.0, 3.05, 2.1, 0.9, 0.1],
         ),
     ];
 
@@ -182,9 +180,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for siegelslopes oracle: {e}"
             );
-            eprintln!(
-                "skipping siegelslopes oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping siegelslopes oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -200,9 +196,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "siegelslopes oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping siegelslopes oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping siegelslopes oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -215,9 +209,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "siegelslopes oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping siegelslopes oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping siegelslopes oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -247,27 +239,29 @@ fn diff_stats_siegelslopes() {
         let result = siegelslopes(&case.x, &case.y);
 
         if let Some(scipy_slope) = scipy_arm.slope
-            && result.slope.is_finite() {
-                let abs_diff = (result.slope - scipy_slope).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "slope".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.slope.is_finite()
+        {
+            let abs_diff = (result.slope - scipy_slope).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "slope".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(scipy_int) = scipy_arm.intercept
-            && result.intercept.is_finite() {
-                let abs_diff = (result.intercept - scipy_int).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "intercept".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.intercept.is_finite()
+        {
+            let abs_diff = (result.intercept - scipy_int).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "intercept".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

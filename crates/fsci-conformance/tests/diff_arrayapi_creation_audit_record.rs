@@ -119,9 +119,7 @@ fn diff_arrayapi_creation_audit_record() {
             .as_ref()
             .err()
             .is_some_and(|e| e.kind == ArrayApiErrorKind::InvalidStep);
-        let reason_matches = reasons
-            .first()
-            .is_some_and(|r| r == "arange::InvalidStep");
+        let reason_matches = reasons.first().is_some_and(|r| r == "arange::InvalidStep");
         diffs.push(CaseDiff {
             case_id: "arange_zero_step_err".into(),
             pass: kind_matches,
@@ -258,15 +256,11 @@ fn diff_arrayapi_creation_audit_record() {
         let g = ledger.lock().expect("acquire");
         let entry = &g.entries()[0];
         // Expected fingerprint from raw input bytes
-        let expected_fp =
-            AuditLedger::fingerprint_bytes(format!("{req:?}").as_bytes());
+        let expected_fp = AuditLedger::fingerprint_bytes(format!("{req:?}").as_bytes());
         diffs.push(CaseDiff {
             case_id: "arange_fingerprint_matches".into(),
             pass: entry.input_fingerprint == expected_fp,
-            note: format!(
-                "got={} expected={}",
-                entry.input_fingerprint, expected_fp
-            ),
+            note: format!("got={} expected={}", entry.input_fingerprint, expected_fp),
         });
         diffs.push(CaseDiff {
             case_id: "arange_outcome_rejected".into(),

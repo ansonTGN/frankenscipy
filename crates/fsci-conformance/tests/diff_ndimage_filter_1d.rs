@@ -11,9 +11,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_ndimage::{
-    BoundaryMode, NdArray, maximum_filter1d, minimum_filter1d, uniform_filter1d,
-};
+use fsci_ndimage::{BoundaryMode, NdArray, maximum_filter1d, minimum_filter1d, uniform_filter1d};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -103,10 +101,8 @@ fn generate_query() -> OracleQuery {
     let mat_4x5: Vec<f64> = (1..=20).map(|i| (i as f64) * 0.5).collect();
 
     let mut points = Vec::new();
-    let inputs: &[(&str, &[f64], Vec<usize>)] = &[
-        ("3x3", &mat_3x3, vec![3, 3]),
-        ("4x5", &mat_4x5, vec![4, 5]),
-    ];
+    let inputs: &[(&str, &[f64], Vec<usize>)] =
+        &[("3x3", &mat_3x3, vec![3, 3]), ("4x5", &mat_4x5, vec![4, 5])];
     // max/min_filter1d diverge from scipy on boundary handling for all
     // fixtures and modes (filed defect separately; related to mufw9
     // boundary-adjacent extrema). Only uniform_filter1d is exercised.
@@ -287,10 +283,7 @@ fn diff_ndimage_filter_1d() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

@@ -51523,4 +51523,5 @@ mod tests {
         assert!(ge.cdf(1.0) > 0.0 && ge.cdf(1.0) < 1.0);
         assert!(ge.cdf(10.0) > 0.99);
     }
+
 }

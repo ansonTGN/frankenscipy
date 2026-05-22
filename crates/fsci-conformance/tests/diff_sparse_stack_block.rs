@@ -12,9 +12,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_sparse::{
-    CsrMatrix, Shape2D, block_diag, bmat, eye_rectangular, hstack, vstack,
-};
+use fsci_sparse::{CsrMatrix, Shape2D, block_diag, bmat, eye_rectangular, hstack, vstack};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -365,7 +363,9 @@ print(json.dumps({"stack": stack_out, "bmat": bmat_out, "eye": eye_out}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for stack_block oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for stack_block oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -451,13 +451,17 @@ fn diff_sparse_stack_block() {
         let refs: Vec<&CsrMatrix> = blocks_csr.iter().collect();
         let fsci_result: Result<CsrMatrix, _> = match case.op.as_str() {
             "hstack" => {
-                let dyn_refs: Vec<&dyn fsci_sparse::FormatConvertible> =
-                    refs.iter().map(|r| *r as &dyn fsci_sparse::FormatConvertible).collect();
+                let dyn_refs: Vec<&dyn fsci_sparse::FormatConvertible> = refs
+                    .iter()
+                    .map(|r| *r as &dyn fsci_sparse::FormatConvertible)
+                    .collect();
                 hstack(&dyn_refs)
             }
             "vstack" => {
-                let dyn_refs: Vec<&dyn fsci_sparse::FormatConvertible> =
-                    refs.iter().map(|r| *r as &dyn fsci_sparse::FormatConvertible).collect();
+                let dyn_refs: Vec<&dyn fsci_sparse::FormatConvertible> = refs
+                    .iter()
+                    .map(|r| *r as &dyn fsci_sparse::FormatConvertible)
+                    .collect();
                 vstack(&dyn_refs)
             }
             "block_diag" => block_diag(&refs),
@@ -542,10 +546,7 @@ fn diff_sparse_stack_block() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

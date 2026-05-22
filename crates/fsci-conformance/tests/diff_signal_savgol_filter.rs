@@ -87,10 +87,7 @@ fn emit_log(log: &DiffLog) {
 
 fn generate_query() -> OracleQuery {
     let inputs: &[(&str, Vec<f64>)] = &[
-        (
-            "ramp_n15",
-            (0..15).map(|i| i as f64).collect(),
-        ),
+        ("ramp_n15", (0..15).map(|i| i as f64).collect()),
         (
             "sin_n25",
             (0..25).map(|i| ((i as f64) * 0.4).sin()).collect(),
@@ -106,9 +103,7 @@ fn generate_query() -> OracleQuery {
         ),
         (
             "step_n17",
-            (0..17)
-                .map(|i| if i < 8 { 0.0 } else { 1.0 })
-                .collect(),
+            (0..17).map(|i| if i < 8 { 0.0 } else { 1.0 }).collect(),
         ),
         (
             "decaying_n31",

@@ -224,10 +224,16 @@ fn diff_stats_exponpow() {
     assert_eq!(oracle.pdf_cdf_sf.len(), query.pdf_cdf_sf_cases.len());
     assert_eq!(oracle.ppf.len(), query.ppf_cases.len());
 
-    let pdf_map: HashMap<String, PdfCdfSfArm> =
-        oracle.pdf_cdf_sf.into_iter().map(|r| (r.case_id.clone(), r)).collect();
-    let ppf_map: HashMap<String, PpfArm> =
-        oracle.ppf.into_iter().map(|r| (r.case_id.clone(), r)).collect();
+    let pdf_map: HashMap<String, PdfCdfSfArm> = oracle
+        .pdf_cdf_sf
+        .into_iter()
+        .map(|r| (r.case_id.clone(), r))
+        .collect();
+    let ppf_map: HashMap<String, PpfArm> = oracle
+        .ppf
+        .into_iter()
+        .map(|r| (r.case_id.clone(), r))
+        .collect();
 
     let start = Instant::now();
     let mut diffs = Vec::new();

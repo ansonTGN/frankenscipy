@@ -63,10 +63,17 @@ fn vec_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
-fn build_csr(rows: usize, cols: usize, trips: &[(usize, usize, f64)]) -> Option<fsci_sparse::CsrMatrix> {
+fn build_csr(
+    rows: usize,
+    cols: usize,
+    trips: &[(usize, usize, f64)],
+) -> Option<fsci_sparse::CsrMatrix> {
     let mut data = Vec::new();
     let mut rs = Vec::new();
     let mut cs = Vec::new();
@@ -88,9 +95,13 @@ fn diff_sparse_casp_iterative_audit_equivalence() {
 
     // SPD tridiagonal (CG-friendly)
     let tri3 = vec![
-        (0, 0, 2.0_f64), (0, 1, -1.0),
-        (1, 0, -1.0), (1, 1, 2.0), (1, 2, -1.0),
-        (2, 1, -1.0), (2, 2, 2.0),
+        (0, 0, 2.0_f64),
+        (0, 1, -1.0),
+        (1, 0, -1.0),
+        (1, 1, 2.0),
+        (1, 2, -1.0),
+        (2, 1, -1.0),
+        (2, 2, 2.0),
     ];
     let b_tri3 = vec![1.0_f64, 2.0, 3.0];
 

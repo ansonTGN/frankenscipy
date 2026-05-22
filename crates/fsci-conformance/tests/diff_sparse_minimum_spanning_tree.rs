@@ -105,25 +105,16 @@ fn dense_to_csr(rows: usize, cols: usize, dense: &[f64]) -> CsrMatrix {
 
 fn generate_query() -> OracleQuery {
     let adj_6 = vec![
-        0.0, 7.0, 9.0, 0.0, 0.0, 14.0,
-        7.0, 0.0, 10.0, 15.0, 0.0, 0.0,
-        9.0, 10.0, 0.0, 11.0, 0.0, 2.0,
-        0.0, 15.0, 11.0, 0.0, 6.0, 0.0,
-        0.0, 0.0, 0.0, 6.0, 0.0, 9.0,
-        14.0, 0.0, 2.0, 0.0, 9.0, 0.0,
+        0.0, 7.0, 9.0, 0.0, 0.0, 14.0, 7.0, 0.0, 10.0, 15.0, 0.0, 0.0, 9.0, 10.0, 0.0, 11.0, 0.0,
+        2.0, 0.0, 15.0, 11.0, 0.0, 6.0, 0.0, 0.0, 0.0, 0.0, 6.0, 0.0, 9.0, 14.0, 0.0, 2.0, 0.0,
+        9.0, 0.0,
     ];
     let adj_4_square = vec![
-        0.0, 1.0, 0.0, 4.0,
-        1.0, 0.0, 2.0, 0.0,
-        0.0, 2.0, 0.0, 3.0,
-        4.0, 0.0, 3.0, 0.0,
+        0.0, 1.0, 0.0, 4.0, 1.0, 0.0, 2.0, 0.0, 0.0, 2.0, 0.0, 3.0, 4.0, 0.0, 3.0, 0.0,
     ];
     let adj_5_star = vec![
-        0.0, 2.0, 3.0, 5.0, 1.0,
-        2.0, 0.0, 0.0, 0.0, 0.0,
-        3.0, 0.0, 0.0, 0.0, 0.0,
-        5.0, 0.0, 0.0, 0.0, 0.0,
-        1.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 2.0, 3.0, 5.0, 1.0, 2.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0,
     ];
 
     OracleQuery {
@@ -254,7 +245,11 @@ fn diff_sparse_minimum_spanning_tree() {
         };
         let weight_d = (res.total_weight - scipy_total).abs();
         // Edge count should also match — both produce n-1 edges for connected graphs.
-        let edge_d = if res.edges.len() == scipy_nnz { 0.0 } else { 1.0 };
+        let edge_d = if res.edges.len() == scipy_nnz {
+            0.0
+        } else {
+            1.0
+        };
         let abs_d = weight_d.max(edge_d);
         max_overall = max_overall.max(abs_d);
         diffs.push(CaseDiff {

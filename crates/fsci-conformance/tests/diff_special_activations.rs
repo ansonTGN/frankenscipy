@@ -228,22 +228,20 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "activations oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping activations oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping activations oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for activations oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for activations oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "activations oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping activations oracle: python not available\n{stderr}"
-        );
+        eprintln!("skipping activations oracle: python not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -309,10 +307,7 @@ fn diff_special_activations() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

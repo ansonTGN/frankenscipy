@@ -100,10 +100,7 @@ fn generate_query() -> OracleQuery {
             vec![5.0, 1.0, 6.0, 2.0, 7.0, 3.0, 8.0, 4.0, 9.0, 0.0, 10.0],
         ),
         // Strongly trending — too few runs
-        (
-            "trending",
-            (1..=15).map(|i| i as f64).collect(),
-        ),
+        ("trending", (1..=15).map(|i| i as f64).collect()),
         // Strict alternation — too many runs (z very negative)
         (
             "alternating",
@@ -206,9 +203,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "runs_test oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping runs_test oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping runs_test oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -259,27 +254,29 @@ fn diff_stats_runs_test() {
             });
         }
         if let Some(scipy_z) = scipy_arm.z
-            && rust_z.is_finite() {
-                let abs_diff = (rust_z - scipy_z).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "z".into(),
-                    abs_diff,
-                    pass: abs_diff <= STAT_TOL,
-                });
-            }
+            && rust_z.is_finite()
+        {
+            let abs_diff = (rust_z - scipy_z).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "z".into(),
+                abs_diff,
+                pass: abs_diff <= STAT_TOL,
+            });
+        }
         if let Some(scipy_p) = scipy_arm.pvalue
-            && rust_p.is_finite() {
-                let abs_diff = (rust_p - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= PVALUE_TOL,
-                });
-            }
+            && rust_p.is_finite()
+        {
+            let abs_diff = (rust_p - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= PVALUE_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

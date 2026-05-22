@@ -99,8 +99,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize orthopoly_extras diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize orthopoly_extras diff log");
     fs::write(path, json).expect("write orthopoly_extras diff log");
 }
 
@@ -213,14 +212,15 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for orthopoly_extras oracle: {e}"
             );
-            eprintln!(
-                "skipping orthopoly_extras oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping orthopoly_extras oracle: python3 not available ({e})");
             return None;
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open orthopoly_extras oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open orthopoly_extras oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -228,9 +228,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "orthopoly_extras oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping orthopoly_extras oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping orthopoly_extras oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -243,9 +241,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "orthopoly_extras oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping orthopoly_extras oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping orthopoly_extras oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

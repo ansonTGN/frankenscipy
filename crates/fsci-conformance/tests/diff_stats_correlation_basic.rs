@@ -123,9 +123,7 @@ fn generate_query() -> OracleQuery {
         (
             "neg_monotone",
             (0..15).map(|i| i as f64).collect(),
-            (0..15)
-                .map(|i| -((i as f64) * (i as f64) / 5.0))
-                .collect(),
+            (0..15).map(|i| -((i as f64) * (i as f64) / 5.0)).collect(),
         ),
         // Uncorrelated permutation
         (
@@ -216,9 +214,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for correlation_basic oracle: {e}"
             );
-            eprintln!(
-                "skipping correlation_basic oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping correlation_basic oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -234,9 +230,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "correlation_basic oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping correlation_basic oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping correlation_basic oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -249,9 +243,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "correlation_basic oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping correlation_basic oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping correlation_basic oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -277,12 +269,12 @@ fn diff_stats_correlation_basic() {
     let mut max_overall = 0.0_f64;
 
     let record = |case_id: &str,
-                      arm: &str,
-                      rust_v: f64,
-                      scipy_v: f64,
-                      tol: f64,
-                      diffs: &mut Vec<CaseDiff>,
-                      max_overall: &mut f64| {
+                  arm: &str,
+                  rust_v: f64,
+                  scipy_v: f64,
+                  tol: f64,
+                  diffs: &mut Vec<CaseDiff>,
+                  max_overall: &mut f64| {
         if !rust_v.is_finite() {
             return;
         }

@@ -84,8 +84,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create tiecorrect_yj_inv diff output dir");
+    fs::create_dir_all(output_dir()).expect("create tiecorrect_yj_inv diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -97,8 +96,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize tiecorrect_yj_inv diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize tiecorrect_yj_inv diff log");
     fs::write(path, json).expect("write tiecorrect_yj_inv diff log");
 }
 
@@ -117,11 +115,7 @@ fn generate_query() -> OracleQuery {
     // yeojohnson_inv: pick (y, λ) pairs covering both signs of y and λ values
     // around the discontinuities (λ near 0 for y≥0; λ near 2 for y<0).
     let yj_fixtures: Vec<(&str, Vec<f64>, f64)> = vec![
-        (
-            "lam_one_pos",
-            vec![0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
-            1.0,
-        ),
+        ("lam_one_pos", vec![0.5, 1.0, 1.5, 2.0, 2.5, 3.0], 1.0),
         (
             "lam_two_thirds",
             vec![-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0],
@@ -231,9 +225,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for tiecorrect_yj_inv oracle: {e}"
             );
-            eprintln!(
-                "skipping tiecorrect_yj_inv oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping tiecorrect_yj_inv oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -249,9 +241,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "tiecorrect_yj_inv oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping tiecorrect_yj_inv oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping tiecorrect_yj_inv oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -264,9 +254,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "tiecorrect_yj_inv oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping tiecorrect_yj_inv oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping tiecorrect_yj_inv oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

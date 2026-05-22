@@ -90,11 +90,7 @@ fn emit_log(log: &DiffLog) {
 const SENTINEL: f64 = 1.0e300;
 
 fn finite_or_sentinel(v: f64) -> f64 {
-    if v.is_infinite() {
-        SENTINEL
-    } else {
-        v
-    }
+    if v.is_infinite() { SENTINEL } else { v }
 }
 
 fn generate_query() -> OracleQuery {
@@ -231,9 +227,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "floyd_warshall oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping floyd_warshall oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping floyd_warshall oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -246,9 +240,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "floyd_warshall oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping floyd_warshall oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping floyd_warshall oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -275,8 +267,7 @@ fn fsci_eval(case: &PointCase) -> Option<Vec<f64>> {
         }
     }
 
-    let coo =
-        CooMatrix::from_triplets(Shape2D::new(case.n, case.n), w, r, c, false).ok()?;
+    let coo = CooMatrix::from_triplets(Shape2D::new(case.n, case.n), w, r, c, false).ok()?;
     let csr = coo.to_csr().ok()?;
     let dist_matrix = floyd_warshall(&csr);
     let mut flat = Vec::with_capacity(case.n * case.n);

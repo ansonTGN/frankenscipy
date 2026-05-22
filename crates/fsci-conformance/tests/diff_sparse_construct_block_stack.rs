@@ -350,8 +350,7 @@ fn diff_sparse_construct_block_stack() {
 
     for (case, o) in query.points.iter().zip(oracle.points.iter()) {
         assert_eq!(case.case_id, o.case_id);
-        let (Some(exp_rows), Some(exp_cols), Some(exp_dense)) =
-            (o.rows, o.cols, o.dense.as_ref())
+        let (Some(exp_rows), Some(exp_cols), Some(exp_dense)) = (o.rows, o.cols, o.dense.as_ref())
         else {
             continue;
         };
@@ -463,9 +462,5 @@ fn diff_sparse_construct_block_stack() {
         }
     }
 
-    assert!(
-        all_pass,
-        "construct parity failed: {} cases",
-        diffs.len()
-    );
+    assert!(all_pass, "construct parity failed: {} cases", diffs.len());
 }

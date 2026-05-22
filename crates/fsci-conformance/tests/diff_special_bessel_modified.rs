@@ -101,16 +101,8 @@ fn fsci_eval(func: &str, x: f64) -> Option<f64> {
     let result = match func {
         "i0" => i0(&arg, RuntimeMode::Strict),
         "i1" => i1(&arg, RuntimeMode::Strict),
-        "k0" => kv(
-            &SpecialTensor::RealScalar(0.0),
-            &arg,
-            RuntimeMode::Strict,
-        ),
-        "k1" => kv(
-            &SpecialTensor::RealScalar(1.0),
-            &arg,
-            RuntimeMode::Strict,
-        ),
+        "k0" => kv(&SpecialTensor::RealScalar(0.0), &arg, RuntimeMode::Strict),
+        "k1" => kv(&SpecialTensor::RealScalar(1.0), &arg, RuntimeMode::Strict),
         _ => return None,
     };
     match result {
@@ -124,9 +116,21 @@ fn generate_query() -> OracleQuery {
     // moderate, and large arguments. K_n diverges as x→0, so
     // the smallest K_n probe stays at x=0.01.
     let xs_in = [
-        1.0e-12_f64, 0.001, 0.01, 0.1, 0.5, 1.0, 2.0, 3.5, 5.0, 7.5, 10.0,
+        1.0e-12_f64,
+        0.001,
+        0.01,
+        0.1,
+        0.5,
+        1.0,
+        2.0,
+        3.5,
+        5.0,
+        7.5,
+        10.0,
     ];
-    let xs_kn = [0.01_f64, 0.05, 0.1, 0.5, 1.0, 2.0, 3.5, 5.0, 7.5, 10.0, 20.0];
+    let xs_kn = [
+        0.01_f64, 0.05, 0.1, 0.5, 1.0, 2.0, 3.5, 5.0, 7.5, 10.0, 20.0,
+    ];
     let mut points = Vec::new();
     for &x in &xs_in {
         for func in ["i0", "i1"] {
@@ -211,9 +215,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "modified-bessel oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping modified-bessel oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping modified-bessel oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -255,30 +257,31 @@ fn diff_special_bessel_modified() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(&case.func, case.x) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                let rel_diff = if scipy_v.abs() > 1.0 {
-                    abs_diff / scipy_v.abs()
-                } else {
-                    abs_diff
-                };
-                max_abs_overall = max_abs_overall.max(abs_diff);
-                max_rel_overall = max_rel_overall.max(rel_diff);
-                // For values with |scipy| > 1, fall back to relative
-                // tolerance (I_n grows exponentially); else use absolute.
-                let pass = if scipy_v.abs() > 1.0 {
-                    rel_diff <= REL_TOL
-                } else {
-                    abs_diff <= ABS_TOL
-                };
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    rel_diff,
-                    pass,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(&case.func, case.x)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            let rel_diff = if scipy_v.abs() > 1.0 {
+                abs_diff / scipy_v.abs()
+            } else {
+                abs_diff
+            };
+            max_abs_overall = max_abs_overall.max(abs_diff);
+            max_rel_overall = max_rel_overall.max(rel_diff);
+            // For values with |scipy| > 1, fall back to relative
+            // tolerance (I_n grows exponentially); else use absolute.
+            let pass = if scipy_v.abs() > 1.0 {
+                rel_diff <= REL_TOL
+            } else {
+                abs_diff <= ABS_TOL
+            };
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                rel_diff,
+                pass,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

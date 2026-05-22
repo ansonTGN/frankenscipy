@@ -178,9 +178,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "aic_bic oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping aic_bic oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping aic_bic oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }

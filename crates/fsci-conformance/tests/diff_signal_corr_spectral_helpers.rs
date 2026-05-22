@@ -327,7 +327,10 @@ print(json.dumps({"lags": lags_out, "autoc": autoc_out, "spectral": spectral_out
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open corr_spectral oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open corr_spectral oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -335,9 +338,7 @@ print(json.dumps({"lags": lags_out, "autoc": autoc_out, "spectral": spectral_out
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "corr_spectral oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping corr_spectral oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping corr_spectral oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -350,9 +351,7 @@ print(json.dumps({"lags": lags_out, "autoc": autoc_out, "spectral": spectral_out
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "corr_spectral oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping corr_spectral oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping corr_spectral oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -478,10 +477,7 @@ fn diff_signal_corr_spectral_helpers() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

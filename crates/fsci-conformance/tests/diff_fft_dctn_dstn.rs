@@ -85,9 +85,21 @@ fn emit_log(log: &DiffLog) {
 
 fn generate_query() -> OracleQuery {
     let inputs: &[(&str, Vec<usize>, Vec<f64>)] = &[
-        ("4x4_arange", vec![4, 4], (0..16).map(|i| i as f64).collect()),
-        ("3x6_sine", vec![3, 6], (0..18).map(|i| ((i as f64) * 0.3).sin()).collect()),
-        ("2x8_decay", vec![2, 8], (0..16).map(|i| (-(i as f64) / 5.0).exp()).collect()),
+        (
+            "4x4_arange",
+            vec![4, 4],
+            (0..16).map(|i| i as f64).collect(),
+        ),
+        (
+            "3x6_sine",
+            vec![3, 6],
+            (0..18).map(|i| ((i as f64) * 0.3).sin()).collect(),
+        ),
+        (
+            "2x8_decay",
+            vec![2, 8],
+            (0..16).map(|i| (-(i as f64) / 5.0).exp()).collect(),
+        ),
     ];
     let mut points = Vec::new();
     for (label, shape, x) in inputs {
@@ -264,10 +276,7 @@ fn diff_fft_dctn_dstn() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

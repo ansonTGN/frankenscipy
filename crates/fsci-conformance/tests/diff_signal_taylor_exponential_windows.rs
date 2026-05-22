@@ -265,7 +265,11 @@ fn diff_signal_taylor_exponential_windows() {
         let actual = match c.func.as_str() {
             "taylor" => taylor(c.n, c.nbar, c.sll, c.norm, c.sym),
             "exponential" => {
-                let center = if c.center.is_nan() { None } else { Some(c.center) };
+                let center = if c.center.is_nan() {
+                    None
+                } else {
+                    Some(c.center)
+                };
                 match exponential(c.n, center, c.tau, c.sym) {
                     Ok(w) => w,
                     Err(e) => {
@@ -293,7 +297,11 @@ fn diff_signal_taylor_exponential_windows() {
                 max_rel_diff: f64::INFINITY,
                 n_eval: actual.len(),
                 pass: false,
-                note: format!("length mismatch: fsci={} scipy={}", actual.len(), expected.len()),
+                note: format!(
+                    "length mismatch: fsci={} scipy={}",
+                    actual.len(),
+                    expected.len()
+                ),
             });
             continue;
         }

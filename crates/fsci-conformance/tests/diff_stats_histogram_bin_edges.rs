@@ -75,8 +75,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create histogram_bin_edges diff output dir");
+    fs::create_dir_all(output_dir()).expect("create histogram_bin_edges diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -88,22 +87,18 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json = serde_json::to_string_pretty(log)
-        .expect("serialize histogram_bin_edges diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize histogram_bin_edges diff log");
     fs::write(path, json).expect("write histogram_bin_edges diff log");
 }
 
 fn generate_query() -> OracleQuery {
     let datasets: Vec<(&str, Vec<f64>)> = vec![
-        (
-            "compact",
-            (1..=20).map(|i| i as f64).collect(),
-        ),
+        ("compact", (1..=20).map(|i| i as f64).collect()),
         (
             "spread",
             vec![
-                -3.0, -1.5, -0.7, 0.0, 0.5, 1.2, 2.0, 3.5, 4.7, 6.0, 8.5, 12.0, 15.0, 20.0,
-                25.0, 30.0,
+                -3.0, -1.5, -0.7, 0.0, 0.5, 1.2, 2.0, 3.5, 4.7, 6.0, 8.5, 12.0, 15.0, 20.0, 25.0,
+                30.0,
             ],
         ),
         (
@@ -160,8 +155,7 @@ for case in q["points"]:
     points.append({"case_id": cid, "edges": val})
 print(json.dumps({"points": points}))
 "#;
-    let query_json =
-        serde_json::to_string(query).expect("serialize histogram_bin_edges query");
+    let query_json = serde_json::to_string(query).expect("serialize histogram_bin_edges query");
     let mut child = match Command::new("python3")
         .arg("-c")
         .arg(script)
@@ -176,9 +170,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for histogram_bin_edges oracle: {e}"
             );
-            eprintln!(
-                "skipping histogram_bin_edges oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping histogram_bin_edges oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -194,9 +186,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "histogram_bin_edges oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping histogram_bin_edges oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping histogram_bin_edges oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -209,9 +199,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "histogram_bin_edges oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping histogram_bin_edges oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping histogram_bin_edges oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

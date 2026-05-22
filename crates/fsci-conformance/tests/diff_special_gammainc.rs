@@ -204,9 +204,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "gammainc family oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping gammainc family oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping gammainc family oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -248,32 +246,33 @@ fn diff_special_gammainc() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(&case.func, case.a, case.x) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                let rel_diff = if scipy_v.abs() > 1.0 {
-                    abs_diff / scipy_v.abs()
-                } else {
-                    abs_diff
-                };
-                max_abs_overall = max_abs_overall.max(abs_diff);
-                max_rel_overall = max_rel_overall.max(rel_diff);
+            && let Some(rust_v) = fsci_eval(&case.func, case.a, case.x)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            let rel_diff = if scipy_v.abs() > 1.0 {
+                abs_diff / scipy_v.abs()
+            } else {
+                abs_diff
+            };
+            max_abs_overall = max_abs_overall.max(abs_diff);
+            max_rel_overall = max_rel_overall.max(rel_diff);
 
-                let pass = match case.func.as_str() {
-                    "gammainc" | "gammaincc" => abs_diff <= GAMMAINC_TOL,
-                    "gammaincinv" => {
-                        let scale = scipy_v.abs().max(1.0);
-                        abs_diff <= GAMMAINCINV_TOL_REL * scale
-                    }
-                    _ => false,
-                };
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    rel_diff,
-                    pass,
-                });
-            }
+            let pass = match case.func.as_str() {
+                "gammainc" | "gammaincc" => abs_diff <= GAMMAINC_TOL,
+                "gammaincinv" => {
+                    let scale = scipy_v.abs().max(1.0);
+                    abs_diff <= GAMMAINCINV_TOL_REL * scale
+                }
+                _ => false,
+            };
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                rel_diff,
+                pass,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

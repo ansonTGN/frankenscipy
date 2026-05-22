@@ -155,11 +155,7 @@ fn diff_interpolate_poly_extras() {
         let p = vec![1.0_f64, 0.0];
         let q = vec![0.0_f64, 0.0]; // q(x) = 0
         let v = ratval(&p, &q, 1.0);
-        check(
-            "ratval_zero_denom_nan",
-            v.is_nan(),
-            format!("v={v}"),
-        );
+        check("ratval_zero_denom_nan", v.is_nan(), format!("v={v}"));
     }
     // q has only constant term 5: f(x) = p(x) / 5
     {

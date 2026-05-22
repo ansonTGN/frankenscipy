@@ -50,8 +50,7 @@ struct GoldenTable {
 }
 
 fn fixture_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures/FSCI-P2C-007_burr3_golden.json")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/FSCI-P2C-007_burr3_golden.json")
 }
 
 #[test]
@@ -59,8 +58,7 @@ fn golden_stats_burr3() {
     let path = fixture_path();
     let raw = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("read burr3 golden fixture {path:?}: {e}"));
-    let table: GoldenTable =
-        serde_json::from_str(&raw).expect("parse burr3 golden fixture");
+    let table: GoldenTable = serde_json::from_str(&raw).expect("parse burr3 golden fixture");
     assert_eq!(table.packet_id, "FSCI-P2C-007");
     assert_eq!(table.family, "stats.burr");
     assert_eq!(table.oracle, "scipy.stats.burr");

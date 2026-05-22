@@ -189,9 +189,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for median_mad oracle: {e}"
             );
-            eprintln!(
-                "skipping median_mad oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping median_mad oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -204,22 +202,20 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "median_mad oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping median_mad oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping median_mad oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for median_mad oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for median_mad oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "median_mad oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping median_mad oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping median_mad oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

@@ -225,9 +225,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for summary_misc oracle: {e}"
             );
-            eprintln!(
-                "skipping summary_misc oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping summary_misc oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -243,9 +241,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "summary_misc oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping summary_misc oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping summary_misc oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -258,9 +254,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "summary_misc oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping summary_misc oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping summary_misc oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -305,17 +299,18 @@ fn diff_stats_summary_misc() {
                 ];
                 for (arm_name, scipy_v, rust_v) in arms {
                     if let Some(scipy_v) = scipy_v
-                        && rust_v.is_finite() {
-                            let abs_diff = (rust_v - scipy_v).abs();
-                            max_overall = max_overall.max(abs_diff);
-                            diffs.push(CaseDiff {
-                                case_id: case.case_id.clone(),
-                                func: case.func.clone(),
-                                arm: arm_name.into(),
-                                abs_diff,
-                                pass: abs_diff <= TTEST_TOL,
-                            });
-                        }
+                        && rust_v.is_finite()
+                    {
+                        let abs_diff = (rust_v - scipy_v).abs();
+                        max_overall = max_overall.max(abs_diff);
+                        diffs.push(CaseDiff {
+                            case_id: case.case_id.clone(),
+                            func: case.func.clone(),
+                            arm: arm_name.into(),
+                            abs_diff,
+                            pass: abs_diff <= TTEST_TOL,
+                        });
+                    }
                 }
             }
             _ => continue,

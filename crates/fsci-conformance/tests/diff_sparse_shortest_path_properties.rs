@@ -144,11 +144,7 @@ fn diff_sparse_shortest_path_properties() {
                 }
             }
         }
-        check(
-            "g1_path_edges_valid",
-            edges_valid,
-            format!("p={p:?}"),
-        );
+        check("g1_path_edges_valid", edges_valid, format!("p={p:?}"));
         check(
             "g1_path_sum_equals_distance",
             (path_sum - d).abs() < ABS_TOL,

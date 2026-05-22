@@ -9,8 +9,8 @@ use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use fsci_sparse::{
-    CaspIterativeSolveOptions, CaspIterativeSolver, CaspMatvecCost, CooMatrix,
-    FormatConvertible, Shape2D, select_casp_iterative_solver,
+    CaspIterativeSolveOptions, CaspIterativeSolver, CaspMatvecCost, CooMatrix, FormatConvertible,
+    Shape2D, select_casp_iterative_solver,
 };
 use serde::Serialize;
 
@@ -75,19 +75,30 @@ fn diff_sparse_select_casp_iterative_solver() {
     let mut diffs: Vec<CaseDiff> = Vec::new();
 
     // Helper for non-default options
-    let mk_opts = |preconditioner: bool, low_memory: bool, cost: CaspMatvecCost| {
-        CaspIterativeSolveOptions {
+    let mk_opts =
+        |preconditioner: bool, low_memory: bool, cost: CaspMatvecCost| CaspIterativeSolveOptions {
             preconditioner_available: preconditioner,
             prefer_low_memory: low_memory,
             matrix_vector_cost: cost,
             ..CaspIterativeSolveOptions::default()
-        }
-    };
+        };
 
     // 1. Rectangular overdetermined (rows > cols) → Lsqr
-    let r1 = build_csr(5, 3, &[(0, 0, 1.0), (1, 1, 1.0), (2, 2, 1.0), (3, 0, 0.5), (4, 1, 0.3)]);
+    let r1 = build_csr(
+        5,
+        3,
+        &[
+            (0, 0, 1.0),
+            (1, 1, 1.0),
+            (2, 2, 1.0),
+            (3, 0, 0.5),
+            (4, 1, 0.3),
+        ],
+    );
     let b1 = vec![1.0_f64; 5];
-    let d1 = select_casp_iterative_solver(&r1, &b1, None, mk_opts(false, false, CaspMatvecCost::Auto)).unwrap();
+    let d1 =
+        select_casp_iterative_solver(&r1, &b1, None, mk_opts(false, false, CaspMatvecCost::Auto))
+            .unwrap();
     diffs.push(CaseDiff {
         case_id: "rect_over".into(),
         expected: format!("{:?}", CaspIterativeSolver::Lsqr),
@@ -96,9 +107,21 @@ fn diff_sparse_select_casp_iterative_solver() {
     });
 
     // 2. Rectangular underdetermined (rows < cols) → Lsmr
-    let r2 = build_csr(3, 5, &[(0, 0, 1.0), (1, 1, 1.0), (2, 2, 1.0), (0, 3, 0.5), (1, 4, 0.3)]);
+    let r2 = build_csr(
+        3,
+        5,
+        &[
+            (0, 0, 1.0),
+            (1, 1, 1.0),
+            (2, 2, 1.0),
+            (0, 3, 0.5),
+            (1, 4, 0.3),
+        ],
+    );
     let b2 = vec![1.0_f64; 3];
-    let d2 = select_casp_iterative_solver(&r2, &b2, None, mk_opts(false, false, CaspMatvecCost::Auto)).unwrap();
+    let d2 =
+        select_casp_iterative_solver(&r2, &b2, None, mk_opts(false, false, CaspMatvecCost::Auto))
+            .unwrap();
     diffs.push(CaseDiff {
         case_id: "rect_under".into(),
         expected: format!("{:?}", CaspIterativeSolver::Lsmr),
@@ -117,7 +140,9 @@ fn diff_sparse_select_casp_iterative_solver() {
     }
     let m3 = build_csr(5, 5, &tri);
     let b3 = vec![1.0_f64; 5];
-    let d3 = select_casp_iterative_solver(&m3, &b3, None, mk_opts(false, false, CaspMatvecCost::Auto)).unwrap();
+    let d3 =
+        select_casp_iterative_solver(&m3, &b3, None, mk_opts(false, false, CaspMatvecCost::Auto))
+            .unwrap();
     diffs.push(CaseDiff {
         case_id: "spd_cg".into(),
         expected: format!("{:?}", CaspIterativeSolver::Cg),
@@ -126,13 +151,12 @@ fn diff_sparse_select_casp_iterative_solver() {
     });
 
     // 4. Symmetric but NOT positive diag → Minres (sym indefinite via negative diag)
-    let sym_indef = vec![
-        (0, 0, -1.0_f64), (0, 1, 0.5),
-        (1, 0, 0.5), (1, 1, 2.0),
-    ];
+    let sym_indef = vec![(0, 0, -1.0_f64), (0, 1, 0.5), (1, 0, 0.5), (1, 1, 2.0)];
     let m4 = build_csr(2, 2, &sym_indef);
     let b4 = vec![1.0_f64, 2.0];
-    let d4 = select_casp_iterative_solver(&m4, &b4, None, mk_opts(false, false, CaspMatvecCost::Auto)).unwrap();
+    let d4 =
+        select_casp_iterative_solver(&m4, &b4, None, mk_opts(false, false, CaspMatvecCost::Auto))
+            .unwrap();
     diffs.push(CaseDiff {
         case_id: "sym_minres".into(),
         expected: format!("{:?}", CaspIterativeSolver::Minres),
@@ -141,13 +165,12 @@ fn diff_sparse_select_casp_iterative_solver() {
     });
 
     // 5. Nonsymmetric with preconditioner → Lgmres
-    let asym = vec![
-        (0, 0, 2.0_f64), (0, 1, 1.0),
-        (1, 0, -1.0), (1, 1, 3.0),
-    ];
+    let asym = vec![(0, 0, 2.0_f64), (0, 1, 1.0), (1, 0, -1.0), (1, 1, 3.0)];
     let m5 = build_csr(2, 2, &asym);
     let b5 = vec![1.0_f64, 1.0];
-    let d5 = select_casp_iterative_solver(&m5, &b5, None, mk_opts(true, false, CaspMatvecCost::Auto)).unwrap();
+    let d5 =
+        select_casp_iterative_solver(&m5, &b5, None, mk_opts(true, false, CaspMatvecCost::Auto))
+            .unwrap();
     diffs.push(CaseDiff {
         case_id: "asym_precond_lgmres".into(),
         expected: format!("{:?}", CaspIterativeSolver::Lgmres),
@@ -156,7 +179,9 @@ fn diff_sparse_select_casp_iterative_solver() {
     });
 
     // 6. Nonsymmetric, low memory → Bicgstab
-    let d6 = select_casp_iterative_solver(&m5, &b5, None, mk_opts(false, true, CaspMatvecCost::Auto)).unwrap();
+    let d6 =
+        select_casp_iterative_solver(&m5, &b5, None, mk_opts(false, true, CaspMatvecCost::Auto))
+            .unwrap();
     diffs.push(CaseDiff {
         case_id: "asym_low_mem_bicgstab".into(),
         expected: format!("{:?}", CaspIterativeSolver::Bicgstab),
@@ -165,7 +190,9 @@ fn diff_sparse_select_casp_iterative_solver() {
     });
 
     // 7. Default nonsymmetric small dense → Gmres
-    let d7 = select_casp_iterative_solver(&m5, &b5, None, mk_opts(false, false, CaspMatvecCost::Cheap)).unwrap();
+    let d7 =
+        select_casp_iterative_solver(&m5, &b5, None, mk_opts(false, false, CaspMatvecCost::Cheap))
+            .unwrap();
     diffs.push(CaseDiff {
         case_id: "asym_default_gmres".into(),
         expected: format!("{:?}", CaspIterativeSolver::Gmres),
@@ -188,7 +215,10 @@ fn diff_sparse_select_casp_iterative_solver() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!("casp_iter_select mismatch: {} got {} (expected {})", d.case_id, d.actual, d.expected);
+            eprintln!(
+                "casp_iter_select mismatch: {} got {} (expected {})",
+                d.case_id, d.actual, d.expected
+            );
         }
     }
 

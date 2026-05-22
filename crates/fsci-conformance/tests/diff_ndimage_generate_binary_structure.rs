@@ -139,7 +139,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open gen_bin_struct oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open gen_bin_struct oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -147,9 +150,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "gen_bin_struct oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping gen_bin_struct oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping gen_bin_struct oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -189,8 +190,7 @@ fn diff_ndimage_generate_binary_structure() {
 
     for case in &query.points {
         let scipy_arm = pmap.get(&case.case_id).expect("validated oracle");
-        let (Some(expected), Some(shape)) =
-            (scipy_arm.values.as_ref(), scipy_arm.shape.as_ref())
+        let (Some(expected), Some(shape)) = (scipy_arm.values.as_ref(), scipy_arm.shape.as_ref())
         else {
             continue;
         };

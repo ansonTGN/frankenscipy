@@ -216,9 +216,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "bayes_mvs oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping bayes_mvs oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping bayes_mvs oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -276,16 +274,17 @@ fn diff_stats_bayes_mvs() {
 
         for (arm_name, scipy_v, rust_v) in arms {
             if let Some(scipy_v) = scipy_v
-                && rust_v.is_finite() {
-                    let abs_diff = (rust_v - scipy_v).abs();
-                    max_overall = max_overall.max(abs_diff);
-                    diffs.push(CaseDiff {
-                        case_id: case.case_id.clone(),
-                        arm: arm_name.into(),
-                        abs_diff,
-                        pass: abs_diff <= ABS_TOL,
-                    });
-                }
+                && rust_v.is_finite()
+            {
+                let abs_diff = (rust_v - scipy_v).abs();
+                max_overall = max_overall.max(abs_diff);
+                diffs.push(CaseDiff {
+                    case_id: case.case_id.clone(),
+                    arm: arm_name.into(),
+                    abs_diff,
+                    pass: abs_diff <= ABS_TOL,
+                });
+            }
         }
     }
 

@@ -158,12 +158,7 @@ fn generate_query() -> OracleQuery {
                 (1, 3, -2.0),
             ],
         ),
-        (
-            "5x5_empty",
-            5,
-            5,
-            vec![],
-        ),
+        ("5x5_empty", 5, 5, vec![]),
         (
             "6x6_negative_mixed",
             6,
@@ -177,12 +172,7 @@ fn generate_query() -> OracleQuery {
                 (5, 5, -6.0),
             ],
         ),
-        (
-            "1x1_singleton",
-            1,
-            1,
-            vec![(0, 0, 9.0)],
-        ),
+        ("1x1_singleton", 1, 1, vec![(0, 0, 9.0)]),
     ];
     let points = cases
         .into_iter()
@@ -290,9 +280,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "sparse_basic oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping sparse_basic oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping sparse_basic oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -305,9 +293,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "sparse_basic oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping sparse_basic oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping sparse_basic oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

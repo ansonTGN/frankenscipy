@@ -182,9 +182,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for root_brenth_ridder_toms748 oracle: {e}"
             );
-            eprintln!(
-                "skipping root_brenth_ridder_toms748 oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping root_brenth_ridder_toms748 oracle: python3 not available ({e})");
             return None;
         }
     };

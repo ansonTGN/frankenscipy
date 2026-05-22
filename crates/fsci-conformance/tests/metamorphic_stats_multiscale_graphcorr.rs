@@ -56,8 +56,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create multiscale_graphcorr metamorphic output dir");
+    fs::create_dir_all(output_dir()).expect("create multiscale_graphcorr metamorphic output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -69,8 +68,8 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &MetamorphicLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json = serde_json::to_string_pretty(log)
-        .expect("serialize multiscale_graphcorr metamorphic log");
+    let json =
+        serde_json::to_string_pretty(log).expect("serialize multiscale_graphcorr metamorphic log");
     fs::write(path, json).expect("write multiscale_graphcorr metamorphic log");
 }
 
@@ -162,8 +161,7 @@ fn metamorphic_stats_multiscale_graphcorr() {
 
         // Invariant 3: mgc_map is n × n.
         let n = x.len();
-        let map_shape_ok = r.mgc_map.len() == n
-            && r.mgc_map.iter().all(|row| row.len() == n);
+        let map_shape_ok = r.mgc_map.len() == n && r.mgc_map.iter().all(|row| row.len() == n);
         cases.push(CaseLog {
             case_id: name.to_string(),
             invariant: "mgc_map_n_by_n".into(),

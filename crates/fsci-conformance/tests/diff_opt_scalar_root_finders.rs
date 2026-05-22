@@ -65,7 +65,12 @@ fn diff_opt_scalar_root_finders() {
 
     // (case_id_prefix, function, bracket, expected_root)
     let cases: Vec<(&str, Box<dyn Fn(f64) -> f64>, (f64, f64), f64)> = vec![
-        ("sqrt2", Box::new(|x: f64| x * x - 2.0), (0.0, 2.0), std::f64::consts::SQRT_2),
+        (
+            "sqrt2",
+            Box::new(|x: f64| x * x - 2.0),
+            (0.0, 2.0),
+            std::f64::consts::SQRT_2,
+        ),
         // x³ - x - 1 = 0 → root ≈ 1.3247179572447460
         (
             "plastic",
@@ -74,7 +79,12 @@ fn diff_opt_scalar_root_finders() {
             1.324_717_957_244_746_0,
         ),
         // sin x = 0 in [3, 4] → π
-        ("pi", Box::new(|x: f64| x.sin()), (3.0, 4.0), std::f64::consts::PI),
+        (
+            "pi",
+            Box::new(|x: f64| x.sin()),
+            (3.0, 4.0),
+            std::f64::consts::PI,
+        ),
         // exp(x) = 2 in [0, 1] → ln 2
         (
             "ln2",

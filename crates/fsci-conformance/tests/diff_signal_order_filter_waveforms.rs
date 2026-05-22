@@ -122,7 +122,11 @@ fn generate_query() -> OracleQuery {
         })
         .collect();
 
-    for (label, x) in [("smooth", &x_smooth), ("spike", &x_spike), ("random", &x_random)] {
+    for (label, x) in [
+        ("smooth", &x_smooth),
+        ("spike", &x_spike),
+        ("random", &x_random),
+    ] {
         for window_size in [3_usize, 5, 7] {
             let median = window_size / 2;
             let upper = window_size - 1;
@@ -143,8 +147,9 @@ fn generate_query() -> OracleQuery {
     }
 
     // sawtooth / square probes — full period, fractional period
-    let t1: Vec<f64> =
-        (0..64).map(|i| i as f64 * 2.0 * std::f64::consts::PI / 64.0).collect();
+    let t1: Vec<f64> = (0..64)
+        .map(|i| i as f64 * 2.0 * std::f64::consts::PI / 64.0)
+        .collect();
     let t2: Vec<f64> = (0..50).map(|i| i as f64 * 0.3).collect();
     for &width in &[0.0_f64, 0.25, 0.5, 0.75, 1.0] {
         points.push(Case {
@@ -271,7 +276,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for signal_misc oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for signal_misc oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -289,7 +296,10 @@ fn vec_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]
@@ -359,7 +369,8 @@ fn diff_signal_order_filter_waveforms() {
 
     let log = DiffLog {
         test_id: "diff_signal_order_filter_waveforms".into(),
-        category: "fsci_signal::order_filter + sawtooth + square + unit_impulse vs scipy.signal".into(),
+        category: "fsci_signal::order_filter + sawtooth + square + unit_impulse vs scipy.signal"
+            .into(),
         case_count: diffs.len(),
         max_abs_diff: max_overall,
         pass: all_pass,

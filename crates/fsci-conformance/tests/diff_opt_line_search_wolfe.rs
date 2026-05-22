@@ -83,7 +83,11 @@ fn diff_opt_line_search_wolfe() {
         // Wolfe 1
         if let Ok(res) = line_search_wolfe1(&f, &g, x0, direction, f0, &g0, params) {
             // Verify Armijo
-            let xp: Vec<f64> = x0.iter().zip(direction.iter()).map(|(xi, di)| xi + res.alpha * di).collect();
+            let xp: Vec<f64> = x0
+                .iter()
+                .zip(direction.iter())
+                .map(|(xi, di)| xi + res.alpha * di)
+                .collect();
             let f_at = f(&xp);
             let g_at = g(&xp);
             let dg0 = dot(&g0, direction);
@@ -100,7 +104,11 @@ fn diff_opt_line_search_wolfe() {
         }
         // Wolfe 2 (strong)
         if let Ok(res) = line_search_wolfe2(&f, &g, x0, direction, f0, &g0, params) {
-            let xp: Vec<f64> = x0.iter().zip(direction.iter()).map(|(xi, di)| xi + res.alpha * di).collect();
+            let xp: Vec<f64> = x0
+                .iter()
+                .zip(direction.iter())
+                .map(|(xi, di)| xi + res.alpha * di)
+                .collect();
             let f_at = f(&xp);
             let g_at = g(&xp);
             let dg0 = dot(&g0, direction);

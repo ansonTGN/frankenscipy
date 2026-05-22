@@ -88,8 +88,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize ndimage_conv diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize ndimage_conv diff log");
     fs::write(path, json).expect("write ndimage_conv diff log");
 }
 
@@ -118,19 +117,14 @@ fn generate_query() -> OracleQuery {
                 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0,
             ],
         ),
-        (
-            "1d_len5",
-            vec![5],
-            vec![1.0, 2.0, 3.0, 4.0, 5.0],
-        ),
+        ("1d_len5", vec![5], vec![1.0, 2.0, 3.0, 4.0, 5.0]),
     ];
     // Kernels per input dimensionality.
     let kernel_2d_laplace: (Vec<usize>, Vec<f64>) = (
         vec![3, 3],
         vec![0.0, 1.0, 0.0, 1.0, -4.0, 1.0, 0.0, 1.0, 0.0],
     );
-    let kernel_2d_box: (Vec<usize>, Vec<f64>) =
-        (vec![3, 3], vec![1.0 / 9.0; 9]);
+    let kernel_2d_box: (Vec<usize>, Vec<f64>) = (vec![3, 3], vec![1.0 / 9.0; 9]);
     let kernel_1d_box: (Vec<usize>, Vec<f64>) = (vec![3], vec![1.0 / 3.0; 3]);
 
     let modes = ["reflect", "constant", "nearest"];
@@ -221,7 +215,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open ndimage_conv oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open ndimage_conv oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -229,9 +226,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "ndimage_conv oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping ndimage_conv oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping ndimage_conv oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }

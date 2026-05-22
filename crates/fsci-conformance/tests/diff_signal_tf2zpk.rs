@@ -88,7 +88,11 @@ fn emit_log(log: &DiffLog) {
 
 fn generate_query() -> OracleQuery {
     let cases: &[(&str, Vec<f64>, Vec<f64>)] = &[
-        ("simple_complex_roots", vec![1.0, 0.5, 0.25], vec![1.0, -0.8, 0.16]),
+        (
+            "simple_complex_roots",
+            vec![1.0, 0.5, 0.25],
+            vec![1.0, -0.8, 0.16],
+        ),
         ("fir_only", vec![1.0, 0.0, -0.5], vec![1.0]),
         (
             "iir_3rd_order",
@@ -118,7 +122,11 @@ fn generate_query() -> OracleQuery {
 }
 
 fn pack_sorted(real: &[f64], imag: &[f64]) -> Vec<(f64, f64)> {
-    let mut items: Vec<(f64, f64)> = real.iter().zip(imag.iter()).map(|(r, i)| (*r, *i)).collect();
+    let mut items: Vec<(f64, f64)> = real
+        .iter()
+        .zip(imag.iter())
+        .map(|(r, i)| (*r, *i))
+        .collect();
     items.sort_by(|a, b| {
         a.0.partial_cmp(&b.0)
             .unwrap_or(std::cmp::Ordering::Equal)

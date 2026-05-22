@@ -241,7 +241,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open integrate_quad oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open integrate_quad oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -249,9 +252,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "integrate_quad oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping integrate_quad oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping integrate_quad oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }

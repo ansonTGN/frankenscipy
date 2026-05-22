@@ -217,9 +217,7 @@ print(json.dumps({"sampled": sampled, "nc": nc}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for simpson_trap_romb_nc oracle: {e}"
             );
-            eprintln!(
-                "skipping simpson_trap_romb_nc oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping simpson_trap_romb_nc oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -235,9 +233,7 @@ print(json.dumps({"sampled": sampled, "nc": nc}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "simpson_trap_romb_nc oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping simpson_trap_romb_nc oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping simpson_trap_romb_nc oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -250,9 +246,7 @@ print(json.dumps({"sampled": sampled, "nc": nc}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "simpson_trap_romb_nc oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping simpson_trap_romb_nc oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping simpson_trap_romb_nc oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -359,10 +353,7 @@ fn diff_integrate_simpson_trapezoid_romb_nc() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

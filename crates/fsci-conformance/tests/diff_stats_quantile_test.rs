@@ -93,15 +93,12 @@ fn emit_log(log: &DiffLog) {
 
 fn generate_query() -> OracleQuery {
     let datasets: Vec<(&str, Vec<f64>)> = vec![
-        (
-            "compact",
-            (1..=20).map(|i| i as f64).collect(),
-        ),
+        ("compact", (1..=20).map(|i| i as f64).collect()),
         (
             "spread",
             vec![
-                -3.0, -1.5, -0.7, 0.0, 0.5, 1.2, 2.0, 3.5, 4.7, 6.0, 8.5, 12.0, 15.0, 20.0,
-                25.0, 30.0,
+                -3.0, -1.5, -0.7, 0.0, 0.5, 1.2, 2.0, 3.5, 4.7, 6.0, 8.5, 12.0, 15.0, 20.0, 25.0,
+                30.0,
             ],
         ),
         (
@@ -180,14 +177,15 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for quantile_test oracle: {e}"
             );
-            eprintln!(
-                "skipping quantile_test oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping quantile_test oracle: python3 not available ({e})");
             return None;
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open quantile_test oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open quantile_test oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -195,9 +193,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "quantile_test oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping quantile_test oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping quantile_test oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -210,9 +206,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "quantile_test oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping quantile_test oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping quantile_test oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -252,16 +246,17 @@ fn diff_stats_quantile_test() {
             });
         }
         if let Some(scipy_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= PVAL_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= PVAL_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

@@ -105,11 +105,7 @@ fn fsci_eval(case: &PointCase) -> Option<f64> {
         "yeojohnson_normmax" => yeojohnson_normmax(&case.data, (-2.0, 2.0)),
         _ => return None,
     };
-    if v.is_finite() {
-        Some(v)
-    } else {
-        None
-    }
+    if v.is_finite() { Some(v) } else { None }
 }
 
 fn generate_query() -> OracleQuery {
@@ -122,14 +118,8 @@ fn generate_query() -> OracleQuery {
         ),
     ];
     let yj_datasets: Vec<(&str, Vec<f64>)> = vec![
-        (
-            "centered",
-            vec![-3.0, -1.5, -0.5, 0.0, 0.5, 1.5, 3.0],
-        ),
-        (
-            "asymmetric",
-            vec![-2.0, -1.0, 0.5, 1.0, 2.5, 4.0, 6.0, 8.0],
-        ),
+        ("centered", vec![-3.0, -1.5, -0.5, 0.0, 0.5, 1.5, 3.0]),
+        ("asymmetric", vec![-2.0, -1.0, 0.5, 1.0, 2.5, 4.0, 6.0, 8.0]),
     ];
 
     let mut points = Vec::new();
@@ -248,16 +238,17 @@ fn diff_stats_normmax() {
     for case in &query.points {
         let scipy_arm = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = scipy_arm.value
-            && let Some(rust_v) = fsci_eval(case) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(case)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

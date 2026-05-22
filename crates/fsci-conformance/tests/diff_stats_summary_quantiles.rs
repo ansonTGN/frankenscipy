@@ -95,8 +95,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize summary_quantiles diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize summary_quantiles diff log");
     fs::write(path, json).expect("write summary_quantiles diff log");
 }
 
@@ -109,19 +108,12 @@ fn fsci_eval(case: &PointCase) -> Option<f64> {
         }
         _ => return None,
     };
-    if v.is_finite() {
-        Some(v)
-    } else {
-        None
-    }
+    if v.is_finite() { Some(v) } else { None }
 }
 
 fn generate_query() -> OracleQuery {
     let datasets: Vec<(&str, Vec<f64>)> = vec![
-        (
-            "compact",
-            (1..=10).map(|i| i as f64).collect(),
-        ),
+        ("compact", (1..=10).map(|i| i as f64).collect()),
         (
             "spread",
             vec![
@@ -155,7 +147,6 @@ fn generate_query() -> OracleQuery {
                 kind: "".into(),
             });
         }
-
     }
     OracleQuery { points }
 }
@@ -208,9 +199,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for summary_quantiles oracle: {e}"
             );
-            eprintln!(
-                "skipping summary_quantiles oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping summary_quantiles oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -226,9 +215,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "summary_quantiles oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping summary_quantiles oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping summary_quantiles oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -241,9 +228,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "summary_quantiles oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping summary_quantiles oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping summary_quantiles oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -271,16 +256,17 @@ fn diff_stats_summary_quantiles() {
     for case in &query.points {
         let scipy_arm = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = scipy_arm.value
-            && let Some(rust_v) = fsci_eval(case) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(case)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

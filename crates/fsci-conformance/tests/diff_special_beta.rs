@@ -236,13 +236,13 @@ print(json.dumps({"two_arg": two_arg, "three_arg": three_arg}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "beta family oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping beta family oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping beta family oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for beta family oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for beta family oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -284,47 +284,49 @@ fn diff_special_beta() {
     for case in &query.two_arg {
         let oracle = two_map.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_two_arg(&case.func, case.a, case.b) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                let rel_diff = if scipy_v.abs() > 1.0 {
-                    abs_diff / scipy_v.abs()
-                } else {
-                    abs_diff
-                };
-                max_abs_overall = max_abs_overall.max(abs_diff);
-                max_rel_overall = max_rel_overall.max(rel_diff);
-                let scale = scipy_v.abs().max(1.0);
-                let pass = abs_diff <= BETA_TOL_ABS || rel_diff <= BETA_TOL_REL * scale;
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    rel_diff,
-                    pass,
-                });
-            }
+            && let Some(rust_v) = fsci_two_arg(&case.func, case.a, case.b)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            let rel_diff = if scipy_v.abs() > 1.0 {
+                abs_diff / scipy_v.abs()
+            } else {
+                abs_diff
+            };
+            max_abs_overall = max_abs_overall.max(abs_diff);
+            max_rel_overall = max_rel_overall.max(rel_diff);
+            let scale = scipy_v.abs().max(1.0);
+            let pass = abs_diff <= BETA_TOL_ABS || rel_diff <= BETA_TOL_REL * scale;
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                rel_diff,
+                pass,
+            });
+        }
     }
 
     for case in &query.three_arg {
         let oracle = three_map.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_three_arg(case.a, case.b, case.x) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                let rel_diff = if scipy_v.abs() > 1.0 {
-                    abs_diff / scipy_v.abs()
-                } else {
-                    abs_diff
-                };
-                max_abs_overall = max_abs_overall.max(abs_diff);
-                max_rel_overall = max_rel_overall.max(rel_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: "betainc".into(),
-                    abs_diff,
-                    rel_diff,
-                    pass: abs_diff <= BETAINC_TOL,
-                });
-            }
+            && let Some(rust_v) = fsci_three_arg(case.a, case.b, case.x)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            let rel_diff = if scipy_v.abs() > 1.0 {
+                abs_diff / scipy_v.abs()
+            } else {
+                abs_diff
+            };
+            max_abs_overall = max_abs_overall.max(abs_diff);
+            max_rel_overall = max_rel_overall.max(rel_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: "betainc".into(),
+                abs_diff,
+                rel_diff,
+                pass: abs_diff <= BETAINC_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

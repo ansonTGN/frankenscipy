@@ -116,9 +116,7 @@ fn generate_query() -> OracleQuery {
         ),
         (
             "spread",
-            vec![
-                -5.0, -2.0, 0.0, 1.0, 2.0, 5.0, 8.0, 10.0, 12.0, 15.0, 20.0,
-            ],
+            vec![-5.0, -2.0, 0.0, 1.0, 2.0, 5.0, 8.0, 10.0, 12.0, 15.0, 20.0],
         ),
     ];
     // Positive-only datasets for gstd / gzscore
@@ -241,9 +239,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for describe_misc oracle: {e}"
             );
-            eprintln!(
-                "skipping describe_misc oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping describe_misc oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -259,9 +255,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "describe_misc oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping describe_misc oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping describe_misc oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -274,9 +268,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "describe_misc oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping describe_misc oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping describe_misc oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -321,16 +313,17 @@ fn diff_stats_describe_misc() {
                 ];
                 for (arm_name, scipy_v, rust_v) in arms {
                     if let (Some(scipy_v), Some(rust_v)) = (scipy_v, rust_v)
-                        && rust_v.is_finite() {
-                            let abs_diff = (rust_v - scipy_v).abs();
-                            max_overall = max_overall.max(abs_diff);
-                            diffs.push(CaseDiff {
-                                case_id: case.case_id.clone(),
-                                arm: arm_name.into(),
-                                abs_diff,
-                                pass: abs_diff <= ABS_TOL,
-                            });
-                        }
+                        && rust_v.is_finite()
+                    {
+                        let abs_diff = (rust_v - scipy_v).abs();
+                        max_overall = max_overall.max(abs_diff);
+                        diffs.push(CaseDiff {
+                            case_id: case.case_id.clone(),
+                            arm: arm_name.into(),
+                            abs_diff,
+                            pass: abs_diff <= ABS_TOL,
+                        });
+                    }
                 }
             }
             "gstd" => {

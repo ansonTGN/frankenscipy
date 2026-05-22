@@ -218,10 +218,16 @@ fn diff_stats_rdist() {
     assert_eq!(oracle.points.len(), query.points.len());
     assert_eq!(oracle.ppf.len(), query.ppf.len());
 
-    let pmap: HashMap<String, PointArm> =
-        oracle.points.into_iter().map(|r| (r.case_id.clone(), r)).collect();
-    let ppfmap: HashMap<String, PpfArm> =
-        oracle.ppf.into_iter().map(|r| (r.case_id.clone(), r)).collect();
+    let pmap: HashMap<String, PointArm> = oracle
+        .points
+        .into_iter()
+        .map(|r| (r.case_id.clone(), r))
+        .collect();
+    let ppfmap: HashMap<String, PpfArm> = oracle
+        .ppf
+        .into_iter()
+        .map(|r| (r.case_id.clone(), r))
+        .collect();
 
     let start = Instant::now();
     let mut diffs = Vec::new();

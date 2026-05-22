@@ -110,7 +110,11 @@ fn diff_special_inverse_hyperbolic_exp2() {
 
     // exp2_iterated(x) = exp(exp(x))
     for &x in &[-2.0_f64, -1.0, 0.0, 0.5, 1.0, 2.0] {
-        check(&format!("exp2_iterated_{x}"), exp2_iterated(x), x.exp().exp());
+        check(
+            &format!("exp2_iterated_{x}"),
+            exp2_iterated(x),
+            x.exp().exp(),
+        );
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

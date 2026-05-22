@@ -124,12 +124,7 @@ fn generate_query() -> OracleQuery {
             (1..=10).map(|i| i as f64).collect(),
             vec![-1.5],
         ),
-        (
-            "4x4_constant",
-            vec![4, 4],
-            vec![1.0; 16],
-            vec![1.0, 1.0],
-        ),
+        ("4x4_constant", vec![4, 4], vec![1.0; 16], vec![1.0, 1.0]),
     ];
     let orders = [0usize, 1];
     let modes = ["constant", "nearest"];

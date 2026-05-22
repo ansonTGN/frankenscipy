@@ -98,7 +98,11 @@ fn emit_log(log: &DiffLog) {
 fn generate_query() -> OracleQuery {
     let fixtures: Vec<(&str, Vec<f64>, Option<Vec<f64>>)> = vec![
         // Uniform expected (default behavior)
-        ("uniform_exp", vec![16.0, 18.0, 16.0, 14.0, 12.0, 12.0], None),
+        (
+            "uniform_exp",
+            vec![16.0, 18.0, 16.0, 14.0, 12.0, 12.0],
+            None,
+        ),
         // Custom expected; totals must match (180 == 180)
         (
             "custom_exp",
@@ -185,9 +189,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for chisquare_power oracle: {e}"
             );
-            eprintln!(
-                "skipping chisquare_power oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping chisquare_power oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -203,9 +205,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "chisquare_power oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping chisquare_power oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping chisquare_power oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -218,9 +218,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "chisquare_power oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping chisquare_power oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping chisquare_power oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -255,16 +253,13 @@ fn diff_stats_chisquare_power() {
             // chisquare and power_divergence(lambda=1) should be identical.
             // Use chisquare's output as the reported statistic so this case
             // also covers the chisquare wrapper.
-            let stat_consistent = (s_pd.is_nan() && s_cs.is_nan())
-                || (s_pd - s_cs).abs() <= 1e-12;
+            let stat_consistent = (s_pd.is_nan() && s_cs.is_nan()) || (s_pd - s_cs).abs() <= 1e-12;
             assert!(
                 stat_consistent,
                 "chisquare/power_divergence inconsistency: {} vs {}",
-                s_pd,
-                s_cs
+                s_pd, s_cs
             );
-            let pval_consistent = (p_pd.is_nan() && p_cs.is_nan())
-                || (p_pd - p_cs).abs() <= 1e-12;
+            let pval_consistent = (p_pd.is_nan() && p_cs.is_nan()) || (p_pd - p_cs).abs() <= 1e-12;
             assert!(
                 pval_consistent,
                 "chisquare/power_divergence pvalue inconsistency"
@@ -275,27 +270,29 @@ fn diff_stats_chisquare_power() {
         };
 
         if let Some(scipy_stat) = scipy_arm.statistic
-            && stat.is_finite() {
-                let abs_diff = (stat - scipy_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && stat.is_finite()
+        {
+            let abs_diff = (stat - scipy_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(scipy_p) = scipy_arm.pvalue
-            && pval.is_finite() {
-                let abs_diff = (pval - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && pval.is_finite()
+        {
+            let abs_diff = (pval - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

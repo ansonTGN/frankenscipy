@@ -139,10 +139,17 @@ fn generate_query() -> OracleQuery {
 
     // iv probes: real (v, z>0)
     let iv_probes: &[(f64, f64)] = &[
-        (0.0, 0.5), (0.0, 1.0), (0.0, 2.0), (0.0, 5.0),
-        (1.0, 0.5), (1.0, 1.0), (1.0, 3.0),
-        (0.5, 1.0), (0.5, 2.5),
-        (2.0, 2.0), (3.0, 4.0),
+        (0.0, 0.5),
+        (0.0, 1.0),
+        (0.0, 2.0),
+        (0.0, 5.0),
+        (1.0, 0.5),
+        (1.0, 1.0),
+        (1.0, 3.0),
+        (0.5, 1.0),
+        (0.5, 2.5),
+        (2.0, 2.0),
+        (3.0, 4.0),
     ];
     for &(v, z) in iv_probes {
         points.push(Case {
@@ -157,10 +164,18 @@ fn generate_query() -> OracleQuery {
     // hankel1 / hankel2 probes: real (v, z>0). Integer orders v=0,1,2,3
     // are exercised across a spread of z (frankenscipy-xg4xw).
     let h_probes: &[(f64, f64)] = &[
-        (0.0, 1.0), (0.0, 2.5), (0.0, 5.0),
-        (1.0, 0.5), (1.0, 1.0), (1.0, 3.0), (1.0, 5.0),
-        (2.0, 1.0), (2.0, 2.0), (2.0, 4.0),
-        (3.0, 2.0), (3.0, 6.0),
+        (0.0, 1.0),
+        (0.0, 2.5),
+        (0.0, 5.0),
+        (1.0, 0.5),
+        (1.0, 1.0),
+        (1.0, 3.0),
+        (1.0, 5.0),
+        (2.0, 1.0),
+        (2.0, 2.0),
+        (2.0, 4.0),
+        (3.0, 2.0),
+        (3.0, 6.0),
         (0.5, 2.0),
     ];
     for &(v, z) in h_probes {
@@ -263,7 +278,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for iv_hankel_erfi oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for iv_hankel_erfi oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

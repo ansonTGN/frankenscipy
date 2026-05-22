@@ -93,10 +93,7 @@ fn emit_log(log: &DiffLog) {
 
 fn generate_query() -> OracleQuery {
     let datasets: Vec<(&str, Vec<f64>)> = vec![
-        (
-            "compact",
-            (1..=10).map(|i| i as f64).collect(),
-        ),
+        ("compact", (1..=10).map(|i| i as f64).collect()),
         (
             "spread",
             vec![
@@ -105,9 +102,7 @@ fn generate_query() -> OracleQuery {
         ),
         (
             "ties",
-            vec![
-                1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0,
-            ],
+            vec![1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0],
         ),
     ];
     // (lo_pct, hi_pct) configs
@@ -182,9 +177,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for winsorize oracle: {e}"
             );
-            eprintln!(
-                "skipping winsorize oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping winsorize oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -197,9 +190,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "winsorize oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping winsorize oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping winsorize oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }

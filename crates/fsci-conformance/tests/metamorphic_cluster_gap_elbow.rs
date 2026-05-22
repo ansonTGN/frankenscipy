@@ -65,8 +65,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create gap_elbow metamorphic output dir");
+    fs::create_dir_all(output_dir()).expect("create gap_elbow metamorphic output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -109,7 +108,12 @@ fn k1_inertia(data: &[Vec<f64>]) -> f64 {
         *v /= n as f64;
     }
     data.iter()
-        .map(|p| p.iter().zip(mean.iter()).map(|(a, b)| (a - b).powi(2)).sum::<f64>())
+        .map(|p| {
+            p.iter()
+                .zip(mean.iter())
+                .map(|(a, b)| (a - b).powi(2))
+                .sum::<f64>()
+        })
         .sum()
 }
 

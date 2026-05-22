@@ -132,11 +132,7 @@ fn generate_query() -> OracleQuery {
     ];
     let b2 = vec![3.0_f64, 2.5, 2.5, 1.0, 3.0];
 
-    let a3 = vec![
-        vec![1.0_f64, -1.0],
-        vec![-1.0, 1.0],
-        vec![0.5, 0.5],
-    ];
+    let a3 = vec![vec![1.0_f64, -1.0], vec![-1.0, 1.0], vec![0.5, 0.5]];
     let b3 = vec![1.0_f64, 1.0, 2.0]; // forces one var to 0 (constraint binding)
 
     for (label, a, b) in [
@@ -308,7 +304,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for nnls_iso_lsa oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for nnls_iso_lsa oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -326,7 +324,10 @@ fn vec_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]

@@ -75,8 +75,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create geometry-primitives diff output dir");
+    fs::create_dir_all(output_dir()).expect("create geometry-primitives diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -88,8 +87,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize geometry-primitives diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize geometry-primitives diff log");
     fs::write(path, json).expect("write geometry-primitives diff log");
 }
 
@@ -197,9 +195,7 @@ print(json.dumps({"points": points}, allow_nan=False))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for geometry-primitives oracle: {e}"
             );
-            eprintln!(
-                "skipping geometry-primitives oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping geometry-primitives oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -215,9 +211,7 @@ print(json.dumps({"points": points}, allow_nan=False))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "geometry-primitives oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping geometry-primitives oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping geometry-primitives oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -230,15 +224,11 @@ print(json.dumps({"points": points}, allow_nan=False))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "geometry-primitives oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping geometry-primitives oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping geometry-primitives oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
-    Some(
-        serde_json::from_str(&stdout).expect("parse geometry-primitives oracle JSON"),
-    )
+    Some(serde_json::from_str(&stdout).expect("parse geometry-primitives oracle JSON"))
 }
 
 #[test]
@@ -279,14 +269,15 @@ fn diff_spatial_geometry_primitives() {
 
         // medoid
         if let Some(scipy_m) = scipy_arm.medoid
-            && let Some(rust_m) = medoid(&case.points) {
-                cases.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    sub_check: "medoid".into(),
-                    detail: format!("rust={rust_m}, scipy={scipy_m}"),
-                    pass: rust_m as i64 == scipy_m,
-                });
-            }
+            && let Some(rust_m) = medoid(&case.points)
+        {
+            cases.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                sub_check: "medoid".into(),
+                detail: format!("rust={rust_m}, scipy={scipy_m}"),
+                pass: rust_m as i64 == scipy_m,
+            });
+        }
 
         // diameter
         if let Some(scipy_d) = scipy_arm.diameter {

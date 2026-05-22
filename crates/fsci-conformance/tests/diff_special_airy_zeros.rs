@@ -177,10 +177,7 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child
-            .stdin
-            .as_mut()
-            .expect("open airy-zeros oracle stdin");
+        let stdin = child.stdin.as_mut().expect("open airy-zeros oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -188,9 +185,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "airy-zeros oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping airy-zeros oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping airy-zeros oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -231,29 +226,30 @@ fn diff_special_airy_zeros() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_zs) = oracle.zeros.as_ref()
-            && let Some(rust_zs) = fsci_eval(&case.func, case.n) {
-                if rust_zs.len() != scipy_zs.len() {
-                    diffs.push(CaseDiff {
-                        case_id: case.case_id.clone(),
-                        func: case.func.clone(),
-                        abs_diff: f64::INFINITY,
-                        pass: false,
-                    });
-                    continue;
-                }
-                let max_abs = rust_zs
-                    .iter()
-                    .zip(scipy_zs.iter())
-                    .map(|(r, s)| (r - s).abs())
-                    .fold(0.0_f64, f64::max);
-                max_overall = max_overall.max(max_abs);
+            && let Some(rust_zs) = fsci_eval(&case.func, case.n)
+        {
+            if rust_zs.len() != scipy_zs.len() {
                 diffs.push(CaseDiff {
                     case_id: case.case_id.clone(),
                     func: case.func.clone(),
-                    abs_diff: max_abs,
-                    pass: max_abs <= ABS_TOL,
+                    abs_diff: f64::INFINITY,
+                    pass: false,
                 });
+                continue;
             }
+            let max_abs = rust_zs
+                .iter()
+                .zip(scipy_zs.iter())
+                .map(|(r, s)| (r - s).abs())
+                .fold(0.0_f64, f64::max);
+            max_overall = max_overall.max(max_abs);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff: max_abs,
+                pass: max_abs <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

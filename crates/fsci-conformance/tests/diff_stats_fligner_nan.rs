@@ -184,9 +184,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for fligner_nan oracle: {e}"
             );
-            eprintln!(
-                "skipping fligner_nan oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping fligner_nan oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -199,13 +197,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "fligner_nan oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping fligner_nan oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping fligner_nan oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for fligner_nan oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for fligner_nan oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -253,16 +251,17 @@ fn diff_stats_fligner_nan() {
                 pass: true,
             });
         } else if let Some(s_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - s_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - s_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if !result.pvalue.is_finite() && scipy_arm.pvalue.is_none() {
             diffs.push(CaseDiff {
                 case_id: case.case_id.clone(),
@@ -271,16 +270,17 @@ fn diff_stats_fligner_nan() {
                 pass: true,
             });
         } else if let Some(s_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - s_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - s_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

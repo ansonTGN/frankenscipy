@@ -14,9 +14,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_sparse::{
-    CooMatrix, FormatConvertible, LuOptions, Shape2D, splu, splu_solve,
-};
+use fsci_sparse::{CooMatrix, FormatConvertible, LuOptions, Shape2D, splu, splu_solve};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-004";

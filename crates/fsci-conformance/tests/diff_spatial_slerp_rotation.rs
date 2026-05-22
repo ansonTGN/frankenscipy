@@ -83,8 +83,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create slerp_rotation diff output dir");
+    fs::create_dir_all(output_dir()).expect("create slerp_rotation diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -233,9 +232,7 @@ print(json.dumps({"points": points}, allow_nan=False))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for slerp_rotation oracle: {e}"
             );
-            eprintln!(
-                "skipping slerp_rotation oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping slerp_rotation oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -251,9 +248,7 @@ print(json.dumps({"points": points}, allow_nan=False))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "slerp_rotation oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping slerp_rotation oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping slerp_rotation oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -300,7 +295,10 @@ fn diff_spatial_slerp_rotation() {
                     let pass = rust_rows.len() == scipy_rows.len()
                         && rust_rows.iter().zip(scipy_rows.iter()).all(|(rr, sr)| {
                             rr.len() == sr.len()
-                                && rr.iter().zip(sr.iter()).all(|(r, s)| (r - s).abs() <= ABS_TOL)
+                                && rr
+                                    .iter()
+                                    .zip(sr.iter())
+                                    .all(|(r, s)| (r - s).abs() <= ABS_TOL)
                         });
                     cases.push(CaseDiff {
                         case_id: case.case_id.clone(),

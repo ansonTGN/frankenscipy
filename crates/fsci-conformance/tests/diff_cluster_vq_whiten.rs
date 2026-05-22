@@ -158,7 +158,14 @@ fn generate_query() -> OracleQuery {
         ),
         (
             "6x1_2centroids",
-            vec![vec![0.0], vec![1.0], vec![2.0], vec![5.0], vec![6.0], vec![7.0]],
+            vec![
+                vec![0.0],
+                vec![1.0],
+                vec![2.0],
+                vec![5.0],
+                vec![6.0],
+                vec![7.0],
+            ],
             vec![vec![1.0], vec![6.0]],
         ),
         (
@@ -265,9 +272,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "vq_whiten oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping vq_whiten oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping vq_whiten oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -307,7 +312,9 @@ fn diff_cluster_vq_whiten() {
         let scipy_arm = pmap.get(&case.case_id).expect("validated oracle");
         match case.op.as_str() {
             "whiten" => {
-                let Ok(fsci_v) = whiten(&case.data) else { continue };
+                let Ok(fsci_v) = whiten(&case.data) else {
+                    continue;
+                };
                 let Some(scipy_v) = scipy_arm.values.as_ref() else {
                     continue;
                 };

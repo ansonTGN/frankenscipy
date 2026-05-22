@@ -189,7 +189,10 @@ print(json.dumps({"points": points, "ppf": ppf}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open recipinvgauss oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open recipinvgauss oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -201,7 +204,9 @@ print(json.dumps({"points": points, "ppf": ppf}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for recipinvgauss oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for recipinvgauss oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -224,10 +229,16 @@ fn diff_stats_recipinvgauss() {
     assert_eq!(oracle.points.len(), query.points.len());
     assert_eq!(oracle.ppf.len(), query.ppf.len());
 
-    let pmap: HashMap<String, PointArm> =
-        oracle.points.into_iter().map(|r| (r.case_id.clone(), r)).collect();
-    let ppfmap: HashMap<String, PpfArm> =
-        oracle.ppf.into_iter().map(|r| (r.case_id.clone(), r)).collect();
+    let pmap: HashMap<String, PointArm> = oracle
+        .points
+        .into_iter()
+        .map(|r| (r.case_id.clone(), r))
+        .collect();
+    let ppfmap: HashMap<String, PpfArm> = oracle
+        .ppf
+        .into_iter()
+        .map(|r| (r.case_id.clone(), r))
+        .collect();
 
     let start = Instant::now();
     let mut diffs = Vec::new();

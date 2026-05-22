@@ -347,7 +347,9 @@ fn diff_linalg_basic_matrix_ops() {
         assert_eq!(case.case_id, o.case_id);
         match case.op.as_str() {
             "diag" => {
-                let Some(exp_flat) = o.flat.as_ref() else { continue };
+                let Some(exp_flat) = o.flat.as_ref() else {
+                    continue;
+                };
                 let actual = diag(&case.a);
                 if actual.len() != exp_flat.len() {
                     diffs.push(CaseDiff {
@@ -373,7 +375,9 @@ fn diff_linalg_basic_matrix_ops() {
                 });
             }
             "matvec" => {
-                let Some(exp_flat) = o.flat.as_ref() else { continue };
+                let Some(exp_flat) = o.flat.as_ref() else {
+                    continue;
+                };
                 let actual = match matvec(&case.a, &case.vec_a) {
                     Ok(v) => v,
                     Err(e) => {
@@ -501,9 +505,5 @@ fn diff_linalg_basic_matrix_ops() {
         }
     }
 
-    assert!(
-        all_pass,
-        "matrix-ops parity failed: {} cases",
-        diffs.len()
-    );
+    assert!(all_pass, "matrix-ops parity failed: {} cases", diffs.len());
 }

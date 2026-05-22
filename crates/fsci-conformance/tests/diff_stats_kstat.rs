@@ -94,10 +94,7 @@ fn emit_log(log: &DiffLog) {
 
 fn generate_query() -> OracleQuery {
     let datasets: Vec<(&str, Vec<f64>)> = vec![
-        (
-            "compact",
-            (1..=10).map(|i| i as f64).collect(),
-        ),
+        ("compact", (1..=10).map(|i| i as f64).collect()),
         (
             "skewed",
             vec![
@@ -106,9 +103,7 @@ fn generate_query() -> OracleQuery {
         ),
         (
             "symmetric",
-            vec![
-                -3.0, -2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 3.0,
-            ],
+            vec![-3.0, -2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 3.0],
         ),
     ];
 
@@ -196,9 +191,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "kstat oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping kstat oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping kstat oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }

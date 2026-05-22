@@ -105,7 +105,12 @@ fn generate_query() -> OracleQuery {
         ("int_linear_m1_k0", vec![2.0, 3.0], 1, 0.0),
         ("int_quad_m1_k5", vec![1.0, 2.0, 3.0], 1, 5.0),
         ("int_cubic_m2_k0", vec![2.0, -3.0, 4.0, -1.0], 2, 0.0),
-        ("int_quartic_m1_kneg2", vec![1.0, 0.0, -2.0, 0.0, 1.0], 1, -2.0),
+        (
+            "int_quartic_m1_kneg2",
+            vec![1.0, 0.0, -2.0, 0.0, 1.0],
+            1,
+            -2.0,
+        ),
     ];
     let polyfromroots_cases: &[(&str, Vec<f64>)] = &[
         ("roots_two", vec![1.0, -1.0]),
@@ -206,7 +211,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open poly_helpers oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open poly_helpers oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -218,7 +226,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for poly_helpers oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for poly_helpers oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -300,10 +310,7 @@ fn diff_interpolate_poly_helpers() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

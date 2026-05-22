@@ -110,12 +110,7 @@ fn generate_query() -> OracleQuery {
     let three_pi_over_4 = -3.0 * std::f64::consts::PI / 4.0;
     let confs: &[(&str, Option<(f64, f64)>, Option<(f64, f64)>, usize)] = &[
         ("default_m_eq_n", None, None, 0), // m = n
-        (
-            "custom_w_default_a",
-            Some((1.0, three_pi_over_4)),
-            None,
-            0,
-        ),
+        ("custom_w_default_a", Some((1.0, three_pi_over_4)), None, 0),
         ("default_w_a_05_0", None, Some((0.5, 0.0)), 0),
         ("m_eq_2n", None, None, 1), // sentinel: harness sets m = 2n
     ];

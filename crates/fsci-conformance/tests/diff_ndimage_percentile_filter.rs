@@ -296,10 +296,7 @@ fn diff_ndimage_percentile_filter() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "pctile mismatch: {} abs_diff={}",
-                d.case_id, d.abs_diff
-            );
+            eprintln!("pctile mismatch: {} abs_diff={}", d.case_id, d.abs_diff);
         }
     }
 

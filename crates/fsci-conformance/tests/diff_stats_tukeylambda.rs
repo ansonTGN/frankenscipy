@@ -117,11 +117,7 @@ fn generate_query() -> OracleQuery {
     let qs = [0.05_f64, 0.25, 0.5, 0.75, 0.95];
     let mut points = Vec::new();
     for &lam in &lams {
-        let span: f64 = if lam > 0.0 {
-            0.95 / lam
-        } else {
-            5.0
-        };
+        let span: f64 = if lam > 0.0 { 0.95 / lam } else { 5.0 };
         for k in 0..7u32 {
             let frac = -0.95 + 1.9 * (k as f64) / 6.0;
             let x = frac * span;
@@ -210,7 +206,9 @@ print(json.dumps({"points": points, "ppf": ppf}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for tukeylambda oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for tukeylambda oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

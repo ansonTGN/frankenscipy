@@ -105,9 +105,7 @@ fn generate_query() -> OracleQuery {
         ),
         (
             "light_tail",
-            vec![
-                -2.5, -1.7, -0.9, -0.3, 0.1, 0.4, 0.8, 1.2, 1.8, 2.1, 3.0,
-            ],
+            vec![-2.5, -1.7, -0.9, -0.3, 0.1, 0.4, 0.8, 1.2, 1.8, 2.1, 3.0],
         ),
         (
             "heavy_tail",
@@ -209,10 +207,7 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child
-            .stdin
-            .as_mut()
-            .expect("open descriptive oracle stdin");
+        let stdin = child.stdin.as_mut().expect("open descriptive oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -220,9 +215,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "descriptive oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping descriptive oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping descriptive oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }

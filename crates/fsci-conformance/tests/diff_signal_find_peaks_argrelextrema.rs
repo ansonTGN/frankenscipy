@@ -96,22 +96,11 @@ fn generate_query() -> OracleQuery {
         ),
         (
             "alternating",
-            vec![
-                0.0, 2.0, 0.0, 4.0, 0.0, 6.0, 0.0, 8.0, 0.0, 10.0, 0.0,
-            ],
+            vec![0.0, 2.0, 0.0, 4.0, 0.0, 6.0, 0.0, 8.0, 0.0, 10.0, 0.0],
         ),
-        (
-            "monotonic_rise",
-            vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
-        ),
-        (
-            "monotonic_fall",
-            vec![5.0, 4.0, 3.0, 2.0, 1.0, 0.0],
-        ),
-        (
-            "plateau",
-            vec![0.0, 1.0, 3.0, 3.0, 3.0, 1.0, 0.0, 2.0, 0.0],
-        ),
+        ("monotonic_rise", vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0]),
+        ("monotonic_fall", vec![5.0, 4.0, 3.0, 2.0, 1.0, 0.0]),
+        ("plateau", vec![0.0, 1.0, 3.0, 3.0, 3.0, 1.0, 0.0, 2.0, 0.0]),
         ("trivial_short", vec![1.0, 2.0, 1.0]),
         (
             "noisy_sine_n11",
@@ -206,13 +195,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "find_peaks oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping find_peaks oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping find_peaks oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for find_peaks oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for find_peaks oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

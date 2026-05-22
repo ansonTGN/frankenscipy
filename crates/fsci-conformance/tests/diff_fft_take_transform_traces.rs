@@ -63,8 +63,7 @@ fn diff_fft_take_transform_traces() {
     let _ = take_transform_traces();
 
     // Issue an fft call — it should record at least one trace.
-    let signal: Vec<Complex64> =
-        (0..16).map(|i| (i as f64, 0.0)).collect();
+    let signal: Vec<Complex64> = (0..16).map(|i| (i as f64, 0.0)).collect();
     let _ = fft(&signal, &opts).expect("fft");
 
     let traces1 = take_transform_traces();

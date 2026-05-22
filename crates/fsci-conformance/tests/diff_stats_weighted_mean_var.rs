@@ -77,8 +77,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create weighted_mean_var diff output dir");
+    fs::create_dir_all(output_dir()).expect("create weighted_mean_var diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -90,8 +89,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize weighted_mean_var diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize weighted_mean_var diff log");
     fs::write(path, json).expect("write weighted_mean_var diff log");
 }
 
@@ -187,9 +185,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for weighted_mean_var oracle: {e}"
             );
-            eprintln!(
-                "skipping weighted_mean_var oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping weighted_mean_var oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -205,9 +201,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "weighted_mean_var oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping weighted_mean_var oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping weighted_mean_var oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -220,9 +214,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "weighted_mean_var oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping weighted_mean_var oracle: numpy not available\n{stderr}"
-        );
+        eprintln!("skipping weighted_mean_var oracle: numpy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

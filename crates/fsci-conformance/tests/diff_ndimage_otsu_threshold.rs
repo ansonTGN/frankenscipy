@@ -87,7 +87,9 @@ fn synth(n: usize, seed: u64, low: f64, hi: f64) -> Vec<f64> {
     let mut s = seed;
     (0..n)
         .map(|_| {
-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            s = s
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let u = ((s >> 11) as f64) / (1u64 << 53) as f64;
             low + u * (hi - low)
         })
@@ -98,7 +100,9 @@ fn bimodal(n: usize, seed: u64) -> Vec<f64> {
     let mut s = seed;
     (0..n)
         .map(|i| {
-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            s = s
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let u = ((s >> 11) as f64) / (1u64 << 53) as f64;
             // Two Gaussian modes
             if i % 2 == 0 {

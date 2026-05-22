@@ -142,7 +142,10 @@ fn diff_runtime_policy_evidence_ledger() {
         );
 
         // After 5 records with capacity 3: entries 3, 4, 5 should remain.
-        let xs: Vec<f64> = led.iter().map(|e| e.signals.condition_number_log10).collect();
+        let xs: Vec<f64> = led
+            .iter()
+            .map(|e| e.signals.condition_number_log10)
+            .collect();
         check(
             "fifo_kept_last_three",
             xs == vec![3.0, 4.0, 5.0],
@@ -175,11 +178,7 @@ fn diff_runtime_policy_evidence_ledger() {
             .latest()
             .map(|e| e.alien_artifact_decision())
             .expect("latest entry");
-        check(
-            "latest_alien_matches_entry",
-            lat == same,
-            String::new(),
-        );
+        check("latest_alien_matches_entry", lat == same, String::new());
     }
 
     // === 5. to_alien_artifact_jsonl yields N lines for N entries ===
@@ -201,11 +200,7 @@ fn diff_runtime_policy_evidence_ledger() {
             .lines()
             .filter(|l| !l.is_empty())
             .all(|l| serde_json::from_str::<serde_json::Value>(l).is_ok());
-        check(
-            "jsonl_each_line_valid_json",
-            all_parse_ok,
-            String::new(),
-        );
+        check("jsonl_each_line_valid_json", all_parse_ok, String::new());
     }
 
     // === 6. DecisionEvidenceEntry::confidence == posterior[top_state.index()] ===
@@ -232,7 +227,10 @@ fn diff_runtime_policy_evidence_ledger() {
         check(
             "calibration_trigger_true_on_fail_closed_incompatible",
             trig,
-            format!("trig={trig} action={:?} top={:?}", entry.action, entry.top_state),
+            format!(
+                "trig={trig} action={:?} top={:?}",
+                entry.action, entry.top_state
+            ),
         );
     }
 

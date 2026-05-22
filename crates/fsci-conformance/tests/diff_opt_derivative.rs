@@ -64,12 +64,12 @@ fn diff_opt_derivative() {
     let mut max_overall = 0.0_f64;
 
     // (model, fsci closure, analytic derivative closure, x value)
-    let models: Vec<(
-        &str,
-        Box<dyn Fn(f64) -> f64>,
-        Box<dyn Fn(f64) -> f64>,
-    )> = vec![
-        ("square", Box::new(|x: f64| x * x), Box::new(|x: f64| 2.0 * x)),
+    let models: Vec<(&str, Box<dyn Fn(f64) -> f64>, Box<dyn Fn(f64) -> f64>)> = vec![
+        (
+            "square",
+            Box::new(|x: f64| x * x),
+            Box::new(|x: f64| 2.0 * x),
+        ),
         (
             "cube",
             Box::new(|x: f64| x * x * x),
@@ -85,12 +85,12 @@ fn diff_opt_derivative() {
             Box::new(|x: f64| x.cos()),
             Box::new(|x: f64| -x.sin()),
         ),
-        ("exp", Box::new(|x: f64| x.exp()), Box::new(|x: f64| x.exp())),
         (
-            "log",
-            Box::new(|x: f64| x.ln()),
-            Box::new(|x: f64| 1.0 / x),
+            "exp",
+            Box::new(|x: f64| x.exp()),
+            Box::new(|x: f64| x.exp()),
         ),
+        ("log", Box::new(|x: f64| x.ln()), Box::new(|x: f64| 1.0 / x)),
         (
             "sqrt",
             Box::new(|x: f64| x.sqrt()),

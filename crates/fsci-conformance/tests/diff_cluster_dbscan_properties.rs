@@ -117,7 +117,8 @@ fn diff_cluster_dbscan_properties() {
         // First 4 points share a label, last 4 share a label, no -1
         let first_labels = &r.labels[..4];
         let last_labels = &r.labels[4..];
-        let all_first_same = first_labels.iter().all(|&l| l == first_labels[0]) && first_labels[0] >= 0;
+        let all_first_same =
+            first_labels.iter().all(|&l| l == first_labels[0]) && first_labels[0] >= 0;
         let all_last_same = last_labels.iter().all(|&l| l == last_labels[0]) && last_labels[0] >= 0;
         check(
             "two_clusters_first_group_same_label",
@@ -215,55 +216,35 @@ fn diff_cluster_dbscan_properties() {
     // === 5. Error: empty data ===
     {
         let r = dbscan(&[], 0.5, 2);
-        check(
-            "empty_data_errors",
-            r.is_err(),
-            format!("res={r:?}"),
-        );
+        check("empty_data_errors", r.is_err(), format!("res={r:?}"));
     }
 
     // === 6. Error: eps == 0 ===
     {
         let data: Vec<Vec<f64>> = vec![vec![0.0, 0.0], vec![1.0, 1.0]];
         let r = dbscan(&data, 0.0, 2);
-        check(
-            "zero_eps_errors",
-            r.is_err(),
-            format!("res={r:?}"),
-        );
+        check("zero_eps_errors", r.is_err(), format!("res={r:?}"));
     }
 
     // === 7. Error: eps non-finite ===
     {
         let data: Vec<Vec<f64>> = vec![vec![0.0, 0.0], vec![1.0, 1.0]];
         let r = dbscan(&data, f64::NAN, 2);
-        check(
-            "nan_eps_errors",
-            r.is_err(),
-            format!("res={r:?}"),
-        );
+        check("nan_eps_errors", r.is_err(), format!("res={r:?}"));
     }
 
     // === 8. Error: min_samples == 0 ===
     {
         let data: Vec<Vec<f64>> = vec![vec![0.0, 0.0], vec![1.0, 1.0]];
         let r = dbscan(&data, 0.5, 0);
-        check(
-            "zero_min_samples_errors",
-            r.is_err(),
-            format!("res={r:?}"),
-        );
+        check("zero_min_samples_errors", r.is_err(), format!("res={r:?}"));
     }
 
     // === 9. Error: non-finite input ===
     {
         let data: Vec<Vec<f64>> = vec![vec![0.0, 0.0], vec![f64::NAN, 1.0]];
         let r = dbscan(&data, 0.5, 2);
-        check(
-            "non_finite_data_errors",
-            r.is_err(),
-            format!("res={r:?}"),
-        );
+        check("non_finite_data_errors", r.is_err(), format!("res={r:?}"));
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

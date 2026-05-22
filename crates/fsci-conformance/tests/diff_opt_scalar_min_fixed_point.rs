@@ -281,13 +281,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "scalar_min oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping scalar_min oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping scalar_min oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for scalar_min oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for scalar_min oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

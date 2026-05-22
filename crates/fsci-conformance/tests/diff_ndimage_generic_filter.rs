@@ -128,14 +128,8 @@ fn diff_ndimage_generic_filter() {
     // === closure = sum / size² → equals uniform_filter ===
     {
         let size_sq = (size * size) as f64;
-        let g = generic_filter(
-            &arr,
-            |w| w.iter().sum::<f64>() / size_sq,
-            size,
-            mode,
-            0.0,
-        )
-        .expect("generic uniform");
+        let g = generic_filter(&arr, |w| w.iter().sum::<f64>() / size_sq, size, mode, 0.0)
+            .expect("generic uniform");
         let u = uniform_filter(&arr, size, mode, 0.0).expect("uniform_filter");
         check(
             "sum_closure_eq_uniform_filter",
@@ -165,12 +159,19 @@ fn diff_ndimage_generic_filter() {
         check(
             "closure_called_per_output_cell",
             calls_eq_size,
-            format!("calls={} expected={}", observed_lengths.borrow().len(), arr.size()),
+            format!(
+                "calls={} expected={}",
+                observed_lengths.borrow().len(),
+                arr.size()
+            ),
         );
         check(
             "closure_neighborhood_length_correct",
             all_lengths_correct,
-            format!("expected={expected_len} actual={:?}", &observed_lengths.borrow()[..5.min(observed_lengths.borrow().len())]),
+            format!(
+                "expected={expected_len} actual={:?}",
+                &observed_lengths.borrow()[..5.min(observed_lengths.borrow().len())]
+            ),
         );
         // sanity check the output is well-formed
         check(
@@ -183,22 +184,14 @@ fn diff_ndimage_generic_filter() {
     // === Error: size = 0 ===
     {
         let r = generic_filter(&arr, |w| w[0], 0, mode, 0.0);
-        check(
-            "size_zero_errors",
-            r.is_err(),
-            format!("res={r:?}"),
-        );
+        check("size_zero_errors", r.is_err(), format!("res={r:?}"));
     }
 
     // === Error: empty input ===
     {
         let empty = NdArray::new(Vec::<f64>::new(), vec![0]).expect("empty ndarray");
         let r = generic_filter(&empty, |w| w.iter().sum(), 3, mode, 0.0);
-        check(
-            "empty_input_errors",
-            r.is_err(),
-            format!("res={r:?}"),
-        );
+        check("empty_input_errors", r.is_err(), format!("res={r:?}"));
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

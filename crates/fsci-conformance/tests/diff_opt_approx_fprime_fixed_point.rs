@@ -131,7 +131,7 @@ fn eval_fp(name: &str, x: f64) -> f64 {
         "linear_half" => 0.5 * (x + 1.0),
         // f = exp(-x) → fixed point near 0.5671432904
         "exp_neg" => (-x).exp(),
-    _ => f64::NAN,
+        _ => f64::NAN,
     }
 }
 
@@ -289,7 +289,10 @@ fn vec_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]

@@ -203,7 +203,9 @@ fn diff_special_poch() {
 
     for case in &query.points {
         let scipy_arm = pmap.get(&case.case_id).expect("validated oracle");
-        let Some(scipy_v) = scipy_arm.value else { continue };
+        let Some(scipy_v) = scipy_arm.value else {
+            continue;
+        };
         let fsci_v = poch(case.x, case.n);
         if !fsci_v.is_finite() {
             continue;
@@ -235,10 +237,7 @@ fn diff_special_poch() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "poch mismatch: {} rel_diff={}",
-                d.case_id, d.rel_diff
-            );
+            eprintln!("poch mismatch: {} rel_diff={}", d.case_id, d.rel_diff);
         }
     }
 

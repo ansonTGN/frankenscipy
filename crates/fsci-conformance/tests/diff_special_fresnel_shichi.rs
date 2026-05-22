@@ -111,7 +111,9 @@ fn generate_query() -> OracleQuery {
     // Restrict to x ∈ [−5, 5] for FresnelS/C and Shi due to
     // fsci precision gaps at |x|>5; Chi is well-conditioned
     // across the full range.
-    let xs_full = [-5.0_f64, -3.0, -1.0, -0.3, -0.01, 0.01, 0.1, 0.3, 1.0, 3.0, 5.0];
+    let xs_full = [
+        -5.0_f64, -3.0, -1.0, -0.3, -0.01, 0.01, 0.1, 0.3, 1.0, 3.0, 5.0,
+    ];
     let xs_chi = [0.01_f64, 0.1, 0.3, 1.0, 3.0, 10.0, 30.0];
     let mut points = Vec::new();
     for &x in &xs_full {
@@ -204,9 +206,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "fresnel/shichi oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping fresnel/shichi oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping fresnel/shichi oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -247,21 +247,22 @@ fn diff_special_fresnel_shichi() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(&case.func, case.x) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                max_overall = max_overall.max(abs_diff);
-                let tol = if case.func == "Chi" {
-                    ABS_TOL_CHI
-                } else {
-                    ABS_TOL_FRESNEL_SHI
-                };
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    pass: abs_diff <= tol,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(&case.func, case.x)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            max_overall = max_overall.max(abs_diff);
+            let tol = if case.func == "Chi" {
+                ABS_TOL_CHI
+            } else {
+                ABS_TOL_FRESNEL_SHI
+            };
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                pass: abs_diff <= tol,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

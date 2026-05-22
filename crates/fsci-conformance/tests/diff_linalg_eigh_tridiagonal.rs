@@ -162,7 +162,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open eigh_tridiagonal oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open eigh_tridiagonal oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -170,9 +173,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "eigh_tridiagonal oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping eigh_tridiagonal oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping eigh_tridiagonal oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -185,9 +186,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "eigh_tridiagonal oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping eigh_tridiagonal oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping eigh_tridiagonal oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -254,7 +253,10 @@ fn diff_linalg_eigh_tridiagonal() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!("eigh_tridiagonal mismatch: {} abs_diff={}", d.case_id, d.abs_diff);
+            eprintln!(
+                "eigh_tridiagonal mismatch: {} abs_diff={}",
+                d.case_id, d.abs_diff
+            );
         }
     }
 

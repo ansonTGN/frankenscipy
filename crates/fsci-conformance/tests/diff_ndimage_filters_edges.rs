@@ -12,9 +12,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_ndimage::{
-    BoundaryMode, NdArray, laplace, median_filter, prewitt, sobel, uniform_filter,
-};
+use fsci_ndimage::{BoundaryMode, NdArray, laplace, median_filter, prewitt, sobel, uniform_filter};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -106,9 +104,7 @@ fn mode_of(name: &str) -> Option<BoundaryMode> {
 fn generate_query() -> OracleQuery {
     let mat_3x3: Vec<f64> = (1..=9).map(|i| i as f64).collect();
     let mat_4x5: Vec<f64> = (1..=20).map(|i| (i as f64) * 0.5).collect();
-    let mat_5x5_pattern: Vec<f64> = (0..25)
-        .map(|i| ((i as f64) * 0.3).sin() * 5.0)
-        .collect();
+    let mat_5x5_pattern: Vec<f64> = (0..25).map(|i| ((i as f64) * 0.3).sin() * 5.0).collect();
 
     let mut points = Vec::new();
 
@@ -236,7 +232,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open filters_edges oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open filters_edges oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -244,13 +243,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "filters_edges oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping filters_edges oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping filters_edges oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for filters_edges oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for filters_edges oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -338,10 +337,7 @@ fn diff_ndimage_filters_edges() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

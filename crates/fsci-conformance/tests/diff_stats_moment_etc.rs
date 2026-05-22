@@ -103,10 +103,7 @@ fn emit_log(log: &DiffLog) {
 
 fn generate_query() -> OracleQuery {
     let datasets: Vec<(&str, Vec<f64>)> = vec![
-        (
-            "compact",
-            (1..=10).map(|i| i as f64).collect(),
-        ),
+        ("compact", (1..=10).map(|i| i as f64).collect()),
         (
             "spread",
             vec![
@@ -115,9 +112,7 @@ fn generate_query() -> OracleQuery {
         ),
         (
             "ties",
-            vec![
-                1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0,
-            ],
+            vec![1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0],
         ),
     ];
     let mut points = Vec::new();
@@ -218,9 +213,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for moment_etc oracle: {e}"
             );
-            eprintln!(
-                "skipping moment_etc oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping moment_etc oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -233,13 +226,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "moment_etc oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping moment_etc oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping moment_etc oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for moment_etc oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for moment_etc oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -293,29 +286,31 @@ fn diff_stats_moment_etc() {
             "idealfourths" => {
                 let (rust_lo, rust_hi) = idealfourths(&case.data);
                 if let Some(scipy_lo) = scipy_arm.qlo
-                    && rust_lo.is_finite() {
-                        let abs_diff = (rust_lo - scipy_lo).abs();
-                        max_overall = max_overall.max(abs_diff);
-                        diffs.push(CaseDiff {
-                            case_id: case.case_id.clone(),
-                            func: case.func.clone(),
-                            arm: "qlo".into(),
-                            abs_diff,
-                            pass: abs_diff <= ABS_TOL,
-                        });
-                    }
+                    && rust_lo.is_finite()
+                {
+                    let abs_diff = (rust_lo - scipy_lo).abs();
+                    max_overall = max_overall.max(abs_diff);
+                    diffs.push(CaseDiff {
+                        case_id: case.case_id.clone(),
+                        func: case.func.clone(),
+                        arm: "qlo".into(),
+                        abs_diff,
+                        pass: abs_diff <= ABS_TOL,
+                    });
+                }
                 if let Some(scipy_hi) = scipy_arm.qup
-                    && rust_hi.is_finite() {
-                        let abs_diff = (rust_hi - scipy_hi).abs();
-                        max_overall = max_overall.max(abs_diff);
-                        diffs.push(CaseDiff {
-                            case_id: case.case_id.clone(),
-                            func: case.func.clone(),
-                            arm: "qup".into(),
-                            abs_diff,
-                            pass: abs_diff <= ABS_TOL,
-                        });
-                    }
+                    && rust_hi.is_finite()
+                {
+                    let abs_diff = (rust_hi - scipy_hi).abs();
+                    max_overall = max_overall.max(abs_diff);
+                    diffs.push(CaseDiff {
+                        case_id: case.case_id.clone(),
+                        func: case.func.clone(),
+                        arm: "qup".into(),
+                        abs_diff,
+                        pass: abs_diff <= ABS_TOL,
+                    });
+                }
             }
             _ => {}
         }

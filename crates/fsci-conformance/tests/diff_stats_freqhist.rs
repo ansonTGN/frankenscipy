@@ -99,8 +99,8 @@ fn generate_query() -> OracleQuery {
         (
             "spread_n20_b8",
             vec![
-                -3.0, -1.5, 0.0, 0.5, 1.5, 2.5, 3.5, 5.0, 7.0, 9.0, 12.0, 16.0, 21.0, 27.0,
-                34.0, 40.0, 45.0, 50.0, 55.0, 60.0,
+                -3.0, -1.5, 0.0, 0.5, 1.5, 2.5, 3.5, 5.0, 7.0, 9.0, 12.0, 16.0, 21.0, 27.0, 34.0,
+                40.0, 45.0, 50.0, 55.0, 60.0,
             ],
             8,
         ),
@@ -202,9 +202,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "freqhist oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping freqhist oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping freqhist oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -249,37 +247,39 @@ fn diff_stats_freqhist() {
         };
 
         if let Some(scipy_freqs) = &scipy_arm.freqs
-            && rust_freqs.len() == scipy_freqs.len() {
-                let mut max_local = 0.0_f64;
-                for (r, s) in rust_freqs.iter().zip(scipy_freqs.iter()) {
-                    if r.is_finite() {
-                        max_local = max_local.max((r - s).abs());
-                    }
+            && rust_freqs.len() == scipy_freqs.len()
+        {
+            let mut max_local = 0.0_f64;
+            for (r, s) in rust_freqs.iter().zip(scipy_freqs.iter()) {
+                if r.is_finite() {
+                    max_local = max_local.max((r - s).abs());
                 }
-                max_overall = max_overall.max(max_local);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: format!("{}.frequencies", case.func),
-                    abs_diff: max_local,
-                    pass: max_local <= ABS_TOL,
-                });
             }
+            max_overall = max_overall.max(max_local);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: format!("{}.frequencies", case.func),
+                abs_diff: max_local,
+                pass: max_local <= ABS_TOL,
+            });
+        }
         if let Some(scipy_edges) = &scipy_arm.edges
-            && rust_edges.len() == scipy_edges.len() {
-                let mut max_local = 0.0_f64;
-                for (r, s) in rust_edges.iter().zip(scipy_edges.iter()) {
-                    if r.is_finite() {
-                        max_local = max_local.max((r - s).abs());
-                    }
+            && rust_edges.len() == scipy_edges.len()
+        {
+            let mut max_local = 0.0_f64;
+            for (r, s) in rust_edges.iter().zip(scipy_edges.iter()) {
+                if r.is_finite() {
+                    max_local = max_local.max((r - s).abs());
                 }
-                max_overall = max_overall.max(max_local);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: format!("{}.bin_edges", case.func),
-                    abs_diff: max_local,
-                    pass: max_local <= ABS_TOL,
-                });
             }
+            max_overall = max_overall.max(max_local);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: format!("{}.bin_edges", case.func),
+                abs_diff: max_local,
+                pass: max_local <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

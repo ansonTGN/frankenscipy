@@ -61,7 +61,10 @@ fn vec_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]
@@ -76,9 +79,12 @@ fn diff_integrate_solve_ivp_audit_equivalence() {
         // Exponential decay: y' = -y, y(0)=1 → y(t)=exp(-t)
         ("expdecay", (0.0, 2.0), vec![1.0], |_t, y| vec![-y[0]]),
         // Harmonic: y'' = -y, as system [y'=v, v'=-y], y(0)=1, v(0)=0
-        ("harmonic", (0.0, std::f64::consts::PI), vec![1.0, 0.0], |_t, y| {
-            vec![y[1], -y[0]]
-        }),
+        (
+            "harmonic",
+            (0.0, std::f64::consts::PI),
+            vec![1.0, 0.0],
+            |_t, y| vec![y[1], -y[0]],
+        ),
         // Lotka-Volterra-ish: u'=u*(1-v), v'=v*(u-1), small horizon
         ("lv_small", (0.0, 1.0), vec![1.5, 1.0], |_t, y| {
             vec![y[0] * (1.0 - y[1]), y[1] * (y[0] - 1.0)]

@@ -74,8 +74,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create contingency_table diff output dir");
+    fs::create_dir_all(output_dir()).expect("create contingency_table diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -87,8 +86,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize contingency_table diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize contingency_table diff log");
     fs::write(path, json).expect("write contingency_table diff log");
 }
 
@@ -107,11 +105,7 @@ fn generate_query() -> OracleQuery {
             vec![0, 1, 2, 1, 0, 2, 0, 2, 1, 1, 1, 0],
         ),
         // Sparse: only some (x, y) combinations appear
-        (
-            "sparse",
-            vec![0, 0, 0, 2, 2, 5],
-            vec![1, 1, 3, 1, 3, 1],
-        ),
+        ("sparse", vec![0, 0, 0, 2, 2, 5], vec![1, 1, 3, 1, 3, 1]),
         // 4 row × 2 col
         (
             "tall_4x2",
@@ -177,9 +171,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for contingency_table oracle: {e}"
             );
-            eprintln!(
-                "skipping contingency_table oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping contingency_table oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -195,9 +187,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "contingency_table oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping contingency_table oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping contingency_table oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -210,9 +200,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "contingency_table oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping contingency_table oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping contingency_table oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

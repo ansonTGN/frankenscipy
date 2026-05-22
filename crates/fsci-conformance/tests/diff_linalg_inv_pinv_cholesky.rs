@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_linalg::{cholesky, inv, pinv, DecompOptions, InvOptions, PinvOptions};
+use fsci_linalg::{DecompOptions, InvOptions, PinvOptions, cholesky, inv, pinv};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-013";
@@ -74,8 +74,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create inv_pinv_cholesky diff output dir");
+    fs::create_dir_all(output_dir()).expect("create inv_pinv_cholesky diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -87,8 +86,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json = serde_json::to_string_pretty(log)
-        .expect("serialize inv_pinv_cholesky diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize inv_pinv_cholesky diff log");
     fs::write(path, json).expect("write inv_pinv_cholesky diff log");
 }
 
@@ -196,8 +194,7 @@ for case in q["points"]:
     points.append(out)
 print(json.dumps({"points": points}, allow_nan=False))
 "#;
-    let query_json =
-        serde_json::to_string(query).expect("serialize inv_pinv_cholesky query");
+    let query_json = serde_json::to_string(query).expect("serialize inv_pinv_cholesky query");
     let mut child = match Command::new("python3")
         .arg("-c")
         .arg(script)
@@ -212,9 +209,7 @@ print(json.dumps({"points": points}, allow_nan=False))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for inv_pinv_cholesky oracle: {e}"
             );
-            eprintln!(
-                "skipping inv_pinv_cholesky oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping inv_pinv_cholesky oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -230,9 +225,7 @@ print(json.dumps({"points": points}, allow_nan=False))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "inv_pinv_cholesky oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping inv_pinv_cholesky oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping inv_pinv_cholesky oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -245,16 +238,11 @@ print(json.dumps({"points": points}, allow_nan=False))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "inv_pinv_cholesky oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping inv_pinv_cholesky oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping inv_pinv_cholesky oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
-    Some(
-        serde_json::from_str(&stdout)
-            .expect("parse inv_pinv_cholesky oracle JSON"),
-    )
+    Some(serde_json::from_str(&stdout).expect("parse inv_pinv_cholesky oracle JSON"))
 }
 
 #[test]
@@ -280,42 +268,45 @@ fn diff_linalg_inv_pinv_cholesky() {
 
         // inv
         if let Some(scipy_inv_m) = scipy_arm.inv.as_ref()
-            && let Ok(rust_res) = inv(&case.a, InvOptions::default()) {
-                let max_d = max_abs_diff_mat(&rust_res.inverse, scipy_inv_m);
-                max_overall = max_overall.max(max_d);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    sub_check: "inv".into(),
-                    max_abs_diff: max_d,
-                    pass: max_d <= ABS_TOL,
-                });
-            }
+            && let Ok(rust_res) = inv(&case.a, InvOptions::default())
+        {
+            let max_d = max_abs_diff_mat(&rust_res.inverse, scipy_inv_m);
+            max_overall = max_overall.max(max_d);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                sub_check: "inv".into(),
+                max_abs_diff: max_d,
+                pass: max_d <= ABS_TOL,
+            });
+        }
 
         // pinv
         if let Some(scipy_pinv_m) = scipy_arm.pinv.as_ref()
-            && let Ok(rust_res) = pinv(&case.a, PinvOptions::default()) {
-                let max_d = max_abs_diff_mat(&rust_res.pseudo_inverse, scipy_pinv_m);
-                max_overall = max_overall.max(max_d);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    sub_check: "pinv".into(),
-                    max_abs_diff: max_d,
-                    pass: max_d <= ABS_TOL,
-                });
-            }
+            && let Ok(rust_res) = pinv(&case.a, PinvOptions::default())
+        {
+            let max_d = max_abs_diff_mat(&rust_res.pseudo_inverse, scipy_pinv_m);
+            max_overall = max_overall.max(max_d);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                sub_check: "pinv".into(),
+                max_abs_diff: max_d,
+                pass: max_d <= ABS_TOL,
+            });
+        }
 
         // cholesky (lower)
         if let Some(scipy_chol_m) = scipy_arm.chol_lower.as_ref()
-            && let Ok(rust_res) = cholesky(&case.a, true, DecompOptions::default()) {
-                let max_d = max_abs_diff_mat(&rust_res.factor, scipy_chol_m);
-                max_overall = max_overall.max(max_d);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    sub_check: "cholesky_lower".into(),
-                    max_abs_diff: max_d,
-                    pass: max_d <= ABS_TOL,
-                });
-            }
+            && let Ok(rust_res) = cholesky(&case.a, true, DecompOptions::default())
+        {
+            let max_d = max_abs_diff_mat(&rust_res.factor, scipy_chol_m);
+            max_overall = max_overall.max(max_d);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                sub_check: "cholesky_lower".into(),
+                max_abs_diff: max_d,
+                pass: max_d <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

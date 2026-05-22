@@ -119,7 +119,9 @@ fn generate_query() -> OracleQuery {
     let xs_full = [
         -5.0_f64, -1.5, -0.5, -0.01, 0.0, 0.01, 0.1, 0.5, 1.5, 5.0, 10.0,
     ];
-    let xs_erfcx = [-1.0_f64, -0.5, -0.1, 0.0, 0.1, 0.5, 1.0, 3.0, 5.0, 10.0, 30.0];
+    let xs_erfcx = [
+        -1.0_f64, -0.5, -0.1, 0.0, 0.1, 0.5, 1.0, 3.0, 5.0, 10.0, 30.0,
+    ];
     let mut points = Vec::new();
     for &x in &xs_full {
         for func in ["dawsn", "exprel"] {
@@ -200,9 +202,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "dawsn/erfcx/exprel oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping dawsn/erfcx/exprel oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping dawsn/erfcx/exprel oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -215,9 +215,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "dawsn/erfcx/exprel oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping dawsn/erfcx/exprel oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping dawsn/erfcx/exprel oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -246,21 +244,22 @@ fn diff_special_dawsn_erfcx_exprel() {
     for case in &query.points {
         let oracle = pmap.get(&case.case_id).expect("validated oracle");
         if let Some(scipy_v) = oracle.value
-            && let Some(rust_v) = fsci_eval(&case.func, case.x) {
-                let abs_diff = (rust_v - scipy_v).abs();
-                let scale = scipy_v.abs().max(1.0);
-                let rel_diff = abs_diff / scale;
-                max_abs_overall = max_abs_overall.max(abs_diff);
-                max_rel_overall = max_rel_overall.max(rel_diff);
-                let pass = abs_diff <= ABS_TOL || abs_diff <= REL_TOL * scale;
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    abs_diff,
-                    rel_diff,
-                    pass,
-                });
-            }
+            && let Some(rust_v) = fsci_eval(&case.func, case.x)
+        {
+            let abs_diff = (rust_v - scipy_v).abs();
+            let scale = scipy_v.abs().max(1.0);
+            let rel_diff = abs_diff / scale;
+            max_abs_overall = max_abs_overall.max(abs_diff);
+            max_rel_overall = max_rel_overall.max(rel_diff);
+            let pass = abs_diff <= ABS_TOL || abs_diff <= REL_TOL * scale;
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                abs_diff,
+                rel_diff,
+                pass,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

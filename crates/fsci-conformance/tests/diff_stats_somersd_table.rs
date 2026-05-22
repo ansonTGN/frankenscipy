@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_stats::{somersd, SomersDInput};
+use fsci_stats::{SomersDInput, somersd};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -111,10 +111,7 @@ fn generate_query() -> OracleQuery {
         // Independent / mild association
         (
             "indep_2x4",
-            vec![
-                vec![5.0, 7.0, 8.0, 6.0],
-                vec![6.0, 8.0, 7.0, 5.0],
-            ],
+            vec![vec![5.0, 7.0, 8.0, 6.0], vec![6.0, 8.0, 7.0, 5.0]],
         ),
     ];
 
@@ -178,9 +175,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for somersd_table oracle: {e}"
             );
-            eprintln!(
-                "skipping somersd_table oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping somersd_table oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -196,9 +191,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "somersd_table oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping somersd_table oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping somersd_table oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -211,9 +204,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "somersd_table oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping somersd_table oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping somersd_table oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -246,27 +237,29 @@ fn diff_stats_somersd_table() {
         };
 
         if let Some(scipy_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - scipy_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - scipy_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(scipy_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

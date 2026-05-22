@@ -112,9 +112,24 @@ fn generate_query() -> OracleQuery {
     let b16: Vec<f64> = (0..n16).map(|i| (i as f64) - 7.5).collect();
     OracleQuery {
         points: vec![
-            Case { case_id: "tridiag_spd_n6".into(), n: n6, triplets: trips_6, b: b6 },
-            Case { case_id: "tridiag_spd_n10".into(), n: n10, triplets: trips_10, b: b10 },
-            Case { case_id: "tridiag_spd_n16".into(), n: n16, triplets: trips_16, b: b16 },
+            Case {
+                case_id: "tridiag_spd_n6".into(),
+                n: n6,
+                triplets: trips_6,
+                b: b6,
+            },
+            Case {
+                case_id: "tridiag_spd_n10".into(),
+                n: n10,
+                triplets: trips_10,
+                b: b10,
+            },
+            Case {
+                case_id: "tridiag_spd_n16".into(),
+                n: n16,
+                triplets: trips_16,
+                b: b16,
+            },
         ],
     }
 }

@@ -192,9 +192,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "peak_prom oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping peak_prom oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping peak_prom oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }

@@ -268,7 +268,11 @@ fn diff_stats_quantile_weighted_helpers() {
                 max_abs_diff: f64::INFINITY,
                 max_rel_diff: f64::INFINITY,
                 pass: false,
-                note: format!("length mismatch: fsci={} numpy={}", actual.len(), expected.len()),
+                note: format!(
+                    "length mismatch: fsci={} numpy={}",
+                    actual.len(),
+                    expected.len()
+                ),
             });
             continue;
         }

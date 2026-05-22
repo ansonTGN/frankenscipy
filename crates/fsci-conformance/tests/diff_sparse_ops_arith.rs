@@ -11,9 +11,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_sparse::{
-    CsrMatrix, Shape2D, add_csr, scale_csr, spdiags, spmv_csr, sub_csr,
-};
+use fsci_sparse::{CsrMatrix, Shape2D, add_csr, scale_csr, spdiags, spmv_csr, sub_csr};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
@@ -174,16 +172,8 @@ fn mk(rows: usize, cols: usize, dense: Vec<f64>) -> DenseBlock {
 }
 
 fn generate_query() -> OracleQuery {
-    let a = mk(
-        3,
-        3,
-        vec![1.0, 0.0, 2.0, 0.0, 3.0, 0.0, 4.0, 0.0, 5.0],
-    );
-    let b = mk(
-        3,
-        3,
-        vec![0.0, 1.0, 0.0, 2.0, 0.0, 3.0, 0.0, 4.0, 0.0],
-    );
+    let a = mk(3, 3, vec![1.0, 0.0, 2.0, 0.0, 3.0, 0.0, 4.0, 0.0, 5.0]);
+    let b = mk(3, 3, vec![0.0, 1.0, 0.0, 2.0, 0.0, 3.0, 0.0, 4.0, 0.0]);
     let c = mk(
         4,
         4,
@@ -198,11 +188,7 @@ fn generate_query() -> OracleQuery {
             -1.0, 0.0, 0.0, 0.0, 0.0, -2.0, 0.0, 0.0, 0.0, 0.0, -3.0, 0.0, 0.0, 0.0, 0.0, -4.0,
         ],
     );
-    let rect = mk(
-        2,
-        5,
-        vec![1.0, 0.0, 2.0, 0.0, 3.0, 0.0, 4.0, 0.0, 5.0, 0.0],
-    );
+    let rect = mk(2, 5, vec![1.0, 0.0, 2.0, 0.0, 3.0, 0.0, 4.0, 0.0, 5.0, 0.0]);
     let rect_match = mk(2, 5, vec![0.0; 10]);
 
     let arith = vec![
@@ -634,10 +620,7 @@ fn diff_sparse_ops_arith() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

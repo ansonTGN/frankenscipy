@@ -208,10 +208,8 @@ fn diff_fft_shared_plan_cache() {
         admission_policy: CacheAdmissionPolicy::CostWeightedLru,
         ..PlanCacheConfig::default()
     };
-    let stored_big = store_shared_plan_with_config(
-        mk_metadata(128, 4_480, 128 * 16),
-        cfg_cw.clone(),
-    );
+    let stored_big =
+        store_shared_plan_with_config(mk_metadata(128, 4_480, 128 * 16), cfg_cw.clone());
     let stored_cheap = store_shared_plan_with_config(mk_metadata(8, 120, 8 * 16), cfg_cw);
     check(
         "cw_lru_accepts_first",
@@ -242,8 +240,7 @@ fn diff_fft_shared_plan_cache() {
         admission_policy: CacheAdmissionPolicy::AlwaysInsert,
         ..PlanCacheConfig::default()
     };
-    let stored_ws_1 =
-        store_shared_plan_with_config(mk_metadata(16, 320, 64), cfg_ws.clone());
+    let stored_ws_1 = store_shared_plan_with_config(mk_metadata(16, 320, 64), cfg_ws.clone());
     let stored_ws_2 = store_shared_plan_with_config(mk_metadata(32, 800, 64), cfg_ws);
     let ws_bytes = shared_plan_cache_working_set_bytes();
     let len_after = shared_plan_cache_len();
@@ -283,8 +280,7 @@ fn diff_fft_shared_plan_cache() {
     // === 7. After clear, lookups return None ===
     check(
         "lookup_after_clear_none",
-        lookup_shared_plan(&mk_key(64)).is_none()
-            && lookup_shared_plan(&mk_key(32)).is_none(),
+        lookup_shared_plan(&mk_key(64)).is_none() && lookup_shared_plan(&mk_key(32)).is_none(),
         String::new(),
     );
 

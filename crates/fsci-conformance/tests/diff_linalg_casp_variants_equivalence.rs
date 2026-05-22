@@ -82,7 +82,10 @@ fn vec_max_diff(a: &[f64], b: &[f64]) -> f64 {
     if a.len() != b.len() {
         return f64::INFINITY;
     }
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f64, f64::max)
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max)
 }
 
 #[test]
@@ -122,28 +125,57 @@ fn diff_linalg_casp_variants_equivalence() {
         ) {
             let d = vec_max_diff(&p.x, &q.x);
             max_overall = max_overall.max(d);
-            diffs.push(CaseDiff { case_id: format!("solve_{label}"), op: "solve".into(), abs_diff: d, pass: d <= ABS_TOL });
+            diffs.push(CaseDiff {
+                case_id: format!("solve_{label}"),
+                op: "solve".into(),
+                abs_diff: d,
+                pass: d <= ABS_TOL,
+            });
         }
         // inv
         let mut portfolio = SolverPortfolio::new(RuntimeMode::Strict, 1);
-        if let (Ok(p), Ok(q)) = (inv(a, InvOptions::default()), inv_with_casp(a, InvOptions::default(), &mut portfolio)) {
+        if let (Ok(p), Ok(q)) = (
+            inv(a, InvOptions::default()),
+            inv_with_casp(a, InvOptions::default(), &mut portfolio),
+        ) {
             let d = mat_max_diff(&p.inverse, &q.inverse);
             max_overall = max_overall.max(d);
-            diffs.push(CaseDiff { case_id: format!("inv_{label}"), op: "inv".into(), abs_diff: d, pass: d <= ABS_TOL });
+            diffs.push(CaseDiff {
+                case_id: format!("inv_{label}"),
+                op: "inv".into(),
+                abs_diff: d,
+                pass: d <= ABS_TOL,
+            });
         }
         // lstsq
         let mut portfolio = SolverPortfolio::new(RuntimeMode::Strict, 1);
-        if let (Ok(p), Ok(q)) = (lstsq(a, b, LstsqOptions::default()), lstsq_with_casp(a, b, LstsqOptions::default(), &mut portfolio)) {
+        if let (Ok(p), Ok(q)) = (
+            lstsq(a, b, LstsqOptions::default()),
+            lstsq_with_casp(a, b, LstsqOptions::default(), &mut portfolio),
+        ) {
             let d = vec_max_diff(&p.x, &q.x);
             max_overall = max_overall.max(d);
-            diffs.push(CaseDiff { case_id: format!("lstsq_{label}"), op: "lstsq".into(), abs_diff: d, pass: d <= ABS_TOL });
+            diffs.push(CaseDiff {
+                case_id: format!("lstsq_{label}"),
+                op: "lstsq".into(),
+                abs_diff: d,
+                pass: d <= ABS_TOL,
+            });
         }
         // pinv
         let mut portfolio = SolverPortfolio::new(RuntimeMode::Strict, 1);
-        if let (Ok(p), Ok(q)) = (pinv(a, PinvOptions::default()), pinv_with_casp(a, PinvOptions::default(), &mut portfolio)) {
+        if let (Ok(p), Ok(q)) = (
+            pinv(a, PinvOptions::default()),
+            pinv_with_casp(a, PinvOptions::default(), &mut portfolio),
+        ) {
             let d = mat_max_diff(&p.pseudo_inverse, &q.pseudo_inverse);
             max_overall = max_overall.max(d);
-            diffs.push(CaseDiff { case_id: format!("pinv_{label}"), op: "pinv".into(), abs_diff: d, pass: d <= ABS_TOL });
+            diffs.push(CaseDiff {
+                case_id: format!("pinv_{label}"),
+                op: "pinv".into(),
+                abs_diff: d,
+                pass: d <= ABS_TOL,
+            });
         }
     }
 

@@ -271,10 +271,7 @@ fn diff_opt_brute() {
                 .map(|(a, b)| (a - b).abs())
                 .fold(0.0_f64, f64::max)
         };
-        let abs_f = res
-            .fun
-            .map(|v| (v - ef).abs())
-            .unwrap_or(f64::INFINITY);
+        let abs_f = res.fun.map(|v| (v - ef).abs()).unwrap_or(f64::INFINITY);
         let abs_d = abs_x.max(abs_f);
         max_overall = max_overall.max(abs_d);
         diffs.push(CaseDiff {

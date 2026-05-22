@@ -76,8 +76,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create polynomial_regression diff output dir");
+    fs::create_dir_all(output_dir()).expect("create polynomial_regression diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -89,8 +88,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize polynomial_regression diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize polynomial_regression diff log");
     fs::write(path, json).expect("write polynomial_regression diff log");
 }
 
@@ -181,8 +179,7 @@ for case in q["points"]:
     points.append({"case_id": cid, "coeffs": val})
 print(json.dumps({"points": points}))
 "#;
-    let query_json =
-        serde_json::to_string(query).expect("serialize polynomial_regression query");
+    let query_json = serde_json::to_string(query).expect("serialize polynomial_regression query");
     let mut child = match Command::new("python3")
         .arg("-c")
         .arg(script)
@@ -197,9 +194,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for polynomial_regression oracle: {e}"
             );
-            eprintln!(
-                "skipping polynomial_regression oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping polynomial_regression oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -230,9 +225,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "polynomial_regression oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping polynomial_regression oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping polynomial_regression oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

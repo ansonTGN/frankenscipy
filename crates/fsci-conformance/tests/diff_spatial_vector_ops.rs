@@ -78,8 +78,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create vector-ops diff output dir");
+    fs::create_dir_all(output_dir()).expect("create vector-ops diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -207,13 +206,13 @@ print(json.dumps({"points": points}, allow_nan=False))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "vector-ops oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping vector-ops oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping vector-ops oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for vector-ops oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for vector-ops oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

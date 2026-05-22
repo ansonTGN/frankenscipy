@@ -236,7 +236,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open iter_solvers oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open iter_solvers oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -244,9 +247,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "iter_solvers oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping iter_solvers oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping iter_solvers oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -259,9 +260,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "iter_solvers oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping iter_solvers oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping iter_solvers oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

@@ -76,8 +76,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create proximity_cliques diff output dir");
+    fs::create_dir_all(output_dir()).expect("create proximity_cliques diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -89,8 +88,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize proximity_cliques diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize proximity_cliques diff log");
     fs::write(path, json).expect("write proximity_cliques diff log");
 }
 
@@ -215,9 +213,7 @@ print(json.dumps({"points": points}, allow_nan=False))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for proximity_cliques oracle: {e}"
             );
-            eprintln!(
-                "skipping proximity_cliques oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping proximity_cliques oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -233,9 +229,7 @@ print(json.dumps({"points": points}, allow_nan=False))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "proximity_cliques oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping proximity_cliques oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping proximity_cliques oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -248,16 +242,11 @@ print(json.dumps({"points": points}, allow_nan=False))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "proximity_cliques oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping proximity_cliques oracle: networkx not available\n{stderr}"
-        );
+        eprintln!("skipping proximity_cliques oracle: networkx not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
-    Some(
-        serde_json::from_str(&stdout)
-            .expect("parse proximity_cliques oracle JSON"),
-    )
+    Some(serde_json::from_str(&stdout).expect("parse proximity_cliques oracle JSON"))
 }
 
 #[test]
@@ -284,8 +273,11 @@ fn diff_cluster_proximity_cliques() {
         };
         let rust_cliques = proximity_cliques(&case.data, case.eps);
 
-        let rust_set =
-            normalize_cliques(rust_cliques.iter().map(|c| c.iter().map(|&x| x as u64).collect()));
+        let rust_set = normalize_cliques(
+            rust_cliques
+                .iter()
+                .map(|c| c.iter().map(|&x| x as u64).collect()),
+        );
         let nx_set = normalize_cliques(nx_cliques.iter().cloned());
 
         let set_match = rust_set == nx_set;
@@ -327,4 +319,3 @@ fn diff_cluster_proximity_cliques() {
         diffs.len()
     );
 }
-

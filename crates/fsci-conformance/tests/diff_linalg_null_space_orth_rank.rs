@@ -99,7 +99,9 @@ fn emit_log(log: &DiffLog) {
 
 fn matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
     let m = a.len();
-    if m == 0 { return vec![]; }
+    if m == 0 {
+        return vec![];
+    }
     let p = a[0].len();
     let n = if b.is_empty() { 0 } else { b[0].len() };
     let mut c = vec![vec![0.0; n]; m];
@@ -115,7 +117,9 @@ fn matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
 }
 
 fn transpose(m: &[Vec<f64>]) -> Vec<Vec<f64>> {
-    if m.is_empty() { return vec![]; }
+    if m.is_empty() {
+        return vec![];
+    }
     let r = m.len();
     let c = m[0].len();
     let mut t = vec![vec![0.0; r]; c];
@@ -136,7 +140,9 @@ fn frobenius_norm(m: &[Vec<f64>]) -> f64 {
 }
 
 fn ident(n: usize) -> Vec<Vec<f64>> {
-    (0..n).map(|i| (0..n).map(|j| if i == j { 1.0 } else { 0.0 }).collect()).collect()
+    (0..n)
+        .map(|i| (0..n).map(|j| if i == j { 1.0 } else { 0.0 }).collect())
+        .collect()
 }
 
 fn sub(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
@@ -175,7 +181,12 @@ fn generate_query() -> OracleQuery {
         vec![0.0, 0.0, 2.0, 0.0],
     ]; // rank 3, m=3, n=4
 
-    for (label, m) in [("m1_rank2", &m1), ("m2_full", &m2), ("m3_rank1", &m3), ("m4_3x4", &m4)] {
+    for (label, m) in [
+        ("m1_rank2", &m1),
+        ("m2_full", &m2),
+        ("m3_rank1", &m3),
+        ("m4_3x4", &m4),
+    ] {
         for op in ["null", "orth"] {
             points.push(Case {
                 case_id: format!("{op}_{label}"),
@@ -259,7 +270,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for null_orth_rank oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for null_orth_rank oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -302,7 +315,11 @@ fn diff_linalg_null_space_orth_rank() {
                     continue;
                 };
                 let m = case.matrix.len();
-                let n_cols = if n_basis.is_empty() { 0 } else { n_basis[0].len() };
+                let n_cols = if n_basis.is_empty() {
+                    0
+                } else {
+                    n_basis[0].len()
+                };
                 if n_cols != exp_cols {
                     diffs.push(CaseDiff {
                         case_id: case.case_id.clone(),
@@ -391,7 +408,11 @@ fn diff_linalg_null_space_orth_rank() {
                 let Ok(actual) = numerical_rank(&case.matrix, case.tol, opts) else {
                     continue;
                 };
-                let abs_d = if actual == expected { 0.0 } else { (actual as i64 - expected as i64).abs() as f64 };
+                let abs_d = if actual == expected {
+                    0.0
+                } else {
+                    (actual as i64 - expected as i64).abs() as f64
+                };
                 max_overall = max_overall.max(abs_d);
                 diffs.push(CaseDiff {
                     case_id: case.case_id.clone(),

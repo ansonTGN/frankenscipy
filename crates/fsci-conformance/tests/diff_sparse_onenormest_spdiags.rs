@@ -137,8 +137,13 @@ fn generate_query() -> OracleQuery {
 
     // onenormest probes
     let a1 = vec![
-        (0, 0, 3.0_f64), (1, 0, -1.0), (0, 1, 2.0), (1, 1, 4.0),
-        (2, 0, 0.5), (2, 1, 1.5), (2, 2, -2.0),
+        (0, 0, 3.0_f64),
+        (1, 0, -1.0),
+        (0, 1, 2.0),
+        (1, 1, 4.0),
+        (2, 0, 0.5),
+        (2, 1, 1.5),
+        (2, 2, -2.0),
     ];
     let a2: Vec<(usize, usize, f64)> = (0..6)
         .flat_map(|i| {
@@ -147,8 +152,12 @@ fn generate_query() -> OracleQuery {
         })
         .collect();
     let a3 = vec![
-        (0, 0, -1.5_f64), (1, 1, 2.7), (2, 2, -3.4), (3, 3, 0.5),
-        (0, 3, 1.2), (3, 0, -0.7),
+        (0, 0, -1.5_f64),
+        (1, 1, 2.7),
+        (2, 2, -3.4),
+        (3, 3, 0.5),
+        (0, 3, 1.2),
+        (3, 0, -0.7),
     ];
     for (label, trips, m, n) in [
         ("a1_3x3", &a1, 3, 3),
@@ -288,7 +297,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for onenormest_spdiags oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for onenormest_spdiags oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -347,9 +358,7 @@ fn diff_sparse_onenormest_spdiags() {
                 else {
                     continue;
                 };
-                let Ok(dia) =
-                    spdiags(&case.diag_data, &case.offsets, case.rows, case.cols)
-                else {
+                let Ok(dia) = spdiags(&case.diag_data, &case.offsets, case.rows, case.cols) else {
                     continue;
                 };
                 let Ok(csr) = dia.to_csr() else {

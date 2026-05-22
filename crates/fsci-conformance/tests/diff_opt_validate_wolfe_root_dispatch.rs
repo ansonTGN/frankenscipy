@@ -71,11 +71,7 @@ fn diff_opt_validate_wolfe_root_dispatch() {
     // === validate_wolfe_params: OK path ===
     {
         let ok = validate_wolfe_params(WolfeParams::default()).is_ok();
-        check(
-            "wolfe_default_ok",
-            ok,
-            String::new(),
-        );
+        check("wolfe_default_ok", ok, String::new());
     }
 
     // === validate_wolfe_params: c1 >= c2 → error ===
@@ -86,11 +82,7 @@ fn diff_opt_validate_wolfe_root_dispatch() {
             ..WolfeParams::default()
         };
         let err = validate_wolfe_params(bad).is_err();
-        check(
-            "wolfe_c1_ge_c2_errors",
-            err,
-            String::new(),
-        );
+        check("wolfe_c1_ge_c2_errors", err, String::new());
     }
 
     // === validate_wolfe_params: c1 == 0 → error ===
@@ -100,11 +92,7 @@ fn diff_opt_validate_wolfe_root_dispatch() {
             ..WolfeParams::default()
         };
         let err = validate_wolfe_params(bad).is_err();
-        check(
-            "wolfe_c1_zero_errors",
-            err,
-            String::new(),
-        );
+        check("wolfe_c1_zero_errors", err, String::new());
     }
 
     // === validate_wolfe_params: c2 == 1 → error ===
@@ -114,11 +102,7 @@ fn diff_opt_validate_wolfe_root_dispatch() {
             ..WolfeParams::default()
         };
         let err = validate_wolfe_params(bad).is_err();
-        check(
-            "wolfe_c2_one_errors",
-            err,
-            String::new(),
-        );
+        check("wolfe_c2_one_errors", err, String::new());
     }
 
     // === validate_wolfe_params: amin >= amax → error ===
@@ -129,11 +113,7 @@ fn diff_opt_validate_wolfe_root_dispatch() {
             ..WolfeParams::default()
         };
         let err = validate_wolfe_params(bad).is_err();
-        check(
-            "wolfe_amin_ge_amax_errors",
-            err,
-            String::new(),
-        );
+        check("wolfe_amin_ge_amax_errors", err, String::new());
     }
 
     // === validate_wolfe_params: amin <= 0 → error ===
@@ -143,11 +123,7 @@ fn diff_opt_validate_wolfe_root_dispatch() {
             ..WolfeParams::default()
         };
         let err = validate_wolfe_params(bad).is_err();
-        check(
-            "wolfe_amin_zero_errors",
-            err,
-            String::new(),
-        );
+        check("wolfe_amin_zero_errors", err, String::new());
     }
 
     // === validate_wolfe_params: maxiter == 0 → error ===
@@ -157,11 +133,7 @@ fn diff_opt_validate_wolfe_root_dispatch() {
             ..WolfeParams::default()
         };
         let err = validate_wolfe_params(bad).is_err();
-        check(
-            "wolfe_maxiter_zero_errors",
-            err,
-            String::new(),
-        );
+        check("wolfe_maxiter_zero_errors", err, String::new());
     }
 
     // === root() dispatcher: 2D nonlinear system with a known root at (1, 0) ===
@@ -195,11 +167,7 @@ fn diff_opt_validate_wolfe_root_dispatch() {
                 );
             }
             Err(e) => {
-                check(
-                    &case_id,
-                    false,
-                    format!("error: {e:?}"),
-                );
+                check(&case_id, false, format!("error: {e:?}"));
             }
         }
     }

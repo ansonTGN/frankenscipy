@@ -116,34 +116,13 @@ fn diff_sparse_iterative_solvers_residual() {
     };
 
     let solvers: &[(&str, Box<dyn Fn() -> _>)] = &[
-        (
-            "cg",
-            Box::new(|| cg(&a, &b, None, opts)),
-        ),
-        (
-            "gmres",
-            Box::new(|| gmres(&a, &b, None, opts)),
-        ),
-        (
-            "bicg",
-            Box::new(|| bicg(&a, &b, None, opts)),
-        ),
-        (
-            "cgs",
-            Box::new(|| cgs(&a, &b, None, opts)),
-        ),
-        (
-            "bicgstab",
-            Box::new(|| bicgstab(&a, &b, None, opts)),
-        ),
-        (
-            "minres",
-            Box::new(|| minres(&a, &b, None, opts)),
-        ),
-        (
-            "lgmres",
-            Box::new(|| lgmres(&a, &b, None, lg_opts)),
-        ),
+        ("cg", Box::new(|| cg(&a, &b, None, opts))),
+        ("gmres", Box::new(|| gmres(&a, &b, None, opts))),
+        ("bicg", Box::new(|| bicg(&a, &b, None, opts))),
+        ("cgs", Box::new(|| cgs(&a, &b, None, opts))),
+        ("bicgstab", Box::new(|| bicgstab(&a, &b, None, opts))),
+        ("minres", Box::new(|| minres(&a, &b, None, opts))),
+        ("lgmres", Box::new(|| lgmres(&a, &b, None, lg_opts))),
     ];
 
     for (name, call) in solvers {
@@ -178,7 +157,9 @@ fn diff_sparse_iterative_solvers_residual() {
     let all_pass = diffs.iter().all(|d| d.pass);
     let log = DiffLog {
         test_id: "diff_sparse_iterative_solvers_residual".into(),
-        category: "fsci_sparse iterative solvers (cg/gmres/bicg/cgs/bicgstab/minres/qmr/lgmres) residual".into(),
+        category:
+            "fsci_sparse iterative solvers (cg/gmres/bicg/cgs/bicgstab/minres/qmr/lgmres) residual"
+                .into(),
         case_count: diffs.len(),
         pass: all_pass,
         timestamp_ms: timestamp_ms(),
@@ -191,7 +172,12 @@ fn diff_sparse_iterative_solvers_residual() {
         if !d.pass {
             eprintln!(
                 "iter_solver mismatch: {} converged={} iter={} residual_norm={} actual_res={} note={}",
-                d.case_id, d.converged, d.iterations, d.residual_norm_reported, d.actual_residual_2norm, d.note
+                d.case_id,
+                d.converged,
+                d.iterations,
+                d.residual_norm_reported,
+                d.actual_residual_2norm,
+                d.note
             );
         }
     }

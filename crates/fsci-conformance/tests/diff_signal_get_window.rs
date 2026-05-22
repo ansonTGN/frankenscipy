@@ -180,13 +180,13 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "get_window oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping get_window oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping get_window oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for get_window oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for get_window oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

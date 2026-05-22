@@ -191,9 +191,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "zmap_ddof oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping zmap_ddof oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping zmap_ddof oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }

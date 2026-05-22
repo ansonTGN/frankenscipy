@@ -87,14 +87,22 @@ fn pack_2d(rows: &[Vec<f64>]) -> Vec<f64> {
 }
 
 fn generate_query() -> OracleQuery {
-    let perfect_sym = vec![vec![1.0, 2.0, 3.0], vec![2.0, 4.0, 5.0], vec![3.0, 5.0, 6.0]];
+    let perfect_sym = vec![
+        vec![1.0, 2.0, 3.0],
+        vec![2.0, 4.0, 5.0],
+        vec![3.0, 5.0, 6.0],
+    ];
     let asym = vec![vec![1.0, 2.0], vec![3.0, 4.0]];
     let near_sym = vec![
         vec![1.0, 2.0 + 1e-12, 3.0],
         vec![2.0, 4.0, 5.0],
         vec![3.0, 5.0 - 1e-12, 6.0],
     ];
-    let antisym = vec![vec![0.0, 1.0, -2.0], vec![-1.0, 0.0, 3.0], vec![2.0, -3.0, 0.0]];
+    let antisym = vec![
+        vec![0.0, 1.0, -2.0],
+        vec![-1.0, 0.0, 3.0],
+        vec![2.0, -3.0, 0.0],
+    ];
     let identity_4 = vec![
         vec![1.0, 0.0, 0.0, 0.0],
         vec![0.0, 1.0, 0.0, 0.0],

@@ -259,7 +259,9 @@ fn diff_ndimage_binary_hit_or_miss() {
         let Some(scipy_v) = scipy_arm.values.as_ref() else {
             continue;
         };
-        let Some(fsci_v) = fsci_eval(case) else { continue };
+        let Some(fsci_v) = fsci_eval(case) else {
+            continue;
+        };
         let mismatched = if fsci_v.len() != scipy_v.len() {
             fsci_v.len()
         } else {

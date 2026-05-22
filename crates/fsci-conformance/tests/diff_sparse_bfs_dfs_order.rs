@@ -110,19 +110,12 @@ fn dense_to_csr(rows: usize, cols: usize, dense: &[f64]) -> CsrMatrix {
 
 fn generate_query() -> OracleQuery {
     let adj_6 = vec![
-        0.0, 1.0, 1.0, 0.0, 0.0, 0.0,
-        1.0, 0.0, 0.0, 1.0, 0.0, 0.0,
-        1.0, 0.0, 0.0, 1.0, 1.0, 0.0,
-        0.0, 1.0, 1.0, 0.0, 1.0, 0.0,
-        0.0, 0.0, 1.0, 1.0, 0.0, 1.0,
-        0.0, 0.0, 0.0, 0.0, 1.0, 0.0,
+        0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0,
+        0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0,
     ];
     let adj_5_chain = vec![
-        0.0, 1.0, 0.0, 0.0, 0.0,
-        1.0, 0.0, 1.0, 0.0, 0.0,
-        0.0, 1.0, 0.0, 1.0, 0.0,
-        0.0, 0.0, 1.0, 0.0, 1.0,
-        0.0, 0.0, 0.0, 1.0, 0.0,
+        0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0,
+        0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0,
     ];
 
     let mut points = Vec::new();
@@ -274,7 +267,11 @@ fn diff_sparse_bfs_dfs_order() {
         } else if !no_dups {
             "duplicate_visits".to_string()
         } else if !set_match {
-            format!("set_mismatch fsci={} scipy={}", fsci_set.len(), scipy_set.len())
+            format!(
+                "set_mismatch fsci={} scipy={}",
+                fsci_set.len(),
+                scipy_set.len()
+            )
         } else {
             "ok".to_string()
         };

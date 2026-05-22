@@ -151,10 +151,22 @@ fn generate_query() -> OracleQuery {
 
     // matrix_rank
     let rank_cases: &[(&str, (usize, usize, Vec<f64>))] = &[
-        ("rank_full_3x3", mk(3, 3, vec![1.0, 2.0, 3.0, 0.0, 1.0, 4.0, 5.0, 6.0, 0.0])),
-        ("rank_deficient", mk(3, 3, vec![1.0, 2.0, 3.0, 2.0, 4.0, 6.0, 3.0, 6.0, 9.0])),
-        ("rank_4x6_full_row", mk(4, 6, (1..=24).map(|i| i as f64).collect())),
-        ("rank_3x3_identity", mk(3, 3, vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0])),
+        (
+            "rank_full_3x3",
+            mk(3, 3, vec![1.0, 2.0, 3.0, 0.0, 1.0, 4.0, 5.0, 6.0, 0.0]),
+        ),
+        (
+            "rank_deficient",
+            mk(3, 3, vec![1.0, 2.0, 3.0, 2.0, 4.0, 6.0, 3.0, 6.0, 9.0]),
+        ),
+        (
+            "rank_4x6_full_row",
+            mk(4, 6, (1..=24).map(|i| i as f64).collect()),
+        ),
+        (
+            "rank_3x3_identity",
+            mk(3, 3, vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]),
+        ),
     ];
     let empty_b = empty();
     for (name, a) in rank_cases {
@@ -204,8 +216,14 @@ fn generate_query() -> OracleQuery {
     // polar
     let polar_cases: &[(&str, (usize, usize, Vec<f64>))] = &[
         ("polar_2x2", mk(2, 2, vec![1.0, 2.0, 3.0, 4.0])),
-        ("polar_3x3_diag", mk(3, 3, vec![2.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 1.0])),
-        ("polar_3x2_tall", mk(3, 2, vec![1.0, 0.0, 0.0, 1.0, 1.0, 1.0])),
+        (
+            "polar_3x3_diag",
+            mk(3, 3, vec![2.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 1.0]),
+        ),
+        (
+            "polar_3x2_tall",
+            mk(3, 2, vec![1.0, 0.0, 0.0, 1.0, 1.0, 1.0]),
+        ),
     ];
     for (name, a) in polar_cases {
         points.push(OpCase {
@@ -301,7 +319,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open subspace_polar oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open subspace_polar oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -309,9 +330,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "subspace_polar oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping subspace_polar oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping subspace_polar oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -324,9 +343,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "subspace_polar oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping subspace_polar oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping subspace_polar oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -458,10 +475,7 @@ fn diff_linalg_subspace_polar() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

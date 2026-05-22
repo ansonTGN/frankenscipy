@@ -81,8 +81,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create regression_metrics diff output dir");
+    fs::create_dir_all(output_dir()).expect("create regression_metrics diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -94,8 +93,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize regression_metrics diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize regression_metrics diff log");
     fs::write(path, json).expect("write regression_metrics diff log");
 }
 
@@ -116,8 +114,12 @@ fn generate_query() -> OracleQuery {
         // Larger error, mixed signs
         (
             "mixed_error",
-            vec![1.0, 2.5, -3.0, 4.0, -5.5, 6.0, 7.5, -8.0, 9.0, 10.5, -11.0, 12.0],
-            vec![1.5, 2.0, -2.5, 4.5, -5.0, 5.5, 8.0, -7.5, 9.5, 10.0, -10.5, 12.5],
+            vec![
+                1.0, 2.5, -3.0, 4.0, -5.5, 6.0, 7.5, -8.0, 9.0, 10.5, -11.0, 12.0,
+            ],
+            vec![
+                1.5, 2.0, -2.5, 4.5, -5.0, 5.5, 8.0, -7.5, 9.5, 10.0, -10.5, 12.5,
+            ],
         ),
         // Real-valued targets, decay-style predictions
         (
@@ -207,9 +209,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for regression_metrics oracle: {e}"
             );
-            eprintln!(
-                "skipping regression_metrics oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping regression_metrics oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -225,9 +225,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "regression_metrics oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping regression_metrics oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping regression_metrics oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -240,9 +238,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "regression_metrics oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping regression_metrics oracle: numpy not available\n{stderr}"
-        );
+        eprintln!("skipping regression_metrics oracle: numpy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

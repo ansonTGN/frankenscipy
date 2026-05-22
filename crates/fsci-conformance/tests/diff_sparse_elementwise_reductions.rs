@@ -136,10 +136,8 @@ fn dense_from_csr(csr: &CsrMatrix) -> Vec<f64> {
 fn generate_query() -> OracleQuery {
     let mat_3x3 = vec![1.0, 0.0, -2.0, 0.0, 3.0, 0.0, -4.0, 0.0, 5.0];
     let mat_4x5 = vec![
-        1.0, 0.0, 0.0, 0.0, 0.5,
-        0.0, -2.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 3.0, 0.0, 0.7,
-        0.0, 0.0, 0.0, -4.0, 0.0,
+        1.0, 0.0, 0.0, 0.0, 0.5, 0.0, -2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.7, 0.0, 0.0, 0.0,
+        -4.0, 0.0,
     ];
     let mat_2x4 = vec![1.0, -1.0, 2.0, -2.0, 3.0, -3.0, 4.0, -4.0];
 
@@ -303,7 +301,9 @@ print(json.dumps({"abs": abs_out, "power": power_out, "sums": sums_out}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for elementwise oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for elementwise oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -441,10 +441,7 @@ fn diff_sparse_elementwise_reductions() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 

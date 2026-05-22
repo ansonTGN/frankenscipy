@@ -179,14 +179,15 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for ks_2samp_alt oracle: {e}"
             );
-            eprintln!(
-                "skipping ks_2samp_alt oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping ks_2samp_alt oracle: python3 not available ({e})");
             return None;
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open ks_2samp_alt oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open ks_2samp_alt oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -194,9 +195,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "ks_2samp_alt oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping ks_2samp_alt oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping ks_2samp_alt oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -209,9 +208,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "ks_2samp_alt oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping ks_2samp_alt oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping ks_2samp_alt oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -241,27 +238,29 @@ fn diff_stats_ks_2samp_alt() {
         let result = ks_2samp_alternative(&case.data1, &case.data2, &case.alternative);
 
         if let Some(scipy_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - scipy_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= STAT_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - scipy_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= STAT_TOL,
+            });
+        }
         if let Some(scipy_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= PVALUE_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= PVALUE_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

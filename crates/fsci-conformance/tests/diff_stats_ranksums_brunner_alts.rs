@@ -77,8 +77,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create ranksums_brunner_alts diff output dir");
+    fs::create_dir_all(output_dir()).expect("create ranksums_brunner_alts diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -90,8 +89,7 @@ fn timestamp_ms() -> u128 {
 fn emit_log(log: &DiffLog) {
     ensure_output_dir();
     let path = output_dir().join(format!("{}.json", log.test_id));
-    let json =
-        serde_json::to_string_pretty(log).expect("serialize ranksums_brunner_alts diff log");
+    let json = serde_json::to_string_pretty(log).expect("serialize ranksums_brunner_alts diff log");
     fs::write(path, json).expect("write ranksums_brunner_alts diff log");
 }
 
@@ -198,9 +196,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for ranksums_brunner_alts oracle: {e}"
             );
-            eprintln!(
-                "skipping ranksums_brunner_alts oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping ranksums_brunner_alts oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -231,9 +227,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "ranksums_brunner_alts oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping ranksums_brunner_alts oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping ranksums_brunner_alts oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -267,27 +261,29 @@ fn diff_stats_ranksums_brunner_alts() {
         };
 
         if let Some(s_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - s_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: format!("{}.statistic", case.func),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - s_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: format!("{}.statistic", case.func),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(s_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - s_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: format!("{}.pvalue", case.func),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - s_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: format!("{}.pvalue", case.func),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

@@ -235,9 +235,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "exp_power_reg oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping exp_power_reg oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping exp_power_reg oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -250,9 +248,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "exp_power_reg oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping exp_power_reg oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping exp_power_reg oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -286,29 +282,31 @@ fn diff_stats_exp_power_reg() {
         };
 
         if let Some(scipy_a) = scipy_arm.a
-            && rust_a.is_finite() {
-                let abs_diff = (rust_a - scipy_a).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    arm: "a".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_a.is_finite()
+        {
+            let abs_diff = (rust_a - scipy_a).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                arm: "a".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(scipy_b) = scipy_arm.b
-            && rust_b.is_finite() {
-                let abs_diff = (rust_b - scipy_b).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    func: case.func.clone(),
-                    arm: "b".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && rust_b.is_finite()
+        {
+            let abs_diff = (rust_b - scipy_b).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                func: case.func.clone(),
+                arm: "b".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

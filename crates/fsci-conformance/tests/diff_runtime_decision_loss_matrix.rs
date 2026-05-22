@@ -56,8 +56,7 @@ fn diff_runtime_decision_loss_matrix() {
     let start = Instant::now();
     let mut diffs: Vec<CaseDiff> = Vec::new();
 
-    let strict_expected: [[f64; 3]; 3] =
-        [[0.0, 65.0, 200.0], [8.0, 4.0, 80.0], [40.0, 25.0, 1.0]];
+    let strict_expected: [[f64; 3]; 3] = [[0.0, 65.0, 200.0], [8.0, 4.0, 80.0], [40.0, 25.0, 1.0]];
     let hardened_expected: [[f64; 3]; 3] =
         [[0.0, 50.0, 180.0], [5.0, 3.0, 60.0], [55.0, 30.0, 1.0]];
 

@@ -89,7 +89,12 @@ fn generate_query() -> OracleQuery {
         ("up3_down2_n16", (0..16).map(|i| i as f64).collect(), 3, 2),
         ("up1_down2_n16", (0..16).map(|i| i as f64).collect(), 1, 2),
         ("up2_down3_n12", (0..12).map(|i| i as f64).collect(), 2, 3),
-        ("up5_down4_n20_sine", (0..20).map(|i| ((i as f64) * 0.3).sin()).collect(), 5, 4),
+        (
+            "up5_down4_n20_sine",
+            (0..20).map(|i| ((i as f64) * 0.3).sin()).collect(),
+            5,
+            4,
+        ),
         ("up1_down1_n16", (0..16).map(|i| i as f64).collect(), 1, 1),
     ];
     let points = cases
@@ -168,9 +173,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "resample_poly oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping resample_poly oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping resample_poly oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -183,9 +186,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "resample_poly oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping resample_poly oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping resample_poly oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);

@@ -87,8 +87,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create combine_pvalues diff output dir");
+    fs::create_dir_all(output_dir()).expect("create combine_pvalues diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -113,7 +112,13 @@ fn generate_query() -> OracleQuery {
         // All large (non-significant)
         ("all_large", vec![0.30, 0.45, 0.60, 0.75, 0.85, 0.92]),
     ];
-    let methods = ["fisher", "pearson", "tippett", "stouffer", "mudholkar_george"];
+    let methods = [
+        "fisher",
+        "pearson",
+        "tippett",
+        "stouffer",
+        "mudholkar_george",
+    ];
 
     let mut points = Vec::new();
     for (name, pvals) in &fixtures {
@@ -173,9 +178,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for combine_pvalues oracle: {e}"
             );
-            eprintln!(
-                "skipping combine_pvalues oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping combine_pvalues oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -191,9 +194,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "combine_pvalues oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping combine_pvalues oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping combine_pvalues oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -206,9 +207,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "combine_pvalues oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping combine_pvalues oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping combine_pvalues oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -240,31 +239,37 @@ fn diff_stats_combine_pvalues() {
             Err(_) => continue,
         };
 
-        let tol = if case.method == "stouffer" { STOUFFER_TOL } else { TIGHT_TOL };
+        let tol = if case.method == "stouffer" {
+            STOUFFER_TOL
+        } else {
+            TIGHT_TOL
+        };
         if let Some(scipy_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - scipy_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    method: case.method.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= tol,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - scipy_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                method: case.method.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= tol,
+            });
+        }
         if let Some(scipy_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    method: case.method.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= tol,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                method: case.method.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= tol,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

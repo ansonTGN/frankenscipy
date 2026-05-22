@@ -237,7 +237,9 @@ fn diff_special_softmax() {
         let scipy_arm = pmap.get(&case.case_id).expect("validated oracle");
         match case.func.as_str() {
             "softmax" => {
-                let Some(scipy_v) = scipy_arm.vector.as_ref() else { continue };
+                let Some(scipy_v) = scipy_arm.vector.as_ref() else {
+                    continue;
+                };
                 let fsci_v = softmax(&case.x);
                 if fsci_v.len() != scipy_v.len() {
                     diffs.push(CaseDiff {
@@ -262,7 +264,9 @@ fn diff_special_softmax() {
                 });
             }
             "log_softmax" => {
-                let Some(scipy_v) = scipy_arm.vector.as_ref() else { continue };
+                let Some(scipy_v) = scipy_arm.vector.as_ref() else {
+                    continue;
+                };
                 let fsci_v = log_softmax(&case.x);
                 if fsci_v.len() != scipy_v.len() {
                     diffs.push(CaseDiff {
@@ -287,7 +291,9 @@ fn diff_special_softmax() {
                 });
             }
             "logsumexp" => {
-                let Some(scipy_v) = scipy_arm.scalar else { continue };
+                let Some(scipy_v) = scipy_arm.scalar else {
+                    continue;
+                };
                 let fsci_v = logsumexp(&case.x);
                 if !fsci_v.is_finite() {
                     diffs.push(CaseDiff {

@@ -123,12 +123,12 @@ fn generate_query() -> OracleQuery {
         (
             "weak_positive_n20",
             vec![
-                0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0,
-                1.0, 0.0, 1.0, 0.0, 1.0,
+                0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0,
+                0.0, 1.0, 0.0, 1.0,
             ],
             vec![
-                1.0, 1.5, 2.0, 2.3, 3.0, 3.4, 4.0, 4.2, 5.0, 5.4, 6.0, 6.3, 7.0, 7.4, 8.0,
-                8.3, 9.0, 9.4, 10.0, 10.3,
+                1.0, 1.5, 2.0, 2.3, 3.0, 3.4, 4.0, 4.2, 5.0, 5.4, 6.0, 6.3, 7.0, 7.4, 8.0, 8.3,
+                9.0, 9.4, 10.0, 10.3,
             ],
         ),
     ];
@@ -190,9 +190,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for pointbiserialr oracle: {e}"
             );
-            eprintln!(
-                "skipping pointbiserialr oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping pointbiserialr oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -208,9 +206,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "pointbiserialr oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping pointbiserialr oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping pointbiserialr oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -223,9 +219,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "pointbiserialr oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping pointbiserialr oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping pointbiserialr oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -255,27 +249,29 @@ fn diff_stats_pointbiserialr() {
         let result = pointbiserialr(&case.binary, &case.continuous);
 
         if let Some(s_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - s_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= STAT_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - s_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= STAT_TOL,
+            });
+        }
         if let Some(s_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - s_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= PVALUE_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - s_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= PVALUE_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

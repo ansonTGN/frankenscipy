@@ -90,12 +90,7 @@ fn diff_opt_audit_record_helpers() {
     };
     let decision = entry.alien_artifact_decision();
     let before = ledger_len(&ledger);
-    fsci_opt::audit::record_alien_artifact_decision(
-        &ledger,
-        b"opt-input-B",
-        decision,
-        "validated",
-    );
+    fsci_opt::audit::record_alien_artifact_decision(&ledger, b"opt-input-B", decision, "validated");
     let after = ledger_len(&ledger);
     diffs.push(CaseDiff {
         case_id: "alien_decision_appends".into(),

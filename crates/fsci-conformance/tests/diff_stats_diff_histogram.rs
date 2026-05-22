@@ -77,8 +77,7 @@ fn output_dir() -> PathBuf {
 }
 
 fn ensure_output_dir() {
-    fs::create_dir_all(output_dir())
-        .expect("create diff_histogram diff output dir");
+    fs::create_dir_all(output_dir()).expect("create diff_histogram diff output dir");
 }
 
 fn timestamp_ms() -> u128 {
@@ -100,8 +99,8 @@ fn generate_query() -> OracleQuery {
         (
             "spread_n20_b8",
             vec![
-                -3.0, -1.5, 0.0, 0.5, 1.5, 2.5, 3.5, 5.0, 7.0, 9.0, 12.0, 16.0, 21.0, 27.0,
-                34.0, 40.0, 45.0, 50.0, 55.0, 60.0,
+                -3.0, -1.5, 0.0, 0.5, 1.5, 2.5, 3.5, 5.0, 7.0, 9.0, 12.0, 16.0, 21.0, 27.0, 34.0,
+                40.0, 45.0, 50.0, 55.0, 60.0,
             ],
             8,
         ),
@@ -186,9 +185,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for diff_histogram oracle: {e}"
             );
-            eprintln!(
-                "skipping diff_histogram oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping diff_histogram oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -204,9 +201,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "diff_histogram oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping diff_histogram oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping diff_histogram oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -219,9 +214,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "diff_histogram oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping diff_histogram oracle: numpy not available\n{stderr}"
-        );
+        eprintln!("skipping diff_histogram oracle: numpy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -272,36 +265,38 @@ fn diff_stats_diff_histogram() {
             "histogram" => {
                 let (rust_counts, rust_edges) = histogram(&case.data, case.bins);
                 if let Some(scipy_counts) = &scipy_arm.counts
-                    && rust_counts.len() == scipy_counts.len() {
-                        let mut max_local = 0.0_f64;
-                        for (r, s) in rust_counts.iter().zip(scipy_counts.iter()) {
-                            let abs = (*r as i64 - *s).unsigned_abs() as f64;
-                            max_local = max_local.max(abs);
-                        }
-                        max_overall = max_overall.max(max_local);
-                        diffs.push(CaseDiff {
-                            case_id: case.case_id.clone(),
-                            arm: "histogram.counts".into(),
-                            abs_diff: max_local,
-                            pass: max_local <= ABS_TOL,
-                        });
+                    && rust_counts.len() == scipy_counts.len()
+                {
+                    let mut max_local = 0.0_f64;
+                    for (r, s) in rust_counts.iter().zip(scipy_counts.iter()) {
+                        let abs = (*r as i64 - *s).unsigned_abs() as f64;
+                        max_local = max_local.max(abs);
                     }
+                    max_overall = max_overall.max(max_local);
+                    diffs.push(CaseDiff {
+                        case_id: case.case_id.clone(),
+                        arm: "histogram.counts".into(),
+                        abs_diff: max_local,
+                        pass: max_local <= ABS_TOL,
+                    });
+                }
                 if let Some(scipy_edges) = &scipy_arm.edges
-                    && rust_edges.len() == scipy_edges.len() {
-                        let mut max_local = 0.0_f64;
-                        for (r, s) in rust_edges.iter().zip(scipy_edges.iter()) {
-                            if r.is_finite() {
-                                max_local = max_local.max((r - s).abs());
-                            }
+                    && rust_edges.len() == scipy_edges.len()
+                {
+                    let mut max_local = 0.0_f64;
+                    for (r, s) in rust_edges.iter().zip(scipy_edges.iter()) {
+                        if r.is_finite() {
+                            max_local = max_local.max((r - s).abs());
                         }
-                        max_overall = max_overall.max(max_local);
-                        diffs.push(CaseDiff {
-                            case_id: case.case_id.clone(),
-                            arm: "histogram.edges".into(),
-                            abs_diff: max_local,
-                            pass: max_local <= ABS_TOL,
-                        });
                     }
+                    max_overall = max_overall.max(max_local);
+                    diffs.push(CaseDiff {
+                        case_id: case.case_id.clone(),
+                        arm: "histogram.edges".into(),
+                        abs_diff: max_local,
+                        pass: max_local <= ABS_TOL,
+                    });
+                }
             }
             _ => continue,
         }

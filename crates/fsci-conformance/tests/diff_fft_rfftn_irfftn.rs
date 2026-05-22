@@ -92,11 +92,7 @@ fn emit_log(log: &DiffLog) {
 
 fn generate_query() -> OracleQuery {
     let inputs: &[(&str, Vec<usize>, Vec<f64>)] = &[
-        (
-            "2x4_arange",
-            vec![2, 4],
-            (0..8).map(|i| i as f64).collect(),
-        ),
+        ("2x4_arange", vec![2, 4], (0..8).map(|i| i as f64).collect()),
         (
             "3x4_sine",
             vec![3, 4],
@@ -212,9 +208,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "rfftn_irfftn oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping rfftn_irfftn oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping rfftn_irfftn oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -227,9 +221,7 @@ print(json.dumps({"points": points}))
             std::env::var(REQUIRE_SCIPY_ENV).is_err(),
             "rfftn_irfftn oracle failed: {stderr}"
         );
-        eprintln!(
-            "skipping rfftn_irfftn oracle: scipy not available\n{stderr}"
-        );
+        eprintln!("skipping rfftn_irfftn oracle: scipy not available\n{stderr}");
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -276,10 +268,8 @@ fn diff_fft_rfftn_irfftn() {
                 let Some(packed) = scipy_arm.complex_input.as_ref() else {
                     continue;
                 };
-                let complex_in: Vec<(f64, f64)> = packed
-                    .chunks_exact(2)
-                    .map(|p| (p[0], p[1]))
-                    .collect();
+                let complex_in: Vec<(f64, f64)> =
+                    packed.chunks_exact(2).map(|p| (p[0], p[1])).collect();
                 let Ok(out) = irfftn(&complex_in, &case.shape, &opts) else {
                     continue;
                 };

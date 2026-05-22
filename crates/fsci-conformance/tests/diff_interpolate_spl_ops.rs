@@ -346,8 +346,7 @@ fn diff_interpolate_spl_ops() {
         };
 
         // splder: tck triple equality
-        if let (Some(et), Some(ec), Some(ek)) =
-            (arm.der_t.as_ref(), arm.der_c.as_ref(), arm.der_k)
+        if let (Some(et), Some(ec), Some(ek)) = (arm.der_t.as_ref(), arm.der_c.as_ref(), arm.der_k)
         {
             let Ok((dt, dc, dk)) = splder(&(tck.t.clone(), tck.c.clone(), tck.k)) else {
                 continue;
@@ -409,8 +408,7 @@ fn diff_interpolate_spl_ops() {
                 let off_actual = ev[0];
                 let off_expected = ev_exp[0];
                 let shifted_actual: Vec<f64> = ev.iter().map(|v| v - off_actual).collect();
-                let shifted_expected: Vec<f64> =
-                    ev_exp.iter().map(|v| v - off_expected).collect();
+                let shifted_expected: Vec<f64> = ev_exp.iter().map(|v| v - off_expected).collect();
                 let abs_d = vec_max_diff(&shifted_actual, &shifted_expected);
                 max_overall = max_overall.max(abs_d);
                 diffs.push(CaseDiff {

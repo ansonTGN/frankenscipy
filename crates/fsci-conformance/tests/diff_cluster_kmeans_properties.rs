@@ -200,36 +200,20 @@ fn diff_cluster_kmeans_properties() {
     // === Error paths ===
     {
         let r = kmeans(&[], 2, 100, 1);
-        check(
-            "empty_data_errors",
-            r.is_err(),
-            String::new(),
-        );
+        check("empty_data_errors", r.is_err(), String::new());
     }
     {
         let bad: Vec<Vec<f64>> = vec![vec![0.0, 0.0], vec![f64::NAN, 1.0]];
         let r = kmeans(&bad, 1, 100, 1);
-        check(
-            "non_finite_data_errors",
-            r.is_err(),
-            String::new(),
-        );
+        check("non_finite_data_errors", r.is_err(), String::new());
     }
     {
         let r = kmeans(&data, 0, 100, 1);
-        check(
-            "k_zero_errors",
-            r.is_err(),
-            String::new(),
-        );
+        check("k_zero_errors", r.is_err(), String::new());
     }
     {
         let r = kmeans(&data, data.len() + 1, 100, 1);
-        check(
-            "k_too_large_errors",
-            r.is_err(),
-            String::new(),
-        );
+        check("k_too_large_errors", r.is_err(), String::new());
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

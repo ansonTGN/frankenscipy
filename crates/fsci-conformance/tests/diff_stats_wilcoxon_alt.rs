@@ -113,8 +113,12 @@ fn generate_query() -> OracleQuery {
         // Mixed differences
         (
             "mixed",
-            vec![1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0, 19.0, 21.0, 23.0, 25.0, 27.0],
-            vec![2.0, 2.5, 6.0, 6.5, 10.0, 10.5, 14.0, 14.5, 18.0, 18.5, 22.0, 22.5, 26.0, 26.5],
+            vec![
+                1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0, 19.0, 21.0, 23.0, 25.0, 27.0,
+            ],
+            vec![
+                2.0, 2.5, 6.0, 6.5, 10.0, 10.5, 14.0, 14.5, 18.0, 18.5, 22.0, 22.5, 26.0, 26.5,
+            ],
         ),
         // Small with ties (in absolute differences)
         (
@@ -192,9 +196,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "failed to spawn python3 for wilcoxon_alt oracle: {e}"
             );
-            eprintln!(
-                "skipping wilcoxon_alt oracle: python3 not available ({e})"
-            );
+            eprintln!("skipping wilcoxon_alt oracle: python3 not available ({e})");
             return None;
         }
     };
@@ -210,9 +212,7 @@ print(json.dumps({"points": points}))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "wilcoxon_alt oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping wilcoxon_alt oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping wilcoxon_alt oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -255,27 +255,29 @@ fn diff_stats_wilcoxon_alt() {
         let result = wilcoxon_alternative(&case.x, &case.y, &case.alternative);
 
         if let Some(scipy_stat) = scipy_arm.statistic
-            && result.statistic.is_finite() {
-                let abs_diff = (result.statistic - scipy_stat).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "statistic".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.statistic.is_finite()
+        {
+            let abs_diff = (result.statistic - scipy_stat).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "statistic".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
         if let Some(scipy_p) = scipy_arm.pvalue
-            && result.pvalue.is_finite() {
-                let abs_diff = (result.pvalue - scipy_p).abs();
-                max_overall = max_overall.max(abs_diff);
-                diffs.push(CaseDiff {
-                    case_id: case.case_id.clone(),
-                    arm: "pvalue".into(),
-                    abs_diff,
-                    pass: abs_diff <= ABS_TOL,
-                });
-            }
+            && result.pvalue.is_finite()
+        {
+            let abs_diff = (result.pvalue - scipy_p).abs();
+            max_overall = max_overall.max(abs_diff);
+            diffs.push(CaseDiff {
+                case_id: case.case_id.clone(),
+                arm: "pvalue".into(),
+                abs_diff,
+                pass: abs_diff <= ABS_TOL,
+            });
+        }
     }
 
     let all_pass = diffs.iter().all(|d| d.pass);

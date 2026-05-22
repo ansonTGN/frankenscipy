@@ -237,9 +237,7 @@ print(json.dumps({"points": points}, allow_nan=False))
                 std::env::var(REQUIRE_SCIPY_ENV).is_err(),
                 "neighbors oracle stdin write failed: {err}; stderr: {stderr}"
             );
-            eprintln!(
-                "skipping neighbors oracle: stdin write failed ({err})\n{stderr}"
-            );
+            eprintln!("skipping neighbors oracle: stdin write failed ({err})\n{stderr}");
             return None;
         }
     }
@@ -278,10 +276,9 @@ fn diff_spatial_neighbors() {
         let scipy_arm = pmap.get(&case.case_id).expect("validated oracle");
 
         // nearest_neighbors
-        if let (Some(scipy_idx), Some(scipy_dist)) = (
-            scipy_arm.nn_idx.as_ref(),
-            scipy_arm.nn_dist.as_ref(),
-        ) {
+        if let (Some(scipy_idx), Some(scipy_dist)) =
+            (scipy_arm.nn_idx.as_ref(), scipy_arm.nn_dist.as_ref())
+        {
             let (rust_idx_opt, rust_dist) = nearest_neighbors(&case.data);
             let rust_idx: Vec<i64> = rust_idx_opt
                 .iter()
@@ -304,19 +301,22 @@ fn diff_spatial_neighbors() {
         }
 
         // k_nearest_neighbors
-        if let (Some(scipy_idx), Some(scipy_dist)) = (
-            scipy_arm.knn_idx.as_ref(),
-            scipy_arm.knn_dist.as_ref(),
-        ) {
+        if let (Some(scipy_idx), Some(scipy_dist)) =
+            (scipy_arm.knn_idx.as_ref(), scipy_arm.knn_dist.as_ref())
+        {
             let (rust_idx, rust_dist) = k_nearest_neighbors(&case.data, case.k);
             let idx_match = rust_idx.len() == scipy_idx.len()
-                && rust_idx.iter().zip(scipy_idx.iter()).all(|(r, s)| {
-                    r.iter().map(|&v| v as i64).collect::<Vec<_>>() == *s
-                });
+                && rust_idx
+                    .iter()
+                    .zip(scipy_idx.iter())
+                    .all(|(r, s)| r.iter().map(|&v| v as i64).collect::<Vec<_>>() == *s);
             let dist_pass = rust_dist.len() == scipy_dist.len()
                 && rust_dist.iter().zip(scipy_dist.iter()).all(|(rr, sr)| {
                     rr.len() == sr.len()
-                        && rr.iter().zip(sr.iter()).all(|(r, s)| (r - s).abs() <= ABS_TOL)
+                        && rr
+                            .iter()
+                            .zip(sr.iter())
+                            .all(|(r, s)| (r - s).abs() <= ABS_TOL)
                 });
             cases.push(CaseDiff {
                 case_id: case.case_id.clone(),

@@ -267,7 +267,11 @@ fn diff_opt_milp() {
         let Some(efun) = arm.fun else {
             continue;
         };
-        let integrality: Vec<Integrality> = case.integrality.iter().map(|&u| integrality_from(u)).collect();
+        let integrality: Vec<Integrality> = case
+            .integrality
+            .iter()
+            .map(|&u| integrality_from(u))
+            .collect();
         let problem = MilpProblem {
             c: &case.c,
             integrality: &integrality,

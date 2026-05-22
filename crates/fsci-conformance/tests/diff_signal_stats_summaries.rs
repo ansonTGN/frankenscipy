@@ -100,9 +100,14 @@ fn generate_query() -> OracleQuery {
         ),
         (
             "alt_20",
-            (0..20).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect(),
+            (0..20)
+                .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
+                .collect(),
         ),
-        ("decay_40", (0..40).map(|i| (-(i as f64) / 8.0).exp()).collect()),
+        (
+            "decay_40",
+            (0..40).map(|i| (-(i as f64) / 8.0).exp()).collect(),
+        ),
         ("constant_10", vec![3.5; 10]),
     ];
 
@@ -191,7 +196,10 @@ print(json.dumps({"points": points}))
         }
     };
     {
-        let stdin = child.stdin.as_mut().expect("open signal_stats oracle stdin");
+        let stdin = child
+            .stdin
+            .as_mut()
+            .expect("open signal_stats oracle stdin");
         if let Err(err) = stdin.write_all(query_json.as_bytes()) {
             let output = child.wait_with_output().expect("wait for failed oracle");
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -203,7 +211,9 @@ print(json.dumps({"points": points}))
             return None;
         }
     }
-    let output = child.wait_with_output().expect("wait for signal_stats oracle");
+    let output = child
+        .wait_with_output()
+        .expect("wait for signal_stats oracle");
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
@@ -275,10 +285,7 @@ fn diff_signal_stats_summaries() {
 
     for d in &diffs {
         if !d.pass {
-            eprintln!(
-                "{} mismatch: {} abs_diff={}",
-                d.op, d.case_id, d.abs_diff
-            );
+            eprintln!("{} mismatch: {} abs_diff={}", d.op, d.case_id, d.abs_diff);
         }
     }
 
