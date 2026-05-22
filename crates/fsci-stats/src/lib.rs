@@ -31855,6 +31855,33 @@ pub fn log_softmax(x: &[f64]) -> Vec<f64> {
     x.iter().map(|&xi| xi - log_sum_exp).collect()
 }
 
+/// Compute log(sum(exp(x))) in a numerically stable way.
+pub fn logsumexp(x: &[f64]) -> f64 {
+    if x.is_empty() {
+        return f64::NEG_INFINITY;
+    }
+    let max_x = x.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    if !max_x.is_finite() {
+        return max_x;
+    }
+    max_x + x.iter().map(|&xi| (xi - max_x).exp()).sum::<f64>().ln()
+}
+
+/// Compute log(sum(b * exp(a))) with numerical stability.
+pub fn logsumexp_weighted(a: &[f64], b: &[f64]) -> f64 {
+    if a.len() != b.len() || a.is_empty() {
+        return f64::NAN;
+    }
+    let max_a = a.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    if !max_a.is_finite() {
+        return max_a;
+    }
+    let sum = a.iter().zip(b.iter())
+        .map(|(&ai, &bi)| bi * (ai - max_a).exp())
+        .sum::<f64>();
+    max_a + sum.ln()
+}
+
 /// Adjusted Rand Index for comparing cluster assignments.
 /// labels_true and labels_pred should be integer labels (encoded as f64).
 pub fn adjusted_rand_index(labels_true: &[f64], labels_pred: &[f64]) -> f64 {
