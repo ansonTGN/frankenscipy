@@ -145,6 +145,29 @@ fn gaussian_filter_with_orders(
     Ok(current)
 }
 
+fn gaussian_filter_with_orders_on_axes(
+    input: &NdArray,
+    sigma: f64,
+    axes: &[usize],
+    orders: &[usize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    if axes.len() != orders.len() {
+        return Err(NdimageError::DimensionMismatch(format!(
+            "orders length {} != axes length {}",
+            orders.len(),
+            axes.len()
+        )));
+    }
+
+    let mut current = input.clone();
+    for (&axis, &order) in axes.iter().zip(orders) {
+        current = gaussian_filter1d_axis(&current, sigma, axis, order, mode, cval)?;
+    }
+    Ok(current)
+}
+
 fn gaussian_filter_with_sigmas_and_orders(
     input: &NdArray,
     sigmas: &[f64],
@@ -2164,6 +2187,31 @@ pub fn gaussian_laplace(
     mode: BoundaryMode,
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
+    let axes = (0..input.ndim()).collect::<Vec<_>>();
+    gaussian_laplace_usize_axes(input, sigma, &axes, mode, cval)
+}
+
+/// Gaussian Laplace (LoG) filter over a SciPy-style signed axes subset.
+///
+/// `axes=[]` matches SciPy's empty-axes identity behavior.
+pub fn gaussian_laplace_axes(
+    input: &NdArray,
+    sigma: f64,
+    axes: &[isize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let axes = normalize_signed_axes(axes, input.ndim())?;
+    gaussian_laplace_usize_axes(input, sigma, &axes, mode, cval)
+}
+
+fn gaussian_laplace_usize_axes(
+    input: &NdArray,
+    sigma: f64,
+    axes: &[usize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
     if !sigma.is_finite() || sigma <= 0.0 {
         return Err(NdimageError::InvalidArgument(
             "sigma must be positive".to_string(),
@@ -2176,12 +2224,22 @@ pub fn gaussian_laplace(
     if ndim == 0 {
         return Ok(input.clone());
     }
+    if axes.is_empty() {
+        return Ok(input.clone());
+    }
 
     let mut result = NdArray::zeros(input.shape.clone());
-    for axis in 0..ndim {
-        let mut orders = vec![0usize; ndim];
-        orders[axis] = 2;
-        let deriv2 = gaussian_filter_with_orders(input, sigma, &orders, mode, cval)?;
+    for &derivative_axis in axes {
+        if derivative_axis >= ndim {
+            return Err(NdimageError::InvalidArgument(format!(
+                "axis {derivative_axis} out of range for {ndim}-dimensional input"
+            )));
+        }
+        let orders = axes
+            .iter()
+            .map(|&axis| if axis == derivative_axis { 2 } else { 0 })
+            .collect::<Vec<_>>();
+        let deriv2 = gaussian_filter_with_orders_on_axes(input, sigma, axes, &orders, mode, cval)?;
         for (r, d) in result.data.iter_mut().zip(&deriv2.data) {
             *r += d;
         }
@@ -6591,6 +6649,73 @@ mod tests {
                 "gaussian_laplace 2d mismatch: {g} vs {e}"
             );
         }
+    }
+
+    #[test]
+    fn gaussian_laplace_axes_matches_scipy_subset_fixtures() {
+        let input = NdArray::new(vec![1.0, 2.0, 4.0, 8.0, 16.0, 32.0], vec![2, 3]).unwrap();
+
+        // scipy.ndimage.gaussian_laplace(input, 1.0, mode='constant', cval=0.0, axes=(-1,))
+        let last_axis = [
+            2.48950059692e-01,
+            -7.97886938712e-01,
+            -1.433800495162e+00,
+            1.991600477539e+00,
+            -6.383095509698e+00,
+            -1.1470403961298e+01,
+        ];
+        // scipy.ndimage.gaussian_laplace(input, 1.0, mode='constant', cval=0.0, axes=(-2,))
+        let first_axis = [
+            -3.98943469356e-01,
+            -7.97886938712e-01,
+            -1.595773877424e+00,
+            -3.191547754849e+00,
+            -6.383095509698e+00,
+            -1.2766191019395e+01,
+        ];
+
+        let got_last =
+            gaussian_laplace_axes(&input, 1.0, &[-1], BoundaryMode::Constant, 0.0).unwrap();
+        for (got, expect) in got_last.data.iter().zip(&last_axis) {
+            assert!(
+                (got - expect).abs() < 1e-9,
+                "last-axis LoG: {got} vs {expect}"
+            );
+        }
+
+        let got_first =
+            gaussian_laplace_axes(&input, 1.0, &[-2], BoundaryMode::Constant, 0.0).unwrap();
+        for (got, expect) in got_first.data.iter().zip(&first_axis) {
+            assert!(
+                (got - expect).abs() < 1e-9,
+                "first-axis LoG: {got} vs {expect}"
+            );
+        }
+
+        assert_close_or_nan(
+            &gaussian_laplace_axes(&input, 1.0, &[-2, -1], BoundaryMode::Constant, 0.0)
+                .unwrap()
+                .data,
+            &gaussian_laplace(&input, 1.0, BoundaryMode::Constant, 0.0)
+                .unwrap()
+                .data,
+        );
+        assert_eq!(
+            gaussian_laplace_axes(&input, 1.0, &[], BoundaryMode::Constant, 0.0)
+                .unwrap()
+                .data,
+            input.data
+        );
+    }
+
+    #[test]
+    fn gaussian_laplace_axes_rejects_duplicate_and_out_of_range_axes() {
+        let input = NdArray::new(vec![1.0; 6], vec![2, 3]).unwrap();
+
+        assert!(gaussian_laplace_axes(&input, 1.0, &[1, -1], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(gaussian_laplace_axes(&input, 1.0, &[2], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(gaussian_laplace_axes(&input, 1.0, &[-3], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(gaussian_laplace_axes(&input, 0.0, &[-1], BoundaryMode::Reflect, 0.0).is_err());
     }
 
     #[test]
