@@ -17526,6 +17526,59 @@ pub fn concordance_correlation(x: &[f64], y: &[f64]) -> f64 {
     2.0 * cov_xy / denom
 }
 
+/// Result of Bland-Altman analysis.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BlandAltmanResult {
+    /// Mean of differences (bias).
+    pub mean_diff: f64,
+    /// Standard deviation of differences.
+    pub std_diff: f64,
+    /// Lower limit of agreement (mean - 1.96*std).
+    pub lower_loa: f64,
+    /// Upper limit of agreement (mean + 1.96*std).
+    pub upper_loa: f64,
+}
+
+/// Bland-Altman analysis for method comparison.
+///
+/// Computes the mean difference (bias) and limits of agreement
+/// between two measurement methods.
+///
+/// # Arguments
+/// * `method1` - Measurements from first method
+/// * `method2` - Measurements from second method
+/// * `confidence` - Confidence level for limits (default 0.95 gives ±1.96*SD)
+///
+/// # Returns
+/// `BlandAltmanResult` with bias and limits of agreement.
+pub fn bland_altman(method1: &[f64], method2: &[f64], confidence: f64) -> BlandAltmanResult {
+    if method1.len() != method2.len() || method1.len() < 2 {
+        return BlandAltmanResult {
+            mean_diff: f64::NAN,
+            std_diff: f64::NAN,
+            lower_loa: f64::NAN,
+            upper_loa: f64::NAN,
+        };
+    }
+
+    let n = method1.len() as f64;
+    let diffs: Vec<f64> = method1.iter().zip(method2).map(|(&a, &b)| a - b).collect();
+
+    let mean_diff = diffs.iter().sum::<f64>() / n;
+    let var_diff = diffs.iter().map(|&d| (d - mean_diff).powi(2)).sum::<f64>() / (n - 1.0);
+    let std_diff = var_diff.sqrt();
+
+    let alpha = 1.0 - confidence;
+    let z = standard_normal_ppf(1.0 - alpha / 2.0);
+
+    BlandAltmanResult {
+        mean_diff,
+        std_diff,
+        lower_loa: mean_diff - z * std_diff,
+        upper_loa: mean_diff + z * std_diff,
+    }
+}
+
 /// Compute the partial correlation between x and y, controlling for z.
 ///
 /// The partial correlation measures the relationship between x and y
