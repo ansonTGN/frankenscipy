@@ -58100,4 +58100,85 @@ mod tests {
             "power_divergence(lambda=2/3) pvalue got {pval2}, expected 0.8490"
         );
     }
+
+    #[test]
+    fn percentileofscore_matches_scipy_reference_values() {
+        let data: Vec<f64> = (1..=10).map(|x| x as f64).collect();
+
+        let rank = percentileofscore(&data, 5.0, Some("rank"));
+        assert!(
+            (rank - 50.0).abs() < 1e-10,
+            "percentileofscore(5, rank) got {rank}, expected 50.0"
+        );
+
+        let weak = percentileofscore(&data, 5.0, Some("weak"));
+        assert!(
+            (weak - 50.0).abs() < 1e-10,
+            "percentileofscore(5, weak) got {weak}, expected 50.0"
+        );
+
+        let strict = percentileofscore(&data, 5.0, Some("strict"));
+        assert!(
+            (strict - 40.0).abs() < 1e-10,
+            "percentileofscore(5, strict) got {strict}, expected 40.0"
+        );
+
+        let mean = percentileofscore(&data, 5.0, Some("mean"));
+        assert!(
+            (mean - 45.0).abs() < 1e-10,
+            "percentileofscore(5, mean) got {mean}, expected 45.0"
+        );
+    }
+
+    #[test]
+    fn trimboth_matches_scipy_reference_values() {
+        let data: Vec<f64> = (1..=10).map(|x| x as f64).collect();
+
+        let trimmed1 = trimboth(&data, 0.1);
+        assert_eq!(trimmed1.len(), 8, "trimboth(0.1) should have 8 elements");
+
+        let trimmed2 = trimboth(&data, 0.2);
+        assert_eq!(trimmed2.len(), 6, "trimboth(0.2) should have 6 elements");
+    }
+
+    #[test]
+    fn sigmaclip_matches_scipy_reference_values() {
+        let data: Vec<f64> = vec![1.0, 2.0, 3.0, 4.0, 100.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let result = sigmaclip(&data, 3.0, 3.0);
+        assert_eq!(
+            result.clipped.len(),
+            10,
+            "sigmaclip should remove outlier 100"
+        );
+        assert!(
+            result.lower < 0.0,
+            "sigmaclip lower bound got {}, expected negative",
+            result.lower
+        );
+        assert!(
+            result.upper > 10.0 && result.upper < 20.0,
+            "sigmaclip upper bound got {}, expected ~14",
+            result.upper
+        );
+    }
+
+    #[test]
+    fn relfreq_cumfreq_return_valid_results() {
+        let data: Vec<f64> = vec![1.0, 1.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0];
+        let (freq, _) = relfreq(&data, 5);
+        assert_eq!(freq.len(), 5, "relfreq should return 5 bins");
+        let sum: f64 = freq.iter().sum();
+        assert!(
+            (sum - 1.0).abs() < 1e-10,
+            "relfreq frequencies should sum to 1.0, got {sum}"
+        );
+
+        let (cum, _) = cumfreq(&data, 5);
+        assert_eq!(cum.len(), 5, "cumfreq should return 5 bins");
+        assert!(
+            (cum[4] - 12.0).abs() < 1e-10,
+            "cumfreq last bin should equal total count, got {}",
+            cum[4]
+        );
+    }
 }
