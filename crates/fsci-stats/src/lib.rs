@@ -18093,6 +18093,88 @@ pub fn f_oneway_with_nan_policy(
     Ok(f_oneway(groups))
 }
 
+/// Alexander-Govern test for equality of means.
+///
+/// Matches `scipy.stats.alexandergovern(*groups)`.
+/// A non-parametric alternative to one-way ANOVA that doesn't assume
+/// homogeneity of variances (robust to heteroscedasticity).
+///
+/// # Arguments
+/// * `groups` - Slice of sample arrays for each group
+///
+/// # Returns
+/// `TtestResult` with the test statistic and p-value.
+pub fn alexander_govern(groups: &[&[f64]]) -> TtestResult {
+    let k = groups.len();
+    if k < 2 {
+        return TtestResult {
+            statistic: f64::NAN,
+            pvalue: f64::NAN,
+            df: f64::NAN,
+        };
+    }
+
+    let mut t_values = Vec::with_capacity(k);
+    let mut a_values = Vec::with_capacity(k);
+    let mut w_values = Vec::with_capacity(k);
+
+    for group in groups.iter() {
+        let n = group.len();
+        if n < 2 {
+            return TtestResult {
+                statistic: f64::NAN,
+                pvalue: f64::NAN,
+                df: f64::NAN,
+            };
+        }
+        let n_f = n as f64;
+        let mean: f64 = group.iter().sum::<f64>() / n_f;
+        let var: f64 = group.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / (n_f - 1.0);
+        if var <= 0.0 {
+            return TtestResult {
+                statistic: f64::NAN,
+                pvalue: f64::NAN,
+                df: f64::NAN,
+            };
+        }
+        let w = n_f / var;
+        w_values.push(w);
+        t_values.push(mean);
+        let a = (n_f - 3.0) / (n_f - 1.0);
+        a_values.push(a);
+    }
+
+    let w_sum: f64 = w_values.iter().sum();
+    let weighted_mean: f64 = t_values
+        .iter()
+        .zip(&w_values)
+        .map(|(&t, &w)| t * w)
+        .sum::<f64>()
+        / w_sum;
+
+    let mut chi_sq = 0.0;
+    for (i, group) in groups.iter().enumerate() {
+        let n_f = group.len() as f64;
+        let mean = t_values[i];
+        let w = w_values[i];
+        let z = (mean - weighted_mean) * w.sqrt();
+        let df = n_f - 1.0;
+        let t_stat = z / (1.0 + (2.0 * (n_f - 1.8) * z * z) / (df * (n_f + 1.0))).sqrt();
+        let v = df + t_stat * t_stat;
+        let c = ((a_values[i] * t_stat * t_stat).ln() - (v / df).ln()) / (a_values[i] - 1.0).max(1e-10);
+        chi_sq += c;
+    }
+
+    let df = (k - 1) as f64;
+    let pvalue = 1.0 - ChiSquared::new(df).cdf(chi_sq.max(0.0));
+
+    TtestResult {
+        statistic: chi_sq,
+        pvalue,
+        df,
+    }
+}
+
 /// Result for Tukey's HSD test.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TukeyHSDResult {
@@ -52172,6 +52254,19 @@ mod tests {
         assert!(mu > 0.0 && mu.is_finite());
         assert!(nhg.var() > 0.0);
         assert!((nhg.cdf(0) - nhg.pmf(0)).abs() < 1e-14);
+    }
+
+    #[test]
+    fn test_alexander_govern() {
+        let g1 = &[1.0, 2.0, 3.0, 4.0, 5.0][..];
+        let g2 = &[2.0, 3.0, 4.0, 5.0, 6.0][..];
+        let g3 = &[10.0, 11.0, 12.0, 13.0, 14.0][..];
+        let result = alexander_govern(&[g1, g2, g3]);
+        assert!(result.statistic.is_finite());
+        assert!(result.pvalue >= 0.0 && result.pvalue <= 1.0);
+        assert!((result.df - 2.0).abs() < 1e-10);
+        let same = alexander_govern(&[g1, g1, g1]);
+        assert!(same.pvalue > 0.5);
     }
 
 }
