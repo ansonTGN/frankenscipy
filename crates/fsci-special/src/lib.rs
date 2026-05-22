@@ -18,8 +18,9 @@ pub use audit::{
 };
 pub use bessel::{
     BESSEL_DISPATCH_PLAN, h1vp, h2vp, hankel1, hankel2, i0, i0_scalar, i1, i1_scalar, iv, ivp, j0,
-    j1, jn, jn_zeros, jv, jvp, kv, kvp, riccati_jn, riccati_yn, spherical_in, spherical_jn,
-    spherical_kn, spherical_yn, wright_bessel, y0, y1, yn, yn_zeros, yv, yvp,
+    j1, jn, jn_zeros, jv, jvp, k0, k0_scalar, k1, k1_scalar, kn, kn_scalar, kv, kvp, riccati_jn,
+    riccati_yn, spherical_in, spherical_jn, spherical_kn, spherical_yn, wright_bessel, y0, y1, yn,
+    yn_zeros, yv, yvp,
 };
 pub use beta::{
     BETA_DISPATCH_PLAN, bdtr, bdtrc, bdtri, beta, betainc, betainc_scalar, betaln, betaln_scalar,

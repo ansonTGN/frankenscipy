@@ -297,6 +297,51 @@ pub fn kv(v: &SpecialTensor, z: &SpecialTensor, mode: RuntimeMode) -> SpecialRes
     bessel_dispatch("kv", v, z, mode, BesselKind::Kv)
 }
 
+/// Modified Bessel function of the second kind of order 0: K_0(z).
+///
+/// Convenience wrapper for kv(0, z). Matches `scipy.special.k0(z)`.
+pub fn k0(z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
+    map_real_input("k0", z, mode, |x| kv_scalar(0.0, x, mode))
+}
+
+/// Modified Bessel function of the second kind of order 1: K_1(z).
+///
+/// Convenience wrapper for kv(1, z). Matches `scipy.special.k1(z)`.
+pub fn k1(z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
+    map_real_input("k1", z, mode, |x| kv_scalar(1.0, x, mode))
+}
+
+/// Modified Bessel function of the second kind for integer order n: K_n(z).
+///
+/// Convenience wrapper for kv(n, z). Matches `scipy.special.kn(n, z)`.
+pub fn kn(n: &SpecialTensor, z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
+    bessel_dispatch("kn", n, z, mode, BesselKind::Kv)
+}
+
+/// Scalar convenience function for K_0(x).
+///
+/// Matches `scipy.special.k0(x)` for positive real x.
+#[must_use]
+pub fn k0_scalar(x: f64) -> f64 {
+    kv_scalar(0.0, x, RuntimeMode::Strict).unwrap_or(f64::NAN)
+}
+
+/// Scalar convenience function for K_1(x).
+///
+/// Matches `scipy.special.k1(x)` for positive real x.
+#[must_use]
+pub fn k1_scalar(x: f64) -> f64 {
+    kv_scalar(1.0, x, RuntimeMode::Strict).unwrap_or(f64::NAN)
+}
+
+/// Scalar convenience function for K_n(x) with integer order n.
+///
+/// Matches `scipy.special.kn(n, x)` for positive real x.
+#[must_use]
+pub fn kn_scalar(n: i32, x: f64) -> f64 {
+    kv_scalar(f64::from(n), x, RuntimeMode::Strict).unwrap_or(f64::NAN)
+}
+
 /// Hankel function of the first kind: H1_v(z) = J_v(z) + i·Y_v(z).
 pub fn hankel1(v: &SpecialTensor, z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
     hankel_dispatch("hankel1", v, z, mode, HankelKind::H1)
@@ -4821,5 +4866,78 @@ mod tests {
         for w in zeros.windows(2) {
             assert!(w[0] < w[1], "zeros must be increasing: {} < {}", w[0], w[1]);
         }
+    }
+
+    #[test]
+    fn k0_matches_scipy_reference() {
+        // Values verified against scipy.special.k0
+        let cases = [
+            (0.1, 2.4270690247020164),
+            (0.5, 0.9244190712276656),
+            (1.0, 0.4210244382407082),
+            (2.0, 0.1138938727495334),
+            (5.0, 0.0036910983340426),
+        ];
+        for (x, expected) in cases {
+            let val = super::k0_scalar(x);
+            assert!(
+                (val - expected).abs() < 1e-10,
+                "k0({x}) = {val}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn k1_matches_scipy_reference() {
+        // Values verified against scipy.special.k1
+        let cases = [
+            (0.1, 9.8538447808706060),
+            (0.5, 1.6564411200033007),
+            (1.0, 0.6019072301972346),
+            (2.0, 0.1398658818165225),
+            (5.0, 0.0040446134454522),
+        ];
+        for (x, expected) in cases {
+            let val = super::k1_scalar(x);
+            assert!(
+                (val - expected).abs() < 1e-10,
+                "k1({x}) = {val}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn kn_matches_scipy_reference() {
+        // Values verified against scipy.special.kn
+        let cases = [
+            (0, 1.0, 0.4210244382407083),
+            (1, 1.0, 0.6019072301972346),
+            (2, 1.0, 1.6248388986351774),
+            (3, 1.0, 7.1012628247379439),
+            (2, 2.0, 0.2537597545660559),
+        ];
+        for (n, x, expected) in cases {
+            let val = super::kn_scalar(n, x);
+            assert!(
+                (val - expected).abs() < 1e-10,
+                "kn({n}, {x}) = {val}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn k0_k1_kn_at_zero_is_infinity() {
+        assert!(super::k0_scalar(0.0).is_infinite());
+        assert!(super::k1_scalar(0.0).is_infinite());
+        assert!(super::kn_scalar(0, 0.0).is_infinite());
+        assert!(super::kn_scalar(2, 0.0).is_infinite());
+    }
+
+    #[test]
+    fn k0_k1_kn_negative_x_is_nan() {
+        // K functions are only defined for x > 0
+        assert!(super::k0_scalar(-1.0).is_nan());
+        assert!(super::k1_scalar(-1.0).is_nan());
+        assert!(super::kn_scalar(0, -1.0).is_nan());
     }
 }
