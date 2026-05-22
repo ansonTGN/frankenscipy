@@ -31336,6 +31336,37 @@ pub fn balanced_accuracy_score(y_true: &[f64], y_pred: &[f64]) -> f64 {
     (sens + spec) / 2.0
 }
 
+/// Geometric mean of positive values.
+pub fn geometric_mean(data: &[f64]) -> f64 {
+    if data.is_empty() || data.iter().any(|&x| x <= 0.0) {
+        return f64::NAN;
+    }
+    let log_sum: f64 = data.iter().map(|&x| x.ln()).sum();
+    (log_sum / data.len() as f64).exp()
+}
+
+/// Harmonic mean of positive values.
+pub fn harmonic_mean(data: &[f64]) -> f64 {
+    if data.is_empty() || data.iter().any(|&x| x <= 0.0) {
+        return f64::NAN;
+    }
+    let recip_sum: f64 = data.iter().map(|&x| 1.0 / x).sum();
+    data.len() as f64 / recip_sum
+}
+
+/// Power mean (generalized mean) of order p.
+/// p=1 gives arithmetic, p=-1 gives harmonic, p->0 gives geometric.
+pub fn power_mean(data: &[f64], p: f64) -> f64 {
+    if data.is_empty() {
+        return f64::NAN;
+    }
+    if p.abs() < 1e-10 {
+        return geometric_mean(data);
+    }
+    let sum_pow: f64 = data.iter().map(|&x| x.powf(p)).sum();
+    (sum_pow / data.len() as f64).powf(1.0 / p)
+}
+
 /// Compute the log-likelihood for a normal distribution.
 pub fn norm_loglikelihood(data: &[f64], mu: f64, sigma: f64) -> f64 {
     let n = data.len() as f64;
