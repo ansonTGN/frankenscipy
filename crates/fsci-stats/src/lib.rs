@@ -17254,6 +17254,11 @@ pub fn weighted_var(values: &[f64], weights: &[f64]) -> f64 {
         / total_w
 }
 
+/// Compute weighted standard deviation.
+pub fn weighted_std(values: &[f64], weights: &[f64]) -> f64 {
+    weighted_var(values, weights).sqrt()
+}
+
 /// Kish's effective sample size for weighted data.
 ///
 /// Computes the effective sample size when observations have different weights.
