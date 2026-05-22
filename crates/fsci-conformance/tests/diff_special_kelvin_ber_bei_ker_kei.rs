@@ -1,8 +1,9 @@
 #![forbid(unsafe_code)]
 //! Live scipy parity for fsci_special Kelvin functions.
 //!
-//! Resolves [frankenscipy-3iudm]. Compares ber(x), bei(x), ker(x),
-//! kei(x) against scipy.special equivalents across x ∈ [0.1, 6.0].
+//! Resolves [frankenscipy-3iudm] and [frankenscipy-l02sw].
+//! Compares ber(x), bei(x), ker(x), kei(x), and their first derivatives
+//! against scipy.special equivalents across x ∈ [0.1, 6.0].
 //! ber/bei use direct alternating series and are accurate up to ~6.
 //! ker/kei use a series with harmonic-number correction terms; the
 //! oracle compares within rel tol 1e-3 to allow for moderate drift.
@@ -13,12 +14,13 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use fsci_special::{bei, ber, kei, ker};
+use fsci_special::{bei, beip, ber, berp, kei, keip, ker, kerp};
 use serde::{Deserialize, Serialize};
 
 const PACKET_ID: &str = "FSCI-P2C-007";
 const REL_TOL_BER_BEI: f64 = 1.0e-9;
 const REL_TOL_KER_KEI: f64 = 1.0e-3;
+const REL_TOL_KER_DERIV: f64 = 5.0e-3;
 const ABS_TOL: f64 = 1.0e-12;
 const REQUIRE_SCIPY_ENV: &str = "FSCI_REQUIRE_SCIPY_ORACLE";
 
@@ -92,7 +94,7 @@ fn build_query() -> OracleQuery {
     let mut pts = Vec::new();
     let xs: &[f64] = &[0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0];
     for &x in xs {
-        for func in ["ber", "bei", "ker", "kei"] {
+        for func in ["ber", "bei", "ker", "kei", "berp", "beip", "kerp", "keip"] {
             pts.push(CasePoint {
                 case_id: format!("{func}_x{x}"),
                 func: func.into(),
@@ -108,7 +110,7 @@ fn scipy_oracle_or_skip(q: &OracleQuery) -> Option<OracleResult> {
 import json, math, sys
 from scipy import special
 
-q = json.load(sys.stdin)
+q = json.loads(sys.argv[1])
 out = []
 for c in q["points"]:
     cid = c["case_id"]; fn = c["func"]; x = c["x"]
@@ -117,6 +119,10 @@ for c in q["points"]:
         elif fn == "bei": v = float(special.bei(x))
         elif fn == "ker": v = float(special.ker(x))
         elif fn == "kei": v = float(special.kei(x))
+        elif fn == "berp": v = float(special.berp(x))
+        elif fn == "beip": v = float(special.beip(x))
+        elif fn == "kerp": v = float(special.kerp(x))
+        elif fn == "keip": v = float(special.keip(x))
         else: v = None
         if v is None or not math.isfinite(v):
             out.append({"case_id": cid, "value": None})
@@ -129,8 +135,8 @@ print(json.dumps({"points": out}))
 "#;
     let query_json = serde_json::to_string(q).expect("serialize");
     let mut child = match Command::new("python3")
-        .arg("-c")
-        .arg(script)
+        .arg("-")
+        .arg(query_json)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -148,7 +154,7 @@ print(json.dumps({"points": out}))
     };
     {
         let stdin = child.stdin.as_mut().expect("open stdin");
-        if let Err(err) = stdin.write_all(query_json.as_bytes()) {
+        if let Err(err) = stdin.write_all(script.as_bytes()) {
             let output = child.wait_with_output().expect("wait");
             let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(
@@ -195,16 +201,20 @@ fn diff_special_kelvin_ber_bei_ker_kei() {
             "bei" => bei(c.x),
             "ker" => ker(c.x),
             "kei" => kei(c.x),
-            _ => panic!("unknown func {}", c.func),
+            "berp" => berp(c.x),
+            "beip" => beip(c.x),
+            "kerp" => kerp(c.x),
+            "keip" => keip(c.x),
+            _ => f64::NAN,
         };
 
         let abs_d = (actual - expected).abs();
         let denom = expected.abs().max(1.0e-300);
         let rel_diff = abs_d / denom;
-        let tol = if matches!(c.func.as_str(), "ber" | "bei") {
-            REL_TOL_BER_BEI
-        } else {
-            REL_TOL_KER_KEI
+        let tol = match c.func.as_str() {
+            "ber" | "bei" | "berp" | "beip" => REL_TOL_BER_BEI,
+            "kerp" | "keip" => REL_TOL_KER_DERIV,
+            _ => REL_TOL_KER_KEI,
         };
         let pass = rel_diff <= tol || abs_d <= ABS_TOL;
         diffs.push(CaseDiff {
@@ -220,7 +230,7 @@ fn diff_special_kelvin_ber_bei_ker_kei() {
     let all_pass = diffs.iter().all(|d| d.pass);
     let log = DiffLog {
         test_id: "diff_special_kelvin_ber_bei_ker_kei".into(),
-        category: "scipy.special Kelvin functions ber/bei/ker/kei".into(),
+        category: "scipy.special Kelvin functions and derivatives".into(),
         case_count: diffs.len(),
         pass: all_pass,
         timestamp_ms: timestamp_ms(),

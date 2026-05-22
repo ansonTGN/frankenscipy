@@ -1881,6 +1881,31 @@ pub fn ber(x: f64) -> f64 {
     sum
 }
 
+/// Kelvin function derivative ber'(x).
+///
+/// Matches `scipy.special.berp`.
+pub fn berp(x: f64) -> f64 {
+    if x.is_nan() {
+        return f64::NAN;
+    }
+    if x == 0.0 {
+        return 0.0;
+    }
+
+    let x2 = x * x / 4.0;
+    let mut term = 1.0;
+    let mut sum = 0.0;
+    for k in 1..50 {
+        term *= -x2 * x2 / ((2 * k - 1) as f64 * (2 * k) as f64).powi(2);
+        let derivative_term = term * (4 * k) as f64 / x;
+        sum += derivative_term;
+        if derivative_term.abs() < sum.abs().max(1.0) * 1e-16 {
+            break;
+        }
+    }
+    sum
+}
+
 /// Kelvin function bei(x): imaginary part of J_0(x * sqrt(j)).
 ///
 /// Matches `scipy.special.bei`.
@@ -1918,6 +1943,31 @@ pub fn bei(x: f64) -> f64 {
         term *= -x2 * x2 / ((2 * k) as f64 * (2 * k + 1) as f64).powi(2);
         sum += term;
         if term.abs() < sum.abs() * 1e-16 {
+            break;
+        }
+    }
+    sum
+}
+
+/// Kelvin function derivative bei'(x).
+///
+/// Matches `scipy.special.beip`.
+pub fn beip(x: f64) -> f64 {
+    if x.is_nan() {
+        return f64::NAN;
+    }
+    if x == 0.0 {
+        return 0.0;
+    }
+
+    let x2 = x * x / 4.0;
+    let mut term = x2;
+    let mut sum = 2.0 * term / x;
+    for k in 1..50 {
+        term *= -x2 * x2 / ((2 * k) as f64 * (2 * k + 1) as f64).powi(2);
+        let derivative_term = term * (4 * k + 2) as f64 / x;
+        sum += derivative_term;
+        if derivative_term.abs() < sum.abs().max(1.0) * 1e-16 {
             break;
         }
     }
@@ -2000,6 +2050,44 @@ pub fn kei(x: f64) -> f64 {
     }
 
     -(ln_x2 + gamma_em) * bei_x - (std::f64::consts::PI / 4.0) * ber_x - correction
+}
+
+fn kelvin_positive_derivative(x: f64, kernel: fn(f64) -> f64) -> f64 {
+    let h = 1.0e-5 * x.abs().max(1.0);
+    if x - h <= 0.0 {
+        (-3.0 * kernel(x) + 4.0 * kernel(x + h) - kernel(x + 2.0 * h)) / (2.0 * h)
+    } else {
+        (kernel(x + h) - kernel(x - h)) / (2.0 * h)
+    }
+}
+
+/// Kelvin function derivative ker'(x).
+///
+/// Matches `scipy.special.kerp` on the real domain.
+pub fn kerp(x: f64) -> f64 {
+    if x.is_nan() {
+        return f64::NAN;
+    }
+    if x < 0.0 {
+        return f64::NAN;
+    }
+    if x == 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    kelvin_positive_derivative(x, ker)
+}
+
+/// Kelvin function derivative kei'(x).
+///
+/// Matches `scipy.special.keip` on the real domain.
+pub fn keip(x: f64) -> f64 {
+    if x.is_nan() || x < 0.0 {
+        return f64::NAN;
+    }
+    if x == 0.0 {
+        return 0.0;
+    }
+    kelvin_positive_derivative(x, kei)
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -5864,6 +5952,30 @@ mod tests {
         assert!((bei(1.0) - 0.249_566_040_036_659_72).abs() < 1e-12);
         assert!((ker(1.0) - 0.286_706_208_728_316_04).abs() < 1e-10);
         assert!((kei(1.0) - (-0.494_994_636_518_72)).abs() < 1e-10);
+    }
+
+    #[test]
+    fn kelvin_derivatives_match_scipy_reference_points() {
+        let cases = [
+            ("berp", 0.1, berp(0.1), -6.249_999_457_465_285e-5, 1.0e-12),
+            ("berp", 3.0, berp(3.0), -1.569_846_632_229_404_2, 1.0e-12),
+            ("beip", 0.1, beip(0.1), 0.049_999_973_958_334_02, 1.0e-12),
+            ("beip", 3.0, beip(3.0), 0.880_482_324_057_861_4, 1.0e-12),
+            ("kerp", 1.0, kerp(1.0), -0.694_603_891_100_690_8, 1.0e-3),
+            ("keip", 1.0, keip(1.0), 0.352_369_913_336_170_5, 1.0e-3),
+        ];
+        for (func, x, actual, expected, tol) in cases {
+            assert!(
+                (actual - expected).abs() <= tol,
+                "{func}({x}) = {actual}, expected {expected}"
+            );
+        }
+        assert_eq!(berp(0.0), 0.0);
+        assert_eq!(beip(0.0), 0.0);
+        assert!(kerp(0.0).is_infinite() && kerp(0.0).is_sign_negative());
+        assert_eq!(keip(0.0), 0.0);
+        assert!(kerp(-1.0).is_nan());
+        assert!(keip(-1.0).is_nan());
     }
 
     #[test]
