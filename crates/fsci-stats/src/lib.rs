@@ -24435,6 +24435,137 @@ fn barnard_pvalue_at_p(
     pvalue
 }
 
+/// Result of Boschloo's exact test.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BoschlooExactResult {
+    /// Fisher's one-sided p-value for the observed table.
+    pub statistic: f64,
+    /// P-value computed by maximizing over nuisance parameter.
+    pub pvalue: f64,
+}
+
+/// Boschloo's exact test for 2x2 contingency tables.
+///
+/// An unconditional exact test using Fisher's p-value as the test statistic.
+/// Often more powerful than both Fisher's and Barnard's tests.
+///
+/// Matches `scipy.stats.boschloo_exact(table)`.
+///
+/// # Arguments
+/// * `table` — 2x2 contingency table [[a, b], [c, d]] with non-negative integer counts.
+pub fn boschloo_exact(table: &[[usize; 2]; 2]) -> BoschlooExactResult {
+    boschloo_exact_alternative(table, "two-sided")
+}
+
+/// Boschloo's exact test with alternative hypothesis specification.
+///
+/// Matches `scipy.stats.boschloo_exact(table, alternative=...)`.
+///
+/// # Arguments
+/// * `table` — 2x2 contingency table [[a, b], [c, d]] with non-negative integer counts.
+/// * `alternative` — "two-sided", "less", or "greater"
+pub fn boschloo_exact_alternative(
+    table: &[[usize; 2]; 2],
+    alternative: &str,
+) -> BoschlooExactResult {
+    let a = table[0][0];
+    let b = table[0][1];
+    let c = table[1][0];
+    let d = table[1][1];
+
+    let n1 = (a + b) as u64;
+    let n2 = (c + d) as u64;
+
+    if n1 == 0 || n2 == 0 {
+        return BoschlooExactResult {
+            statistic: f64::NAN,
+            pvalue: f64::NAN,
+        };
+    }
+
+    // Compute Fisher's one-sided p-value for observed table
+    let observed_fisher_p = fisher_one_sided_pvalue(a, b, c, d, alternative);
+
+    // Search over nuisance parameter p to find maximum p-value
+    let n_grid = 101;
+    let mut max_pvalue = 0.0_f64;
+
+    for i in 1..n_grid {
+        let p = i as f64 / n_grid as f64;
+
+        // Compute p-value for this nuisance parameter
+        let pval = boschloo_pvalue_at_p(n1, n2, p, observed_fisher_p, alternative);
+        max_pvalue = max_pvalue.max(pval);
+    }
+
+    BoschlooExactResult {
+        statistic: observed_fisher_p,
+        pvalue: max_pvalue.min(1.0),
+    }
+}
+
+fn fisher_one_sided_pvalue(a: usize, b: usize, c: usize, d: usize, alternative: &str) -> f64 {
+    let n = (a + b + c + d) as u64;
+    let row0 = (a + b) as u64;
+    let col0 = (a + c) as u64;
+
+    if n == 0 {
+        return 1.0;
+    }
+
+    let hyper = Hypergeometric::new(n, col0, row0);
+    let observed_k = a as u64;
+
+    let k_min = row0.saturating_sub(n - col0);
+    let k_max = row0.min(col0);
+
+    match alternative {
+        "less" => {
+            // P(X <= observed)
+            (k_min..=observed_k).map(|k| hyper.pmf(k)).sum()
+        }
+        "greater" => {
+            // P(X >= observed)
+            (observed_k..=k_max).map(|k| hyper.pmf(k)).sum()
+        }
+        _ => {
+            // Two-sided: sum probabilities as or more extreme than observed
+            let p_observed = hyper.pmf(observed_k);
+            (k_min..=k_max)
+                .filter(|&k| hyper.pmf(k) <= p_observed + 1e-14)
+                .map(|k| hyper.pmf(k))
+                .sum()
+        }
+    }
+}
+
+fn boschloo_pvalue_at_p(n1: u64, n2: u64, p: f64, observed_stat: f64, alternative: &str) -> f64 {
+    let binom1 = Binomial::new(n1, p);
+    let binom2 = Binomial::new(n2, p);
+
+    let mut pvalue = 0.0;
+
+    // Sum over all possible tables
+    for a in 0..=n1 {
+        let b = n1 - a;
+        for c in 0..=n2 {
+            let d = n2 - c;
+
+            // Fisher's p-value for this table
+            let fisher_p =
+                fisher_one_sided_pvalue(a as usize, b as usize, c as usize, d as usize, alternative);
+
+            // Is this table as or more extreme? (smaller Fisher p-value)
+            if fisher_p <= observed_stat + 1e-14 {
+                let prob = binom1.pmf(a) * binom2.pmf(c);
+                pvalue += prob;
+            }
+        }
+    }
+
+    pvalue
+}
+
 // ── Chi-squared contingency test ─────────────────────────────────────
 
 /// Result of a chi-squared contingency test.
@@ -39087,6 +39218,52 @@ mod tests {
         // Empty row should return NaN
         let table = [[0, 0], [5, 5]];
         let result = barnard_exact(&table);
+        assert!(result.pvalue.is_nan());
+    }
+
+    // ── boschloo_exact tests ────────────────────────────────────────────
+
+    #[test]
+    fn boschloo_exact_significant_difference() {
+        // Clear difference between groups
+        let table = [[8, 2], [2, 8]];
+        let result = boschloo_exact(&table);
+
+        assert!(
+            result.pvalue < 0.05,
+            "p-value {} should be significant",
+            result.pvalue
+        );
+    }
+
+    #[test]
+    fn boschloo_exact_no_difference() {
+        // Similar proportions
+        let table = [[5, 5], [5, 5]];
+        let result = boschloo_exact(&table);
+
+        assert!(
+            result.pvalue > 0.1,
+            "p-value {} should not be significant for equal proportions",
+            result.pvalue
+        );
+    }
+
+    #[test]
+    fn boschloo_exact_alternative_greater() {
+        let table = [[9, 1], [1, 9]];
+        let result = boschloo_exact_alternative(&table, "greater");
+
+        assert!(
+            result.pvalue < 0.05,
+            "one-sided p-value should be significant"
+        );
+    }
+
+    #[test]
+    fn boschloo_exact_empty_row() {
+        let table = [[0, 0], [5, 5]];
+        let result = boschloo_exact(&table);
         assert!(result.pvalue.is_nan());
     }
 
