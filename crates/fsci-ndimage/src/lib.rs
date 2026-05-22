@@ -935,6 +935,59 @@ pub fn convolve(
     convolve_with_origins(input, weights, &origins, mode, cval)
 }
 
+fn normalize_axes_for_weights(
+    input: &NdArray,
+    weights: &NdArray,
+    axes: &[isize],
+) -> Result<(Vec<usize>, Vec<i64>), NdimageError> {
+    let axes = normalize_signed_axes(axes, input.ndim())?;
+    let weights_ndim = weights.ndim();
+    if weights_ndim != axes.len() {
+        return Err(NdimageError::DimensionMismatch(format!(
+            "weights.ndim ({weights_ndim}) must match len(axes) ({})",
+            axes.len()
+        )));
+    }
+    let origins = normalize_filter_origins(weights_ndim, &weights.shape, &[0])?;
+    Ok((axes, origins))
+}
+
+/// N-dimensional convolution over a SciPy-style signed axes subset.
+pub fn convolve_axes(
+    input: &NdArray,
+    weights: &NdArray,
+    axes: &[isize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    if input.size() == 0 {
+        return Err(NdimageError::EmptyInput);
+    }
+    let (axes, origins) = normalize_axes_for_weights(input, weights, axes)?;
+    let offsets: Vec<i64> = weights.shape.iter().map(|&s| (s as i64 - 1) / 2).collect();
+    let mut output = NdArray::zeros(input.shape.clone());
+
+    for flat_out in 0..input.size() {
+        let out_idx = input.unravel(flat_out);
+        let mut sum = 0.0;
+
+        for flat_k in 0..weights.size() {
+            let k_idx = weights.unravel(flat_k);
+            let mut in_idx: Vec<i64> = out_idx.iter().map(|&idx| idx as i64).collect();
+            for (kernel_axis, &input_axis) in axes.iter().enumerate() {
+                let k_flipped = weights.shape[kernel_axis] as i64 - 1 - k_idx[kernel_axis] as i64;
+                in_idx[input_axis] = out_idx[input_axis] as i64 + k_flipped - offsets[kernel_axis]
+                    + origins[kernel_axis];
+            }
+            sum += weights.data[flat_k] * input.get_boundary(&in_idx, mode, cval);
+        }
+
+        output.data[flat_out] = sum;
+    }
+
+    Ok(output)
+}
+
 /// N-dimensional convolution with SciPy `origin` semantics.
 ///
 /// `origins` may contain one scalar origin applied to every axis, or one origin
@@ -1074,6 +1127,42 @@ pub fn correlate(
 ) -> Result<NdArray, NdimageError> {
     let origins = vec![0; input.ndim()];
     correlate_with_origins(input, weights, &origins, mode, cval)
+}
+
+/// N-dimensional correlation over a SciPy-style signed axes subset.
+pub fn correlate_axes(
+    input: &NdArray,
+    weights: &NdArray,
+    axes: &[isize],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    if input.size() == 0 {
+        return Err(NdimageError::EmptyInput);
+    }
+    let (axes, origins) = normalize_axes_for_weights(input, weights, axes)?;
+    let offsets: Vec<i64> = weights.shape.iter().map(|&s| s as i64 / 2).collect();
+    let mut output = NdArray::zeros(input.shape.clone());
+
+    for flat_out in 0..input.size() {
+        let out_idx = input.unravel(flat_out);
+        let mut sum = 0.0;
+
+        for flat_k in 0..weights.size() {
+            let k_idx = weights.unravel(flat_k);
+            let mut in_idx: Vec<i64> = out_idx.iter().map(|&idx| idx as i64).collect();
+            for (kernel_axis, &input_axis) in axes.iter().enumerate() {
+                in_idx[input_axis] = out_idx[input_axis] as i64 + k_idx[kernel_axis] as i64
+                    - offsets[kernel_axis]
+                    - origins[kernel_axis];
+            }
+            sum += weights.data[flat_k] * input.get_boundary(&in_idx, mode, cval);
+        }
+
+        output.data[flat_out] = sum;
+    }
+
+    Ok(output)
 }
 
 /// N-dimensional correlation with SciPy `origin` semantics.
@@ -6882,6 +6971,105 @@ mod tests {
             convolve_with_origins(&input, &weights, &[-1, 0, 0], BoundaryMode::Reflect, 0.0)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn convolve_and_correlate_axes_match_scipy_subset_fixtures() {
+        let input = NdArray::new((1..=6).map(f64::from).collect(), vec![2, 3]).unwrap();
+        let weights_1d = NdArray::new(vec![1.0, 2.0], vec![2]).unwrap();
+        let weights_2d = NdArray::new(vec![1.0, 2.0, 3.0, 4.0], vec![2, 2]).unwrap();
+        let scalar = NdArray::new(vec![2.0], vec![]).unwrap();
+
+        // scipy.ndimage.correlate(input, [1, 2], mode='constant', cval=-10, axes=(-1,))
+        assert_eq!(
+            correlate_axes(&input, &weights_1d, &[-1], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            vec![-8.0, 5.0, 8.0, -2.0, 14.0, 17.0]
+        );
+        // scipy.ndimage.correlate(input, [1, 2], mode='constant', cval=-10, axes=(-2,))
+        assert_eq!(
+            correlate_axes(&input, &weights_1d, &[-2], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            vec![-8.0, -6.0, -4.0, 9.0, 12.0, 15.0]
+        );
+        // scipy.ndimage.correlate(input, [[1, 2], [3, 4]], mode='constant', cval=-10, axes=(-2, -1))
+        assert_eq!(
+            correlate_axes(
+                &input,
+                &weights_2d,
+                &[-2, -1],
+                BoundaryMode::Constant,
+                -10.0
+            )
+            .unwrap()
+            .data,
+            vec![-56.0, -19.0, -12.0, -22.0, 37.0, 47.0]
+        );
+        assert_eq!(
+            correlate_axes(&input, &scalar, &[], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            vec![2.0, 4.0, 6.0, 8.0, 10.0, 12.0]
+        );
+
+        // scipy.ndimage.convolve(input, [1, 2], mode='constant', cval=-10, axes=(-1,))
+        assert_eq!(
+            convolve_axes(&input, &weights_1d, &[-1], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            vec![4.0, 7.0, -4.0, 13.0, 16.0, 2.0]
+        );
+        // scipy.ndimage.convolve(input, [1, 2], mode='constant', cval=-10, axes=(-2,))
+        assert_eq!(
+            convolve_axes(&input, &weights_1d, &[-2], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            vec![6.0, 9.0, 12.0, -2.0, 0.0, 2.0]
+        );
+        // scipy.ndimage.convolve(input, [[1, 2], [3, 4]], mode='constant', cval=-10, axes=(-2, -1))
+        assert_eq!(
+            convolve_axes(
+                &input,
+                &weights_2d,
+                &[-2, -1],
+                BoundaryMode::Constant,
+                -10.0
+            )
+            .unwrap()
+            .data,
+            vec![23.0, 33.0, -16.0, 1.0, 8.0, -36.0]
+        );
+        assert_eq!(
+            convolve_axes(&input, &scalar, &[], BoundaryMode::Constant, -10.0)
+                .unwrap()
+                .data,
+            vec![2.0, 4.0, 6.0, 8.0, 10.0, 12.0]
+        );
+    }
+
+    #[test]
+    fn convolve_and_correlate_axes_reject_invalid_axes_and_weight_rank() {
+        let input = NdArray::new((1..=6).map(f64::from).collect(), vec![2, 3]).unwrap();
+        let weights_1d = NdArray::new(vec![1.0, 2.0], vec![2]).unwrap();
+        let weights_2d = NdArray::new(vec![1.0, 2.0, 3.0, 4.0], vec![2, 2]).unwrap();
+
+        assert!(correlate_axes(&input, &weights_1d, &[1, -1], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(correlate_axes(&input, &weights_1d, &[2], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(correlate_axes(&input, &weights_1d, &[-3], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(correlate_axes(&input, &weights_2d, &[-1], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(
+            correlate_axes(&input, &weights_1d, &[-2, -1], BoundaryMode::Reflect, 0.0).is_err()
+        );
+        assert!(correlate_axes(&input, &weights_1d, &[], BoundaryMode::Reflect, 0.0).is_err());
+
+        assert!(convolve_axes(&input, &weights_1d, &[1, -1], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(convolve_axes(&input, &weights_1d, &[2], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(convolve_axes(&input, &weights_1d, &[-3], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(convolve_axes(&input, &weights_2d, &[-1], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(convolve_axes(&input, &weights_1d, &[-2, -1], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(convolve_axes(&input, &weights_1d, &[], BoundaryMode::Reflect, 0.0).is_err());
     }
 
     #[test]
