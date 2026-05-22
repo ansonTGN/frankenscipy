@@ -55774,6 +55774,22 @@ mod tests {
     }
 
     #[test]
+    fn test_kulsinski_distance_identical() {
+        let u = vec![1.0, 1.0, 1.0, 1.0];
+        let v = vec![1.0, 1.0, 1.0, 1.0];
+        let d = kulsinski_distance(&u, &v);
+        assert!(d >= 0.0 && d <= 1.0, "Kulsinski distance should be in [0,1], got {}", d);
+    }
+
+    #[test]
+    fn test_matching_distance_identical() {
+        let u = vec![1.0, 0.0, 1.0, 0.0];
+        let v = vec![1.0, 0.0, 1.0, 0.0];
+        let d = matching_distance(&u, &v);
+        assert!(d.abs() < 1e-10, "Matching distance of identical vectors should be 0, got {}", d);
+    }
+
+    #[test]
     fn test_russellrao_distance_identical() {
         let u = vec![1.0, 1.0, 1.0, 1.0];
         let v = vec![1.0, 1.0, 1.0, 1.0];
