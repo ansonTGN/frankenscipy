@@ -1612,8 +1612,19 @@ pub fn morphological_gradient(
     mode: BoundaryMode,
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
-    let max_img = maximum_filter(input, size, mode, cval)?;
-    let min_img = minimum_filter(input, size, mode, cval)?;
+    morphological_gradient_with_origins(input, size, &[0], mode, cval)
+}
+
+/// Morphological gradient with SciPy `origin` semantics.
+pub fn morphological_gradient_with_origins(
+    input: &NdArray,
+    size: usize,
+    origins: &[i64],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let max_img = grey_dilation_with_origins(input, size, origins, mode, cval)?;
+    let min_img = grey_erosion_with_origins(input, size, origins, mode, cval)?;
 
     let mut result = NdArray::zeros(input.shape.clone());
     for i in 0..result.data.len() {
@@ -1631,8 +1642,19 @@ pub fn morphological_laplace(
     mode: BoundaryMode,
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
-    let max_img = maximum_filter(input, size, mode, cval)?;
-    let min_img = minimum_filter(input, size, mode, cval)?;
+    morphological_laplace_with_origins(input, size, &[0], mode, cval)
+}
+
+/// Morphological Laplace with SciPy `origin` semantics.
+pub fn morphological_laplace_with_origins(
+    input: &NdArray,
+    size: usize,
+    origins: &[i64],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let max_img = grey_dilation_with_origins(input, size, origins, mode, cval)?;
+    let min_img = grey_erosion_with_origins(input, size, origins, mode, cval)?;
 
     let mut result = NdArray::zeros(input.shape.clone());
     for i in 0..result.data.len() {
@@ -1650,10 +1672,18 @@ pub fn white_tophat(
     mode: BoundaryMode,
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
-    let opened = {
-        let min_img = minimum_filter(input, size, mode, cval)?;
-        maximum_filter(&min_img, size, mode, cval)?
-    };
+    white_tophat_with_origins(input, size, &[0], mode, cval)
+}
+
+/// White top-hat with SciPy `origin` semantics.
+pub fn white_tophat_with_origins(
+    input: &NdArray,
+    size: usize,
+    origins: &[i64],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let opened = grey_opening_with_origins(input, size, origins, mode, cval)?;
 
     let mut result = NdArray::zeros(input.shape.clone());
     for i in 0..result.data.len() {
@@ -1671,10 +1701,18 @@ pub fn black_tophat(
     mode: BoundaryMode,
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
-    let closed = {
-        let max_img = maximum_filter(input, size, mode, cval)?;
-        minimum_filter(&max_img, size, mode, cval)?
-    };
+    black_tophat_with_origins(input, size, &[0], mode, cval)
+}
+
+/// Black top-hat with SciPy `origin` semantics.
+pub fn black_tophat_with_origins(
+    input: &NdArray,
+    size: usize,
+    origins: &[i64],
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let closed = grey_closing_with_origins(input, size, origins, mode, cval)?;
 
     let mut result = NdArray::zeros(input.shape.clone());
     for i in 0..result.data.len() {
@@ -8215,6 +8253,45 @@ mod tests {
         assert!(grey_dilation_with_origins(&input, 2, &[0], BoundaryMode::Reflect, 0.0).is_ok());
         assert!(grey_opening_with_origins(&input, 2, &[1], BoundaryMode::Reflect, 0.0).is_err());
         assert!(grey_closing_with_origins(&input, 3, &[-2], BoundaryMode::Reflect, 0.0).is_err());
+    }
+
+    #[test]
+    fn morphology_origins_match_scipy_constant() {
+        let input = NdArray::new(vec![1., 3., 2., 5., 4.], vec![5]).unwrap();
+
+        let gradient =
+            morphological_gradient_with_origins(&input, 3, &[-1], BoundaryMode::Constant, 0.0)
+                .unwrap();
+        assert_eq!(gradient.data, vec![0., 1., 1., 5., 5.]);
+
+        let laplace =
+            morphological_laplace_with_origins(&input, 3, &[1], BoundaryMode::Constant, 0.0)
+                .unwrap();
+        assert_eq!(laplace.data, vec![1., -1., 2., -3., -2.]);
+
+        let white =
+            white_tophat_with_origins(&input, 3, &[-1], BoundaryMode::Constant, 0.0).unwrap();
+        assert_eq!(white.data, vec![0., 1., 0., 3., 2.]);
+
+        let black =
+            black_tophat_with_origins(&input, 3, &[1], BoundaryMode::Constant, 0.0).unwrap();
+        assert_eq!(black.data, vec![-1., -3., 1., 0., 0.]);
+    }
+
+    #[test]
+    fn morphology_origin_validation_matches_scipy_bounds() {
+        let input = NdArray::new(vec![1., 3., 2., 5., 4.], vec![5]).unwrap();
+
+        assert!(
+            morphological_gradient_with_origins(&input, 2, &[-1], BoundaryMode::Reflect, 0.0)
+                .is_ok()
+        );
+        assert!(
+            morphological_laplace_with_origins(&input, 2, &[1], BoundaryMode::Reflect, 0.0)
+                .is_err()
+        );
+        assert!(white_tophat_with_origins(&input, 3, &[-2], BoundaryMode::Reflect, 0.0).is_err());
+        assert!(black_tophat_with_origins(&input, 3, &[2], BoundaryMode::Reflect, 0.0).is_err());
     }
 
     #[test]
