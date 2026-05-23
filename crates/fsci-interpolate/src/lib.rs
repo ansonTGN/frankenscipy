@@ -6745,4 +6745,41 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn lagrange_matches_scipy_reference_values() {
+        // scipy.interpolate.lagrange([0, 1, 2], [1, 2, 1]) -> poly with coeffs
+        let xi = [0.0, 1.0, 2.0];
+        let yi = [1.0, 2.0, 1.0];
+        let coeffs = lagrange(&xi, &yi).expect("lagrange");
+        // Evaluate at xi should give yi
+        for i in 0..xi.len() {
+            let val = polyval(&coeffs, xi[i]);
+            assert!(
+                (val - yi[i]).abs() < 1e-10,
+                "lagrange(xi[{i}]) = {val}, expected {}",
+                yi[i]
+            );
+        }
+    }
+
+    #[test]
+    fn polyfromroots_matches_scipy_reference_values() {
+        // np.poly([1, 2]) -> [1, -3, 2] (x-1)(x-2) = x^2 - 3x + 2
+        let roots = [1.0, 2.0];
+        let coeffs = polyfromroots(&roots);
+        // Leading coefficient should be 1, evaluate at roots should give 0
+        for &r in &roots {
+            let val = polyval(&coeffs, r);
+            assert!(val.abs() < 1e-10, "polyfromroots(root={r}) = {val}, expected 0");
+        }
+    }
+
+    #[test]
+    fn polyval_matches_scipy_reference_values() {
+        // np.polyval([2, 3, 1], 2) = 2*4 + 3*2 + 1 = 15
+        let coeffs = [2.0, 3.0, 1.0];
+        let result = polyval(&coeffs, 2.0);
+        assert!((result - 15.0).abs() < 1e-10, "polyval got {result}, expected 15");
+    }
 }
