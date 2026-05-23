@@ -3984,7 +3984,7 @@ mod tests {
     use crate::{
         BasinhoppingOptions, Bounds, ConvergenceStatus, DifferentialEvolutionOptions, Integrality,
         LinearConstraint, MilpOptions, MilpProblem, MinimizeOptions, NonlinearConstraint,
-        OptimizeMethod, RootOptions, approx_fprime, basinhopping, brent_minimize, brute,
+        OptimizeMethod, RootOptions, approx_fprime, basinhopping, bracket, brent_minimize, brute,
         check_grad, cobyla, derivative, differential_evolution, differential_evolution_constrained,
         dual_annealing, fixed_point, golden, gradient_descent, hessian, isotonic_regression,
         jacobian, linear_sum_assignment, linprog, milp, nnls, projected_gradient_descent, pso,
@@ -5437,6 +5437,79 @@ mod tests {
             (result.x[1] - 2.0).abs() < 0.6,
             "x[1] got {}, expected ~2.0",
             result.x[1]
+        );
+    }
+
+    #[test]
+    fn rosen_hess_matches_scipy_reference_values() {
+        // scipy.optimize.rosen_hess([1.0, 1.0])
+        // At the minimum [1,1], the Hessian should be [[802, -400], [-400, 200]]
+        let h = rosen_hess(&[1.0, 1.0]);
+        assert_eq!(h.len(), 2);
+        assert_eq!(h[0].len(), 2);
+        assert!(
+            (h[0][0] - 802.0).abs() < 1e-10,
+            "H[0][0] got {}, expected 802.0",
+            h[0][0]
+        );
+        assert!(
+            (h[0][1] - (-400.0)).abs() < 1e-10,
+            "H[0][1] got {}, expected -400.0",
+            h[0][1]
+        );
+        assert!(
+            (h[1][0] - (-400.0)).abs() < 1e-10,
+            "H[1][0] got {}, expected -400.0",
+            h[1][0]
+        );
+        assert!(
+            (h[1][1] - 200.0).abs() < 1e-10,
+            "H[1][1] got {}, expected 200.0",
+            h[1][1]
+        );
+    }
+
+    #[test]
+    fn bracket_matches_scipy_reference_values() {
+        // scipy.optimize.bracket(lambda x: (x-2)**2, xa=0, xb=1)
+        // Brackets the minimum at x=2
+        let (xa, xb, xc, fa, fb, fc) = bracket(|x| (x - 2.0).powi(2), 0.0, 1.0);
+        // xb should be between xa and xc (golden section bracket)
+        // fb should be less than both fa and fc (bracketing condition)
+        assert!(
+            fb <= fa && fb <= fc,
+            "bracket failed: fa={fa}, fb={fb}, fc={fc}"
+        );
+        assert!(
+            (xa < xb && xb < xc) || (xa > xb && xb > xc),
+            "bracket order violated: xa={xa}, xb={xb}, xc={xc}"
+        );
+    }
+
+    #[test]
+    fn nnls_matches_scipy_reference_values() {
+        // scipy.optimize.nnls([[1,0],[1,0],[0,1]], [2,1,1])
+        // -> (array([1.5, 1.0]), 0.5)
+        // Solve min ||Ax - b||^2 subject to x >= 0
+        let a = vec![vec![1.0, 0.0], vec![1.0, 0.0], vec![0.0, 1.0]];
+        let b = vec![2.0, 1.0, 1.0];
+        let (x, residual) = nnls(&a, &b).expect("nnls should succeed");
+        assert_eq!(x.len(), 2);
+        assert!(
+            (x[0] - 1.5).abs() < 1e-10,
+            "x[0] got {}, expected 1.5",
+            x[0]
+        );
+        assert!(
+            (x[1] - 1.0).abs() < 1e-10,
+            "x[1] got {}, expected 1.0",
+            x[1]
+        );
+        // Residual: ||Ax - b|| = ||(-0.5, 0.5, 0)|| = sqrt(0.5) ≈ 0.707
+        let expected_residual = 0.5_f64.sqrt();
+        assert!(
+            (residual - expected_residual).abs() < 1e-10,
+            "residual got {residual}, expected {expected_residual}"
         );
     }
 }
