@@ -6307,6 +6307,76 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn norm_matches_scipy_reference_values() {
+        // scipy.sparse.linalg.norm([[1, 2], [3, 4]], 'fro') -> sqrt(1+4+9+16) = sqrt(30)
+        use crate::{CooMatrix, Shape2D};
+        let a = CooMatrix::from_triplets(
+            Shape2D::new(2, 2),
+            vec![1.0, 2.0, 3.0, 4.0],
+            vec![0, 0, 1, 1],
+            vec![0, 1, 0, 1],
+            false,
+        )
+        .expect("coo")
+        .to_csr()
+        .expect("csr");
+        let norm = super::sparse_norm(&a, "fro");
+        let expected = 30.0_f64.sqrt();
+        assert!(
+            (norm - expected).abs() < 1e-10,
+            "norm got {norm}, expected {expected}"
+        );
+    }
+
+    #[test]
+    fn onenormest_matches_scipy_reference_values() {
+        // scipy.sparse.linalg.onenormest([[1, 2], [3, 4]]) -> max column sum = max(4, 6) = 6
+        use crate::{CooMatrix, Shape2D};
+        let a = CooMatrix::from_triplets(
+            Shape2D::new(2, 2),
+            vec![1.0, 2.0, 3.0, 4.0],
+            vec![0, 0, 1, 1],
+            vec![0, 1, 0, 1],
+            false,
+        )
+        .expect("coo")
+        .to_csr()
+        .expect("csr");
+        let estimate = super::onenormest(&a);
+        // 1-norm = max column sum = max(|1|+|3|, |2|+|4|) = max(4, 6) = 6
+        assert!(
+            (estimate - 6.0).abs() < 1e-10,
+            "onenormest got {estimate}, expected 6.0"
+        );
+    }
+
+    #[test]
+    fn cg_matches_scipy_reference_values() {
+        // scipy.sparse.linalg.cg(A, b) for SPD matrix
+        // A = [[4, 1], [1, 3]], b = [1, 2] -> same as spsolve
+        use crate::{CooMatrix, Shape2D};
+        let a = CooMatrix::from_triplets(
+            Shape2D::new(2, 2),
+            vec![4.0, 1.0, 1.0, 3.0],
+            vec![0, 0, 1, 1],
+            vec![0, 1, 0, 1],
+            false,
+        )
+        .expect("coo")
+        .to_csr()
+        .expect("csr");
+        let b = vec![1.0, 2.0];
+        let result = super::cg(&a, &b, None, IterativeSolveOptions::default()).expect("cg");
+        let expected = [0.09090909090909091, 0.6363636363636364];
+        for (i, (&got, &want)) in result.solution.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-6,
+                "cg x[{i}] got {got}, expected {want}"
+            );
+        }
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════
