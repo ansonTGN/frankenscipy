@@ -13,7 +13,7 @@
         1.2,
         1.2
       ],
-      "tol": 1e-08,
+      "tol": 1E-8,
       "maxiter": 300,
       "maxfev": 10000,
       "expected": {
@@ -40,7 +40,7 @@
         1.2,
         1.2
       ],
-      "tol": 1e-08,
+      "tol": 1E-8,
       "maxiter": 600,
       "maxfev": 20000,
       "expected": {
@@ -67,7 +67,7 @@
         1.2,
         1.2
       ],
-      "tol": 1e-08,
+      "tol": 1E-8,
       "maxiter": 300,
       "maxfev": 20000,
       "expected": {
@@ -94,7 +94,7 @@
         0.1,
         -0.1
       ],
-      "tol": 1e-08,
+      "tol": 1E-8,
       "maxiter": 500,
       "maxfev": 20000,
       "expected": {
@@ -121,7 +121,7 @@
         0.1,
         -0.1
       ],
-      "tol": 1e-08,
+      "tol": 1E-8,
       "maxiter": 600,
       "maxfev": 25000,
       "expected": {
@@ -148,7 +148,7 @@
         0.1,
         -0.1
       ],
-      "tol": 1e-08,
+      "tol": 1E-8,
       "maxiter": 300,
       "maxfev": 25000,
       "expected": {
@@ -175,7 +175,7 @@
         0.1,
         -0.1
       ],
-      "tol": 1e-08,
+      "tol": 1E-8,
       "maxiter": 600,
       "maxfev": 25000,
       "expected": {
@@ -202,7 +202,7 @@
         0.1,
         -0.1
       ],
-      "tol": 1e-08,
+      "tol": 1E-8,
       "maxiter": 700,
       "maxfev": 30000,
       "expected": {
@@ -229,7 +229,7 @@
         0.1,
         -0.1
       ],
-      "tol": 1e-08,
+      "tol": 1E-8,
       "maxiter": 300,
       "maxfev": 30000,
       "expected": {
@@ -256,7 +256,7 @@
         8.0,
         -8.0
       ],
-      "tol": 1e-10,
+      "tol": 1E-10,
       "maxiter": 100,
       "maxfev": 20000,
       "expected": {
@@ -266,8 +266,8 @@
           -2.0
         ],
         "fun": 0.0,
-        "atol": 1e-06,
-        "rtol": 1e-06,
+        "atol": 0.000001,
+        "rtol": 0.000001,
         "require_success": true,
         "contract_ref": "fsci_opt::trust_exact"
       }
@@ -283,7 +283,7 @@
         -6.0,
         4.0
       ],
-      "tol": 1e-10,
+      "tol": 1E-10,
       "maxiter": 100,
       "maxfev": 20000,
       "expected": {
@@ -293,8 +293,8 @@
           -3.0
         ],
         "fun": 0.0,
-        "atol": 1e-06,
-        "rtol": 1e-06,
+        "atol": 0.000001,
+        "rtol": 0.000001,
         "require_success": true,
         "contract_ref": "fsci_opt::trust_exact"
       }
@@ -311,7 +311,7 @@
         -8.0
       ],
       "hessp": true,
-      "tol": 1e-10,
+      "tol": 1E-10,
       "maxiter": 50,
       "maxfev": 100,
       "expected": {
@@ -321,8 +321,8 @@
           -2.0
         ],
         "fun": 0.0,
-        "atol": 1e-08,
-        "rtol": 1e-08,
+        "atol": 1E-8,
+        "rtol": 1E-8,
         "require_success": true,
         "contract_ref": "fsci_opt::newton_cg:hessp"
       }
@@ -344,7 +344,7 @@
         ]
       ],
       "seed": 42,
-      "tol": 1e-07,
+      "tol": 1E-7,
       "maxiter": 80,
       "popsize": 8,
       "expected": {
@@ -381,12 +381,12 @@
       "expected": {
         "kind": "minimize_point",
         "x": [
-          -4.982421728566533,
-          1.0755525586061006
+          0.0,
+          0.0
         ],
-        "fun": 27.1480211,
-        "atol": 1e-06,
-        "rtol": 1e-06,
+        "fun": 0.0,
+        "atol": 0.000001,
+        "rtol": 0.000001,
         "require_success": true,
         "contract_ref": "fsci_opt::dual_annealing"
       }
@@ -403,7 +403,7 @@
       ],
       "seed": 42,
       "maxiter": 60,
-      "tol": 1e-08,
+      "tol": 1E-8,
       "expected": {
         "kind": "minimize_point",
         "x": [
@@ -434,7 +434,7 @@
         ]
       ],
       "seed": 42,
-      "tol": 1e-07,
+      "tol": 1E-7,
       "maxiter": 80,
       "popsize": 8,
       "expected": {
@@ -470,8 +470,8 @@
           4.7
         ],
         "fun": -0.9999232575641008,
-        "atol": 1e-12,
-        "rtol": 1e-12,
+        "atol": 1E-12,
+        "rtol": 1E-12,
         "require_success": true,
         "contract_ref": "fsci_opt::brute"
       }
@@ -493,7 +493,7 @@
         ]
       ],
       "seed": 7,
-      "tol": 1e-07,
+      "tol": 1E-7,
       "maxiter": 60,
       "popsize": 8,
       "expected": {
@@ -526,7 +526,7 @@
         ]
       ],
       "seed": 123,
-      "tol": 1e-07,
+      "tol": 1E-7,
       "maxiter": 60,
       "popsize": 8,
       "expected": {
@@ -554,7 +554,7 @@
       ],
       "seed": 7,
       "maxiter": 40,
-      "tol": 1e-08,
+      "tol": 1E-8,
       "expected": {
         "kind": "minimize_point",
         "x": [
@@ -593,8 +593,8 @@
           0.0
         ],
         "fun": 0.0,
-        "atol": 1e-12,
-        "rtol": 1e-12,
+        "atol": 1E-12,
+        "rtol": 1E-12,
         "require_success": true,
         "contract_ref": "fsci_opt::brute"
       }
@@ -624,8 +624,8 @@
           -2.0
         ],
         "fun": 0.0,
-        "atol": 1e-12,
-        "rtol": 1e-12,
+        "atol": 1E-12,
+        "rtol": 1E-12,
         "require_success": true,
         "contract_ref": "fsci_opt::brute"
       }
@@ -641,14 +641,14 @@
         0.0,
         2.0
       ],
-      "xtol": 1e-12,
-      "rtol": 1e-12,
+      "xtol": 1E-12,
+      "rtol": 1E-12,
       "maxiter": 200,
       "expected": {
         "kind": "root_value",
         "root": 1.2599210498948732,
-        "atol": 1e-08,
-        "rtol": 1e-08,
+        "atol": 1E-8,
+        "rtol": 1E-8,
         "require_converged": true,
         "contract_ref": "fsci_opt::root_scalar"
       }
@@ -664,14 +664,14 @@
         0.0,
         2.0
       ],
-      "xtol": 1e-12,
-      "rtol": 1e-12,
+      "xtol": 1E-12,
+      "rtol": 1E-12,
       "maxiter": 200,
       "expected": {
         "kind": "root_value",
         "root": 1.2599210498948732,
-        "atol": 1e-08,
-        "rtol": 1e-08,
+        "atol": 1E-8,
+        "rtol": 1E-8,
         "require_converged": true,
         "contract_ref": "fsci_opt::root_scalar"
       }
@@ -687,14 +687,14 @@
         0.0,
         2.0
       ],
-      "xtol": 1e-10,
-      "rtol": 1e-10,
+      "xtol": 1E-10,
+      "rtol": 1E-10,
       "maxiter": 200,
       "expected": {
         "kind": "root_value",
         "root": 1.2599210498948732,
-        "atol": 1e-06,
-        "rtol": 1e-06,
+        "atol": 0.000001,
+        "rtol": 0.000001,
         "require_converged": true,
         "contract_ref": "fsci_opt::root_scalar"
       }
@@ -710,14 +710,14 @@
         0.0,
         2.0
       ],
-      "xtol": 1e-10,
-      "rtol": 1e-10,
+      "xtol": 1E-10,
+      "rtol": 1E-10,
       "maxiter": 200,
       "expected": {
         "kind": "root_value",
         "root": 1.2599210498948732,
-        "atol": 1e-06,
-        "rtol": 1e-06,
+        "atol": 0.000001,
+        "rtol": 0.000001,
         "require_converged": true,
         "contract_ref": "fsci_opt::root_scalar"
       }
@@ -733,14 +733,14 @@
         0.0,
         1.0
       ],
-      "xtol": 1e-12,
-      "rtol": 1e-12,
+      "xtol": 1E-12,
+      "rtol": 1E-12,
       "maxiter": 200,
       "expected": {
         "kind": "root_value",
         "root": 0.7390851332151607,
-        "atol": 1e-08,
-        "rtol": 1e-08,
+        "atol": 1E-8,
+        "rtol": 1E-8,
         "require_converged": true,
         "contract_ref": "fsci_opt::root_scalar"
       }
@@ -756,14 +756,14 @@
         0.0,
         1.0
       ],
-      "xtol": 1e-12,
-      "rtol": 1e-12,
+      "xtol": 1E-12,
+      "rtol": 1E-12,
       "maxiter": 200,
       "expected": {
         "kind": "root_value",
         "root": 0.5235987755982989,
-        "atol": 1e-08,
-        "rtol": 1e-08,
+        "atol": 1E-8,
+        "rtol": 1E-8,
         "require_converged": true,
         "contract_ref": "fsci_opt::root_scalar"
       }
@@ -779,7 +779,7 @@
         4.0,
         -7.0
       ],
-      "tol": 1e-09,
+      "tol": 1E-9,
       "maxiter": 300,
       "maxfev": 10000,
       "expected": {
@@ -806,7 +806,7 @@
         4.0,
         -7.0
       ],
-      "tol": 1e-09,
+      "tol": 1E-9,
       "maxiter": 300,
       "maxfev": 20000,
       "expected": {
@@ -833,7 +833,7 @@
         0.0,
         0.0
       ],
-      "tol": 1e-09,
+      "tol": 1E-9,
       "maxiter": 300,
       "maxfev": 10000,
       "expected": {
@@ -860,7 +860,7 @@
         0.0,
         0.0
       ],
-      "tol": 1e-09,
+      "tol": 1E-9,
       "maxiter": 400,
       "maxfev": 15000,
       "expected": {
@@ -887,7 +887,7 @@
         4.0,
         -7.0
       ],
-      "tol": 1e-09,
+      "tol": 1E-9,
       "maxiter": 300,
       "maxfev": 10000,
       "expected": {
@@ -914,7 +914,7 @@
         4.0,
         -7.0
       ],
-      "tol": 1e-09,
+      "tol": 1E-9,
       "maxiter": 300,
       "maxfev": 20000,
       "expected": {
@@ -1055,8 +1055,8 @@
         0.0,
         1.0
       ],
-      "xtol": 1e-18,
-      "rtol": 1e-18,
+      "xtol": 1E-18,
+      "rtol": 1E-18,
       "maxiter": 1,
       "expected": {
         "kind": "root_status",
@@ -1075,14 +1075,14 @@
         0.0,
         2.0
       ],
-      "xtol": 1e-12,
-      "rtol": 1e-12,
+      "xtol": 1E-12,
+      "rtol": 1E-12,
       "maxiter": 200,
       "expected": {
         "kind": "root_value",
         "root": 1.2599210498948732,
-        "atol": 1e-08,
-        "rtol": 1e-08,
+        "atol": 1E-8,
+        "rtol": 1E-8,
         "require_converged": true,
         "contract_ref": "fsci_opt::toms748"
       }
@@ -1098,14 +1098,14 @@
         0.0,
         1.0
       ],
-      "xtol": 1e-12,
-      "rtol": 1e-12,
+      "xtol": 1E-12,
+      "rtol": 1E-12,
       "maxiter": 200,
       "expected": {
         "kind": "root_value",
         "root": 0.7390851332151607,
-        "atol": 1e-08,
-        "rtol": 1e-08,
+        "atol": 1E-8,
+        "rtol": 1E-8,
         "require_converged": true,
         "contract_ref": "fsci_opt::toms748"
       }
@@ -1121,14 +1121,14 @@
         0.0,
         1.0
       ],
-      "xtol": 1e-12,
-      "rtol": 1e-12,
+      "xtol": 1E-12,
+      "rtol": 1E-12,
       "maxiter": 200,
       "expected": {
         "kind": "root_value",
         "root": 0.5235987755982989,
-        "atol": 1e-08,
-        "rtol": 1e-08,
+        "atol": 1E-8,
+        "rtol": 1E-8,
         "require_converged": true,
         "contract_ref": "fsci_opt::toms748"
       }
@@ -1144,14 +1144,14 @@
         0.0,
         1.0
       ],
-      "xtol": 1e-12,
-      "rtol": 1e-12,
+      "xtol": 1E-12,
+      "rtol": 1E-12,
       "maxiter": 200,
       "expected": {
         "kind": "root_value",
         "root": 0.3,
-        "atol": 1e-10,
-        "rtol": 1e-10,
+        "atol": 1E-10,
+        "rtol": 1E-10,
         "require_converged": true,
         "contract_ref": "fsci_opt::toms748"
       }
@@ -1167,14 +1167,14 @@
         0.0,
         1.0
       ],
-      "xtol": 1e-12,
-      "rtol": 1e-12,
+      "xtol": 1E-12,
+      "rtol": 1E-12,
       "maxiter": 200,
       "expected": {
         "kind": "root_value",
         "root": 0.7390851332151607,
-        "atol": 1e-08,
-        "rtol": 1e-08,
+        "atol": 1E-8,
+        "rtol": 1E-8,
         "require_converged": true,
         "contract_ref": "fsci_opt::ridder"
       }
@@ -1190,14 +1190,14 @@
         0.0,
         1.0
       ],
-      "xtol": 1e-12,
-      "rtol": 1e-12,
+      "xtol": 1E-12,
+      "rtol": 1E-12,
       "maxiter": 200,
       "expected": {
         "kind": "root_value",
         "root": 0.5235987755982989,
-        "atol": 1e-08,
-        "rtol": 1e-08,
+        "atol": 1E-8,
+        "rtol": 1E-8,
         "require_converged": true,
         "contract_ref": "fsci_opt::ridder"
       }
@@ -1213,14 +1213,14 @@
         0.0,
         1.0
       ],
-      "xtol": 1e-12,
-      "rtol": 1e-12,
+      "xtol": 1E-12,
+      "rtol": 1E-12,
       "maxiter": 200,
       "expected": {
         "kind": "root_value",
         "root": 0.7390851332151607,
-        "atol": 1e-08,
-        "rtol": 1e-08,
+        "atol": 1E-8,
+        "rtol": 1E-8,
         "require_converged": true,
         "contract_ref": "fsci_opt::brenth"
       }
@@ -1236,14 +1236,14 @@
         0.0,
         1.0
       ],
-      "xtol": 1e-12,
-      "rtol": 1e-12,
+      "xtol": 1E-12,
+      "rtol": 1E-12,
       "maxiter": 200,
       "expected": {
         "kind": "root_value",
         "root": 0.5235987755982989,
-        "atol": 1e-08,
-        "rtol": 1e-08,
+        "atol": 1E-8,
+        "rtol": 1E-8,
         "require_converged": true,
         "contract_ref": "fsci_opt::brenth"
       }
@@ -1254,22 +1254,43 @@
       "category": "differential",
       "mode": "Strict",
       "objective": "rosenbrock2",
-      "bounds": [[-2.0, 2.0], [-1.0, 3.0]],
+      "bounds": [
+        [
+          -2.0,
+          2.0
+        ],
+        [
+          -1.0,
+          3.0
+        ]
+      ],
       "seed": 42,
-      "tol": 1e-07,
+      "tol": 1E-7,
       "maxiter": 200,
       "popsize": 15,
       "constraints": [
         {
           "kind": "linear",
-          "A": [[1.0, 1.0]],
-          "lb": [2.0],
-          "ub": [2.0]
+          "A": [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          "lb": [
+            2.0
+          ],
+          "ub": [
+            2.0
+          ]
         }
       ],
       "expected": {
         "kind": "minimize_point",
-        "x": [1.0, 1.0],
+        "x": [
+          1.0,
+          1.0
+        ],
         "fun": 0.0,
         "atol": 0.1,
         "rtol": 0.1,
@@ -1283,22 +1304,38 @@
       "category": "differential",
       "mode": "Strict",
       "objective": "rastrigin2",
-      "bounds": [[-5.12, 5.12], [-5.12, 5.12]],
+      "bounds": [
+        [
+          -5.12,
+          5.12
+        ],
+        [
+          -5.12,
+          5.12
+        ]
+      ],
       "seed": 42,
-      "tol": 1e-08,
+      "tol": 1E-8,
       "maxiter": 300,
       "popsize": 20,
       "constraints": [
         {
           "kind": "nonlinear",
           "fn_name": "unit_disk",
-          "lb": [0.0],
-          "ub": [1.0]
+          "lb": [
+            0.0
+          ],
+          "ub": [
+            1.0
+          ]
         }
       ],
       "expected": {
         "kind": "minimize_point",
-        "x": [0.0, 0.0],
+        "x": [
+          0.0,
+          0.0
+        ],
         "fun": 0.0,
         "atol": 0.1,
         "rtol": 0.5,
@@ -1312,15 +1349,27 @@
       "category": "differential",
       "mode": "Strict",
       "objective": "sphere2",
-      "bounds": [[-3.0, 3.0], [-3.0, 3.0]],
+      "bounds": [
+        [
+          -3.0,
+          3.0
+        ],
+        [
+          -3.0,
+          3.0
+        ]
+      ],
       "seed": 42,
-      "tol": 1e-08,
+      "tol": 1E-8,
       "maxiter": 100,
       "popsize": 10,
       "constraints": [],
       "expected": {
         "kind": "minimize_point",
-        "x": [0.0, 0.0],
+        "x": [
+          0.0,
+          0.0
+        ],
         "fun": 0.0,
         "atol": 0.05,
         "rtol": 0.05,
@@ -1334,22 +1383,43 @@
       "category": "differential",
       "mode": "Strict",
       "objective": "sphere2",
-      "bounds": [[-3.0, 3.0], [-3.0, 3.0]],
+      "bounds": [
+        [
+          -3.0,
+          3.0
+        ],
+        [
+          -3.0,
+          3.0
+        ]
+      ],
       "seed": 42,
-      "tol": 1e-08,
+      "tol": 1E-8,
       "maxiter": 300,
       "popsize": 20,
       "constraints": [
         {
           "kind": "linear",
-          "A": [[1.0, 1.0]],
-          "lb": [2.0],
-          "ub": [10.0]
+          "A": [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          "lb": [
+            2.0
+          ],
+          "ub": [
+            10.0
+          ]
         }
       ],
       "expected": {
         "kind": "minimize_point",
-        "x": [1.0, 1.0],
+        "x": [
+          1.0,
+          1.0
+        ],
         "fun": 2.0,
         "atol": 0.2,
         "rtol": 0.2,
