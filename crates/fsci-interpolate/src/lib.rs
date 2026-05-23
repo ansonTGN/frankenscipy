@@ -6514,4 +6514,80 @@ mod tests {
         let tck = (vec![0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0], vec![1.0, -1.0, 1.0], 2);
         assert!(sproot(&tck).is_err());
     }
+
+    #[test]
+    fn pchip_interpolate_matches_scipy_reference_values() {
+        let x = vec![0.0, 1.0, 2.0, 3.0, 4.0];
+        let y = vec![0.0, 1.0, 4.0, 9.0, 16.0];
+        let x_new = vec![1.5, 2.5];
+        let result = pchip_interpolate(&x, &y, &x_new).expect("pchip_interpolate");
+        // scipy.interpolate.PchipInterpolator(x, y)([1.5, 2.5])
+        assert!(
+            (result[0] - 2.21875).abs() < 1e-10,
+            "pchip(1.5) got {}, expected 2.21875",
+            result[0]
+        );
+        assert!(
+            (result[1] - 6.239583333333333).abs() < 1e-10,
+            "pchip(2.5) got {}, expected 6.239583333333333",
+            result[1]
+        );
+    }
+
+    #[test]
+    fn akima1d_interpolate_matches_scipy_reference_values() {
+        let x = vec![0.0, 1.0, 2.0, 3.0, 4.0];
+        let y = vec![0.0, 1.0, 4.0, 9.0, 16.0];
+        let x_new = vec![1.5, 2.5];
+        let result = akima1d_interpolate(&x, &y, &x_new).expect("akima1d_interpolate");
+        // scipy.interpolate.Akima1DInterpolator(x, y)([1.5, 2.5])
+        assert!(
+            (result[0] - 2.25).abs() < 1e-10,
+            "akima(1.5) got {}, expected 2.25",
+            result[0]
+        );
+        assert!(
+            (result[1] - 6.25).abs() < 1e-10,
+            "akima(2.5) got {}, expected 6.25",
+            result[1]
+        );
+    }
+
+    #[test]
+    fn interp1d_linear_matches_scipy_reference_values() {
+        let x = vec![0.0, 1.0, 2.0, 3.0, 4.0];
+        let y = vec![0.0, 1.0, 4.0, 9.0, 16.0];
+        let x_new = vec![1.5, 2.5];
+        let result = interp1d_linear(&x, &y, &x_new).expect("interp1d_linear");
+        // scipy.interpolate.interp1d(x, y, kind='linear')([1.5, 2.5])
+        assert!(
+            (result[0] - 2.5).abs() < 1e-10,
+            "linear(1.5) got {}, expected 2.5",
+            result[0]
+        );
+        assert!(
+            (result[1] - 6.5).abs() < 1e-10,
+            "linear(2.5) got {}, expected 6.5",
+            result[1]
+        );
+    }
+
+    #[test]
+    fn krogh_interpolate_matches_scipy_reference_values() {
+        let x = vec![0.0, 1.0, 2.0, 3.0, 4.0];
+        let y = vec![0.0, 1.0, 4.0, 9.0, 16.0];
+        let x_new = vec![1.5, 2.5];
+        let result = krogh_interpolate(&x, &y, &x_new).expect("krogh_interpolate");
+        // scipy.interpolate.krogh_interpolate(x, y, [1.5, 2.5])
+        assert!(
+            (result[0] - 2.25).abs() < 1e-10,
+            "krogh(1.5) got {}, expected 2.25",
+            result[0]
+        );
+        assert!(
+            (result[1] - 6.25).abs() < 1e-10,
+            "krogh(2.5) got {}, expected 6.25",
+            result[1]
+        );
+    }
 }
