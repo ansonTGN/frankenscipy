@@ -5875,4 +5875,67 @@ mod tests {
             "jaccard got {result}, expected 0.5"
         );
     }
+
+    #[test]
+    fn kdtree_query_matches_scipy_reference_values() {
+        // scipy.spatial.KDTree([[0,0], [1,1], [2,2]]).query([0.5, 0.5])
+        // -> (dist=0.7071..., idx=0)  (closest to [0,0] or [1,1])
+        let points = vec![vec![0.0, 0.0], vec![1.0, 1.0], vec![2.0, 2.0]];
+        let tree = KDTree::new(&points).expect("kdtree");
+        let (idx, dist) = tree.query(&[0.5, 0.5]).expect("query");
+        let expected_dist = 0.7071067811865476;
+        assert!(
+            (dist - expected_dist).abs() < 1e-10,
+            "kdtree dist got {dist}, expected {expected_dist}"
+        );
+        // Index should be 0 or 1 (both are equidistant from [0.5, 0.5])
+        assert!(idx == 0 || idx == 1, "kdtree idx got {idx}, expected 0 or 1");
+    }
+
+    #[test]
+    fn convex_hull_area_matches_scipy_reference_values() {
+        // scipy.spatial.ConvexHull([[0,0], [1,0], [1,1], [0,1], [0.5,0.5]]).volume
+        // -> 1.0 (area of unit square)
+        let points: Vec<(f64, f64)> = vec![
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (1.0, 1.0),
+            (0.0, 1.0),
+            (0.5, 0.5),
+        ];
+        let hull = ConvexHull::new(&points).expect("convex_hull");
+        // Hull should be the 4 corner vertices
+        assert_eq!(hull.vertices.len(), 4, "hull should have 4 vertices");
+        // Area should be 1.0
+        assert!(
+            (hull.area - 1.0).abs() < 1e-10,
+            "hull area got {}, expected 1.0",
+            hull.area
+        );
+    }
+
+    #[test]
+    fn delaunay_triangulation_matches_scipy_reference_values() {
+        // scipy.spatial.Delaunay([[0,0], [1,0], [1,1], [0,1]]).simplices
+        // -> 2 triangles covering the square
+        let points: Vec<(f64, f64)> = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+        let tri = Delaunay::new(&points).expect("delaunay");
+        // Should have exactly 2 triangles
+        assert_eq!(tri.simplices.len(), 2, "should have 2 triangles");
+    }
+
+    #[test]
+    fn voronoi_vertices_matches_scipy_reference_values() {
+        // scipy.spatial.Voronoi([[0,0], [1,0], [1,1], [0,1]]).vertices
+        // -> [[0.5, 0.5]] (center of square)
+        let points: Vec<(f64, f64)> = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+        let vor = Voronoi::new(&points).expect("voronoi");
+        // Should have 1 finite vertex at the center
+        assert!(vor.vertices.len() >= 1, "should have at least 1 vertex");
+        // Check that center vertex exists
+        let has_center = vor.vertices.iter().any(|&(x, y)| {
+            (x - 0.5).abs() < 1e-10 && (y - 0.5).abs() < 1e-10
+        });
+        assert!(has_center, "should have vertex at center (0.5, 0.5)");
+    }
 }
