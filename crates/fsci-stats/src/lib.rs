@@ -59549,4 +59549,63 @@ mod tests {
             "hellinger_distance got {result}, expected 0.07821546206579755"
         );
     }
+
+    #[test]
+    fn combine_pvalues_fisher_matches_scipy_reference_values() {
+        let pvalues = vec![0.01, 0.05, 0.1, 0.2];
+        let result = combine_pvalues(&pvalues, Some("fisher"), None).expect("fisher");
+        assert!(
+            (result.statistic - 23.025850929940454).abs() < 1e-10,
+            "combine_pvalues fisher statistic got {}, expected 23.025850929940454",
+            result.statistic
+        );
+        assert!(
+            (result.pvalue - 0.0033312147588263515).abs() < 1e-10,
+            "combine_pvalues fisher pvalue got {}, expected 0.0033312147588263515",
+            result.pvalue
+        );
+    }
+
+    #[test]
+    fn combine_pvalues_stouffer_matches_scipy_reference_values() {
+        let pvalues = vec![0.01, 0.05, 0.1, 0.2];
+        let result = combine_pvalues(&pvalues, Some("stouffer"), None).expect("stouffer");
+        assert!(
+            (result.statistic - 3.047187150054914).abs() < 1e-10,
+            "combine_pvalues stouffer statistic got {}, expected 3.047187150054914",
+            result.statistic
+        );
+        assert!(
+            (result.pvalue - 0.0011549692062016116).abs() < 1e-10,
+            "combine_pvalues stouffer pvalue got {}, expected 0.0011549692062016116",
+            result.pvalue
+        );
+    }
+
+    #[test]
+    fn combine_pvalues_tippett_matches_scipy_reference_values() {
+        let pvalues = vec![0.01, 0.05, 0.1, 0.2];
+        let result = combine_pvalues(&pvalues, Some("tippett"), None).expect("tippett");
+        assert!(
+            (result.statistic - 0.01).abs() < 1e-10,
+            "combine_pvalues tippett statistic got {}, expected 0.01",
+            result.statistic
+        );
+        assert!(
+            (result.pvalue - 0.03940399).abs() < 1e-6,
+            "combine_pvalues tippett pvalue got {}, expected 0.03940399",
+            result.pvalue
+        );
+    }
+
+    #[test]
+    fn weightedtau_matches_scipy_reference_values() {
+        let x = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let y = vec![1.0, 3.0, 2.0, 4.0, 5.0];
+        let result = weightedtau(&x, &y);
+        assert!(
+            (result - 0.8722627737226277).abs() < 1e-10,
+            "weightedtau got {result}, expected 0.8722627737226277"
+        );
+    }
 }
