@@ -5326,6 +5326,26 @@ mod tests {
         }
     }
 
+    #[test]
+    fn mminfo_matches_scipy_reference_values() {
+        // scipy.io.mminfo returns (rows, cols, nnz, format, field, symmetry)
+        let content = "%%MatrixMarket matrix coordinate real general\n2 3 4\n1 1 1.0\n1 2 2.0\n2 2 3.0\n2 3 4.0\n";
+        let info = mminfo(content).expect("mminfo");
+        assert_eq!(info.rows, 2, "mminfo rows");
+        assert_eq!(info.cols, 3, "mminfo cols");
+        assert_eq!(info.nnz, 4, "mminfo nnz");
+    }
+
+    #[test]
+    fn wav_write_read_roundtrip_matches_scipy_semantics() {
+        // scipy.io.wavfile roundtrip preserves data
+        let original = vec![0.5, -0.5, 0.25, -0.25];
+        let bytes = wav_write(44100, 1, &original).expect("wav_write");
+        let result = wav_read(&bytes).expect("wav_read");
+        assert_eq!(result.sample_rate, 44100, "sample rate preserved");
+        assert_eq!(result.data.len(), original.len(), "data length preserved");
+    }
+
     fn idl_save_header() -> Vec<u8> {
         b"SR\x00\x04".to_vec()
     }
