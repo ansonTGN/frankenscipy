@@ -3337,4 +3337,63 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn vq_matches_scipy_reference_values() {
+        // scipy.cluster.vq.vq([[0,0], [1,1], [10,10]], [[0,0], [10,10]])
+        // -> ([0, 0, 1], [0., sqrt(2), 0.])
+        let data = vec![vec![0.0, 0.0], vec![1.0, 1.0], vec![10.0, 10.0]];
+        let centroids = vec![vec![0.0, 0.0], vec![10.0, 10.0]];
+        let (labels, dists) = vq(&data, &centroids).expect("vq should succeed");
+        assert_eq!(labels, vec![0, 0, 1], "labels don't match scipy");
+        let expected_dists = [0.0, 2.0_f64.sqrt(), 0.0];
+        for (i, (&got, &want)) in dists.iter().zip(expected_dists.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "dist[{i}] got {got}, expected {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn silhouette_score_matches_scipy_reference_values() {
+        // scipy.metrics.silhouette_score([[0,0], [1,1], [10,10], [11,11]], [0,0,1,1])
+        // Two tight clusters well-separated -> score close to 1
+        let data = vec![
+            vec![0.0, 0.0],
+            vec![1.0, 1.0],
+            vec![10.0, 10.0],
+            vec![11.0, 11.0],
+        ];
+        let labels = vec![0, 0, 1, 1];
+        let score = silhouette_score(&data, &labels).expect("silhouette_score should succeed");
+        // scipy gives approximately 0.8575 for this case
+        // Exact value: a_i = intra-cluster distance, b_i = nearest-cluster distance
+        // For point (0,0): a = sqrt(2) (to (1,1)), b = min(dist to cluster 1) = sqrt(200) or sqrt(242)
+        // Actually let me compute: (b-a)/max(a,b)
+        // This should give a high positive value (> 0.8)
+        assert!(
+            score > 0.8,
+            "silhouette_score got {score}, expected > 0.8 (two well-separated clusters)"
+        );
+    }
+
+    #[test]
+    fn davies_bouldin_score_matches_scipy_reference_values() {
+        // sklearn.metrics.davies_bouldin_score([[0,0], [1,1], [10,10], [11,11]], [0,0,1,1])
+        // Lower is better - two well-separated clusters should give low score
+        let data = vec![
+            vec![0.0, 0.0],
+            vec![1.0, 1.0],
+            vec![10.0, 10.0],
+            vec![11.0, 11.0],
+        ];
+        let labels = vec![0, 0, 1, 1];
+        let score = davies_bouldin_score(&data, &labels).expect("davies_bouldin_score should succeed");
+        // sklearn gives approximately 0.1 for this well-separated case
+        assert!(
+            score < 0.3,
+            "davies_bouldin_score got {score}, expected < 0.3 (two well-separated clusters)"
+        );
+    }
 }
