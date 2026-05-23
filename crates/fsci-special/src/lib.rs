@@ -2951,4 +2951,33 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn zeta_matches_scipy_reference_values() {
+        // scipy.special.zeta([2, 3, 4])
+        let inputs = [2.0, 3.0, 4.0];
+        let expected = [1.6449340668482264, 1.2020569031595942, 1.0823232337111381];
+        for (i, (&s, &want)) in inputs.iter().zip(expected.iter()).enumerate() {
+            let got = zeta_scalar(s);
+            assert!(
+                (got - want).abs() < 1e-10,
+                "zeta({s}) got {got}, expected {want} at index {i}"
+            );
+        }
+    }
+
+    #[test]
+    fn cbrt_matches_scipy_reference_values() {
+        // scipy.special.cbrt([1, 8, 27, -8])
+        let inputs = [1.0, 8.0, 27.0, -8.0];
+        let expected = [1.0, 2.0, 3.0, -2.0];
+        for (i, (&x, &want)) in inputs.iter().zip(expected.iter()).enumerate() {
+            let got = cbrt(x);
+            assert!(
+                (got - want).abs() < 1e-10,
+                "cbrt({x}) got {got}, expected {want} at index {i}"
+            );
+        }
+    }
+
 }
