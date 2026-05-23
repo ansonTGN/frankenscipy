@@ -3485,4 +3485,45 @@ mod tests {
         let z_arr: Vec<[f64; 4]> = z.iter().map(|row| [row[0], row[1], row[2], row[3]]).collect();
         assert!(is_monotonic(&z_arr), "valid linkage should be monotonic");
     }
+
+    #[test]
+    fn calinski_harabasz_score_matches_scipy_reference_values() {
+        // sklearn.metrics.calinski_harabasz_score([[0,0], [0,1], [10,10], [10,11]], [0, 0, 1, 1])
+        // Well-separated clusters should have high score
+        let data = vec![
+            vec![0.0, 0.0],
+            vec![0.0, 1.0],
+            vec![10.0, 10.0],
+            vec![10.0, 11.0],
+        ];
+        let labels = vec![0, 0, 1, 1];
+        let score = calinski_harabasz_score(&data, &labels).expect("calinski_harabasz");
+        // For well-separated clusters, score should be high (> 100)
+        assert!(score > 100.0, "calinski_harabasz got {}, expected > 100", score);
+    }
+
+    #[test]
+    fn fowlkes_mallows_score_matches_scipy_reference_values() {
+        // sklearn.metrics.fowlkes_mallows_score([0, 0, 1, 1], [0, 0, 1, 1])
+        // Perfect agreement should give 1.0
+        let labels_true = vec![0, 0, 1, 1];
+        let labels_pred = vec![0, 0, 1, 1];
+        let score = fowlkes_mallows_score(&labels_true, &labels_pred).expect("fowlkes_mallows");
+        assert!(
+            (score - 1.0).abs() < 1e-10,
+            "fowlkes_mallows perfect agreement got {}, expected 1.0",
+            score
+        );
+
+        // sklearn.metrics.fowlkes_mallows_score([0, 0, 1, 1], [1, 1, 0, 0])
+        // Swapped labels should also give 1.0 (labels are arbitrary)
+        let labels_pred_swapped = vec![1, 1, 0, 0];
+        let score_swapped =
+            fowlkes_mallows_score(&labels_true, &labels_pred_swapped).expect("fowlkes_mallows");
+        assert!(
+            (score_swapped - 1.0).abs() < 1e-10,
+            "fowlkes_mallows swapped got {}, expected 1.0",
+            score_swapped
+        );
+    }
 }
