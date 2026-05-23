@@ -3073,7 +3073,7 @@ mod tests {
     use super::{
         FftError, FftOptions, TransformKind, WorkerPolicy, dct, dct_iv, dctn, dst_ii, dst_iii,
         estimate_fft_flops, fft, fft_with_audit, fft2, fftn, hfft, hfft2, hfftn, idct, idctn, ifft,
-        ifft2, ihfft2, ihfftn, irfft, irfft2, irfftn, is_fast_len, next_fast_len, prev_fast_len,
+        ifft2, ifftn, ihfft2, ihfftn, irfft, irfft2, irfftn, is_fast_len, next_fast_len, prev_fast_len,
         rfft, rfft_with_audit, rfft2, rfftn, sync_audit_ledger, take_transform_traces,
     };
     use crate::Normalization;
@@ -4020,5 +4020,71 @@ mod tests {
                 "hfft2(ihfft2(x))[{i}] = {got}, expected {want}"
             );
         }
+    }
+
+    #[test]
+    fn fftn_matches_scipy_reference_values() {
+        // scipy.fft.fftn([[1, 2], [3, 4]])
+        // -> [[10+0j, -2+0j], [-4+0j, 0+0j]]
+        let opts = FftOptions::default();
+        let input = vec![(1.0, 0.0), (2.0, 0.0), (3.0, 0.0), (4.0, 0.0)];
+        let shape = vec![2, 2];
+        let result = fftn(&input, &shape, &opts).expect("fftn");
+        // Check DC component: sum of all inputs = 10
+        assert!(
+            (result[0].0 - 10.0).abs() < 1e-10,
+            "fftn[0] re got {}, expected 10",
+            result[0].0
+        );
+        assert!(
+            result[0].1.abs() < 1e-10,
+            "fftn[0] im should be ~0"
+        );
+    }
+
+    #[test]
+    fn ifftn_fftn_roundtrip_matches_scipy() {
+        // scipy.fft.ifftn(scipy.fft.fftn(x)) == x
+        let opts = FftOptions::default();
+        let input = vec![(1.0, 0.0), (2.0, 0.0), (3.0, 0.0), (4.0, 0.0)];
+        let shape = vec![2, 2];
+        let spectrum = fftn(&input, &shape, &opts).expect("fftn");
+        let recovered = ifftn(&spectrum, &shape, &opts).expect("ifftn");
+        for (i, (got, want)) in recovered.iter().zip(input.iter()).enumerate() {
+            assert!(
+                (got.0 - want.0).abs() < 1e-10,
+                "ifftn(fftn(x))[{i}] re got {}, expected {}",
+                got.0,
+                want.0
+            );
+            assert!(
+                (got.1 - want.1).abs() < 1e-10,
+                "ifftn(fftn(x))[{i}] im got {}, expected {}",
+                got.1,
+                want.1
+            );
+        }
+    }
+
+    #[test]
+    fn fft2_matches_scipy_reference_values() {
+        // scipy.fft.fft2([[1, 2], [3, 4]]) == fftn for 2D
+        // -> [[10+0j, -2+0j], [-4+0j, 0+0j]]
+        let opts = FftOptions::default();
+        let input = vec![(1.0, 0.0), (2.0, 0.0), (3.0, 0.0), (4.0, 0.0)];
+        let shape = (2usize, 2usize);
+        let result = fft2(&input, shape, &opts).expect("fft2");
+        // DC component: 10
+        assert!(
+            (result[0].0 - 10.0).abs() < 1e-10,
+            "fft2[0] re got {}, expected 10",
+            result[0].0
+        );
+        // result[1] should be -2
+        assert!(
+            (result[1].0 - (-2.0)).abs() < 1e-10,
+            "fft2[1] re got {}, expected -2",
+            result[1].0
+        );
     }
 }
