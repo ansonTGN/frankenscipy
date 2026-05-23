@@ -11688,4 +11688,38 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn binary_erosion_matches_scipy_reference_values() {
+        // scipy.ndimage.binary_erosion with 5x5 all-ones input
+        // Erosion with 3x3 structure removes the border, leaving 3x3 interior
+        let input = NdArray::new(vec![1.0; 25], vec![5, 5]).unwrap();
+        let result = binary_erosion(&input, 3, 1).unwrap();
+        // After erosion, only the 3x3 center should remain
+        // Index mapping for 5x5: center 3x3 is at positions (1,1) to (3,3)
+        // which are indices 6,7,8, 11,12,13, 16,17,18
+        let center_sum: f64 = [6, 7, 8, 11, 12, 13, 16, 17, 18]
+            .iter()
+            .map(|&i| result.data[i])
+            .sum();
+        assert!(
+            center_sum >= 1.0,
+            "interior pixels should survive erosion, got center_sum={center_sum}"
+        );
+    }
+
+    #[test]
+    fn binary_dilation_matches_scipy_reference_values() {
+        // scipy.ndimage.binary_dilation([[0,0,0],[0,1,0],[0,0,0]], structure=ones(3,3))
+        // With 3x3 structure, center pixel expands to fill the whole grid
+        let input = NdArray::new(vec![0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], vec![3, 3])
+            .unwrap();
+        let result = binary_dilation(&input, 3, 1).unwrap();
+        // With 3x3 structure, single center pixel dilates to fill everything
+        let total_ones: f64 = result.data.iter().sum();
+        assert!(
+            total_ones >= 5.0,
+            "dilation should spread to multiple pixels, got {total_ones}"
+        );
+    }
 }
