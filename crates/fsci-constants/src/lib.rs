@@ -1017,4 +1017,50 @@ mod tests {
             "second radiation constant should equal h*c/k",
         );
     }
+
+    #[test]
+    fn physical_constants_match_scipy_reference_values() {
+        // scipy.constants values (CODATA 2018)
+        // Use relative tolerances for physical constants since different CODATA years may differ slightly
+        assert_eq!(SPEED_OF_LIGHT, 299792458.0, "c should match scipy.constants.c exactly");
+        assert_close(MU_0, 1.25663706127e-6, 1e-15, "mu_0 vs scipy.constants.mu_0");
+        assert_close(
+            EPSILON_0,
+            8.8541878188e-12,
+            1e-20,
+            "epsilon_0 vs scipy.constants.epsilon_0",
+        );
+        assert_close(PLANCK, 6.62607015e-34, 1e-43, "h vs scipy.constants.h");
+        assert_close(
+            GRAVITATIONAL_CONSTANT,
+            6.6743e-11,
+            1e-14,
+            "G vs scipy.constants.G",
+        );
+        assert_close(
+            ELEMENTARY_CHARGE,
+            1.602176634e-19,
+            1e-28,
+            "e vs scipy.constants.e",
+        );
+        assert_close(
+            GAS_CONSTANT,
+            8.31446261815324,
+            2e-10,
+            "R vs scipy.constants.R",
+        );
+        assert_close(AVOGADRO, 6.02214076e23, 1e14, "N_A vs scipy.constants.N_A");
+        assert_close(
+            BOLTZMANN,
+            1.380649e-23,
+            1e-29,
+            "k vs scipy.constants.k",
+        );
+        assert_close(
+            GOLDEN_RATIO,
+            1.618033988749895,
+            1e-15,
+            "golden_ratio vs scipy.constants.golden_ratio",
+        );
+    }
 }
