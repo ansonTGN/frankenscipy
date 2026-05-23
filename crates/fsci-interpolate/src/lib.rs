@@ -6626,4 +6626,53 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn polyadd_matches_scipy_reference_values() {
+        // np.polyadd([1, 2], [9, 5, 4]) -> [9, 6, 6]
+        // numpy uses highest-degree-first convention
+        let a = [1.0, 2.0];
+        let b = [9.0, 5.0, 4.0];
+        let result = polyadd(&a, &b);
+        let expected = [9.0, 6.0, 6.0];
+        assert_eq!(result.len(), expected.len(), "polyadd length mismatch");
+        for (i, (&got, &want)) in result.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "polyadd[{i}] got {got}, expected {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn polyder_matches_scipy_reference_values() {
+        // np.polyder([3, 2, 1]) -> [6, 2] (derivative of 3x^2 + 2x + 1 = 6x + 2)
+        let coeffs = [3.0, 2.0, 1.0];
+        let result = polyder(&coeffs, 1);
+        let expected = [6.0, 2.0];
+        assert_eq!(result.len(), expected.len(), "polyder length mismatch");
+        for (i, (&got, &want)) in result.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "polyder[{i}] got {got}, expected {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn polymul_matches_scipy_reference_values() {
+        // np.polymul([1, 2], [1, 2, 1]) -> [1, 4, 5, 2]
+        // (x + 2) * (x^2 + 2x + 1) = x^3 + 4x^2 + 5x + 2
+        let a = [1.0, 2.0];
+        let b = [1.0, 2.0, 1.0];
+        let result = polymul(&a, &b);
+        let expected = [1.0, 4.0, 5.0, 2.0];
+        assert_eq!(result.len(), expected.len(), "polymul length mismatch");
+        for (i, (&got, &want)) in result.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "polymul[{i}] got {got}, expected {want}"
+            );
+        }
+    }
 }
