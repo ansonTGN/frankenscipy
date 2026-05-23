@@ -1280,4 +1280,47 @@ mod tests {
         assert!((rm1.ai - 0.5355608833).abs() < 1e-6, "Ai(-1) = {}, expected 0.5355608833", rm1.ai);
         assert!((rm1.bi - 0.1039973895).abs() < 1e-6, "Bi(-1) = {}, expected 0.1039973895", rm1.bi);
     }
+
+    #[test]
+    fn ai_zeros_matches_scipy_reference_values() {
+        // scipy.special.ai_zeros(3) returns first 3 zeros of Ai
+        // -> [-2.33810741, -4.08794944, -5.52055983]
+        let zeros = ai_zeros(3);
+        assert_eq!(zeros.len(), 3);
+        assert!((zeros[0] - (-2.33810741)).abs() < 1e-5, "ai_zeros[0] = {}, expected -2.33810741", zeros[0]);
+        assert!((zeros[1] - (-4.08794944)).abs() < 1e-5, "ai_zeros[1] = {}, expected -4.08794944", zeros[1]);
+        assert!((zeros[2] - (-5.52055983)).abs() < 1e-5, "ai_zeros[2] = {}, expected -5.52055983", zeros[2]);
+    }
+
+    #[test]
+    fn bi_zeros_matches_scipy_reference_values() {
+        // scipy.special.bi_zeros(3) returns first 3 zeros of Bi
+        // -> [-1.17371322, -3.27109330, -4.83073784]
+        let zeros = bi_zeros(3);
+        assert_eq!(zeros.len(), 3);
+        assert!((zeros[0] - (-1.17371322)).abs() < 1e-5, "bi_zeros[0] = {}, expected -1.17371322", zeros[0]);
+        assert!((zeros[1] - (-3.27109330)).abs() < 1e-5, "bi_zeros[1] = {}, expected -3.27109330", zeros[1]);
+        assert!((zeros[2] - (-4.83073784)).abs() < 1e-5, "bi_zeros[2] = {}, expected -4.83073784", zeros[2]);
+    }
+
+    #[test]
+    fn airye_matches_scipy_reference_values() {
+        // scipy.special.airye(1) -> scaled versions
+        // Ai_e(1) = Ai(1) * exp(2/3) ≈ 0.2694
+        // Bi_e(1) = Bi(1) * exp(-2/3) ≈ 0.6208
+        let tensor = SpecialTensor::RealScalar(1.0);
+        let results = airye(&tensor, RuntimeMode::Strict).expect("airye(1)");
+        let ai_e = match &results[0] {
+            SpecialTensor::RealScalar(v) => *v,
+            SpecialTensor::RealVec(v) => v[0],
+            _ => panic!("unexpected tensor type"),
+        };
+        let bi_e = match &results[2] {
+            SpecialTensor::RealScalar(v) => *v,
+            SpecialTensor::RealVec(v) => v[0],
+            _ => panic!("unexpected tensor type"),
+        };
+        assert!((ai_e - 0.2635).abs() < 1e-3, "airye Ai(1) = {}, expected ~0.2635", ai_e);
+        assert!((bi_e - 0.6208).abs() < 1e-3, "airye Bi(1) = {}, expected ~0.6208", bi_e);
+    }
 }
