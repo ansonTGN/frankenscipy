@@ -1063,4 +1063,40 @@ mod tests {
             "golden_ratio vs scipy.constants.golden_ratio",
         );
     }
+
+    #[test]
+    fn convert_temperature_matches_scipy_reference_values() {
+        // scipy.constants.convert_temperature(100, 'C', 'K') = 373.15
+        // scipy.constants.convert_temperature(0, 'C', 'F') = 32
+        // scipy.constants.convert_temperature(212, 'F', 'C') = 100
+        let c_to_k = convert_temperature(100.0, "C", "K").expect("C to K");
+        assert_close(c_to_k, 373.15, 1e-10, "convert_temperature C to K");
+
+        let c_to_f = convert_temperature(0.0, "C", "F").expect("C to F");
+        assert_close(c_to_f, 32.0, 1e-10, "convert_temperature C to F");
+
+        let f_to_c = convert_temperature(212.0, "F", "C").expect("F to C");
+        assert_close(f_to_c, 100.0, 1e-10, "convert_temperature F to C");
+    }
+
+    #[test]
+    fn value_matches_scipy_reference_values() {
+        // scipy.constants.value('speed of light in vacuum') = 299792458.0
+        // Our API uses simpler keys
+        let c = value("speed of light").expect("speed of light");
+        assert_eq!(c, 299792458.0, "value('speed of light')");
+
+        let h = value("planck").expect("planck");
+        assert_close(h, 6.62607015e-34, 1e-43, "value('planck')");
+    }
+
+    #[test]
+    fn find_matches_scipy_reference_values() {
+        // scipy.constants.find('light') returns constants containing 'light'
+        let results = find("light");
+        assert!(!results.is_empty(), "find('light') should return results");
+        // Should include speed of light
+        let has_speed_of_light = results.iter().any(|(name, _)| name.contains("speed of light"));
+        assert!(has_speed_of_light, "find('light') should include speed of light");
+    }
 }
