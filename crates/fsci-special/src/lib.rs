@@ -2846,4 +2846,109 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn gammaln_scalar_matches_scipy_reference_values() {
+        // scipy.special.gammaln([0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0])
+        use fsci_runtime::RuntimeMode;
+        let inputs = [0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0];
+        let expected = [
+            0.5723649429247,
+            0.0,
+            -0.12078223763524526,
+            0.0,
+            0.6931471805599453,
+            1.791759469228055,
+            3.1780538303479458,
+        ];
+        for (i, (&x, &want)) in inputs.iter().zip(expected.iter()).enumerate() {
+            let got = gammaln_scalar(x, RuntimeMode::Strict).expect("gammaln_scalar should succeed");
+            assert!(
+                (got - want).abs() < 1e-10,
+                "gammaln({x}) got {got}, expected {want} at index {i}"
+            );
+        }
+    }
+
+    #[test]
+    fn gammainc_scalar_matches_scipy_reference_values() {
+        // scipy.special.gammainc(a, x) for (a, x) in [(1, 1), (2, 1), (3, 2), (0.5, 0.5)]
+        use fsci_runtime::RuntimeMode;
+        let inputs = [(1.0, 1.0), (2.0, 1.0), (3.0, 2.0), (0.5, 0.5)];
+        let expected = [
+            0.6321205588285577,
+            0.2642411176571153,
+            0.32332358381693654,
+            0.6826894921370859,
+        ];
+        for (i, ((a, x), &want)) in inputs.iter().zip(expected.iter()).enumerate() {
+            let got =
+                gammainc_scalar(*a, *x, RuntimeMode::Strict).expect("gammainc_scalar should succeed");
+            assert!(
+                (got - want).abs() < 1e-10,
+                "gammainc({a}, {x}) got {got}, expected {want} at index {i}"
+            );
+        }
+    }
+
+    #[test]
+    fn gammaincc_scalar_matches_scipy_reference_values() {
+        // scipy.special.gammaincc(a, x) for (a, x) in [(1, 1), (2, 1), (3, 2), (0.5, 0.5)]
+        use fsci_runtime::RuntimeMode;
+        let inputs = [(1.0, 1.0), (2.0, 1.0), (3.0, 2.0), (0.5, 0.5)];
+        let expected = [
+            0.36787944117144245,
+            0.7357588823428847,
+            0.6766764161830634,
+            0.31731050786291115,
+        ];
+        for (i, ((a, x), &want)) in inputs.iter().zip(expected.iter()).enumerate() {
+            let got =
+                gammaincc_scalar(*a, *x, RuntimeMode::Strict).expect("gammaincc_scalar should succeed");
+            assert!(
+                (got - want).abs() < 1e-10,
+                "gammaincc({a}, {x}) got {got}, expected {want} at index {i}"
+            );
+        }
+    }
+
+    #[test]
+    fn ndtr_scalar_matches_scipy_reference_values() {
+        // scipy.special.ndtr([-2, -1, 0, 1, 2])
+        let inputs = [-2.0, -1.0, 0.0, 1.0, 2.0];
+        let expected = [
+            0.022750131948179195,
+            0.15865525393145707,
+            0.5,
+            0.8413447460685429,
+            0.9772498680518208,
+        ];
+        for (i, (&x, &want)) in inputs.iter().zip(expected.iter()).enumerate() {
+            let got = ndtr_scalar(x);
+            assert!(
+                (got - want).abs() < 1e-10,
+                "ndtr({x}) got {got}, expected {want} at index {i}"
+            );
+        }
+    }
+
+    #[test]
+    fn ndtri_scalar_matches_scipy_reference_values() {
+        // scipy.special.ndtri([0.01, 0.1, 0.5, 0.9, 0.99])
+        let inputs = [0.01, 0.1, 0.5, 0.9, 0.99];
+        let expected = [
+            -2.3263478740408408,
+            -1.2815515655446004,
+            0.0,
+            1.2815515655446004,
+            2.3263478740408408,
+        ];
+        for (i, (&p, &want)) in inputs.iter().zip(expected.iter()).enumerate() {
+            let got = ndtri_scalar(p);
+            assert!(
+                (got - want).abs() < 1e-10,
+                "ndtri({p}) got {got}, expected {want} at index {i}"
+            );
+        }
+    }
 }
