@@ -2754,4 +2754,40 @@ mod tests {
             "bdtr(5,10,0.5) got {result}, expected {expected}"
         );
     }
+
+    #[test]
+    fn stdtr_matches_scipy_reference_values() {
+        // scipy.special.stdtr(df, t) - Student's t CDF
+        // stdtr(5, 0) = 0.5 (symmetric at 0)
+        // stdtr(5, 1.0) ≈ 0.8183 (df=5, t=1)
+        let result0 = stdtr(5.0, 0.0);
+        assert!(
+            (result0 - 0.5).abs() < 1e-10,
+            "stdtr(5, 0) got {result0}, expected 0.5"
+        );
+
+        let result1 = stdtr(5.0, 1.0);
+        assert!(
+            (result1 - 0.8183).abs() < 1e-3,
+            "stdtr(5, 1) got {result1}, expected ~0.8183"
+        );
+    }
+
+    #[test]
+    fn fdtr_matches_scipy_reference_values() {
+        // scipy.special.fdtr(dfn, dfd, x) - F distribution CDF
+        // fdtr(5, 10, 1.0) ≈ 0.5348
+        let result = fdtr(5.0, 10.0, 1.0);
+        assert!(
+            (result - 0.5349).abs() < 1e-3,
+            "fdtr(5, 10, 1) got {result}, expected ~0.5349"
+        );
+
+        // fdtr at 0 should be 0
+        let result0 = fdtr(5.0, 10.0, 0.0);
+        assert!(
+            result0.abs() < 1e-10,
+            "fdtr(5, 10, 0) got {result0}, expected 0"
+        );
+    }
 }
