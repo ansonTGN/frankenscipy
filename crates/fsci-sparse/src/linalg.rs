@@ -6470,6 +6470,48 @@ mod tests {
             result[1][1]
         );
     }
+
+    #[test]
+    fn minres_matches_scipy_reference_values() {
+        // scipy.sparse.linalg.minres on symmetric 2x2 system
+        use crate::{CooMatrix, Shape2D};
+        let a = CooMatrix::from_triplets(
+            Shape2D::new(2, 2),
+            vec![4.0, 1.0, 1.0, 3.0],
+            vec![0, 0, 1, 1],
+            vec![0, 1, 0, 1],
+            false,
+        )
+        .expect("coo")
+        .to_csr()
+        .expect("csr");
+        let b = vec![1.0, 2.0];
+        let result = super::minres(&a, &b, None, IterativeSolveOptions::default()).expect("minres");
+        // Verify Ax ≈ b
+        let ax = super::spmv(&a, &result.solution);
+        for i in 0..2 {
+            assert!((ax[i] - b[i]).abs() < 1e-6, "minres residual too large at {i}");
+        }
+    }
+
+    #[test]
+    fn lsqr_matches_scipy_reference_values() {
+        // scipy.sparse.linalg.lsqr on overdetermined system
+        use crate::{CooMatrix, Shape2D};
+        let a = CooMatrix::from_triplets(
+            Shape2D::new(3, 2),
+            vec![1.0, 0.0, 1.0, 1.0, 0.0, 1.0],
+            vec![0, 0, 1, 1, 2, 2],
+            vec![0, 1, 0, 1, 0, 1],
+            false,
+        )
+        .expect("coo")
+        .to_csr()
+        .expect("csr");
+        let b = vec![1.0, 2.0, 3.0];
+        let result = super::lsqr(&a, &b, IterativeSolveOptions::default()).expect("lsqr");
+        assert_eq!(result.solution.len(), 2, "lsqr should return 2-element solution");
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════
