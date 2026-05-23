@@ -781,4 +781,38 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn fft2_matches_scipy_reference_values() {
+        // scipy.fft.fft2([[1, 2], [3, 4]])
+        use super::transforms::fft2;
+        use super::{Complex64, FftOptions, Normalization};
+        // 2x2 input: [[1, 2], [3, 4]] in row-major (flattened)
+        let input: Vec<Complex64> = vec![
+            (1.0, 0.0),
+            (2.0, 0.0),
+            (3.0, 0.0),
+            (4.0, 0.0),
+        ];
+        let options = FftOptions {
+            normalization: Normalization::Backward,
+            ..FftOptions::default()
+        };
+        let result = fft2(&input, (2, 2), &options).expect("fft2");
+        // Expected: [[10, -2], [-4, 0]]
+        let expected: [Complex64; 4] = [
+            (10.0, 0.0),
+            (-2.0, 0.0),
+            (-4.0, 0.0),
+            (0.0, 0.0),
+        ];
+        for (i, (&got, &want)) in result.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got.0 - want.0).abs() < 1e-10 && (got.1 - want.1).abs() < 1e-10,
+                "fft2[{i}] = {:?}, want {:?}",
+                got,
+                want
+            );
+        }
+    }
 }
