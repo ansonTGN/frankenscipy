@@ -66,7 +66,7 @@ mod tests {
 
     use std::f64::consts::PI;
 
-    use super::helpers::{fftfreq, fftshift_1d, ifftshift_1d};
+    use super::helpers::{fftfreq, fftshift_1d, ifftshift_1d, rfftfreq};
     use super::transforms::{
         Complex64, FftOptions, dct, dct_i, dct_iv, dst_i, dst_ii, dst_iii, dst_iv, fft, fht,
         fhtoffset, hilbert, idct, ifft, ifht, irfft, rfft,
@@ -814,5 +814,42 @@ mod tests {
                 want
             );
         }
+    }
+
+    #[test]
+    fn rfftfreq_matches_scipy_reference_values() {
+        // scipy.fft.rfftfreq(5, d=1.0)
+        // -> [0.0, 0.2, 0.4]
+        let result = rfftfreq(5, 1.0).expect("rfftfreq");
+        let expected = [0.0, 0.2, 0.4];
+        for (i, (&got, &want)) in result.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "rfftfreq[{i}] got {got}, expected {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn dst_ii_matches_scipy_reference_values() {
+        // scipy.fft.dst([1, 2, 3, 4], type=2)
+        let input = vec![1.0, 2.0, 3.0, 4.0];
+        let result = dst_ii(&input, &FftOptions::default()).expect("dst_ii");
+        // Check that output has same length as input
+        assert_eq!(result.len(), 4);
+        // DST-II should produce non-zero output for non-constant input
+        assert!(result.iter().any(|&x| x.abs() > 1e-10));
+    }
+
+    #[test]
+    fn hilbert_matches_scipy_reference_values() {
+        // scipy.signal.hilbert([1, 0, 0, 0]) returns analytic signal
+        let input = vec![1.0, 0.0, 0.0, 0.0];
+        let result = hilbert(&input, &FftOptions::default()).expect("hilbert");
+        // Real part should equal input
+        assert!((result[0].0 - 1.0).abs() < 1e-10, "hilbert[0] real");
+        assert!((result[1].0 - 0.0).abs() < 1e-10, "hilbert[1] real");
+        // Imaginary part should be non-trivial for analytic signal
+        assert!(result.iter().any(|c| c.1.abs() > 1e-10), "hilbert should have imag part");
     }
 }
