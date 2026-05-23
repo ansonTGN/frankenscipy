@@ -17697,4 +17697,57 @@ mod tests {
         let msg = format!("{err:?}");
         assert!(msg.contains("daub"), "{msg}");
     }
+
+    #[test]
+    fn hilbert_matches_scipy_reference_values() {
+        // scipy.signal.hilbert([1,2,3,4,5,6,7,8])
+        let x = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let result = hilbert(&x).expect("hilbert");
+        let expected_imag = [
+            3.82842712474619,
+            -1.0,
+            -0.9999999999999999,
+            -1.8284271247461903,
+            -1.8284271247461898,
+            -1.0,
+            -1.0,
+            3.8284271247461903,
+        ];
+        for (i, (re, im)) in result.iter().enumerate() {
+            assert!(
+                (*re - x[i]).abs() < 1e-10,
+                "hilbert real[{i}] got {re}, expected {}",
+                x[i]
+            );
+            assert!(
+                (*im - expected_imag[i]).abs() < 1e-10,
+                "hilbert imag[{i}] got {im}, expected {}",
+                expected_imag[i]
+            );
+        }
+    }
+
+    #[test]
+    fn hilbert_envelope_matches_scipy_reference_values() {
+        // np.abs(scipy.signal.hilbert([1,2,3,4,5,6,7,8]))
+        let x = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let result = hilbert_envelope(&x).expect("hilbert envelope");
+        let expected = [
+            3.9568743029684903,
+            2.23606797749979,
+            3.1622776601683795,
+            4.398084327352946,
+            5.323828110533587,
+            6.0827625302982185,
+            7.0710678118654755,
+            8.868869953353267,
+        ];
+        for (i, val) in result.iter().enumerate() {
+            assert!(
+                (*val - expected[i]).abs() < 1e-10,
+                "hilbert envelope[{i}] got {val}, expected {}",
+                expected[i]
+            );
+        }
+    }
 }
