@@ -5703,4 +5703,84 @@ mod tests {
             "kve definition mismatch"
         );
     }
+
+    #[test]
+    fn j1_matches_scipy_reference_values() {
+        // scipy.special.j1([0.5, 1.0, 2.0, 5.0])
+        let cases = [
+            (0.5, 0.24226845767487388),
+            (1.0, 0.4400505857449335),
+            (2.0, 0.5767248077568734),
+            (5.0, -0.32757913759146523),
+        ];
+        for (x, expected) in cases {
+            let result = super::jn_scalar(1.0, x, RuntimeMode::Strict).unwrap();
+            assert!((result - expected).abs() < 1e-6, "j1({x}) = {result}, expected {expected}");
+        }
+    }
+
+    #[test]
+    fn y1_matches_scipy_reference_values() {
+        // scipy.special.y1([0.5, 1.0, 2.0, 5.0])
+        let cases = [
+            (0.5, -1.4714723926702431),
+            (1.0, -0.7812128213002887),
+            (2.0, -0.10703243154093755),
+            (5.0, 0.14786314339122687),
+        ];
+        for (x, expected) in cases {
+            let result = super::yn_scalar(1.0, x, RuntimeMode::Strict).unwrap();
+            assert!((result - expected).abs() < 1e-6, "y1({x}) = {result}, expected {expected}");
+        }
+    }
+
+    #[test]
+    fn jv_matches_scipy_reference_values() {
+        // scipy.special.jv([1.5, 2.5], [1.0, 2.0])
+        let cases = [(1.5, 1.0, 0.24029783912342725), (2.5, 2.0, 0.22347178875816508)];
+        for (v, x, expected) in cases {
+            let result = super::jv_scalar(v, x);
+            assert!((result - expected).abs() < 1e-3, "jv({v}, {x}) = {result}, expected {expected}");
+        }
+    }
+
+    #[test]
+    fn yv_matches_scipy_reference_values() {
+        // scipy.special.yv([1.5], [1.0])
+        let cases = [(1.5, 1.0, -1.1024850657061767)];
+        for (v, x, expected) in cases {
+            let result = super::yv_scalar(v, x, RuntimeMode::Strict).unwrap();
+            assert!((result - expected).abs() < 1e-3, "yv({v}, {x}) = {result}, expected {expected}");
+        }
+    }
+
+    #[test]
+    fn i0_matches_scipy_reference_values() {
+        // scipy.special.i0([0.5, 1.0, 2.0, 5.0])
+        let cases = [
+            (0.5, 1.0634833707413234),
+            (1.0, 1.2660658777520082),
+            (2.0, 2.279585302336067),
+            (5.0, 27.239871823604442),
+        ];
+        for (x, expected) in cases {
+            let result = super::i0_scalar(x);
+            assert!((result - expected).abs() < 1e-10, "i0({x}) = {result}, expected {expected}");
+        }
+    }
+
+    #[test]
+    fn i1_matches_scipy_reference_values() {
+        // scipy.special.i1([0.5, 1.0, 2.0, 5.0])
+        let cases = [
+            (0.5, 0.25789430539089634),
+            (1.0, 0.5651591039924851),
+            (2.0, 1.5906368546373291),
+            (5.0, 24.33564214245053),
+        ];
+        for (x, expected) in cases {
+            let result = super::i1_scalar(x);
+            assert!((result - expected).abs() < 1e-10, "i1({x}) = {result}, expected {expected}");
+        }
+    }
 }
