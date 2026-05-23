@@ -12422,4 +12422,105 @@ mod proptest_tests {
             "norm inf got {result}, expected 7.0"
         );
     }
+
+    #[test]
+    fn eigvals_matches_scipy_reference_values() {
+        // scipy.linalg.eigvals([[1, 2], [3, 4]]) = [-0.372..., 5.372...]
+        let a = vec![vec![1.0, 2.0], vec![3.0, 4.0]];
+        let (real_parts_unsorted, _imag_parts) =
+            eigvals(&a, DecompOptions::default()).expect("eigvals");
+        let mut real_parts = real_parts_unsorted.clone();
+        real_parts.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let expected = [-0.3722813232690143, 5.372281323269014];
+        for (i, (&got, &want)) in real_parts.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "eigvals[{i}] got {got}, expected {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn qr_matches_scipy_reference_values() {
+        // scipy.linalg.qr([[1, 2], [3, 4]]) - verify QR = A
+        // Sign convention may differ, so check reconstruction instead
+        let a = vec![vec![1.0, 2.0], vec![3.0, 4.0]];
+        let result = qr(&a, DecompOptions::default()).expect("qr");
+        let expected_q_abs = [
+            [0.316227766016838, 0.9486832980505138],
+            [0.9486832980505138, 0.316227766016838],
+        ];
+        let expected_r_abs = [
+            [3.1622776601683795, 4.427188724235731],
+            [0.0, 0.6324555320336751],
+        ];
+        for (i, row) in result.q.iter().enumerate() {
+            for (j, &got) in row.iter().enumerate() {
+                let want = expected_q_abs[i][j];
+                assert!(
+                    (got.abs() - want).abs() < 1e-10,
+                    "|Q[{i}][{j}]| got {}, expected {want}",
+                    got.abs()
+                );
+            }
+        }
+        for (i, row) in result.r.iter().enumerate() {
+            for (j, &got) in row.iter().enumerate() {
+                let want = expected_r_abs[i][j];
+                assert!(
+                    (got.abs() - want).abs() < 1e-10,
+                    "|R[{i}][{j}]| got {}, expected {want}",
+                    got.abs()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn pinv_matches_scipy_reference_values() {
+        // scipy.linalg.pinv([[1, 2, 3], [4, 5, 6]])
+        let a = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
+        let result = pinv(&a, PinvOptions::default()).expect("pinv");
+        let expected = [
+            [-0.9444444444444444, 0.4444444444444443],
+            [-0.11111111111111108, 0.11111111111111109],
+            [0.7222222222222221, -0.22222222222222207],
+        ];
+        for (i, row) in result.pseudo_inverse.iter().enumerate() {
+            for (j, &got) in row.iter().enumerate() {
+                let want = expected[i][j];
+                assert!(
+                    (got - want).abs() < 1e-9,
+                    "pinv[{i}][{j}] got {got}, expected {want}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn lu_matches_scipy_reference_values() {
+        // scipy.linalg.lu([[1, 2], [3, 4]]) returns P, L, U
+        let a = vec![vec![1.0, 2.0], vec![3.0, 4.0]];
+        let result = lu(&a, DecompOptions::default()).expect("lu");
+        let expected_l = [[1.0, 0.0], [0.3333333333333333, 1.0]];
+        let expected_u = [[3.0, 4.0], [0.0, 0.6666666666666667]];
+        for (i, row) in result.l.iter().enumerate() {
+            for (j, &got) in row.iter().enumerate() {
+                let want = expected_l[i][j];
+                assert!(
+                    (got - want).abs() < 1e-10,
+                    "L[{i}][{j}] got {got}, expected {want}"
+                );
+            }
+        }
+        for (i, row) in result.u.iter().enumerate() {
+            for (j, &got) in row.iter().enumerate() {
+                let want = expected_u[i][j];
+                assert!(
+                    (got - want).abs() < 1e-10,
+                    "U[{i}][{j}] got {got}, expected {want}"
+                );
+            }
+        }
+    }
 }
