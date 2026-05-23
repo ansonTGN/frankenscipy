@@ -2945,4 +2945,36 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn ellipk_matches_scipy_reference_values() {
+        // scipy.special.ellipk([0, 0.25, 0.5, 0.75])
+        // -> [1.5707963267948966, 1.6857503548125961, 1.8540746773013719, 2.1565156474996432]
+        let cases = [
+            (0.0, 1.5707963267948966),   // K(0) = π/2
+            (0.25, 1.6857503548125961),
+            (0.5, 1.8540746773013719),
+            (0.75, 2.1565156474996432),
+        ];
+        for (m, expected) in cases {
+            let got = ellipk_scalar(m, RuntimeMode::Strict).expect("ellipk");
+            assert_close(got, expected, 1e-10, &format!("ellipk({m})"));
+        }
+    }
+
+    #[test]
+    fn ellipe_matches_scipy_reference_values() {
+        // scipy.special.ellipe([0, 0.25, 0.5, 0.75])
+        // -> [1.5707963267948966, 1.4674622093394272, 1.3506438810476755, 1.2110560275684594]
+        let cases = [
+            (0.0, 1.5707963267948966),   // E(0) = π/2
+            (0.25, 1.4674622093394272),
+            (0.5, 1.3506438810476755),
+            (0.75, 1.2110560275684594),
+        ];
+        for (m, expected) in cases {
+            let got = ellipe_scalar(m, RuntimeMode::Strict).expect("ellipe");
+            assert_close(got, expected, 1e-10, &format!("ellipe({m})"));
+        }
+    }
 }

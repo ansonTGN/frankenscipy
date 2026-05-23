@@ -1262,4 +1262,22 @@ mod tests {
             assert!(r.bi.abs() < 1e-6, "Bi({z}) = {} is not ~0", r.bi);
         }
     }
+
+    #[test]
+    fn airy_matches_scipy_reference_values() {
+        // scipy.special.airy(0) -> (Ai=0.3550280538, Ai'=-0.2588194038, Bi=0.6149266274, Bi'=0.4482883574)
+        // scipy.special.airy(1) -> (Ai=0.1352924163, Ai'=-0.1591474413, Bi=1.2074235950, Bi'=0.9324359334)
+        // scipy.special.airy(-1) -> (Ai=0.5355608833, Ai'=0.0106522540, Bi=0.1039973895, Bi'=0.5923756264)
+        let r0 = airy_scalar(0.0, RuntimeMode::Strict).expect("airy(0)");
+        assert!((r0.ai - 0.3550280538).abs() < 1e-6, "Ai(0) = {}, expected 0.3550280538", r0.ai);
+        assert!((r0.bi - 0.6149266274).abs() < 1e-6, "Bi(0) = {}, expected 0.6149266274", r0.bi);
+
+        let r1 = airy_scalar(1.0, RuntimeMode::Strict).expect("airy(1)");
+        assert!((r1.ai - 0.1352924163).abs() < 1e-6, "Ai(1) = {}, expected 0.1352924163", r1.ai);
+        assert!((r1.bi - 1.2074235950).abs() < 1e-6, "Bi(1) = {}, expected 1.2074235950", r1.bi);
+
+        let rm1 = airy_scalar(-1.0, RuntimeMode::Strict).expect("airy(-1)");
+        assert!((rm1.ai - 0.5355608833).abs() < 1e-6, "Ai(-1) = {}, expected 0.5355608833", rm1.ai);
+        assert!((rm1.bi - 0.1039973895).abs() < 1e-6, "Bi(-1) = {}, expected 0.1039973895", rm1.bi);
+    }
 }
