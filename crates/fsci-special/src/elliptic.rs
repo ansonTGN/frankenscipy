@@ -3008,4 +3008,39 @@ mod tests {
         let e2_1 = expn_scalar(2, 1.0);
         assert_close(e2_1, 0.1484955068, 1e-6, "expn(2, 1)");
     }
+
+    #[test]
+    fn elliprc_matches_scipy_reference_values() {
+        // scipy.special.elliprc(1, 2) ≈ 0.7853981634
+        let rc = elliprc(1.0, 2.0);
+        assert_close(rc, 0.7853981634, 1e-6, "elliprc(1, 2)");
+    }
+
+    #[test]
+    fn elliprf_matches_scipy_reference_values() {
+        // scipy.special.elliprf(0, 1, 2) ≈ 1.3110287771
+        let rf = elliprf(0.0, 1.0, 2.0);
+        assert_close(rf, 1.3110287771, 1e-6, "elliprf(0, 1, 2)");
+    }
+
+    #[test]
+    fn elliprd_matches_scipy_reference_values() {
+        // scipy.special.elliprd(0, 1, 2) ≈ 1.0679379896673962
+        let rd = elliprd(0.0, 1.0, 2.0);
+        assert_close(rd, 1.0679379896673962, 1e-6, "elliprd(0, 1, 2)");
+    }
+
+    #[test]
+    fn elliprg_matches_scipy_reference_values() {
+        // scipy.special.elliprg(0, 1, 2) ≈ 0.9550494472569279
+        let rg = elliprg(0.0, 1.0, 2.0);
+        assert_close(rg, 0.9550494472569279, 1e-6, "elliprg(0, 1, 2)");
+    }
+
+    #[test]
+    fn elliprj_matches_scipy_reference_values() {
+        // scipy.special.elliprj(0, 1, 2, 3) ≈ 0.7768862377858233
+        let rj = elliprj(0.0, 1.0, 2.0, 3.0);
+        assert_close(rj, 0.7768862377858233, 1e-6, "elliprj(0, 1, 2, 3)");
+    }
 }
