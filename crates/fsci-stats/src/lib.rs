@@ -59424,4 +59424,24 @@ mod tests {
             "trimmed_var got {result}, expected 6.0"
         );
     }
+
+    #[test]
+    fn geometric_mean_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, 4.0, 8.0];
+        let result = geometric_mean(&data);
+        assert!(
+            (result - 2.82842712474619).abs() < 1e-10,
+            "geometric_mean got {result}, expected 2.82842712474619"
+        );
+    }
+
+    #[test]
+    fn power_mean_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, 4.0, 8.0];
+        let result = power_mean(&data, 2.0);
+        assert!(
+            (result - 4.6097722286464435).abs() < 1e-10,
+            "power_mean got {result}, expected 4.6097722286464435"
+        );
+    }
 }
