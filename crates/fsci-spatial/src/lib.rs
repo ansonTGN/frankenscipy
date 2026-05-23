@@ -5603,4 +5603,126 @@ mod tests {
             "disjoint √ln(2): got {d}, expected {bound}"
         );
     }
+
+    #[test]
+    fn pdist_euclidean_matches_scipy_reference_values() {
+        // scipy.spatial.distance.pdist([[0,0],[1,0],[0,1],[1,1]], 'euclidean')
+        let x = vec![
+            vec![0.0, 0.0],
+            vec![1.0, 0.0],
+            vec![0.0, 1.0],
+            vec![1.0, 1.0],
+        ];
+        let result = pdist(&x, DistanceMetric::Euclidean).expect("pdist");
+        let expected = [1.0, 1.0, 1.4142135623730951, 1.4142135623730951, 1.0, 1.0];
+        for (i, val) in result.iter().enumerate() {
+            assert!(
+                (*val - expected[i]).abs() < 1e-10,
+                "pdist[{i}] got {val}, expected {}",
+                expected[i]
+            );
+        }
+    }
+
+    #[test]
+    fn cdist_euclidean_matches_scipy_reference_values() {
+        // scipy.spatial.distance.cdist([[0,0],[1,0]], [[0,1],[1,1]], 'euclidean')
+        let xa = vec![vec![0.0, 0.0], vec![1.0, 0.0]];
+        let xb = vec![vec![0.0, 1.0], vec![1.0, 1.0]];
+        let result = cdist(&xa, &xb).expect("cdist");
+        let expected = [[1.0, 1.4142135623730951], [1.4142135623730951, 1.0]];
+        for (i, row) in result.iter().enumerate() {
+            for (j, val) in row.iter().enumerate() {
+                assert!(
+                    (*val - expected[i][j]).abs() < 1e-10,
+                    "cdist[{i}][{j}] got {val}, expected {}",
+                    expected[i][j]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn euclidean_matches_scipy_reference_values() {
+        // scipy.spatial.distance.euclidean([1,2,3], [4,5,6])
+        let a = [1.0, 2.0, 3.0];
+        let b = [4.0, 5.0, 6.0];
+        let result = euclidean(&a, &b);
+        assert!(
+            (result - 5.196152422706632).abs() < 1e-10,
+            "euclidean got {result}, expected 5.196152422706632"
+        );
+    }
+
+    #[test]
+    fn cityblock_matches_scipy_reference_values() {
+        // scipy.spatial.distance.cityblock([1,2,3], [4,5,6])
+        let a = [1.0, 2.0, 3.0];
+        let b = [4.0, 5.0, 6.0];
+        let result = cityblock(&a, &b);
+        assert!(
+            (result - 9.0).abs() < 1e-10,
+            "cityblock got {result}, expected 9.0"
+        );
+    }
+
+    #[test]
+    fn chebyshev_matches_scipy_reference_values() {
+        // scipy.spatial.distance.chebyshev([1,2,3], [4,5,6])
+        let a = [1.0, 2.0, 3.0];
+        let b = [4.0, 5.0, 6.0];
+        let result = chebyshev(&a, &b);
+        assert!(
+            (result - 3.0).abs() < 1e-10,
+            "chebyshev got {result}, expected 3.0"
+        );
+    }
+
+    #[test]
+    fn minkowski_matches_scipy_reference_values() {
+        // scipy.spatial.distance.minkowski([1,2,3], [4,5,6], 3)
+        let a = [1.0, 2.0, 3.0];
+        let b = [4.0, 5.0, 6.0];
+        let result = minkowski(&a, &b, 3.0);
+        assert!(
+            (result - 4.3267487109222245).abs() < 1e-10,
+            "minkowski got {result}, expected 4.3267487109222245"
+        );
+    }
+
+    #[test]
+    fn cosine_matches_scipy_reference_values() {
+        // scipy.spatial.distance.cosine([1,2,3], [4,5,6])
+        let a = [1.0, 2.0, 3.0];
+        let b = [4.0, 5.0, 6.0];
+        let result = cosine(&a, &b);
+        assert!(
+            (result - 0.025368153802923787).abs() < 1e-10,
+            "cosine got {result}, expected 0.025368153802923787"
+        );
+    }
+
+    #[test]
+    fn braycurtis_matches_scipy_reference_values() {
+        // scipy.spatial.distance.braycurtis([1,2,3], [4,5,6])
+        let a = [1.0, 2.0, 3.0];
+        let b = [4.0, 5.0, 6.0];
+        let result = braycurtis(&a, &b);
+        assert!(
+            (result - 0.42857142857142855).abs() < 1e-10,
+            "braycurtis got {result}, expected 0.42857142857142855"
+        );
+    }
+
+    #[test]
+    fn canberra_matches_scipy_reference_values() {
+        // scipy.spatial.distance.canberra([1,2,3], [4,5,6])
+        let a = [1.0, 2.0, 3.0];
+        let b = [4.0, 5.0, 6.0];
+        let result = canberra(&a, &b);
+        assert!(
+            (result - 1.3619047619047617).abs() < 1e-10,
+            "canberra got {result}, expected 1.3619047619047617"
+        );
+    }
 }
