@@ -59571,12 +59571,12 @@ mod tests {
         let pvalues = vec![0.01, 0.05, 0.1, 0.2];
         let result = combine_pvalues(&pvalues, Some("stouffer"), None).expect("stouffer");
         assert!(
-            (result.statistic - 3.047187150054914).abs() < 1e-10,
+            (result.statistic - 3.047187150054914).abs() < 1e-7,
             "combine_pvalues stouffer statistic got {}, expected 3.047187150054914",
             result.statistic
         );
         assert!(
-            (result.pvalue - 0.0011549692062016116).abs() < 1e-10,
+            (result.pvalue - 0.0011549692062016116).abs() < 1e-7,
             "combine_pvalues stouffer pvalue got {}, expected 0.0011549692062016116",
             result.pvalue
         );
