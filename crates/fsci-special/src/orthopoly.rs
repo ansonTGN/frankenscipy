@@ -2939,4 +2939,90 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn eval_legendre_matches_scipy_reference_values() {
+        // scipy.special.eval_legendre(n, x)
+        // P_0(x) = 1, P_1(x) = x, P_2(x) = (3x^2 - 1)/2
+        let x = 0.5;
+        assert!((eval_legendre(0, x) - 1.0).abs() < 1e-10, "P_0(0.5)");
+        assert!((eval_legendre(1, x) - 0.5).abs() < 1e-10, "P_1(0.5)");
+        let p2_expected = (3.0 * x * x - 1.0) / 2.0; // -0.125
+        assert!(
+            (eval_legendre(2, x) - p2_expected).abs() < 1e-10,
+            "P_2(0.5) got {}, expected {}",
+            eval_legendre(2, x),
+            p2_expected
+        );
+    }
+
+    #[test]
+    fn eval_chebyt_matches_scipy_reference_values() {
+        // scipy.special.eval_chebyt(n, x)
+        // T_0(x) = 1, T_1(x) = x, T_2(x) = 2x^2 - 1
+        let x = 0.5;
+        assert!((eval_chebyt(0, x) - 1.0).abs() < 1e-10, "T_0(0.5)");
+        assert!((eval_chebyt(1, x) - 0.5).abs() < 1e-10, "T_1(0.5)");
+        let t2_expected = 2.0 * x * x - 1.0; // -0.5
+        assert!(
+            (eval_chebyt(2, x) - t2_expected).abs() < 1e-10,
+            "T_2(0.5) got {}, expected {}",
+            eval_chebyt(2, x),
+            t2_expected
+        );
+    }
+
+    #[test]
+    fn eval_hermite_matches_scipy_reference_values() {
+        // scipy.special.eval_hermite(n, x) - physicist's Hermite
+        // H_0(x) = 1, H_1(x) = 2x, H_2(x) = 4x^2 - 2
+        let x = 1.0;
+        assert!((eval_hermite(0, x) - 1.0).abs() < 1e-10, "H_0(1)");
+        assert!((eval_hermite(1, x) - 2.0).abs() < 1e-10, "H_1(1)");
+        let h2_expected = 4.0 * x * x - 2.0; // 2
+        assert!(
+            (eval_hermite(2, x) - h2_expected).abs() < 1e-10,
+            "H_2(1) got {}, expected {}",
+            eval_hermite(2, x),
+            h2_expected
+        );
+    }
+
+    #[test]
+    fn roots_legendre_matches_scipy_reference_values() {
+        // scipy.special.roots_legendre(3)
+        // nodes ≈ [-0.7746, 0, 0.7746], weights ≈ [0.5556, 0.8889, 0.5556]
+        let (nodes, weights) = roots_legendre(3);
+        assert_eq!(nodes.len(), 3);
+        assert_eq!(weights.len(), 3);
+        // Check symmetry: nodes should be symmetric around 0
+        assert!(
+            (nodes[0] + nodes[2]).abs() < 1e-10,
+            "nodes should be symmetric"
+        );
+        assert!((nodes[1]).abs() < 1e-10, "middle node should be ~0");
+        // Weights should be positive and sum to 2 (integral of 1 over [-1,1])
+        let weight_sum: f64 = weights.iter().sum();
+        assert!(
+            (weight_sum - 2.0).abs() < 1e-10,
+            "weights should sum to 2, got {}",
+            weight_sum
+        );
+    }
+
+    #[test]
+    fn eval_laguerre_matches_scipy_reference_values() {
+        // scipy.special.eval_laguerre(n, x)
+        // L_0(x) = 1, L_1(x) = 1-x, L_2(x) = (x^2 - 4x + 2)/2
+        let x = 1.0;
+        assert!((eval_laguerre(0, x) - 1.0).abs() < 1e-10, "L_0(1)");
+        assert!((eval_laguerre(1, x) - 0.0).abs() < 1e-10, "L_1(1) = 1-1 = 0");
+        let l2_expected = (x * x - 4.0 * x + 2.0) / 2.0; // -0.5
+        assert!(
+            (eval_laguerre(2, x) - l2_expected).abs() < 1e-10,
+            "L_2(1) got {}, expected {}",
+            eval_laguerre(2, x),
+            l2_expected
+        );
+    }
 }
