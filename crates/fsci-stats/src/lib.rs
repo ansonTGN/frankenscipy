@@ -59252,4 +59252,56 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn iqr_range_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let result = iqr_range(&data);
+        assert!(
+            (result - 4.5).abs() < 1e-10,
+            "iqr_range got {result}, expected 4.5"
+        );
+    }
+
+    #[test]
+    fn percentile_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let p50 = percentile(&data, 50.0);
+        assert!(
+            (p50 - 5.5).abs() < 1e-10,
+            "percentile 50 got {p50}, expected 5.5"
+        );
+        let p25 = percentile(&data, 25.0);
+        assert!(
+            (p25 - 3.25).abs() < 1e-10,
+            "percentile 25 got {p25}, expected 3.25"
+        );
+    }
+
+    #[test]
+    fn quantile_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let result = quantile(&data, &[0.5]);
+        assert!(
+            (result[0] - 5.5).abs() < 1e-10,
+            "quantile 0.5 got {}, expected 5.5",
+            result[0]
+        );
+    }
+
+    #[test]
+    fn mode_full_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, 2.0, 3.0, 4.0];
+        let result = mode_full(&data);
+        assert!(
+            (result.mode - 2.0).abs() < 1e-10,
+            "mode got {}, expected 2.0",
+            result.mode
+        );
+        assert!(
+            result.count == 2,
+            "mode count got {}, expected 2",
+            result.count
+        );
+    }
 }
