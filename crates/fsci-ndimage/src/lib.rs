@@ -11780,4 +11780,12 @@ mod tests {
         assert!(sums[0] > 0.0, "label 1 sum should be > 0");
         assert!(sums[1] > 0.0, "label 2 sum should be > 0");
     }
+
+    #[test]
+    fn zoom_matches_scipy_reference_dimensions() {
+        // scipy.ndimage.zoom([[1, 2], [3, 4]], 2) produces 4x4 array
+        let arr = NdArray::new(vec![1.0, 2.0, 3.0, 4.0], vec![2, 2]).unwrap();
+        let result = zoom(&arr, &[2.0, 2.0], 3, BoundaryMode::Constant, 0.0).expect("zoom");
+        assert_eq!(result.shape, vec![4, 4], "zoom(2x) should produce 4x4 array");
+    }
 }
