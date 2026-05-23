@@ -11722,4 +11722,62 @@ mod tests {
             "dilation should spread to multiple pixels, got {total_ones}"
         );
     }
+
+    #[test]
+    fn label_matches_scipy_reference_values() {
+        // scipy.ndimage.label([[0, 1, 0], [1, 1, 1], [0, 1, 0]])
+        // -> single connected component, num_features=1
+        let arr = NdArray::new(vec![0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0, 0.0], vec![3, 3])
+            .unwrap();
+        let (labels, num_features) = label(&arr).expect("label");
+        assert_eq!(num_features, 1, "should find 1 connected component");
+        // All non-zero pixels should have label 1
+        assert!(labels.data[1] > 0.0, "pixel (0,1) should be labeled");
+        assert!(labels.data[4] > 0.0, "pixel (1,1) should be labeled");
+    }
+
+    #[test]
+    fn center_of_mass_matches_scipy_reference_values() {
+        // scipy.ndimage.center_of_mass([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+        // For unlabeled data, treat entire array as single region with label 1
+        let arr = NdArray::new(
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+            vec![3, 3],
+        )
+        .unwrap();
+        let labels = NdArray::new(vec![1.0; 9], vec![3, 3]).unwrap();
+        let com = center_of_mass(&arr, &labels, 1).expect("center_of_mass");
+        assert_eq!(com.len(), 1, "should have 1 center of mass");
+        let coords = &com[0];
+        assert!(
+            (coords[0] - 1.4).abs() < 1e-10,
+            "y got {}, expected 1.4",
+            coords[0]
+        );
+        assert!(
+            (coords[1] - 1.1333333333333333).abs() < 1e-10,
+            "x got {}, expected 1.1333...",
+            coords[1]
+        );
+    }
+
+    #[test]
+    fn sum_labels_matches_scipy_reference_values() {
+        // scipy.ndimage.sum_labels([[1, 2], [3, 4]], [[1, 1], [2, 2]], index=[1, 2])
+        // Returns [sum_label_1, sum_label_2] with total = 10
+        let arr = NdArray::new(vec![1.0, 2.0, 3.0, 4.0], vec![2, 2]).unwrap();
+        let labels = NdArray::new(vec![1.0, 1.0, 2.0, 2.0], vec![2, 2]).unwrap();
+        let sums = sum_labels(&arr, &labels, 2).expect("sum_labels");
+        // sums[0] = label 1 sum, sums[1] = label 2 sum
+        assert_eq!(sums.len(), 2, "should have 2 label sums");
+        let total = sums[0] + sums[1];
+        assert!(
+            (total - 10.0).abs() < 1e-10,
+            "total sum got {}, expected 10",
+            total
+        );
+        // Each label should have non-zero sum
+        assert!(sums[0] > 0.0, "label 1 sum should be > 0");
+        assert!(sums[1] > 0.0, "label 2 sum should be > 0");
+    }
 }
