@@ -12648,4 +12648,103 @@ mod proptest_tests {
         assert!((result.d[0] - 2.0).abs() < 1e-10);
         assert!((result.d[1] - 2.5).abs() < 1e-10);
     }
+
+    #[test]
+    fn schur_matches_scipy_reference_values() {
+        // scipy.linalg.schur([[0, 1], [-1, 0]])
+        // Real Schur form of 2D rotation matrix
+        let a = vec![vec![0.0, 1.0], vec![-1.0, 0.0]];
+        let result = schur(&a, DecompOptions::default()).expect("schur");
+        // T should be quasi-upper triangular, Z orthogonal
+        // Z @ Z.T = I
+        let m = result.z[0][0] * result.z[0][0] + result.z[0][1] * result.z[0][1];
+        assert!((m - 1.0).abs() < 1e-10, "Z row 0 norm should be 1");
+        // A = Z @ T @ Z.T
+        let ztz00 =
+            result.z[0][0] * result.t[0][0] + result.z[0][1] * result.t[1][0];
+        let ztz01 =
+            result.z[0][0] * result.t[0][1] + result.z[0][1] * result.t[1][1];
+        let a_rec00 = ztz00 * result.z[0][0] + ztz01 * result.z[1][0];
+        assert!((a_rec00 - a[0][0]).abs() < 1e-10, "Schur reconstruction [0][0]");
+    }
+
+    #[test]
+    fn hessenberg_matches_scipy_reference_values() {
+        // scipy.linalg.hessenberg([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+        // H[2][0] should be zero (sub-sub-diagonal)
+        let a = vec![
+            vec![1.0, 2.0, 3.0],
+            vec![4.0, 5.0, 6.0],
+            vec![7.0, 8.0, 9.0],
+        ];
+        let result = hessenberg(&a, DecompOptions::default()).expect("hessenberg");
+        // Sub-sub-diagonal should be zero
+        assert!(
+            result.h[2][0].abs() < 1e-10,
+            "hessenberg h[2][0] should be ~0, got {}",
+            result.h[2][0]
+        );
+        // Trace should be preserved
+        let trace_a = a[0][0] + a[1][1] + a[2][2];
+        let trace_h = result.h[0][0] + result.h[1][1] + result.h[2][2];
+        assert!(
+            (trace_a - trace_h).abs() < 1e-10,
+            "trace should be preserved"
+        );
+    }
+
+    #[test]
+    fn logm_matches_scipy_reference_values() {
+        // scipy.linalg.logm([[e, 0], [0, e]]) = [[1, 0], [0, 1]]
+        let e = std::f64::consts::E;
+        let a = vec![vec![e, 0.0], vec![0.0, e]];
+        let result = logm(&a, DecompOptions::default()).expect("logm");
+        assert!(
+            (result[0][0] - 1.0).abs() < 1e-10,
+            "logm[0][0] got {}, expected 1.0",
+            result[0][0]
+        );
+        assert!(
+            result[0][1].abs() < 1e-10,
+            "logm[0][1] got {}, expected 0.0",
+            result[0][1]
+        );
+        assert!(
+            result[1][0].abs() < 1e-10,
+            "logm[1][0] got {}, expected 0.0",
+            result[1][0]
+        );
+        assert!(
+            (result[1][1] - 1.0).abs() < 1e-10,
+            "logm[1][1] got {}, expected 1.0",
+            result[1][1]
+        );
+    }
+
+    #[test]
+    fn sqrtm_matches_scipy_reference_values() {
+        // scipy.linalg.sqrtm([[4, 0], [0, 9]]) = [[2, 0], [0, 3]]
+        let a = vec![vec![4.0, 0.0], vec![0.0, 9.0]];
+        let result = sqrtm(&a, DecompOptions::default()).expect("sqrtm");
+        assert!(
+            (result[0][0] - 2.0).abs() < 1e-10,
+            "sqrtm[0][0] got {}, expected 2.0",
+            result[0][0]
+        );
+        assert!(
+            result[0][1].abs() < 1e-10,
+            "sqrtm[0][1] got {}, expected 0.0",
+            result[0][1]
+        );
+        assert!(
+            result[1][0].abs() < 1e-10,
+            "sqrtm[1][0] got {}, expected 0.0",
+            result[1][0]
+        );
+        assert!(
+            (result[1][1] - 3.0).abs() < 1e-10,
+            "sqrtm[1][1] got {}, expected 3.0",
+            result[1][1]
+        );
+    }
 }
