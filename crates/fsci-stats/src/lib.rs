@@ -19185,9 +19185,9 @@ pub fn alexander_govern(groups: &[&[f64]]) -> TtestResult {
         };
     }
 
-    let mut t_values = Vec::with_capacity(k);
-    let mut a_values = Vec::with_capacity(k);
-    let mut w_values = Vec::with_capacity(k);
+    let mut means = Vec::with_capacity(k);
+    let mut standard_errors_squared = Vec::with_capacity(k);
+    let mut lengths = Vec::with_capacity(k);
 
     for group in groups.iter() {
         let n = group.len();
@@ -19208,40 +19208,47 @@ pub fn alexander_govern(groups: &[&[f64]]) -> TtestResult {
                 df: f64::NAN,
             };
         }
-        let w = n_f / var;
-        w_values.push(w);
-        t_values.push(mean);
-        let a = (n_f - 3.0) / (n_f - 1.0);
-        a_values.push(a);
+        let se2 = var / n_f;
+        means.push(mean);
+        standard_errors_squared.push(se2);
+        lengths.push(n_f);
     }
 
-    let w_sum: f64 = w_values.iter().sum();
-    let weighted_mean: f64 = t_values
+    // (2) define a weight for each sample
+    let inv_sq_se_sum: f64 = standard_errors_squared.iter().map(|&se2| 1.0 / se2).sum();
+    let weights: Vec<f64> = standard_errors_squared
         .iter()
-        .zip(&w_values)
-        .map(|(&t, &w)| t * w)
-        .sum::<f64>()
-        / w_sum;
+        .map(|&se2| (1.0 / se2) / inv_sq_se_sum)
+        .collect();
 
-    let mut chi_sq = 0.0;
-    for (i, group) in groups.iter().enumerate() {
-        let n_f = group.len() as f64;
-        let mean = t_values[i];
-        let w = w_values[i];
-        let z = (mean - weighted_mean) * w.sqrt();
-        let df = n_f - 1.0;
-        let t_stat = z / (1.0 + (2.0 * (n_f - 1.8) * z * z) / (df * (n_f + 1.0))).sqrt();
-        let v = df + t_stat * t_stat;
-        let c =
-            ((a_values[i] * t_stat * t_stat).ln() - (v / df).ln()) / (a_values[i] - 1.0).max(1e-10);
-        chi_sq += c;
+    // (3) variance-weighted estimate of the common mean
+    let var_w: f64 = means.iter().zip(&weights).map(|(&m, &w)| m * w).sum();
+
+    // (4) one-sample t statistic for each group and transformation
+    let mut a_stat = 0.0;
+    for i in 0..k {
+        let se = standard_errors_squared[i].sqrt();
+        let t_stat = (means[i] - var_w) / se;
+        let v = lengths[i] - 1.0;
+
+        // Parameters for transformation (scipy formulas)
+        let a = v - 0.5;
+        let b = 48.0 * a * a;
+        let c = (a * (1.0 + t_stat * t_stat / v).ln()).sqrt();
+
+        // (8) normalizing transformation
+        let z = c + (c.powi(3) + 3.0 * c) / b
+            - (4.0 * c.powi(7) + 33.0 * c.powi(5) + 240.0 * c.powi(3) + 855.0 * c)
+                / (b * b * 10.0 + 8.0 * b * c.powi(4) + 1000.0 * b);
+
+        a_stat += z * z;
     }
 
     let df = (k - 1) as f64;
-    let pvalue = 1.0 - ChiSquared::new(df).cdf(chi_sq.max(0.0));
+    let pvalue = 1.0 - ChiSquared::new(df).cdf(a_stat.max(0.0));
 
     TtestResult {
-        statistic: chi_sq,
+        statistic: a_stat,
         pvalue,
         df,
     }
@@ -59674,6 +59681,25 @@ mod tests {
         assert!(
             (result - 0.2915738641052754).abs() < 1e-8,
             "burr12 entropy got {result}, expected 0.2915738641052754"
+        );
+    }
+
+    #[test]
+    fn alexander_govern_matches_scipy_reference_values() {
+        let g1: Vec<f64> = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let g2: Vec<f64> = vec![2.0, 3.0, 4.0, 5.0, 6.0];
+        let g3: Vec<f64> = vec![3.0, 4.0, 5.0, 6.0, 7.0];
+        let groups: Vec<&[f64]> = vec![&g1, &g2, &g3];
+        let result = alexander_govern(&groups);
+        assert!(
+            (result.statistic - 2.879282148300284).abs() < 1e-10,
+            "alexander_govern statistic got {}, expected 2.879282148300284",
+            result.statistic
+        );
+        assert!(
+            (result.pvalue - 0.23701281344252467).abs() < 1e-10,
+            "alexander_govern pvalue got {}, expected 0.23701281344252467",
+            result.pvalue
         );
     }
 }
