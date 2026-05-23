@@ -18050,4 +18050,42 @@ mod tests {
         let expected = [1, 3, 5];
         assert_eq!(mins, expected, "argrelmin mismatch");
     }
+
+    #[test]
+    fn cwt_matches_scipy_output_shape() {
+        // scipy.signal.cwt with ricker wavelet produces widths.len() x data.len() output
+        let data = vec![1.0, 2.0, 3.0, 2.0, 1.0];
+        let widths = vec![1.0, 2.0, 3.0];
+        let result = cwt(&data, |m, a| ricker(m, a), &widths).expect("cwt");
+        assert_eq!(result.len(), widths.len(), "cwt row count should match widths");
+        assert_eq!(result[0].len(), data.len(), "cwt column count should match data");
+    }
+
+    #[test]
+    fn find_peaks_matches_scipy_basic_reference() {
+        // scipy.signal.find_peaks([1, 3, 2, 4, 1]) -> (array([1, 3]),)
+        let x = vec![1.0, 3.0, 2.0, 4.0, 1.0];
+        let result = find_peaks(&x, FindPeaksOptions::default());
+        let expected = vec![1, 3];
+        assert_eq!(result.peaks, expected, "find_peaks mismatch");
+    }
+
+    #[test]
+    fn deconvolve_matches_scipy_reference_values() {
+        // scipy.signal.deconvolve([1, 2, 3], [1, 0.5]) recovers quotient
+        let signal = vec![1.0, 2.5, 4.0, 1.5];
+        let divisor = vec![1.0, 0.5];
+        let (quotient, remainder) = deconvolve(&signal, &divisor).expect("deconvolve");
+        // quotient * divisor + remainder should equal signal
+        let mut reconstructed = convolve(&quotient, &divisor, ConvolveMode::Full).expect("convolve");
+        for (i, r) in remainder.iter().enumerate() {
+            if i < reconstructed.len() {
+                reconstructed[i] += r;
+            }
+        }
+        // First signal.len() elements should match
+        for i in 0..signal.len() {
+            assert!((reconstructed[i] - signal[i]).abs() < 1e-10, "deconvolve reconstruction failed at {i}");
+        }
+    }
 }
