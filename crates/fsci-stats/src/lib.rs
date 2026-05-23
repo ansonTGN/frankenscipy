@@ -59608,4 +59608,39 @@ mod tests {
             "weightedtau got {result}, expected 0.8722627737226277"
         );
     }
+
+    #[test]
+    fn chi2_contingency_matches_scipy_reference_values() {
+        // scipy.stats.chi2_contingency(table, correction=False)
+        let table = vec![vec![10.0, 20.0], vec![30.0, 40.0]];
+        let result = chi2_contingency(&table, false);
+        assert!(
+            (result.statistic - 0.7936507936507936).abs() < 1e-10,
+            "chi2_contingency statistic got {}, expected 0.7936507936507936",
+            result.statistic
+        );
+        assert!(
+            (result.pvalue - 0.37299848361348686).abs() < 1e-10,
+            "chi2_contingency pvalue got {}, expected 0.37299848361348686",
+            result.pvalue
+        );
+        assert_eq!(result.dof, 1);
+    }
+
+    #[test]
+    fn chi2_contingency_yates_matches_scipy_reference_values() {
+        // scipy.stats.chi2_contingency(table, correction=True)
+        let table = vec![vec![10.0, 20.0], vec![30.0, 40.0]];
+        let result = chi2_contingency(&table, true);
+        assert!(
+            (result.statistic - 0.4464285714285714).abs() < 1e-10,
+            "chi2_contingency w/Yates statistic got {}, expected 0.4464285714285714",
+            result.statistic
+        );
+        assert!(
+            (result.pvalue - 0.5040358664525046).abs() < 1e-10,
+            "chi2_contingency w/Yates pvalue got {}, expected 0.5040358664525046",
+            result.pvalue
+        );
+    }
 }
