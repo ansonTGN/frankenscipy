@@ -4230,4 +4230,44 @@ mod tests {
             result.integral
         );
     }
+
+    #[test]
+    fn cumulative_trapezoid_matches_scipy_reference_values() {
+        // scipy.integrate.cumulative_trapezoid([0,1,4,9,16], dx=1.0)
+        // -> [0.5, 3.0, 9.5, 22.0]
+        let y = [0.0, 1.0, 4.0, 9.0, 16.0];
+        let result = cumulative_trapezoid_uniform(&y, 1.0).expect("cumulative_trapezoid");
+        let expected = [0.5, 3.0, 9.5, 22.0];
+        for (i, (&got, &want)) in result.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "cumulative_trapezoid[{i}] got {got}, expected {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn romb_matches_scipy_reference_values() {
+        // scipy.integrate.romb([1, 2, 3, 4, 5], dx=1.0)
+        // For 5 samples (2^2 + 1), dx=1.0, integral of linear fn = area under [1,5] over [0,4]
+        // = (1+5)*4/2 = 12.0, but romb uses Richardson extrapolation
+        let y = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let result = romb(&y, 1.0).expect("romb should succeed");
+        // Linear function: romb should give exact result = 12.0
+        assert!(
+            (result - 12.0).abs() < 1e-10,
+            "romb got {result}, expected 12.0"
+        );
+    }
+
+    #[test]
+    fn fixed_quad_matches_scipy_reference_values() {
+        // scipy.integrate.fixed_quad(lambda x: x**2, 0, 1, n=5)
+        // -> (0.3333333333333333, None)
+        let (integral, _neval) = fixed_quad(|x| x * x, 0.0, 1.0, 5).expect("fixed_quad should succeed");
+        assert!(
+            (integral - 0.3333333333333333).abs() < 1e-10,
+            "fixed_quad got {integral}, expected 0.333..."
+        );
+    }
 }
