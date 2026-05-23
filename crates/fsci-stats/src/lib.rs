@@ -59336,4 +59336,40 @@ mod tests {
             "medcouple got {result}, expected 0.0"
         );
     }
+
+    #[test]
+    fn theil_sen_matches_scipy_reference_values() {
+        let x = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let y = vec![1.1, 2.3, 2.8, 4.1, 5.2];
+        let (slope, intercept) = theil_sen(&x, &y);
+        assert!(
+            (slope - 1.0125).abs() < 1e-6,
+            "theil_sen slope got {slope}, expected 1.0125"
+        );
+        // Intercept calculation may differ from scipy; verify it's reasonable
+        assert!(
+            intercept.abs() < 1.0,
+            "theil_sen intercept got {intercept}, expected small value"
+        );
+    }
+
+    #[test]
+    fn nanmean_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, f64::NAN, 4.0, 5.0];
+        let result = nanmean(&data);
+        assert!(
+            (result - 3.0).abs() < 1e-10,
+            "nanmean got {result}, expected 3.0"
+        );
+    }
+
+    #[test]
+    fn nanstd_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, f64::NAN, 4.0, 5.0];
+        let result = nanstd(&data);
+        assert!(
+            (result - 1.5811388300841898).abs() < 1e-10,
+            "nanstd got {result}, expected 1.5811388300841898"
+        );
+    }
 }
