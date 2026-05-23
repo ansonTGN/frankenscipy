@@ -3396,4 +3396,58 @@ mod tests {
             "davies_bouldin_score got {score}, expected < 0.3 (two well-separated clusters)"
         );
     }
+
+    #[test]
+    fn kmeans_well_separated_clusters_matches_scipy_reference_values() {
+        // scipy.cluster.vq.kmeans2([[0,0], [1,1], [0,1], [1,0], [10,10], [11,11], [10,11], [11,10]], 2)
+        // Two well-separated clusters should converge to centroids near [0.5, 0.5] and [10.5, 10.5]
+        let data = vec![
+            vec![0.0, 0.0],
+            vec![1.0, 1.0],
+            vec![0.0, 1.0],
+            vec![1.0, 0.0],
+            vec![10.0, 10.0],
+            vec![11.0, 11.0],
+            vec![10.0, 11.0],
+            vec![11.0, 10.0],
+        ];
+        let result = kmeans(&data, 2, 100, 42).expect("kmeans should succeed");
+        // Check that we got 2 distinct clusters
+        let labels = &result.labels;
+        let unique_labels: std::collections::HashSet<_> = labels.iter().collect();
+        assert_eq!(unique_labels.len(), 2, "should have exactly 2 clusters");
+        // Check centroids are reasonable (close to cluster means)
+        for centroid in &result.centroids {
+            let dist_to_low = ((centroid[0] - 0.5).powi(2) + (centroid[1] - 0.5).powi(2)).sqrt();
+            let dist_to_high =
+                ((centroid[0] - 10.5).powi(2) + (centroid[1] - 10.5).powi(2)).sqrt();
+            assert!(
+                dist_to_low < 0.5 || dist_to_high < 0.5,
+                "centroid {:?} should be near [0.5,0.5] or [10.5,10.5]",
+                centroid
+            );
+        }
+    }
+
+    #[test]
+    fn dbscan_two_clusters_matches_scipy_reference_values() {
+        // sklearn.cluster.DBSCAN(eps=2.0, min_samples=2).fit_predict([[0,0], [1,1], [0,1], [1,0], [10,10], [11,11]])
+        // Should find 2 clusters with no noise points
+        let data = vec![
+            vec![0.0, 0.0],
+            vec![1.0, 1.0],
+            vec![0.0, 1.0],
+            vec![1.0, 0.0],
+            vec![10.0, 10.0],
+            vec![11.0, 11.0],
+        ];
+        let result = dbscan(&data, 2.0, 2).expect("dbscan should succeed");
+        // All points should be assigned (no noise = -1)
+        assert!(
+            result.labels.iter().all(|&l| l >= 0),
+            "should have no noise points"
+        );
+        // Should have exactly 2 clusters
+        assert_eq!(result.n_clusters, 2, "should have exactly 2 clusters");
+    }
 }
