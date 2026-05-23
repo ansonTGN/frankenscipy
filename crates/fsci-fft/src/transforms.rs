@@ -4087,4 +4087,62 @@ mod tests {
             result[1].0
         );
     }
+
+    #[test]
+    fn rfft_matches_scipy_reference_values() {
+        // scipy.fft.rfft([1, 2, 3, 4]) -> [10+0j, -2+2j, -2+0j]
+        let opts = FftOptions::default();
+        let input = vec![1.0, 2.0, 3.0, 4.0];
+        let result = rfft(&input, &opts).expect("rfft");
+        // Length should be n/2 + 1 = 3
+        assert_eq!(result.len(), 3, "rfft output length");
+        // DC component: sum = 10
+        assert!(
+            (result[0].0 - 10.0).abs() < 1e-10,
+            "rfft[0] re got {}, expected 10",
+            result[0].0
+        );
+        // rfft[1] = -2 + 2j
+        assert!(
+            (result[1].0 - (-2.0)).abs() < 1e-10,
+            "rfft[1] re got {}, expected -2",
+            result[1].0
+        );
+        assert!(
+            (result[1].1 - 2.0).abs() < 1e-10,
+            "rfft[1] im got {}, expected 2",
+            result[1].1
+        );
+    }
+
+    #[test]
+    fn dct_matches_scipy_reference_values() {
+        // scipy.fft.dct([1, 2, 3, 4], type=2)
+        // -> [20, -6.30..., 0, -0.448...]
+        let opts = FftOptions::default();
+        let input = vec![1.0, 2.0, 3.0, 4.0];
+        let result = dct(&input, &opts).expect("dct");
+        assert_eq!(result.len(), 4);
+        // First coefficient should be 2*sum = 20
+        assert!(
+            (result[0] - 20.0).abs() < 1e-6,
+            "dct[0] got {}, expected 20",
+            result[0]
+        );
+    }
+
+    #[test]
+    fn idct_dct_roundtrip_matches_scipy() {
+        // scipy.fft.idct(scipy.fft.dct(x)) == x (with normalization)
+        let opts = FftOptions::default().with_normalization(Normalization::Ortho);
+        let input = vec![1.0, 2.0, 3.0, 4.0];
+        let spectrum = dct(&input, &opts).expect("dct");
+        let recovered = idct(&spectrum, &opts).expect("idct");
+        for (i, (&got, &want)) in recovered.iter().zip(input.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "idct(dct(x))[{i}] got {got}, expected {want}"
+            );
+        }
+    }
 }
