@@ -2790,4 +2790,24 @@ mod tests {
             "fdtr(5, 10, 0) got {result0}, expected 0"
         );
     }
+
+    #[test]
+    fn fdtri_matches_scipy_reference_values() {
+        // scipy.special.fdtri(5, 10, 0.5) ≈ 0.931933160851048
+        let result = fdtri(5.0, 10.0, 0.5);
+        assert!(
+            (result - 0.931933160851048).abs() < 1e-6,
+            "fdtri(5, 10, 0.5) got {result}, expected 0.931933160851048"
+        );
+    }
+
+    #[test]
+    fn stdtrit_matches_scipy_reference_values() {
+        // scipy.special.stdtrit(10, 0.95) ≈ 1.8124611228116756
+        let result = stdtrit(10.0, 0.95);
+        assert!(
+            (result - 1.8124611228116756).abs() < 1e-6,
+            "stdtrit(10, 0.95) got {result}, expected 1.8124611228116756"
+        );
+    }
 }
