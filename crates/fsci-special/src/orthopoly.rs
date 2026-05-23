@@ -3025,4 +3025,54 @@ mod tests {
             l2_expected
         );
     }
+
+    #[test]
+    fn eval_jacobi_matches_scipy_reference_values() {
+        // scipy.special.eval_jacobi(n, alpha, beta, x)
+        // P_0^(a,b)(x) = 1
+        // P_1^(a,b)(x) = (a+b+2)*x/2 + (a-b)/2
+        assert!(
+            (eval_jacobi(0, 0.5, 0.5, 0.5) - 1.0).abs() < 1e-10,
+            "P_0^(0.5,0.5)(0.5) = 1"
+        );
+        // P_1^(1,1)(0) = (1-1)/2 = 0
+        assert!(
+            eval_jacobi(1, 1.0, 1.0, 0.0).abs() < 1e-10,
+            "P_1^(1,1)(0) = 0"
+        );
+    }
+
+    #[test]
+    fn eval_gegenbauer_matches_scipy_reference_values() {
+        // scipy.special.eval_gegenbauer(n, alpha, x)
+        // C_0^alpha(x) = 1
+        // C_1^alpha(x) = 2*alpha*x
+        assert!(
+            (eval_gegenbauer(0, 0.5, 0.7) - 1.0).abs() < 1e-10,
+            "C_0^0.5(0.7) = 1"
+        );
+        let c1_expected = 2.0 * 0.5 * 0.7; // = 0.7
+        assert!(
+            (eval_gegenbauer(1, 0.5, 0.7) - c1_expected).abs() < 1e-10,
+            "C_1^0.5(0.7) got {}, expected {}",
+            eval_gegenbauer(1, 0.5, 0.7),
+            c1_expected
+        );
+    }
+
+    #[test]
+    fn eval_chebyu_matches_scipy_reference_values() {
+        // scipy.special.eval_chebyu(n, x) - Chebyshev of second kind
+        // U_0(x) = 1, U_1(x) = 2x, U_2(x) = 4x^2 - 1
+        let x = 0.5;
+        assert!((eval_chebyu(0, x) - 1.0).abs() < 1e-10, "U_0(0.5)");
+        assert!((eval_chebyu(1, x) - 1.0).abs() < 1e-10, "U_1(0.5) = 2*0.5 = 1");
+        let u2_expected = 4.0 * x * x - 1.0; // = 0
+        assert!(
+            (eval_chebyu(2, x) - u2_expected).abs() < 1e-10,
+            "U_2(0.5) got {}, expected {}",
+            eval_chebyu(2, x),
+            u2_expected
+        );
+    }
 }
