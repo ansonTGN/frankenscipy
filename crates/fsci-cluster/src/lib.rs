@@ -3526,4 +3526,40 @@ mod tests {
             score_swapped
         );
     }
+
+    #[test]
+    fn homogeneity_score_matches_scipy_reference_values() {
+        // sklearn.metrics.homogeneity_score([0, 0, 1, 1], [0, 0, 1, 1]) = 1.0
+        let labels_true = vec![0, 0, 1, 1];
+        let labels_pred = vec![0, 0, 1, 1];
+        let score = homogeneity_score(&labels_true, &labels_pred).expect("homogeneity");
+        assert!((score - 1.0).abs() < 1e-10, "homogeneity perfect got {}, expected 1.0", score);
+    }
+
+    #[test]
+    fn completeness_score_matches_scipy_reference_values() {
+        // sklearn.metrics.completeness_score([0, 0, 1, 1], [0, 0, 1, 1]) = 1.0
+        let labels_true = vec![0, 0, 1, 1];
+        let labels_pred = vec![0, 0, 1, 1];
+        let score = completeness_score(&labels_true, &labels_pred).expect("completeness");
+        assert!((score - 1.0).abs() < 1e-10, "completeness perfect got {}, expected 1.0", score);
+    }
+
+    #[test]
+    fn v_measure_score_matches_scipy_reference_values() {
+        // sklearn.metrics.v_measure_score([0, 0, 1, 1], [0, 0, 1, 1]) = 1.0
+        let labels_true = vec![0, 0, 1, 1];
+        let labels_pred = vec![0, 0, 1, 1];
+        let score = v_measure_score(&labels_true, &labels_pred).expect("v_measure");
+        assert!((score - 1.0).abs() < 1e-10, "v_measure perfect got {}, expected 1.0", score);
+    }
+
+    #[test]
+    fn normalized_mutual_info_matches_scipy_reference_values() {
+        // sklearn.metrics.normalized_mutual_info_score([0, 0, 1, 1], [0, 0, 1, 1]) = 1.0
+        let labels_true = vec![0, 0, 1, 1];
+        let labels_pred = vec![0, 0, 1, 1];
+        let score = normalized_mutual_info(&labels_true, &labels_pred).expect("nmi");
+        assert!((score - 1.0).abs() < 1e-10, "nmi perfect got {}, expected 1.0", score);
+    }
 }
