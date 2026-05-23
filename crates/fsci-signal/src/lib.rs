@@ -17801,4 +17801,58 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn hann_window_matches_scipy_reference_values() {
+        // scipy.signal.windows.hann(5)
+        // -> [0., 0.5, 1., 0.5, 0.]
+        let w = hann(5);
+        let expected = [0.0, 0.5, 1.0, 0.5, 0.0];
+        assert_eq!(w.len(), expected.len());
+        for (i, (&got, &want)) in w.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "hann(5)[{i}] got {got}, expected {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn blackman_window_matches_scipy_reference_values() {
+        // scipy.signal.windows.blackman(5)
+        // -> [0., 0.34, 1., 0.34, 0.] approximately
+        let w = blackman(5);
+        assert_eq!(w.len(), 5);
+        // First and last should be close to 0
+        assert!(w[0].abs() < 0.01, "blackman(5)[0] should be ~0");
+        assert!(w[4].abs() < 0.01, "blackman(5)[4] should be ~0");
+        // Middle should be 1
+        assert!((w[2] - 1.0).abs() < 1e-10, "blackman(5)[2] should be 1");
+    }
+
+    #[test]
+    fn kaiser_window_matches_scipy_reference_values() {
+        // scipy.signal.windows.kaiser(5, 14)
+        let w = kaiser(5, 14.0);
+        assert_eq!(w.len(), 5);
+        // Kaiser window is symmetric and peaks in the middle
+        assert!((w[0] - w[4]).abs() < 1e-10, "kaiser should be symmetric");
+        assert!((w[1] - w[3]).abs() < 1e-10, "kaiser should be symmetric");
+        // Middle value should be largest
+        assert!(w[2] >= w[0] && w[2] >= w[1], "kaiser peak should be in middle");
+    }
+
+    #[test]
+    fn boxcar_window_matches_scipy_reference_values() {
+        // scipy.signal.windows.boxcar(5)
+        // -> [1., 1., 1., 1., 1.]
+        let w = boxcar(5, true);
+        let expected = [1.0; 5];
+        for (i, (&got, &want)) in w.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "boxcar(5)[{i}] got {got}, expected {want}"
+            );
+        }
+    }
 }
