@@ -59229,4 +59229,27 @@ mod tests {
             result.pvalue
         );
     }
+
+    #[test]
+    fn gini_coefficient_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let result = gini_coefficient(&data);
+        assert!(
+            (result - 0.26666666666666666).abs() < 1e-10,
+            "gini_coefficient got {result}, expected 0.26666666666666666"
+        );
+    }
+
+    #[test]
+    fn rankdata_matches_scipy_reference_values() {
+        let data = vec![1.0, 5.0, 3.0, 3.0, 2.0];
+        let result = rankdata(&data, None).expect("rankdata should succeed");
+        let expected = vec![1.0, 5.0, 3.5, 3.5, 2.0];
+        for (i, (r, e)) in result.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (r - e).abs() < 1e-10,
+                "rankdata[{i}] got {r}, expected {e}"
+            );
+        }
+    }
 }
