@@ -1407,4 +1407,72 @@ mod tests {
         }
         dense
     }
+
+    #[test]
+    fn eye_matches_scipy_reference_values() {
+        // scipy.sparse.eye(3).toarray()
+        let result = eye(3).expect("eye");
+        let dense = dense_from_csr(&result);
+        let expected = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+        for (i, row) in dense.iter().enumerate() {
+            for (j, val) in row.iter().enumerate() {
+                assert!(
+                    (*val - expected[i][j]).abs() < 1e-10,
+                    "eye[{i}][{j}] got {val}, expected {}",
+                    expected[i][j]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn diags_matches_scipy_reference_values() {
+        // scipy.sparse.diags([1,2,3], 0, shape=(3,3)).toarray()
+        let result =
+            diags(&[vec![1.0, 2.0, 3.0]], &[0], Some(Shape2D::new(3, 3))).expect("diags");
+        let dense = dense_from_csr(&result);
+        let expected = [[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0]];
+        for (i, row) in dense.iter().enumerate() {
+            for (j, val) in row.iter().enumerate() {
+                assert!(
+                    (*val - expected[i][j]).abs() < 1e-10,
+                    "diags[{i}][{j}] got {val}, expected {}",
+                    expected[i][j]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn kron_matches_scipy_reference_values() {
+        // scipy.sparse.kron([[1,2],[3,4]], [[1,0],[0,1]])
+        let a = CooMatrix::from_triplets(
+            Shape2D::new(2, 2),
+            vec![1.0, 2.0, 3.0, 4.0],
+            vec![0, 0, 1, 1],
+            vec![0, 1, 0, 1],
+            false,
+        )
+        .expect("coo_a")
+        .to_csr()
+        .expect("csr_a");
+        let b = eye(2).expect("eye_b");
+        let result = kron(&a, &b).expect("kron");
+        let dense = dense_from_csr(&result);
+        let expected = [
+            [1.0, 0.0, 2.0, 0.0],
+            [0.0, 1.0, 0.0, 2.0],
+            [3.0, 0.0, 4.0, 0.0],
+            [0.0, 3.0, 0.0, 4.0],
+        ];
+        for (i, row) in dense.iter().enumerate() {
+            for (j, val) in row.iter().enumerate() {
+                assert!(
+                    (*val - expected[i][j]).abs() < 1e-10,
+                    "kron[{i}][{j}] got {val}, expected {}",
+                    expected[i][j]
+                );
+            }
+        }
+    }
 }
