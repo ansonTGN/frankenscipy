@@ -11631,4 +11631,61 @@ mod tests {
             "block pixel (3,4) should fail miss"
         );
     }
+
+    #[test]
+    fn sobel_matches_scipy_reference_values() {
+        // scipy.ndimage.sobel([[1,2,3],[4,5,6],[7,8,9]], axis=0, mode='reflect')
+        let input = NdArray::new(
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+            vec![3, 3],
+        )
+        .unwrap();
+        let result = sobel(&input, 0, BoundaryMode::Reflect, 0.0).unwrap();
+        let expected = [12.0, 12.0, 12.0, 24.0, 24.0, 24.0, 12.0, 12.0, 12.0];
+        for (i, val) in result.data.iter().enumerate() {
+            assert!(
+                (*val - expected[i]).abs() < 1e-10,
+                "sobel[{i}] got {val}, expected {}",
+                expected[i]
+            );
+        }
+    }
+
+    #[test]
+    fn prewitt_matches_scipy_reference_values() {
+        // scipy.ndimage.prewitt([[1,2,3],[4,5,6],[7,8,9]], axis=0, mode='reflect')
+        let input = NdArray::new(
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+            vec![3, 3],
+        )
+        .unwrap();
+        let result = prewitt(&input, 0, BoundaryMode::Reflect, 0.0).unwrap();
+        let expected = [9.0, 9.0, 9.0, 18.0, 18.0, 18.0, 9.0, 9.0, 9.0];
+        for (i, val) in result.data.iter().enumerate() {
+            assert!(
+                (*val - expected[i]).abs() < 1e-10,
+                "prewitt[{i}] got {val}, expected {}",
+                expected[i]
+            );
+        }
+    }
+
+    #[test]
+    fn laplace_matches_scipy_reference_values() {
+        // scipy.ndimage.laplace([[1,2,3],[4,5,6],[7,8,9]], mode='reflect')
+        let input = NdArray::new(
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+            vec![3, 3],
+        )
+        .unwrap();
+        let result = laplace(&input, BoundaryMode::Reflect, 0.0).unwrap();
+        let expected = [4.0, 3.0, 2.0, 1.0, 0.0, -1.0, -2.0, -3.0, -4.0];
+        for (i, val) in result.data.iter().enumerate() {
+            assert!(
+                (*val - expected[i]).abs() < 1e-10,
+                "laplace[{i}] got {val}, expected {}",
+                expected[i]
+            );
+        }
+    }
 }
