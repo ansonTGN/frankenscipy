@@ -2977,4 +2977,35 @@ mod tests {
             assert_close(got, expected, 1e-10, &format!("ellipe({m})"));
         }
     }
+
+    #[test]
+    fn ellipj_matches_scipy_reference_values() {
+        // scipy.special.ellipj(0.5, 0.25) returns (sn, cn, dn, ph)
+        // sn = 0.4706, cn = 0.8823, dn = 0.9406
+        let (sn, cn, dn, _ph) = ellipj(0.5, 0.25);
+        assert_close(sn, 0.4750829360, 1e-4, "ellipj sn(0.5, 0.25)");
+        assert_close(cn, 0.8799410230, 1e-4, "ellipj cn(0.5, 0.25)");
+        assert_close(dn, 0.9713773988, 1e-4, "ellipj dn(0.5, 0.25)");
+    }
+
+    #[test]
+    fn ellipj_zero_matches_scipy_reference_values() {
+        // scipy.special.ellipj(0, m) = (0, 1, 1, 0) for any m
+        let (sn, cn, dn, ph) = ellipj(0.0, 0.5);
+        assert_close(sn, 0.0, 1e-10, "ellipj sn(0, 0.5)");
+        assert_close(cn, 1.0, 1e-10, "ellipj cn(0, 0.5)");
+        assert_close(dn, 1.0, 1e-10, "ellipj dn(0, 0.5)");
+        assert_close(ph, 0.0, 1e-10, "ellipj ph(0, 0.5)");
+    }
+
+    #[test]
+    fn expn_matches_scipy_reference_values() {
+        // scipy.special.expn(1, 1) ≈ 0.2193839344
+        // scipy.special.expn(2, 1) ≈ 0.1484955068
+        let e1_1 = expn_scalar(1, 1.0);
+        assert_close(e1_1, 0.2193839344, 1e-6, "expn(1, 1)");
+
+        let e2_1 = expn_scalar(2, 1.0);
+        assert_close(e2_1, 0.1484955068, 1e-6, "expn(2, 1)");
+    }
 }
