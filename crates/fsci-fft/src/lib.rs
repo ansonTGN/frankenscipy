@@ -66,7 +66,7 @@ mod tests {
 
     use std::f64::consts::PI;
 
-    use super::helpers::fftfreq;
+    use super::helpers::{fftfreq, fftshift_1d, ifftshift_1d};
     use super::transforms::{
         Complex64, FftOptions, dct, dct_i, dct_iv, dst_i, dst_ii, dst_iii, dst_iv, fft, fht,
         fhtoffset, hilbert, idct, ifft, ifht, irfft, rfft,
@@ -736,6 +736,20 @@ mod tests {
             assert!(
                 (got - want).abs() < 1e-6,
                 "idct(dct(x))[{i}] = {got}, want {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn fftshift_1d_even_length_matches_scipy_reference_values() {
+        // scipy.fft.fftshift([0, 1, 2, 3]) = [2, 3, 0, 1]
+        let input: Vec<f64> = vec![0.0, 1.0, 2.0, 3.0];
+        let result = fftshift_1d(&input);
+        let expected: [f64; 4] = [2.0, 3.0, 0.0, 1.0];
+        for (i, (&got, &want)) in result.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "fftshift[{i}] = {got}, want {want}"
             );
         }
     }
