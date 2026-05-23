@@ -3450,4 +3450,39 @@ mod tests {
         // Should have exactly 2 clusters
         assert_eq!(result.n_clusters, 2, "should have exactly 2 clusters");
     }
+
+    #[test]
+    fn fclusterdata_matches_scipy_reference_values() {
+        // scipy.cluster.hierarchy.fclusterdata([[0,0], [0,1], [4,4], [4,5]], t=2, criterion='maxclust')
+        // -> [1, 1, 2, 2]
+        let data = vec![vec![0.0, 0.0], vec![0.0, 1.0], vec![4.0, 4.0], vec![4.0, 5.0]];
+        let result = fclusterdata(&data, 2, LinkageMethod::Single).expect("fclusterdata");
+        // First two points should be in same cluster, last two in another
+        assert_eq!(result[0], result[1], "points 0,1 should be in same cluster");
+        assert_eq!(result[2], result[3], "points 2,3 should be in same cluster");
+        assert_ne!(result[0], result[2], "cluster 1 should differ from cluster 2");
+    }
+
+    #[test]
+    fn inconsistent_matches_scipy_reference_values() {
+        // scipy.cluster.hierarchy.inconsistent(z, d=2) for z from linkage of [[0,0], [0,1], [4,4], [4,5]]
+        let data = vec![vec![0.0, 0.0], vec![0.0, 1.0], vec![4.0, 4.0], vec![4.0, 5.0]];
+        let z = linkage(&data, LinkageMethod::Single).expect("linkage");
+        let incon = inconsistent(&z, 2);
+        assert_eq!(incon.len(), 3, "inconsistent should have 3 rows");
+        // First two rows have 1 element each so std=0, R=0
+        assert!((incon[0][1] - 0.0).abs() < 1e-10, "std of row 0 should be 0");
+        assert!((incon[1][1] - 0.0).abs() < 1e-10, "std of row 1 should be 0");
+        // Third row has multiple elements so std > 0
+        assert!(incon[2][1] > 0.0, "std of row 2 should be > 0");
+    }
+
+    #[test]
+    fn is_monotonic_matches_scipy_reference_values() {
+        // scipy.cluster.hierarchy.is_monotonic(z) for properly formed linkage
+        let data = vec![vec![0.0, 0.0], vec![0.0, 1.0], vec![4.0, 4.0], vec![4.0, 5.0]];
+        let z = linkage(&data, LinkageMethod::Single).expect("linkage");
+        let z_arr: Vec<[f64; 4]> = z.iter().map(|row| [row[0], row[1], row[2], row[3]]).collect();
+        assert!(is_monotonic(&z_arr), "valid linkage should be monotonic");
+    }
 }
