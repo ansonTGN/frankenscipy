@@ -59747,4 +59747,48 @@ mod tests {
             result.pvalue
         );
     }
+
+    #[test]
+    fn pearsonr_matches_scipy_reference_values() {
+        let x = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let y = vec![2.0, 4.0, 5.0, 4.0, 5.0];
+        let result = pearsonr(&x, &y);
+        assert!(
+            (result.statistic - 0.7745966692414834).abs() < 1e-10,
+            "pearsonr correlation got {}, expected 0.7745966692414834",
+            result.statistic
+        );
+        assert!(
+            (result.pvalue - 0.1240270626575546).abs() < 1e-10,
+            "pearsonr pvalue got {}, expected 0.1240270626575546",
+            result.pvalue
+        );
+    }
+
+    #[test]
+    fn describe_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let result = describe(&data);
+        assert_eq!(result.nobs, 10);
+        assert!(
+            (result.mean - 5.5).abs() < 1e-10,
+            "describe mean got {}, expected 5.5",
+            result.mean
+        );
+        assert!(
+            (result.variance - 9.166666666666668).abs() < 1e-10,
+            "describe variance got {}, expected 9.166666666666668",
+            result.variance
+        );
+        assert!(
+            result.skewness.abs() < 1e-10,
+            "describe skewness got {}, expected 0.0",
+            result.skewness
+        );
+        assert!(
+            (result.kurtosis - (-1.2242424242424244)).abs() < 1e-10,
+            "describe kurtosis got {}, expected -1.2242424242424244",
+            result.kurtosis
+        );
+    }
 }
