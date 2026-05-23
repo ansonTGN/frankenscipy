@@ -59304,4 +59304,36 @@ mod tests {
             result.count
         );
     }
+
+    #[test]
+    fn matthews_corrcoef_matches_scipy_reference_values() {
+        let y_true = vec![1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0];
+        let y_pred = vec![1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0];
+        let result = matthews_corrcoef(&y_true, &y_pred);
+        assert!(
+            (result - 0.5).abs() < 1e-10,
+            "matthews_corrcoef got {result}, expected 0.5"
+        );
+    }
+
+    #[test]
+    fn corrcoef_matches_scipy_reference_values() {
+        let x = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let y = vec![1.1, 2.3, 2.8, 4.1, 5.2];
+        let result = corrcoef(&x, &y);
+        assert!(
+            (result - 0.9930726528736965).abs() < 1e-10,
+            "corrcoef got {result}, expected 0.9930726528736965"
+        );
+    }
+
+    #[test]
+    fn medcouple_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let result = medcouple(&data);
+        assert!(
+            result.abs() < 1e-10,
+            "medcouple got {result}, expected 0.0"
+        );
+    }
 }
