@@ -59488,4 +59488,65 @@ mod tests {
             "theil_l_index got {result}, expected 0.1943068349308737"
         );
     }
+
+    #[test]
+    fn nanprod_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, f64::NAN, 4.0, 5.0, 6.0];
+        let result = nanprod(&data);
+        assert!(
+            (result - 240.0).abs() < 1e-10,
+            "nanprod got {result}, expected 240.0"
+        );
+    }
+
+    #[test]
+    fn nanmin_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, f64::NAN, 4.0, 5.0, 6.0];
+        let result = nanmin(&data);
+        assert!(
+            (result - 1.0).abs() < 1e-10,
+            "nanmin got {result}, expected 1.0"
+        );
+    }
+
+    #[test]
+    fn nanmax_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, f64::NAN, 4.0, 5.0, 6.0];
+        let result = nanmax(&data);
+        assert!(
+            (result - 6.0).abs() < 1e-10,
+            "nanmax got {result}, expected 6.0"
+        );
+    }
+
+    #[test]
+    fn nanmedian_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, f64::NAN, 4.0, 5.0, 6.0];
+        let result = nanmedian(&data);
+        assert!(
+            (result - 4.0).abs() < 1e-10,
+            "nanmedian got {result}, expected 4.0"
+        );
+    }
+
+    #[test]
+    fn hmean_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let result = hmean(&data);
+        assert!(
+            (result - 2.18978102189781).abs() < 1e-10,
+            "hmean got {result}, expected 2.18978102189781"
+        );
+    }
+
+    #[test]
+    fn hellinger_distance_matches_scipy_reference_values() {
+        let p = vec![0.1, 0.2, 0.3, 0.4];
+        let q = vec![0.15, 0.15, 0.35, 0.35];
+        let result = hellinger_distance(&p, &q);
+        assert!(
+            (result - 0.07821546206579755).abs() < 1e-10,
+            "hellinger_distance got {result}, expected 0.07821546206579755"
+        );
+    }
 }
