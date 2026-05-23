@@ -59444,4 +59444,48 @@ mod tests {
             "power_mean got {result}, expected 4.6097722286464435"
         );
     }
+
+    #[test]
+    fn nansum_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, f64::NAN, 4.0, 5.0];
+        let result = nansum(&data);
+        assert!(
+            (result - 12.0).abs() < 1e-10,
+            "nansum got {result}, expected 12.0"
+        );
+    }
+
+    #[test]
+    fn jensenshannon_distance_matches_scipy_reference_values() {
+        // Note: our implementation uses base-2, scipy defaults to base-e
+        // scipy.spatial.distance.jensenshannon(p, q, base=2) = 0.09385077499124841
+        let p = vec![0.1, 0.2, 0.3, 0.4];
+        let q = vec![0.15, 0.15, 0.35, 0.35];
+        let result = jensenshannon_distance(&p, &q);
+        assert!(
+            (result - 0.09385077499124841).abs() < 1e-10,
+            "jensenshannon_distance got {result}, expected 0.09385077499124841"
+        );
+    }
+
+    #[test]
+    fn excess_kurtosis_matches_scipy_reference_values() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let result = excess_kurtosis(&data);
+        assert!(
+            (result - (-1.2242424242424244)).abs() < 1e-10,
+            "excess_kurtosis got {result}, expected -1.2242424242424244"
+        );
+    }
+
+    #[test]
+    fn theil_l_index_matches_scipy_reference_values() {
+        // theil_l = mean(log(mean/x_i)) = log(mean) - mean(log(x_i))
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let result = theil_l_index(&data);
+        assert!(
+            (result - 0.1943068349308737).abs() < 1e-10,
+            "theil_l_index got {result}, expected 0.1943068349308737"
+        );
+    }
 }
