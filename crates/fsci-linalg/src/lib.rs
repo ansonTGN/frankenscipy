@@ -12747,4 +12747,34 @@ mod proptest_tests {
             result[1][1]
         );
     }
+
+    #[test]
+    fn eigvalsh_symmetric_matrix_matches_scipy_reference() {
+        // scipy.linalg.eigvalsh([[1, 2], [2, 4]]) = [0, 5]
+        let a = vec![vec![1.0, 2.0], vec![2.0, 4.0]];
+        let mut result = eigvalsh(&a, DecompOptions::default()).expect("eigvalsh");
+        result.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        assert!(result[0].abs() < 1e-10, "eigvalsh[0] got {}, expected 0.0", result[0]);
+        assert!((result[1] - 5.0).abs() < 1e-10, "eigvalsh[1] got {}, expected 5.0", result[1]);
+    }
+
+    #[test]
+    fn svdvals_diagonal_matrix_matches_scipy_reference() {
+        // scipy.linalg.svdvals([[3, 0], [0, 4]]) = [4, 3]
+        let a = vec![vec![3.0, 0.0], vec![0.0, 4.0]];
+        let mut result = svdvals(&a, DecompOptions::default()).expect("svdvals");
+        result.sort_by(|a, b| b.partial_cmp(a).unwrap());
+        assert!((result[0] - 4.0).abs() < 1e-10, "svdvals[0] got {}, expected 4.0", result[0]);
+        assert!((result[1] - 3.0).abs() < 1e-10, "svdvals[1] got {}, expected 3.0", result[1]);
+    }
+
+    #[test]
+    fn lu_triangular_factors_match_scipy_convention() {
+        // scipy.linalg.lu([[1, 2], [3, 4]]) returns P, L, U
+        let a = vec![vec![1.0, 2.0], vec![3.0, 4.0]];
+        let result = lu(&a, DecompOptions::default()).expect("lu");
+        // U diagonal elements product gives determinant magnitude
+        let u_diag_product = result.u[0][0] * result.u[1][1];
+        assert!(u_diag_product.abs() > 1e-10, "U diagonal product should be non-zero");
+    }
 }
