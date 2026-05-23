@@ -5725,4 +5725,99 @@ mod tests {
             "canberra got {result}, expected 1.3619047619047617"
         );
     }
+
+    #[test]
+    fn squareform_condensed_to_matrix_matches_scipy_reference_values() {
+        // scipy.spatial.distance.squareform([1, 2, 3])
+        // -> array([[0., 1., 2.], [1., 0., 3.], [2., 3., 0.]])
+        let condensed = vec![1.0, 2.0, 3.0];
+        let result = squareform_to_matrix(&condensed).expect("squareform should succeed");
+        let expected = vec![
+            vec![0.0, 1.0, 2.0],
+            vec![1.0, 0.0, 3.0],
+            vec![2.0, 3.0, 0.0],
+        ];
+        for (i, row) in result.iter().enumerate() {
+            for (j, &got) in row.iter().enumerate() {
+                let want = expected[i][j];
+                assert!(
+                    (got - want).abs() < 1e-10,
+                    "matrix[{i}][{j}] got {got}, expected {want}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn squareform_matrix_to_condensed_matches_scipy_reference_values() {
+        // scipy.spatial.distance.squareform([[0,1,2],[1,0,3],[2,3,0]])
+        // -> array([1., 2., 3.])
+        let matrix = vec![
+            vec![0.0, 1.0, 2.0],
+            vec![1.0, 0.0, 3.0],
+            vec![2.0, 3.0, 0.0],
+        ];
+        let result = squareform_to_condensed(&matrix).expect("squareform should succeed");
+        let expected = [1.0, 2.0, 3.0];
+        for (i, (&got, &want)) in result.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "condensed[{i}] got {got}, expected {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn directed_hausdorff_matches_scipy_reference_values() {
+        // scipy.spatial.distance.directed_hausdorff([[0,0],[1,0]], [[0,1],[1,1]])[0]
+        // -> 1.0
+        let xa = vec![vec![0.0, 0.0], vec![1.0, 0.0]];
+        let xb = vec![vec![0.0, 1.0], vec![1.0, 1.0]];
+        let result = directed_hausdorff(&xa, &xb).expect("directed_hausdorff should succeed");
+        assert!(
+            (result - 1.0).abs() < 1e-10,
+            "directed_hausdorff got {result}, expected 1.0"
+        );
+    }
+
+    #[test]
+    fn hausdorff_distance_matches_scipy_reference_values() {
+        // max of directed_hausdorff in both directions
+        // scipy.spatial.distance.directed_hausdorff gives 1.0 both ways here
+        let xa = vec![vec![0.0, 0.0], vec![1.0, 0.0]];
+        let xb = vec![vec![0.0, 1.0], vec![1.0, 1.0]];
+        let result = hausdorff_distance(&xa, &xb).expect("hausdorff_distance should succeed");
+        assert!(
+            (result - 1.0).abs() < 1e-10,
+            "hausdorff_distance got {result}, expected 1.0"
+        );
+    }
+
+    #[test]
+    fn mahalanobis_matches_scipy_reference_values() {
+        // scipy.spatial.distance.mahalanobis([0, 2], [0, 1], [[1, 0], [0, 1]])
+        // -> 1.0
+        let x = [0.0, 2.0];
+        let y = [0.0, 1.0];
+        let vi = vec![vec![1.0, 0.0], vec![0.0, 1.0]];
+        let result = mahalanobis(&x, &y, &vi);
+        assert!(
+            (result - 1.0).abs() < 1e-10,
+            "mahalanobis got {result}, expected 1.0"
+        );
+    }
+
+    #[test]
+    fn seuclidean_matches_scipy_reference_values() {
+        // scipy.spatial.distance.seuclidean([1, 2], [3, 4], [1, 1])
+        // -> sqrt((1-3)^2/1 + (2-4)^2/1) = sqrt(4 + 4) = sqrt(8) = 2.8284271247461903
+        let x = [1.0, 2.0];
+        let y = [3.0, 4.0];
+        let v = [1.0, 1.0];
+        let result = seuclidean(&x, &y, &v);
+        assert!(
+            (result - 2.8284271247461903).abs() < 1e-10,
+            "seuclidean got {result}, expected 2.8284271247461903"
+        );
+    }
 }
