@@ -59093,4 +59093,81 @@ mod tests {
             result.pvalue
         );
     }
+
+    #[test]
+    fn cityblock_distance_matches_scipy_reference_values() {
+        let u = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let v = vec![1.1, 2.2, 2.8, 4.1, 5.0];
+        let result = cityblock_distance(&u, &v);
+        assert!(
+            (result - 0.6).abs() < 1e-10,
+            "cityblock_distance got {result}, expected 0.6"
+        );
+    }
+
+    #[test]
+    fn correlation_distance_matches_scipy_reference_values() {
+        let u = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let v = vec![1.1, 2.2, 2.8, 4.1, 5.0];
+        let result = correlation_distance(&u, &v);
+        assert!(
+            (result - 0.0043817024817496275).abs() < 1e-10,
+            "correlation_distance got {result}, expected 0.0043817024817496275"
+        );
+    }
+
+    #[test]
+    fn cosine_distance_matches_scipy_reference_values() {
+        let u = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let v = vec![1.1, 2.2, 2.8, 4.1, 5.0];
+        let result = cosine_distance(&u, &v);
+        assert!(
+            (result - 0.0008833671558723388).abs() < 1e-10,
+            "cosine_distance got {result}, expected 0.0008833671558723388"
+        );
+    }
+
+    #[test]
+    fn euclidean_distance_matches_scipy_reference_values() {
+        let u = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let v = vec![1.1, 2.2, 2.8, 4.1, 5.0];
+        let result = euclidean_distance(&u, &v);
+        assert!(
+            (result - 0.31622776601683805).abs() < 1e-10,
+            "euclidean_distance got {result}, expected 0.31622776601683805"
+        );
+    }
+
+    #[test]
+    fn hamming_distance_matches_scipy_reference_values() {
+        let u = vec![1.0, 0.0, 1.0, 1.0, 0.0];
+        let v = vec![1.0, 1.0, 0.0, 1.0, 0.0];
+        let result = hamming_distance(&u, &v);
+        assert!(
+            (result - 0.4).abs() < 1e-10,
+            "hamming_distance got {result}, expected 0.4"
+        );
+    }
+
+    #[test]
+    fn minkowski_distance_matches_scipy_reference_values() {
+        let u = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let v = vec![1.1, 2.2, 2.8, 4.1, 5.0];
+        let result = minkowski_distance(&u, &v, 3.0);
+        assert!(
+            (result - 0.26207413942088986).abs() < 1e-10,
+            "minkowski_distance got {result}, expected 0.26207413942088986"
+        );
+    }
+
+    #[test]
+    fn sqeuclidean_distance_matches_scipy_reference_values() {
+        let u = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let v = vec![1.1, 2.2, 2.8, 4.1, 5.0];
+        let result = sqeuclidean_distance(&u, &v);
+        assert!(
+            (result - 0.1).abs() < 1e-10,
+            "sqeuclidean_distance got {result}, expected 0.1"
+        );
+    }
 }
