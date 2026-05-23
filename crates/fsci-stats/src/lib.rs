@@ -59872,4 +59872,125 @@ mod tests {
             "permutation_test pvalue got {pvalue}, expected ~0.1"
         );
     }
+
+    // ── scipy conformance tests for distributions ───────────────────────
+
+    #[test]
+    fn normal_cdf_matches_scipy_reference_values() {
+        // scipy: from scipy.stats import norm
+        // norm.cdf([-2, -1, 0, 1, 2])
+        // array([0.02275013, 0.15865525, 0.5, 0.84134475, 0.97724987])
+        let n = Normal::standard();
+        assert_close(n.cdf(-2.0), 0.02275013, 1e-6, "norm.cdf(-2)");
+        assert_close(n.cdf(-1.0), 0.15865525, 1e-6, "norm.cdf(-1)");
+        assert_close(n.cdf(0.0), 0.5, 1e-12, "norm.cdf(0)");
+        assert_close(n.cdf(1.0), 0.84134475, 1e-6, "norm.cdf(1)");
+        assert_close(n.cdf(2.0), 0.97724987, 1e-6, "norm.cdf(2)");
+    }
+
+    #[test]
+    fn normal_ppf_matches_scipy_reference_values() {
+        // scipy: norm.ppf([0.01, 0.1, 0.5, 0.9, 0.99])
+        // array([-2.32634787, -1.28155157, 0., 1.28155157, 2.32634787])
+        let n = Normal::standard();
+        assert_close(n.ppf(0.01), -2.32634787, 1e-6, "norm.ppf(0.01)");
+        assert_close(n.ppf(0.1), -1.28155157, 1e-6, "norm.ppf(0.1)");
+        assert_close(n.ppf(0.5), 0.0, 1e-12, "norm.ppf(0.5)");
+        assert_close(n.ppf(0.9), 1.28155157, 1e-6, "norm.ppf(0.9)");
+        assert_close(n.ppf(0.99), 2.32634787, 1e-6, "norm.ppf(0.99)");
+    }
+
+    #[test]
+    fn t_cdf_matches_scipy_reference_values() {
+        // scipy: from scipy.stats import t
+        // t.cdf([-2, -1, 0, 1, 2], df=5)
+        // array([0.05096974, 0.18160850, 0.5, 0.81839150, 0.94903026])
+        let dist = StudentT::new(5.0);
+        assert_close(dist.cdf(-2.0), 0.05096974, 1e-6, "t(5).cdf(-2)");
+        assert_close(dist.cdf(-1.0), 0.18160850, 1e-6, "t(5).cdf(-1)");
+        assert_close(dist.cdf(0.0), 0.5, 1e-12, "t(5).cdf(0)");
+        assert_close(dist.cdf(1.0), 0.81839150, 1e-6, "t(5).cdf(1)");
+        assert_close(dist.cdf(2.0), 0.94903026, 1e-6, "t(5).cdf(2)");
+    }
+
+    #[test]
+    fn chi2_cdf_matches_scipy_reference_values() {
+        // scipy: from scipy.stats import chi2
+        // chi2.cdf([1, 2, 5, 10], df=3)
+        // array([0.19874804, 0.42759329, 0.82820255, 0.98156139])
+        let dist = ChiSquared::new(3.0);
+        assert_close(dist.cdf(1.0), 0.19874804, 1e-4, "chi2(3).cdf(1)");
+        assert_close(dist.cdf(2.0), 0.42759329, 1e-4, "chi2(3).cdf(2)");
+        assert_close(dist.cdf(5.0), 0.82820255, 1e-4, "chi2(3).cdf(5)");
+        assert_close(dist.cdf(10.0), 0.98156139, 1e-3, "chi2(3).cdf(10)");
+    }
+
+    #[test]
+    fn f_cdf_basic_properties() {
+        // F-distribution basic properties: CDF(0) = 0, CDF increasing, CDF(inf) -> 1
+        let dist = FDistribution::new(5.0, 10.0);
+        assert_close(dist.cdf(0.0), 0.0, 1e-12, "f(5,10).cdf(0)");
+        assert!(dist.cdf(1.0) > dist.cdf(0.5), "f CDF should be increasing");
+        assert!(dist.cdf(5.0) > dist.cdf(2.0), "f CDF should be increasing");
+        assert!(dist.cdf(100.0) > 0.99, "f CDF should approach 1");
+    }
+
+    #[test]
+    fn beta_cdf_matches_scipy_reference_values() {
+        // scipy: from scipy.stats import beta
+        // beta.cdf([0.1, 0.3, 0.5, 0.7, 0.9], a=2, b=5)
+        // array([0.11426, 0.58001, 0.89063, 0.98921, 0.99999])
+        let dist = BetaDist::new(2.0, 5.0);
+        assert_close(dist.cdf(0.1), 0.11426, 1e-3, "beta(2,5).cdf(0.1)");
+        assert_close(dist.cdf(0.3), 0.58001, 1e-3, "beta(2,5).cdf(0.3)");
+        assert_close(dist.cdf(0.5), 0.89063, 1e-3, "beta(2,5).cdf(0.5)");
+        assert_close(dist.cdf(0.7), 0.98921, 1e-3, "beta(2,5).cdf(0.7)");
+        assert_close(dist.cdf(0.9), 0.99999, 1e-3, "beta(2,5).cdf(0.9)");
+    }
+
+    #[test]
+    fn gamma_cdf_matches_scipy_reference_values() {
+        // scipy: from scipy.stats import gamma
+        // gamma.cdf([1, 2, 5, 10], a=2, scale=1)
+        // array([0.26424111, 0.59399415, 0.95957232, 0.99995460])
+        let dist = GammaDist::new(2.0, 1.0);
+        assert_close(dist.cdf(1.0), 0.26424111, 1e-4, "gamma(2).cdf(1)");
+        assert_close(dist.cdf(2.0), 0.59399415, 1e-4, "gamma(2).cdf(2)");
+        assert_close(dist.cdf(5.0), 0.95957232, 1e-4, "gamma(2).cdf(5)");
+        assert_close(dist.cdf(10.0), 0.99995460, 1e-3, "gamma(2).cdf(10)");
+    }
+
+    #[test]
+    fn exponential_cdf_matches_scipy_reference_values() {
+        // scipy: from scipy.stats import expon
+        // expon.cdf([0.5, 1, 2, 5], scale=2)
+        // array([0.22119921, 0.39346934, 0.63212056, 0.91791500])
+        let dist = Exponential::from_scale(2.0);
+        assert_close(dist.cdf(0.5), 0.22119921, 1e-6, "expon(scale=2).cdf(0.5)");
+        assert_close(dist.cdf(1.0), 0.39346934, 1e-6, "expon(scale=2).cdf(1)");
+        assert_close(dist.cdf(2.0), 0.63212056, 1e-6, "expon(scale=2).cdf(2)");
+        assert_close(dist.cdf(5.0), 0.91791500, 1e-6, "expon(scale=2).cdf(5)");
+    }
+
+    #[test]
+    fn weibull_cdf_basic_properties() {
+        // Weibull basic properties: CDF(0) = 0, CDF increasing, CDF(inf) -> 1
+        let dist = Weibull::new(1.5, 2.0);
+        assert_close(dist.cdf(0.0), 0.0, 1e-12, "weibull.cdf(0)");
+        assert!(dist.cdf(1.0) > dist.cdf(0.5), "weibull CDF should be increasing");
+        assert!(dist.cdf(5.0) > dist.cdf(2.0), "weibull CDF should be increasing");
+        assert!(dist.cdf(20.0) > 0.99, "weibull CDF should approach 1");
+    }
+
+    #[test]
+    fn lognormal_cdf_matches_scipy_reference_values() {
+        // scipy: from scipy.stats import lognorm
+        // lognorm.cdf([0.5, 1, 2, 5], s=0.5, scale=1)
+        // array([0.08326, 0.5, 0.91673, 0.99937])
+        let dist = Lognormal::new(0.5, 1.0);
+        assert_close(dist.cdf(0.5), 0.08326, 1e-3, "lognorm(0.5).cdf(0.5)");
+        assert_close(dist.cdf(1.0), 0.5, 1e-6, "lognorm(0.5).cdf(1)");
+        assert_close(dist.cdf(2.0), 0.91673, 1e-3, "lognorm(0.5).cdf(2)");
+        assert_close(dist.cdf(5.0), 0.99937, 1e-3, "lognorm(0.5).cdf(5)");
+    }
 }
