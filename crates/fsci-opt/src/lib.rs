@@ -3984,11 +3984,11 @@ mod tests {
     use crate::{
         BasinhoppingOptions, Bounds, ConvergenceStatus, DifferentialEvolutionOptions, Integrality,
         LinearConstraint, MilpOptions, MilpProblem, MinimizeOptions, NonlinearConstraint,
-        OptimizeMethod, RootOptions, approx_fprime, basinhopping, check_grad, cobyla, derivative,
-        differential_evolution, differential_evolution_constrained, dual_annealing,
-        gradient_descent, hessian, isotonic_regression, jacobian, linear_sum_assignment, linprog,
-        milp, nnls,
-        projected_gradient_descent, pso, rosen, rosen_der, rosen_hess, rosen_hess_prod, shgo,
+        OptimizeMethod, RootOptions, approx_fprime, basinhopping, brent_minimize, check_grad,
+        cobyla, derivative, differential_evolution, differential_evolution_constrained,
+        dual_annealing, golden, gradient_descent, hessian, isotonic_regression, jacobian,
+        linear_sum_assignment, linprog, milp, nnls, projected_gradient_descent, pso, rosen,
+        rosen_der, rosen_hess, rosen_hess_prod, shgo,
     };
 
     #[test]
@@ -5233,5 +5233,75 @@ mod tests {
             .all(|v| v.is_nan()));
         // Empty input returns empty.
         assert!(isotonic_regression(&[], None).is_empty());
+    }
+
+    #[test]
+    fn rosen_matches_scipy_reference_values() {
+        // scipy.optimize.rosen([1, 1]) = 0.0
+        let result = rosen(&[1.0, 1.0]);
+        assert!(
+            result.abs() < 1e-10,
+            "rosen at [1,1] got {result}, expected 0.0"
+        );
+        // scipy.optimize.rosen([0, 0]) = 1.0
+        let result = rosen(&[0.0, 0.0]);
+        assert!(
+            (result - 1.0).abs() < 1e-10,
+            "rosen at [0,0] got {result}, expected 1.0"
+        );
+    }
+
+    #[test]
+    fn rosen_der_matches_scipy_reference_values() {
+        // scipy.optimize.rosen_der([1, 1]) = [0, 0]
+        let result = rosen_der(&[1.0, 1.0]);
+        assert!(
+            result[0].abs() < 1e-10,
+            "rosen_der[0] got {}, expected 0.0",
+            result[0]
+        );
+        assert!(
+            result[1].abs() < 1e-10,
+            "rosen_der[1] got {}, expected 0.0",
+            result[1]
+        );
+    }
+
+    #[test]
+    fn golden_matches_scipy_reference_values() {
+        // scipy.optimize.golden(lambda x: x**2, brack=(-1, 0, 1)) ≈ 0
+        let (x_opt, _f_opt) = golden(|x| x * x, -1.0, 1.0, 1e-10, 1000);
+        assert!(
+            x_opt.abs() < 1e-8,
+            "golden x^2 minimum at {x_opt}, expected ~0"
+        );
+    }
+
+    #[test]
+    fn brent_minimize_matches_scipy_reference_values() {
+        // scipy.optimize.brent(lambda x: (x-2)**2, brack=(0, 4)) ≈ 2
+        let (x_opt, _f_opt) = brent_minimize(|x| (x - 2.0).powi(2), 0.0, 4.0, 1e-10, 1000);
+        assert!(
+            (x_opt - 2.0).abs() < 1e-8,
+            "brent (x-2)^2 minimum at {x_opt}, expected ~2"
+        );
+    }
+
+    #[test]
+    fn linear_sum_assignment_matches_scipy_reference_values() {
+        // scipy.optimize.linear_sum_assignment([[4,1,3],[2,0,5],[3,2,2]])
+        let cost = vec![vec![4.0, 1.0, 3.0], vec![2.0, 0.0, 5.0], vec![3.0, 2.0, 2.0]];
+        let (row_ind, col_ind) = linear_sum_assignment(&cost).expect("lsa");
+        assert_eq!(row_ind, vec![0, 1, 2]);
+        assert_eq!(col_ind, vec![1, 0, 2]);
+        let total_cost: f64 = row_ind
+            .iter()
+            .zip(col_ind.iter())
+            .map(|(&i, &j)| cost[i][j])
+            .sum();
+        assert!(
+            (total_cost - 5.0).abs() < 1e-10,
+            "total cost got {total_cost}, expected 5.0"
+        );
     }
 }
