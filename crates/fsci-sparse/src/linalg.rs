@@ -6512,6 +6512,151 @@ mod tests {
         let result = super::lsqr(&a, &b, IterativeSolveOptions::default()).expect("lsqr");
         assert_eq!(result.solution.len(), 2, "lsqr should return 2-element solution");
     }
+
+    #[test]
+    fn floyd_warshall_matches_scipy_reference_values() {
+        // scipy.sparse.csgraph.floyd_warshall for simple 3-node path: 0 -> 1 -> 2
+        // Edges: (0,1)=1.0, (1,2)=2.0
+        // Expected: d(0,0)=0, d(0,1)=1, d(0,2)=3, d(1,1)=0, d(1,2)=2, d(2,2)=0
+        use crate::{CooMatrix, Shape2D};
+        let g = CooMatrix::from_triplets(
+            Shape2D::new(3, 3),
+            vec![1.0, 2.0],
+            vec![0, 1],
+            vec![1, 2],
+            false,
+        )
+        .expect("coo")
+        .to_csr()
+        .expect("csr");
+        let dist = super::floyd_warshall(&g);
+        assert!((dist[0][0] - 0.0).abs() < 1e-10);
+        assert!((dist[0][1] - 1.0).abs() < 1e-10);
+        assert!((dist[0][2] - 3.0).abs() < 1e-10);
+        assert!((dist[1][1] - 0.0).abs() < 1e-10);
+        assert!((dist[1][2] - 2.0).abs() < 1e-10);
+        assert!((dist[2][2] - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn connected_components_matches_scipy_reference_values() {
+        // scipy.sparse.csgraph.connected_components for 4-node graph with 2 components
+        // Edges: (0,1), (2,3) -> 2 components
+        use crate::{CooMatrix, Shape2D};
+        let g = CooMatrix::from_triplets(
+            Shape2D::new(4, 4),
+            vec![1.0, 1.0, 1.0, 1.0],
+            vec![0, 1, 2, 3],
+            vec![1, 0, 3, 2],
+            false,
+        )
+        .expect("coo")
+        .to_csr()
+        .expect("csr");
+        let result = super::connected_components(&g).expect("cc");
+        assert_eq!(result.n_components, 2);
+        assert_eq!(result.labels[0], result.labels[1]);
+        assert_eq!(result.labels[2], result.labels[3]);
+        assert_ne!(result.labels[0], result.labels[2]);
+    }
+
+    #[test]
+    fn eigsh_matches_scipy_reference_values() {
+        // scipy.sparse.linalg.eigsh for diagonal matrix with eigenvalues 1, 4, 9
+        // Request k=2 largest -> should get 9 and 4
+        use crate::{CooMatrix, Shape2D};
+        let a = CooMatrix::from_triplets(
+            Shape2D::new(3, 3),
+            vec![1.0, 4.0, 9.0],
+            vec![0, 1, 2],
+            vec![0, 1, 2],
+            false,
+        )
+        .expect("coo")
+        .to_csr()
+        .expect("csr");
+        let result = super::eigsh(&a, 2, EigsOptions::default()).expect("eigsh");
+        assert!(result.converged);
+        let mut evs = result.eigenvalues.clone();
+        evs.sort_by(|a, b| b.total_cmp(a));
+        assert!((evs[0] - 9.0).abs() < 1e-4, "largest eigenvalue = {}, expected 9.0", evs[0]);
+        assert!((evs[1] - 4.0).abs() < 1e-4, "second eigenvalue = {}, expected 4.0", evs[1]);
+    }
+
+    #[test]
+    fn lgmres_matches_scipy_reference_values() {
+        // scipy.sparse.linalg.lgmres(A, b) for non-symmetric matrix
+        // A = [[4, 1], [2, 3]], b = [1, 2] -> same as gmres: x = [0.1, 0.6]
+        use crate::{CooMatrix, Shape2D};
+        let a = CooMatrix::from_triplets(
+            Shape2D::new(2, 2),
+            vec![4.0, 1.0, 2.0, 3.0],
+            vec![0, 0, 1, 1],
+            vec![0, 1, 0, 1],
+            false,
+        )
+        .expect("coo")
+        .to_csr()
+        .expect("csr");
+        let b = vec![1.0, 2.0];
+        let result = super::lgmres(&a, &b, None, LgmresOptions::default()).expect("lgmres");
+        let expected = [0.1, 0.6];
+        for (i, (&got, &want)) in result.solution.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-6,
+                "lgmres x[{i}] got {got}, expected {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn qmr_matches_scipy_reference_values() {
+        // scipy.sparse.linalg.qmr(A, b) for non-symmetric matrix
+        use crate::{CooMatrix, Shape2D};
+        let a = CooMatrix::from_triplets(
+            Shape2D::new(2, 2),
+            vec![4.0, 1.0, 2.0, 3.0],
+            vec![0, 0, 1, 1],
+            vec![0, 1, 0, 1],
+            false,
+        )
+        .expect("coo")
+        .to_csr()
+        .expect("csr");
+        let b = vec![1.0, 2.0];
+        let result = super::qmr(&a, &b, None, IterativeSolveOptions::default()).expect("qmr");
+        // Verify Ax ≈ b
+        let ax = super::spmv(&a, &result.solution);
+        for i in 0..2 {
+            assert!((ax[i] - b[i]).abs() < 1e-5, "qmr residual too large at {i}");
+        }
+    }
+
+    #[test]
+    fn pagerank_matches_scipy_reference_behavior() {
+        // scipy.sparse.csgraph uses similar pagerank algorithm
+        // Simple 3-node graph: 0 -> 1 -> 2 -> 0 (cycle)
+        use crate::{CooMatrix, Shape2D};
+        let g = CooMatrix::from_triplets(
+            Shape2D::new(3, 3),
+            vec![1.0, 1.0, 1.0],
+            vec![0, 1, 2],
+            vec![1, 2, 0],
+            false,
+        )
+        .expect("coo")
+        .to_csr()
+        .expect("csr");
+        let pr = super::pagerank(&g, 0.85, 100, 1e-6);
+        // In a symmetric cycle, all nodes should have equal PageRank
+        let sum: f64 = pr.iter().sum();
+        assert!((sum - 1.0).abs() < 1e-6, "PageRank should sum to 1.0");
+        // All nodes should have roughly equal rank
+        let mean = 1.0 / 3.0;
+        for (i, &r) in pr.iter().enumerate() {
+            assert!((r - mean).abs() < 0.1, "PageRank[{i}] = {r}, expected ~{mean}");
+        }
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════
