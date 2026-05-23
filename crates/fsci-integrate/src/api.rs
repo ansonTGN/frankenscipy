@@ -1378,4 +1378,85 @@ mod tests {
             expected
         );
     }
+
+    #[test]
+    fn solve_ivp_exponential_decay_matches_scipy_reference_values() {
+        // scipy.integrate.solve_ivp(exp_decay, [0, 4], [1.0], t_eval=[0, 1, 2, 3, 4], method='RK45')
+        // where exp_decay = lambda t, y: -0.5 * y
+        let result = solve_ivp(
+            &mut |_t, y| vec![-0.5 * y[0]],
+            &SolveIvpOptions {
+                t_span: (0.0, 4.0),
+                y0: &[1.0],
+                method: SolverKind::Rk45,
+                t_eval: Some(&[0.0, 1.0, 2.0, 3.0, 4.0]),
+                rtol: 1e-6,
+                atol: ToleranceValue::Scalar(1e-8),
+                ..SolveIvpOptions::default()
+            },
+        )
+        .expect("solve_ivp should succeed");
+
+        assert!(result.success, "integration should succeed");
+        let expected_y = [
+            1.0,
+            0.6065268298424474,
+            0.3676699729783925,
+            0.22325717532500178,
+            0.13541609549742406,
+        ];
+        for (i, (got, want)) in result
+            .y
+            .iter()
+            .map(|y| y[0])
+            .zip(expected_y.iter())
+            .enumerate()
+        {
+            assert!(
+                (got - want).abs() < 1e-3,
+                "y[{i}] got {got}, expected {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn solve_ivp_harmonic_oscillator_matches_scipy_reference_values() {
+        // scipy.integrate.solve_ivp(harmonic, [0, 2*pi], [1.0, 0.0], t_eval=[0, pi/2, pi, 3*pi/2, 2*pi])
+        // where harmonic = lambda t, state: [state[1], -state[0]]
+        use std::f64::consts::PI;
+        let result = solve_ivp(
+            &mut |_t, state| vec![state[1], -state[0]],
+            &SolveIvpOptions {
+                t_span: (0.0, 2.0 * PI),
+                y0: &[1.0, 0.0],
+                method: SolverKind::Rk45,
+                t_eval: Some(&[0.0, PI / 2.0, PI, 3.0 * PI / 2.0, 2.0 * PI]),
+                rtol: 1e-6,
+                atol: ToleranceValue::Scalar(1e-8),
+                ..SolveIvpOptions::default()
+            },
+        )
+        .expect("solve_ivp should succeed");
+
+        assert!(result.success, "integration should succeed");
+        let expected_y = [1.0, 0.0, -1.0, 0.0, 1.0];
+        let expected_v = [0.0, -1.0, 0.0, 1.0, 0.0];
+        for (i, (got_y, got_v)) in result
+            .y
+            .iter()
+            .map(|y| (y[0], y[1]))
+            .enumerate()
+        {
+            let want_y = expected_y[i];
+            let want_v = expected_v[i];
+            assert!(
+                (got_y - want_y).abs() < 1e-4,
+                "y[{i}] got {got_y}, expected {want_y}"
+            );
+            assert!(
+                (got_v - want_v).abs() < 1e-4,
+                "v[{i}] got {got_v}, expected {want_v}"
+            );
+        }
+    }
 }
