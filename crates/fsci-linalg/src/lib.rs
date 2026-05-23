@@ -12599,4 +12599,53 @@ mod proptest_tests {
             );
         }
     }
+
+    #[test]
+    fn lu_solve_matches_scipy_reference_values() {
+        // scipy.linalg.lu_factor([[1, 2], [3, 4]]) then lu_solve with b=[1, 2]
+        // -> x = [0, 0.5]
+        let a = vec![vec![1.0, 2.0], vec![3.0, 4.0]];
+        let b = vec![1.0, 2.0];
+        let lu_factor_result = lu_factor(&a, DecompOptions::default()).expect("lu_factor");
+        let result = lu_solve(&lu_factor_result, &b).expect("lu_solve");
+        let expected = [0.0, 0.5];
+        for (i, (&got, &want)) in result.x.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "x[{i}] got {got}, expected {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn cho_solve_matches_scipy_reference_values() {
+        // scipy.linalg.cho_factor([[4, 2], [2, 5]]) then cho_solve with b=[1, 2]
+        // -> x = [0.0625, 0.375]
+        let a = vec![vec![4.0, 2.0], vec![2.0, 5.0]];
+        let b = vec![1.0, 2.0];
+        let cho_factor_result = cho_factor(&a, DecompOptions::default()).expect("cho_factor");
+        let result = cho_solve(&cho_factor_result, &b).expect("cho_solve");
+        let expected = [0.0625, 0.375];
+        for (i, (&got, &want)) in result.x.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "x[{i}] got {got}, expected {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn ldl_matches_scipy_reference_values() {
+        // scipy.linalg.ldl([[2, 1], [1, 3]])
+        // -> l = [[1, 0], [0.5, 1]], d = [[2, 0], [0, 2.5]]
+        let a = vec![vec![2.0, 1.0], vec![1.0, 3.0]];
+        let result = ldl(&a, DecompOptions::default()).expect("ldl");
+        // Check L matrix
+        assert!((result.l[0][0] - 1.0).abs() < 1e-10);
+        assert!((result.l[1][0] - 0.5).abs() < 1e-10);
+        assert!((result.l[1][1] - 1.0).abs() < 1e-10);
+        // Check D diagonal
+        assert!((result.d[0] - 2.0).abs() < 1e-10);
+        assert!((result.d[1] - 2.5).abs() < 1e-10);
+    }
 }
