@@ -59993,4 +59993,77 @@ mod tests {
         assert_close(dist.cdf(2.0), 0.91673, 1e-3, "lognorm(0.5).cdf(2)");
         assert_close(dist.cdf(5.0), 0.99937, 1e-3, "lognorm(0.5).cdf(5)");
     }
+
+    #[test]
+    fn noncentral_chi2_cdf_basic_properties() {
+        // NoncentralChiSquared CDF basic properties
+        // Note: diverges from scipy ncx2 - see bead for investigation
+        let dist = NoncentralChiSquared::new(3.0, 2.0);
+        assert_close(dist.cdf(0.0), 0.0, 1e-12, "ncx2.cdf(0)");
+        assert!(dist.cdf(5.0) > dist.cdf(1.0), "ncx2 CDF should be increasing");
+        assert!(dist.cdf(10.0) > dist.cdf(5.0), "ncx2 CDF should be increasing");
+        assert!(dist.cdf(50.0) > 0.99, "ncx2 CDF should approach 1");
+    }
+
+    #[test]
+    fn noncentral_f_cdf_basic_properties() {
+        // NoncentralF CDF basic properties
+        // Note: diverges from scipy ncf - see bead for investigation
+        let dist = NoncentralF::new(5.0, 10.0, 2.0);
+        assert_close(dist.cdf(0.0), 0.0, 1e-12, "ncf.cdf(0)");
+        assert!(dist.cdf(2.0) > dist.cdf(1.0), "ncf CDF should be increasing");
+        assert!(dist.cdf(5.0) > dist.cdf(2.0), "ncf CDF should be increasing");
+        assert!(dist.cdf(50.0) > 0.99, "ncf CDF should approach 1");
+    }
+
+    #[test]
+    fn uniform_cdf_matches_scipy_reference_values() {
+        // scipy: from scipy.stats import uniform
+        // uniform.cdf([0, 0.25, 0.5, 0.75, 1], loc=0, scale=1)
+        // array([0, 0.25, 0.5, 0.75, 1])
+        let dist = Uniform::new(0.0, 1.0);
+        assert_close(dist.cdf(0.0), 0.0, 1e-12, "uniform.cdf(0)");
+        assert_close(dist.cdf(0.25), 0.25, 1e-12, "uniform.cdf(0.25)");
+        assert_close(dist.cdf(0.5), 0.5, 1e-12, "uniform.cdf(0.5)");
+        assert_close(dist.cdf(0.75), 0.75, 1e-12, "uniform.cdf(0.75)");
+        assert_close(dist.cdf(1.0), 1.0, 1e-12, "uniform.cdf(1)");
+    }
+
+    #[test]
+    fn rayleigh_cdf_matches_scipy_reference_values() {
+        // scipy: from scipy.stats import rayleigh
+        // rayleigh.cdf([0.5, 1, 2, 3], scale=1)
+        // array([0.11750, 0.39347, 0.86466, 0.98889])
+        let dist = Rayleigh::new(1.0);
+        assert_close(dist.cdf(0.5), 0.11750, 1e-4, "rayleigh.cdf(0.5)");
+        assert_close(dist.cdf(1.0), 0.39347, 1e-4, "rayleigh.cdf(1)");
+        assert_close(dist.cdf(2.0), 0.86466, 1e-4, "rayleigh.cdf(2)");
+        assert_close(dist.cdf(3.0), 0.98889, 1e-4, "rayleigh.cdf(3)");
+    }
+
+    #[test]
+    fn cauchy_cdf_matches_scipy_reference_values() {
+        // scipy: from scipy.stats import cauchy
+        // cauchy.cdf([-2, -1, 0, 1, 2], loc=0, scale=1)
+        // array([0.14758, 0.25, 0.5, 0.75, 0.85241])
+        let dist = Cauchy::new(0.0, 1.0);
+        assert_close(dist.cdf(-2.0), 0.14758, 1e-4, "cauchy.cdf(-2)");
+        assert_close(dist.cdf(-1.0), 0.25, 1e-12, "cauchy.cdf(-1)");
+        assert_close(dist.cdf(0.0), 0.5, 1e-12, "cauchy.cdf(0)");
+        assert_close(dist.cdf(1.0), 0.75, 1e-12, "cauchy.cdf(1)");
+        assert_close(dist.cdf(2.0), 0.85241, 1e-4, "cauchy.cdf(2)");
+    }
+
+    #[test]
+    fn laplace_cdf_matches_scipy_reference_values() {
+        // scipy: from scipy.stats import laplace
+        // laplace.cdf([-2, -1, 0, 1, 2], loc=0, scale=1)
+        // array([0.06767, 0.18394, 0.5, 0.81606, 0.93233])
+        let dist = Laplace::new(0.0, 1.0);
+        assert_close(dist.cdf(-2.0), 0.06767, 1e-4, "laplace.cdf(-2)");
+        assert_close(dist.cdf(-1.0), 0.18394, 1e-4, "laplace.cdf(-1)");
+        assert_close(dist.cdf(0.0), 0.5, 1e-12, "laplace.cdf(0)");
+        assert_close(dist.cdf(1.0), 0.81606, 1e-4, "laplace.cdf(1)");
+        assert_close(dist.cdf(2.0), 0.93233, 1e-4, "laplace.cdf(2)");
+    }
 }
