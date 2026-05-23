@@ -3982,13 +3982,14 @@ mod tests {
     use fsci_runtime::RuntimeMode;
 
     use crate::{
-        BasinhoppingOptions, Bounds, ConvergenceStatus, DifferentialEvolutionOptions, Integrality,
-        LinearConstraint, MilpOptions, MilpProblem, MinimizeOptions, NonlinearConstraint,
-        OptimizeMethod, RootOptions, approx_fprime, basinhopping, bracket, brent_minimize, brute,
-        check_grad, cobyla, derivative, differential_evolution, differential_evolution_constrained,
-        dual_annealing, fixed_point, golden, gradient_descent, hessian, isotonic_regression,
-        jacobian, linear_sum_assignment, linprog, milp, nnls, projected_gradient_descent, pso,
-        rosen, rosen_der, rosen_hess, rosen_hess_prod, shgo,
+        BasinhoppingOptions, Bounds, ConvergenceStatus, DifferentialEvolutionOptions,
+        DifferentiateOptions, Integrality, LinearConstraint, MilpOptions, MilpProblem,
+        MinimizeOptions, NonlinearConstraint, OptimizeMethod, RootOptions, approx_fprime,
+        basinhopping, bracket, brent_minimize, brute, check_grad, cobyla, derivative,
+        differential_evolution, differential_evolution_constrained, dual_annealing, fixed_point,
+        golden, gradient_descent, hessian, isotonic_regression, jacobian, linear_sum_assignment,
+        linprog, milp, nnls, projected_gradient_descent, pso, rosen, rosen_der, rosen_hess,
+        rosen_hess_prod, shgo,
     };
 
     #[test]
@@ -5550,6 +5551,53 @@ mod tests {
             (result.fun - (-4.0)).abs() < 1e-6,
             "fun got {}, expected -4.0",
             result.fun
+        );
+    }
+
+    #[test]
+    fn derivative_matches_scipy_reference_values() {
+        // scipy.misc.derivative(lambda x: x**2, 1.0, dx=1e-6)
+        // -> 2.0 (derivative of x^2 at x=1)
+        let f = |x: f64| x * x;
+        let opts = DifferentiateOptions::default();
+        let result = derivative(f, 1.0, opts).expect("derivative");
+        assert!(
+            (result.df - 2.0).abs() < 1e-4,
+            "derivative got {}, expected 2.0",
+            result.df
+        );
+    }
+
+    #[test]
+    fn jacobian_matches_scipy_reference_values() {
+        // Jacobian of f(x,y) = [x^2, x*y] at (1, 2)
+        // -> [[2*x, 0], [y, x]] at (1,2) = [[2, 0], [2, 1]]
+        let f = |x: &[f64]| vec![x[0] * x[0], x[0] * x[1]];
+        let x0 = vec![1.0, 2.0];
+        let opts = DifferentiateOptions::default();
+        let result = jacobian(f, &x0, opts).expect("jacobian");
+        // df is the Jacobian matrix as Vec<Vec<f64>>
+        // Check first row: [2, 0]
+        assert!(
+            (result.df[0][0] - 2.0).abs() < 1e-4,
+            "J[0][0] got {}, expected 2",
+            result.df[0][0]
+        );
+        assert!(
+            result.df[0][1].abs() < 1e-4,
+            "J[0][1] got {}, expected 0",
+            result.df[0][1]
+        );
+        // Check second row: [2, 1]
+        assert!(
+            (result.df[1][0] - 2.0).abs() < 1e-4,
+            "J[1][0] got {}, expected 2",
+            result.df[1][0]
+        );
+        assert!(
+            (result.df[1][1] - 1.0).abs() < 1e-4,
+            "J[1][1] got {}, expected 1",
+            result.df[1][1]
         );
     }
 }
