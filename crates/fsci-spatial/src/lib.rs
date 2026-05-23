@@ -5820,4 +5820,59 @@ mod tests {
             "seuclidean got {result}, expected 2.8284271247461903"
         );
     }
+
+    #[test]
+    fn sqeuclidean_matches_scipy_reference_values() {
+        // scipy.spatial.distance.sqeuclidean([1, 2], [3, 4])
+        // -> (1-3)^2 + (2-4)^2 = 4 + 4 = 8
+        let result = sqeuclidean(&[1.0, 2.0], &[3.0, 4.0]);
+        assert!(
+            (result - 8.0).abs() < 1e-10,
+            "sqeuclidean got {result}, expected 8.0"
+        );
+    }
+
+    #[test]
+    fn correlation_matches_scipy_reference_values() {
+        // scipy.spatial.distance.correlation([1, 2, 3], [1, 2, 3])
+        // -> 0.0 (identical vectors have zero correlation distance)
+        let result = correlation(&[1.0, 2.0, 3.0], &[1.0, 2.0, 3.0]);
+        assert!(
+            result.abs() < 1e-10,
+            "correlation of identical vectors got {result}, expected 0.0"
+        );
+
+        // scipy.spatial.distance.correlation([1, 2, 3], [3, 2, 1])
+        // -> 2.0 (perfectly anti-correlated)
+        let result2 = correlation(&[1.0, 2.0, 3.0], &[3.0, 2.0, 1.0]);
+        assert!(
+            (result2 - 2.0).abs() < 1e-10,
+            "correlation of anti-correlated vectors got {result2}, expected 2.0"
+        );
+    }
+
+    #[test]
+    fn hamming_matches_scipy_reference_values() {
+        // scipy.spatial.distance.hamming([1, 0, 0], [0, 1, 0])
+        // -> 2/3 = 0.6666... (2 out of 3 elements differ)
+        let result = hamming(&[1.0, 0.0, 0.0], &[0.0, 1.0, 0.0]);
+        let expected = 2.0 / 3.0;
+        assert!(
+            (result - expected).abs() < 1e-10,
+            "hamming got {result}, expected {expected}"
+        );
+    }
+
+    #[test]
+    fn jaccard_matches_scipy_reference_values() {
+        // scipy.spatial.distance.jaccard([1, 0, 0], [1, 1, 0])
+        // -> 1 - |{1,0,0} ∩ {1,1,0}| / |{1,0,0} ∪ {1,1,0}|
+        // intersection at index 0 (both 1), union at indices 0,1 (any 1)
+        // For boolean: 1 - 1/2 = 0.5
+        let result = jaccard(&[1.0, 0.0, 0.0], &[1.0, 1.0, 0.0]);
+        assert!(
+            (result - 0.5).abs() < 1e-10,
+            "jaccard got {result}, expected 0.5"
+        );
+    }
 }
