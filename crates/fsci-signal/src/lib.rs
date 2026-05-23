@@ -17855,4 +17855,132 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn hamming_window_matches_scipy_reference_values() {
+        // scipy.signal.windows.hamming(5)
+        // -> [0.08, 0.54, 1.0, 0.54, 0.08]
+        let w = hamming(5);
+        let expected = [0.08, 0.54, 1.0, 0.54, 0.08];
+        assert_eq!(w.len(), expected.len());
+        for (i, (&got, &want)) in w.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "hamming(5)[{i}] got {got}, expected {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn savgol_coeffs_matches_scipy_reference_values() {
+        // scipy.signal.savgol_coeffs(5, 2)
+        let c = savgol_coeffs(5, 2, 0).expect("savgol_coeffs");
+        let expected = [
+            -0.0857142857142857,
+            0.3428571428571427,
+            0.4857142857142855,
+            0.3428571428571427,
+            -0.0857142857142858,
+        ];
+        assert_eq!(c.len(), expected.len());
+        for (i, (&got, &want)) in c.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "savgol_coeffs(5,2)[{i}] got {got}, expected {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn savgol_filter_matches_scipy_reference_values() {
+        // scipy.signal.savgol_filter([1,2,3,4,5,6,7,8], 5, 2, mode='nearest')
+        // fsci-signal uses 'nearest' mode by default
+        let x = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let result = savgol_filter(&x, 5, 2).expect("savgol_filter");
+        let expected = [
+            1.1714285714285706,
+            1.914285714285713,
+            2.9999999999999982,
+            3.999999999999998,
+            4.999999999999997,
+            5.9999999999999964,
+            7.085714285714282,
+            7.828571428571424,
+        ];
+        assert_eq!(result.len(), expected.len());
+        for (i, (&got, &want)) in result.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "savgol_filter[{i}] got {got}, expected {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn find_peaks_matches_scipy_reference_values() {
+        // scipy.signal.find_peaks([0, 1, 0, 2, 0, 3, 0, 2, 0, 1, 0])
+        let x = vec![0.0, 1.0, 0.0, 2.0, 0.0, 3.0, 0.0, 2.0, 0.0, 1.0, 0.0];
+        let result = find_peaks(&x, FindPeaksOptions::default());
+        let expected_peaks = [1, 3, 5, 7, 9];
+        assert_eq!(
+            result.peaks, expected_peaks,
+            "find_peaks got {:?}, expected {:?}",
+            result.peaks, expected_peaks
+        );
+    }
+
+    #[test]
+    fn find_peaks_with_height_matches_scipy_reference_values() {
+        // scipy.signal.find_peaks([0, 1, 0, 2, 0, 3, 0, 2, 0, 1, 0], height=1.5)
+        let x = vec![0.0, 1.0, 0.0, 2.0, 0.0, 3.0, 0.0, 2.0, 0.0, 1.0, 0.0];
+        let opts = FindPeaksOptions {
+            height: Some(1.5),
+            ..Default::default()
+        };
+        let result = find_peaks(&x, opts);
+        let expected_peaks = [3, 5, 7];
+        assert_eq!(
+            result.peaks, expected_peaks,
+            "find_peaks with height got {:?}, expected {:?}",
+            result.peaks, expected_peaks
+        );
+    }
+
+    #[test]
+    fn find_peaks_with_distance_matches_scipy_reference_values() {
+        // scipy.signal.find_peaks([0, 1, 0, 2, 0, 3, 0, 2, 0, 1, 0], distance=3)
+        let x = vec![0.0, 1.0, 0.0, 2.0, 0.0, 3.0, 0.0, 2.0, 0.0, 1.0, 0.0];
+        let opts = FindPeaksOptions {
+            distance: Some(3),
+            ..Default::default()
+        };
+        let result = find_peaks(&x, opts);
+        let expected_peaks = [1, 5, 9];
+        assert_eq!(
+            result.peaks, expected_peaks,
+            "find_peaks with distance got {:?}, expected {:?}",
+            result.peaks, expected_peaks
+        );
+    }
+
+    #[test]
+    fn peak_prominences_matches_scipy_reference_values() {
+        // scipy.signal.peak_prominences([0, 1, 0, 2, 0, 3, 0, 2, 0, 1, 0], [1, 3, 5, 7, 9])
+        let x = vec![0.0, 1.0, 0.0, 2.0, 0.0, 3.0, 0.0, 2.0, 0.0, 1.0, 0.0];
+        let peaks = vec![1, 3, 5, 7, 9];
+        let (prominences, left_bases, right_bases) = peak_prominences(&x, &peaks);
+
+        let expected_prom = [1.0, 2.0, 3.0, 2.0, 1.0];
+        let expected_left = [0, 2, 4, 6, 8];
+        let expected_right = [2, 4, 6, 8, 10];
+
+        for (i, (&got, &want)) in prominences.iter().zip(expected_prom.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "prominence[{i}] got {got}, expected {want}"
+            );
+        }
+        assert_eq!(left_bases, expected_left, "left_bases mismatch");
+        assert_eq!(right_bases, expected_right, "right_bases mismatch");
+    }
 }
