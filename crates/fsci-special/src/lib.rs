@@ -2768,4 +2768,52 @@ mod tests {
         assert!((i0_scalar(-1.0) - i0_scalar(1.0)).abs() < 1e-14);
         assert!((i1_scalar(-1.0) + i1_scalar(1.0)).abs() < 1e-14);
     }
+
+    #[test]
+    fn erf_matches_scipy_reference_values() {
+        // scipy.special.erf(1) = 0.8427007929497148
+        assert!((erf_scalar(1.0) - 0.8427007929497148).abs() < 1e-10);
+        // scipy.special.erf(0) = 0.0
+        assert!(erf_scalar(0.0).abs() < 1e-14);
+        // scipy.special.erf(-1) = -0.8427007929497148
+        assert!((erf_scalar(-1.0) + 0.8427007929497148).abs() < 1e-10);
+    }
+
+    #[test]
+    fn erfc_matches_scipy_reference_values() {
+        // scipy.special.erfc(1) = 0.15729920705028516
+        assert!((erfc_scalar(1.0) - 0.15729920705028516).abs() < 1e-10);
+        // scipy.special.erfc(0) = 1.0
+        assert!((erfc_scalar(0.0) - 1.0).abs() < 1e-14);
+    }
+
+    #[test]
+    fn digamma_matches_scipy_reference_values() {
+        // scipy.special.digamma(5) = 1.5061176684318003
+        let result = digamma_scalar(5.0);
+        assert!(
+            (result - 1.5061176684318003).abs() < 1e-6,
+            "digamma(5) got {result}, expected 1.5061176684318003"
+        );
+        // scipy.special.digamma(1) = -0.5772156649015329 (Euler-Mascheroni)
+        let result1 = digamma_scalar(1.0);
+        assert!(
+            (result1 + 0.5772156649015329).abs() < 1e-6,
+            "digamma(1) got {result1}, expected -0.5772156649015329"
+        );
+    }
+
+    #[test]
+    fn betaln_matches_scipy_reference_values() {
+        // scipy.special.betaln(2, 3) = -2.4849066497880004
+        let result = betaln_scalar(2.0, 3.0, RuntimeMode::Strict).unwrap();
+        assert!((result + 2.4849066497880004).abs() < 1e-10);
+    }
+
+    #[test]
+    fn betainc_matches_scipy_reference_values() {
+        // scipy.special.betainc(2, 3, 0.5) = 0.6875
+        let result = betainc_scalar(2.0, 3.0, 0.5, RuntimeMode::Strict).unwrap();
+        assert!((result - 0.6875).abs() < 1e-10);
+    }
 }
