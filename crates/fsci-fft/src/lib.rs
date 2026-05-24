@@ -66,7 +66,10 @@ mod tests {
 
     use std::f64::consts::PI;
 
-    use super::helpers::{fftfreq, fftshift_1d, ifftshift_1d, rfftfreq};
+    use super::helpers::{
+        analytic_signal, fftconvolve, fftfreq, fftshift_1d, ifftshift_1d, magnitude_spectrum,
+        periodogram_simple, rfftfreq,
+    };
     use super::transforms::{
         Complex64, FftOptions, dct, dct_i, dct_iv, dst_i, dst_ii, dst_iii, dst_iv, fft, fht,
         fhtoffset, hilbert, idct, ifft, ifht, irfft, rfft,
@@ -643,7 +646,10 @@ mod tests {
             assert!(
                 (got.0 - want.0).abs() < 1e-9 && (got.1 - want.1).abs() < 1e-9,
                 "fft[{i}] = ({}, {}), want ({}, {})",
-                got.0, got.1, want.0, want.1
+                got.0,
+                got.1,
+                want.0,
+                want.1
             );
         }
     }
@@ -659,7 +665,10 @@ mod tests {
             assert!(
                 (got.0 - want.0).abs() < 1e-9 && (got.1 - want.1).abs() < 1e-9,
                 "ifft[{i}] = ({}, {}), want ({}, {})",
-                got.0, got.1, want.0, want.1
+                got.0,
+                got.1,
+                want.0,
+                want.1
             );
         }
     }
@@ -675,7 +684,10 @@ mod tests {
             assert!(
                 (got.0 - want.0).abs() < 1e-9 && (got.1 - want.1).abs() < 1e-9,
                 "rfft[{i}] = ({}, {}), want ({}, {})",
-                got.0, got.1, want.0, want.1
+                got.0,
+                got.1,
+                want.0,
+                want.1
             );
         }
     }
@@ -688,10 +700,7 @@ mod tests {
         // scipy.fft.irfft([10+0j, -2+2j, -2+0j]) = [1,2,3,4]
         let expected: Vec<f64> = vec![1.0, 2.0, 3.0, 4.0];
         for (i, (got, want)) in result.iter().zip(expected.iter()).enumerate() {
-            assert!(
-                (got - want).abs() < 1e-9,
-                "irfft[{i}] = {got}, want {want}"
-            );
+            assert!((got - want).abs() < 1e-9, "irfft[{i}] = {got}, want {want}");
         }
     }
 
@@ -788,24 +797,14 @@ mod tests {
         use super::transforms::fft2;
         use super::{Complex64, FftOptions, Normalization};
         // 2x2 input: [[1, 2], [3, 4]] in row-major (flattened)
-        let input: Vec<Complex64> = vec![
-            (1.0, 0.0),
-            (2.0, 0.0),
-            (3.0, 0.0),
-            (4.0, 0.0),
-        ];
+        let input: Vec<Complex64> = vec![(1.0, 0.0), (2.0, 0.0), (3.0, 0.0), (4.0, 0.0)];
         let options = FftOptions {
             normalization: Normalization::Backward,
             ..FftOptions::default()
         };
         let result = fft2(&input, (2, 2), &options).expect("fft2");
         // Expected: [[10, -2], [-4, 0]]
-        let expected: [Complex64; 4] = [
-            (10.0, 0.0),
-            (-2.0, 0.0),
-            (-4.0, 0.0),
-            (0.0, 0.0),
-        ];
+        let expected: [Complex64; 4] = [(10.0, 0.0), (-2.0, 0.0), (-4.0, 0.0), (0.0, 0.0)];
         for (i, (&got, &want)) in result.iter().zip(expected.iter()).enumerate() {
             assert!(
                 (got.0 - want.0).abs() < 1e-10 && (got.1 - want.1).abs() < 1e-10,
@@ -850,6 +849,85 @@ mod tests {
         assert!((result[0].0 - 1.0).abs() < 1e-10, "hilbert[0] real");
         assert!((result[1].0 - 0.0).abs() < 1e-10, "hilbert[1] real");
         // Imaginary part should be non-trivial for analytic signal
-        assert!(result.iter().any(|c| c.1.abs() > 1e-10), "hilbert should have imag part");
+        assert!(
+            result.iter().any(|c| c.1.abs() > 1e-10),
+            "hilbert should have imag part"
+        );
+    }
+
+    #[test]
+    fn fftconvolve_matches_scipy_reference_values() {
+        // scipy.signal.fftconvolve([1, 2, 3], [0, 1, 0.5], mode='full')
+        // -> [0.0, 1.0, 2.5, 4.0, 1.5]
+        let a = vec![1.0, 2.0, 3.0];
+        let b = vec![0.0, 1.0, 0.5];
+        let result = fftconvolve(&a, &b, "full").expect("fftconvolve");
+        let expected = [0.0, 1.0, 2.5, 4.0, 1.5];
+        assert_eq!(result.len(), expected.len());
+        for (i, (&got, &want)) in result.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - want).abs() < 1e-10,
+                "fftconvolve[{i}] = {got}, expected {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn fftconvolve_same_mode_matches_scipy_reference() {
+        // scipy.signal.fftconvolve([1, 2, 3, 4, 5], [1, 0, -1], mode='same')
+        // Output length should equal first input length
+        let a = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let b = vec![1.0, 0.0, -1.0];
+        let result = fftconvolve(&a, &b, "same").expect("fftconvolve same");
+        assert_eq!(result.len(), a.len(), "same mode output length");
+    }
+
+    #[test]
+    fn periodogram_simple_matches_scipy_reference() {
+        // scipy.signal.periodogram([1, 2, 3, 4], fs=1.0) returns (freqs, psd)
+        let x = vec![1.0, 2.0, 3.0, 4.0];
+        let (freqs, psd) = periodogram_simple(&x, 1.0).expect("periodogram");
+        // Frequencies should include DC (0.0) and go up to Nyquist (0.5)
+        assert!(freqs[0].abs() < 1e-10, "DC frequency should be 0");
+        assert!(
+            (freqs.last().unwrap() - 0.5).abs() < 1e-10,
+            "last freq should be Nyquist"
+        );
+        // PSD should be non-negative
+        assert!(psd.iter().all(|&p| p >= 0.0), "PSD should be non-negative");
+    }
+
+    #[test]
+    fn magnitude_spectrum_matches_scipy_reference() {
+        // scipy.fft.fft([1, 0, -1, 0]) -> magnitude spectrum (one-sided)
+        let x = vec![1.0, 0.0, -1.0, 0.0];
+        let result = magnitude_spectrum(&x).expect("magnitude_spectrum");
+        // One-sided spectrum: DC + n/2 positive freqs = n/2 + 1 for even n
+        assert!(
+            result.len() >= 2,
+            "magnitude spectrum should have at least 2 values"
+        );
+        // DC component (sum) should be 0
+        assert!(result[0].abs() < 1e-10, "DC magnitude should be 0");
+        // All magnitudes should be non-negative
+        assert!(
+            result.iter().all(|&m| m >= 0.0),
+            "magnitudes should be non-negative"
+        );
+    }
+
+    #[test]
+    fn analytic_signal_matches_scipy_reference() {
+        // scipy.signal.hilbert([1, 2, 3, 4]) returns analytic signal
+        let x = vec![1.0, 2.0, 3.0, 4.0];
+        let result = analytic_signal(&x).expect("analytic_signal");
+        assert_eq!(result.len(), 4);
+        // Real part should equal input
+        for (i, (&(re, _), &expected)) in result.iter().zip(x.iter()).enumerate() {
+            assert!(
+                (re - expected).abs() < 1e-10,
+                "analytic_signal[{i}].real = {re}, expected {expected}"
+            );
+        }
     }
 }
