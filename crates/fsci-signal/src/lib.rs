@@ -18178,4 +18178,29 @@ mod tests {
         );
         assert!((result[1] - result[3]).abs() < 1e-10, "bohman symmetric");
     }
+
+    #[test]
+    fn instantaneous_frequency_matches_scipy_reference() {
+        // scipy.signal instantaneous_frequency via hilbert
+        // For a pure sine wave sin(2*pi*f*t), instantaneous freq should be f
+        let fs = 100.0;
+        let freq = 5.0;
+        let t: Vec<f64> = (0..100).map(|i| i as f64 / fs).collect();
+        let x: Vec<f64> = t
+            .iter()
+            .map(|&ti| (2.0 * std::f64::consts::PI * freq * ti).sin())
+            .collect();
+        let result = instantaneous_frequency(&x, fs).expect("instantaneous_frequency");
+        assert_eq!(result.len(), x.len());
+        // Middle values should be close to the input frequency
+        let mid_start = 20;
+        let mid_end = 80;
+        for i in mid_start..mid_end {
+            assert!(
+                (result[i] - freq).abs() < 1.0,
+                "instantaneous_frequency[{i}] = {}, expected ~{freq}",
+                result[i]
+            );
+        }
+    }
 }
