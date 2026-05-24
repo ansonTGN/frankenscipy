@@ -6743,6 +6743,34 @@ mod tests {
             assert!((ax[i] - b[i]).abs() < 1e-5, "cgs residual too large at {i}");
         }
     }
+
+    #[test]
+    fn splu_solve_matches_scipy_reference_values() {
+        // scipy.sparse.linalg.splu(A).solve(b) solves Ax = b
+        // Simple 2x2 system: [[4, 1], [1, 3]] * x = [1, 2]
+        use crate::{CooMatrix, Shape2D};
+        let a = CooMatrix::from_triplets(
+            Shape2D::new(2, 2),
+            vec![4.0, 1.0, 1.0, 3.0],
+            vec![0, 0, 1, 1],
+            vec![0, 1, 0, 1],
+            false,
+        )
+        .expect("coo")
+        .to_csc()
+        .expect("csc");
+        let lu = super::splu(&a, LuOptions::default()).expect("splu");
+        let b = vec![1.0, 2.0];
+        let x = super::splu_solve(&lu, &b).expect("splu_solve");
+        // Exact solution is x = [1/11, 7/11] ≈ [0.0909, 0.6364]
+        // Verify via matrix product: compute A @ x manually
+        // Row 0: 4*x[0] + 1*x[1] should ≈ 1
+        // Row 1: 1*x[0] + 3*x[1] should ≈ 2
+        let ax0 = 4.0 * x[0] + 1.0 * x[1];
+        let ax1 = 1.0 * x[0] + 3.0 * x[1];
+        assert!((ax0 - 1.0).abs() < 1e-10, "splu row 0 residual");
+        assert!((ax1 - 2.0).abs() < 1e-10, "splu row 1 residual");
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════
