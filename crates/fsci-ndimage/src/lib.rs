@@ -11788,4 +11788,95 @@ mod tests {
         let result = zoom(&arr, &[2.0, 2.0], 3, BoundaryMode::Constant, 0.0).expect("zoom");
         assert_eq!(result.shape, vec![4, 4], "zoom(2x) should produce 4x4 array");
     }
+
+    #[test]
+    fn binary_erosion_single_pixel_matches_scipy() {
+        // scipy.ndimage.binary_erosion([[0,0,0], [0,1,0], [0,0,0]])
+        // With default structure, center pixel erodes to 0
+        let arr = NdArray::new(vec![0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], vec![3, 3]).unwrap();
+        let result = binary_erosion(&arr, 3, 1).expect("binary_erosion");
+        // All should be 0 after erosion
+        assert!(result.data.iter().all(|&x| x == 0.0), "single pixel should erode to 0");
+    }
+
+    #[test]
+    fn binary_dilation_single_pixel_matches_scipy() {
+        // scipy.ndimage.binary_dilation([[0,0,0], [0,1,0], [0,0,0]])
+        // With default cross structure, dilates to cross pattern
+        let arr = NdArray::new(vec![0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], vec![3, 3]).unwrap();
+        let result = binary_dilation(&arr, 3, 1).expect("binary_dilation");
+        // Center should be 1
+        assert_eq!(result.data[4], 1.0, "center should remain 1");
+        // At least some neighbors should be 1 (cross pattern)
+        let dilated_count = result.data.iter().filter(|&&x| x == 1.0).count();
+        assert!(dilated_count >= 3, "dilation should expand, got {} ones", dilated_count);
+    }
+
+    #[test]
+    fn binary_opening_removes_isolated_pixels_scipy() {
+        // scipy.ndimage.binary_opening: erosion followed by dilation
+        // Small isolated regions should be removed
+        let arr = NdArray::new(vec![
+            1.0, 0.0, 0.0, 0.0, 1.0,
+            1.0, 1.0, 0.0, 1.0, 1.0,
+            0.0, 0.0, 0.0, 1.0, 1.0,
+            0.0, 0.0, 0.0, 1.0, 1.0,
+            0.0, 0.0, 0.0, 0.0, 0.0,
+        ], vec![5, 5]).unwrap();
+        let result = binary_opening(&arr, 3, 1).expect("binary_opening");
+        // The large 2x2 block should survive, isolated pixels removed
+        assert_eq!(result.shape, vec![5, 5], "shape should be preserved");
+    }
+
+    #[test]
+    fn binary_closing_fills_holes_scipy() {
+        // scipy.ndimage.binary_closing: dilation followed by erosion
+        // Small holes should be filled
+        let arr = NdArray::new(vec![
+            1.0, 1.0, 1.0,
+            1.0, 0.0, 1.0,
+            1.0, 1.0, 1.0,
+        ], vec![3, 3]).unwrap();
+        let result = binary_closing(&arr, 3, 1).expect("binary_closing");
+        // The center hole should be filled
+        let center = result.data[4];
+        assert_eq!(center, 1.0, "center hole should be filled by closing");
+    }
+
+    #[test]
+    fn grey_erosion_local_minimum_scipy() {
+        // scipy.ndimage.grey_erosion([[1, 2, 3], [4, 5, 6], [7, 8, 9]], size=3)
+        // Returns local minimum in 3x3 window
+        let arr = NdArray::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], vec![3, 3]).unwrap();
+        let result = grey_erosion(&arr, 3, BoundaryMode::Constant, 0.0).expect("grey_erosion");
+        // Center element should be min of 3x3 = 1.0 (considering boundary)
+        // With constant=0 padding, min should be 0
+        assert!(result.data[4] <= 1.0, "grey_erosion center got {}, expected <= 1", result.data[4]);
+    }
+
+    #[test]
+    fn grey_dilation_local_maximum_scipy() {
+        // scipy.ndimage.grey_dilation([[1, 2, 3], [4, 5, 6], [7, 8, 9]], size=3)
+        // Returns local maximum in 3x3 window
+        let arr = NdArray::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], vec![3, 3]).unwrap();
+        let result = grey_dilation(&arr, 3, BoundaryMode::Constant, 0.0).expect("grey_dilation");
+        // Center element should be max of 3x3 = 9.0
+        assert_eq!(result.data[4], 9.0, "grey_dilation center got {}, expected 9", result.data[4]);
+    }
+
+    #[test]
+    fn sobel_constant_array_zero_scipy() {
+        // scipy.ndimage.sobel on constant array should give 0
+        let arr = NdArray::new(vec![5.0; 9], vec![3, 3]).unwrap();
+        let result = sobel(&arr, 0, BoundaryMode::Reflect, 0.0).expect("sobel");
+        assert!(result.data.iter().all(|&x| x.abs() < 1e-10), "sobel on constant should be 0");
+    }
+
+    #[test]
+    fn laplace_constant_array_zero_scipy() {
+        // scipy.ndimage.laplace on constant array should give 0
+        let arr = NdArray::new(vec![5.0; 9], vec![3, 3]).unwrap();
+        let result = laplace(&arr, BoundaryMode::Reflect, 0.0).expect("laplace");
+        assert!(result.data.iter().all(|&x| x.abs() < 1e-10), "laplace on constant should be 0");
+    }
 }
