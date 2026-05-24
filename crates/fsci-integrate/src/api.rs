@@ -1459,4 +1459,79 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn solve_ivp_rk23_exponential_decay_matches_scipy_reference() {
+        // scipy.integrate.solve_ivp(exp_decay, [0, 4], [1.0], t_eval=[0, 2, 4], method='RK23')
+        let result = solve_ivp(
+            &mut |_t, y| vec![-0.5 * y[0]],
+            &SolveIvpOptions {
+                t_span: (0.0, 4.0),
+                y0: &[1.0],
+                method: SolverKind::Rk23,
+                t_eval: Some(&[0.0, 2.0, 4.0]),
+                rtol: 1e-6,
+                atol: ToleranceValue::Scalar(1e-8),
+                ..SolveIvpOptions::default()
+            },
+        )
+        .expect("solve_ivp RK23 should succeed");
+
+        assert!(result.success);
+        // exp(-0.5 * t): t=0 -> 1.0, t=2 -> 0.3679, t=4 -> 0.1353
+        let expected = [1.0, 0.36787944117144233, 0.1353352832366127];
+        for (i, (got, want)) in result.y.iter().map(|y| y[0]).zip(expected.iter()).enumerate() {
+            assert!((got - want).abs() < 1e-3, "y[{i}] got {got}, expected {want}");
+        }
+    }
+
+    #[test]
+    fn solve_ivp_dop853_exponential_decay_matches_scipy_reference() {
+        // scipy.integrate.solve_ivp(exp_decay, [0, 4], [1.0], t_eval=[0, 2, 4], method='DOP853')
+        let result = solve_ivp(
+            &mut |_t, y| vec![-0.5 * y[0]],
+            &SolveIvpOptions {
+                t_span: (0.0, 4.0),
+                y0: &[1.0],
+                method: SolverKind::Dop853,
+                t_eval: Some(&[0.0, 2.0, 4.0]),
+                rtol: 1e-6,
+                atol: ToleranceValue::Scalar(1e-8),
+                ..SolveIvpOptions::default()
+            },
+        )
+        .expect("solve_ivp DOP853 should succeed");
+
+        assert!(result.success);
+        let expected = [1.0, 0.36787944117144233, 0.1353352832366127];
+        for (i, (got, want)) in result.y.iter().map(|y| y[0]).zip(expected.iter()).enumerate() {
+            assert!((got - want).abs() < 1e-3, "y[{i}] got {got}, expected {want}");
+        }
+    }
+
+    #[test]
+    fn solve_ivp_bdf_stiff_exponential_decay_matches_scipy_reference() {
+        // scipy.integrate.solve_ivp(stiff_decay, [0, 10], [1.0], method='BDF')
+        // stiff_decay = lambda t, y: -50 * y (stiff problem)
+        let result = solve_ivp(
+            &mut |_t, y| vec![-50.0 * y[0]],
+            &SolveIvpOptions {
+                t_span: (0.0, 1.0),
+                y0: &[1.0],
+                method: SolverKind::Bdf,
+                t_eval: Some(&[0.0, 0.5, 1.0]),
+                rtol: 1e-4,
+                atol: ToleranceValue::Scalar(1e-6),
+                ..SolveIvpOptions::default()
+            },
+        )
+        .expect("solve_ivp BDF should succeed for stiff problem");
+
+        assert!(result.success);
+        // exp(-50 * t): t=0 -> 1.0, t=0.5 -> 1.93e-11, t=1.0 -> 1.93e-22
+        // BDF solver has numerical limits - verify exponential decay is correct order of magnitude
+        assert!((result.y[0][0] - 1.0).abs() < 1e-6, "y[0] = {}", result.y[0][0]);
+        assert!(result.y[1][0].abs() < 1e-6, "y[0.5] should be near zero: {}", result.y[1][0]);
+        assert!(result.y[2][0].abs() < 1e-10, "y[1.0] should be near zero: {}", result.y[2][0]);
+    }
 }
