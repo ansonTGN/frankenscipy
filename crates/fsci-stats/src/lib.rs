@@ -2718,6 +2718,113 @@ impl ContinuousDistribution for BetaDist {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// Studentized Range Distribution
+// ══════════════════════════════════════════════════════════════════════
+
+/// Studentized Range distribution for k groups with df degrees of freedom.
+///
+/// This is the distribution of (max - min)/S where max and min are the
+/// extreme values of k independent standard normal random variables,
+/// and S is an independent estimate of the standard deviation with df
+/// degrees of freedom.
+///
+/// Matches `scipy.stats.studentized_range(k, df)`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StudentizedRange {
+    /// Number of groups being compared (k >= 2)
+    pub k: usize,
+    /// Degrees of freedom (df > 0)
+    pub df: f64,
+}
+
+impl StudentizedRange {
+    #[must_use]
+    pub fn new(k: usize, df: f64) -> Self {
+        assert!(k >= 2, "k must be >= 2, got {k}");
+        assert!(df > 0.0, "df must be positive, got {df}");
+        Self { k, df }
+    }
+
+    /// CDF of the range of k standard normal variables at value w.
+    /// F_R(w) = integral_{-inf}^{inf} k * phi(x) * [Phi(x+w) - Phi(x)]^{k-1} dx
+    fn range_cdf(k: usize, w: f64) -> f64 {
+        if w <= 0.0 {
+            return 0.0;
+        }
+        if !w.is_finite() {
+            return 1.0;
+        }
+        let k_f = k as f64;
+        let integrand = |x: f64| {
+            let phi_x = (-0.5 * x * x).exp() / (2.0 * PI).sqrt();
+            let cdf_x = standard_normal_cdf(x);
+            let cdf_xw = standard_normal_cdf(x + w);
+            let diff = (cdf_xw - cdf_x).max(0.0);
+            k_f * phi_x * diff.powf(k_f - 1.0)
+        };
+        simpson_integrate_adaptive(integrand, -12.0, 12.0, 64, 1e-10, 1e-14, 12).clamp(0.0, 1.0)
+    }
+
+    /// Survival function: P(Q > q)
+    pub fn sf(&self, q: f64) -> f64 {
+        if q <= 0.0 {
+            return 1.0;
+        }
+        if !q.is_finite() {
+            return 0.0;
+        }
+        1.0 - self.cdf(q)
+    }
+
+    /// Cumulative distribution function: P(Q <= q)
+    ///
+    /// Computed by integrating over the chi-scaled variable:
+    /// F_Q(q) = integral_0^inf f_chi(s; df) * F_R(q*s) ds
+    ///
+    /// where f_chi is the PDF of sqrt(chi2(df)/df).
+    pub fn cdf(&self, q: f64) -> f64 {
+        if q <= 0.0 {
+            return 0.0;
+        }
+        if !q.is_finite() {
+            return 1.0;
+        }
+
+        let df = self.df;
+        let k = self.k;
+
+        // For the scaled chi distribution (s = sqrt(chi2/df)), we integrate
+        // using the change of variables. Let u = chi2/df, then s = sqrt(u).
+        // We integrate over u from 0 to infinity.
+        //
+        // chi2 has PDF: f(x) = x^(df/2-1) * exp(-x/2) / (2^(df/2) * Gamma(df/2))
+        // u = x/df has PDF: f(u) = (df*u)^(df/2-1) * exp(-df*u/2) * df / (2^(df/2) * Gamma(df/2))
+        //                       = df^(df/2) * u^(df/2-1) * exp(-df*u/2) / (2^(df/2) * Gamma(df/2))
+
+        // More direct: integrate using the chi2 distribution directly
+        // F_Q(q) = integral_0^inf f_chi2(v; df) * F_R(q * sqrt(v/df)) dv
+
+        let half_df = df / 2.0;
+        let log_norm = half_df * 2.0_f64.ln() + ln_gamma(half_df);
+
+        let integrand = |v: f64| {
+            if v <= 0.0 {
+                return 0.0;
+            }
+            let log_chi2_pdf = (half_df - 1.0) * v.ln() - v / 2.0 - log_norm;
+            let chi2_pdf = log_chi2_pdf.exp();
+            let s = (v / df).sqrt();
+            let range_cdf = Self::range_cdf(k, q * s);
+            chi2_pdf * range_cdf
+        };
+
+        // Integrate from 0 to a reasonable upper bound (chi2 tails decay fast)
+        let upper = (df + 10.0 * (2.0 * df).sqrt()).max(50.0);
+        simpson_integrate_adaptive(integrand, 1e-10, upper, 128, 1e-9, 1e-12, 14).clamp(0.0, 1.0)
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // Gamma Distribution
 // ══════════════════════════════════════════════════════════════════════
 
@@ -19266,15 +19373,15 @@ pub struct TukeyHSDResult {
 /// Tukey's HSD test for pairwise comparison of group means.
 ///
 /// Post-hoc test after ANOVA to identify which groups differ.
-/// Uses Bonferroni-corrected t-tests as approximation.
+/// Uses the Studentized Range distribution for exact p-values.
 ///
-/// Similar to `scipy.stats.tukey_hsd(*groups)`.
+/// Matches `scipy.stats.tukey_hsd(*groups)`.
 ///
 /// # Arguments
 /// * `groups` - Slice of sample arrays for each group
 ///
 /// # Returns
-/// `TukeyHSDResult` with matrices of statistics and p-values.
+/// `TukeyHSDResult` with matrices of statistics (mean differences) and p-values.
 pub fn tukey_hsd(groups: &[&[f64]]) -> TukeyHSDResult {
     let k = groups.len();
     if k < 2 {
@@ -19284,7 +19391,7 @@ pub fn tukey_hsd(groups: &[&[f64]]) -> TukeyHSDResult {
         };
     }
 
-    // Compute group means
+    // Compute group means and sizes
     let means: Vec<f64> = groups
         .iter()
         .map(|g| {
@@ -19295,6 +19402,8 @@ pub fn tukey_hsd(groups: &[&[f64]]) -> TukeyHSDResult {
             }
         })
         .collect();
+
+    let ns: Vec<f64> = groups.iter().map(|g| g.len() as f64).collect();
 
     // Compute pooled variance (MSE from ANOVA)
     let n_total: usize = groups.iter().map(|g| g.len()).sum();
@@ -19314,14 +19423,12 @@ pub fn tukey_hsd(groups: &[&[f64]]) -> TukeyHSDResult {
         .sum();
     let mse = ss_within / df_within;
 
-    // Number of pairwise comparisons for Bonferroni
-    let num_comparisons = k * (k - 1) / 2;
+    // Studentized Range distribution for k groups with df_within degrees of freedom
+    let sr_dist = StudentizedRange::new(k, df_within);
 
     // Compute pairwise statistics and p-values
     let mut stat_matrix = vec![vec![0.0; k]; k];
     let mut pval_matrix = vec![vec![1.0; k]; k];
-
-    let tdist = StudentT::new(df_within);
 
     for i in 0..k {
         for j in 0..k {
@@ -19332,16 +19439,13 @@ pub fn tukey_hsd(groups: &[&[f64]]) -> TukeyHSDResult {
                 let mean_diff = means[i] - means[j];
                 stat_matrix[i][j] = mean_diff;
 
-                // Standard error for difference of means
-                let ni = groups[i].len() as f64;
-                let nj = groups[j].len() as f64;
-                let se = (mse * (1.0 / ni + 1.0 / nj)).sqrt();
+                // Standard error: sqrt(MSE / n) for equal sample sizes
+                // For unequal sizes, use harmonic mean: sqrt(MSE * (1/ni + 1/nj) / 2)
+                let se = (mse * (1.0 / ns[i] + 1.0 / ns[j]) / 2.0).sqrt();
 
                 if se > 0.0 {
-                    let t = mean_diff.abs() / se;
-                    let p_raw = 2.0 * (1.0 - tdist.cdf(t));
-                    // Bonferroni correction
-                    pval_matrix[i][j] = (p_raw * num_comparisons as f64).min(1.0);
+                    let q = mean_diff.abs() / se;
+                    pval_matrix[i][j] = sr_dist.sf(q);
                 } else {
                     pval_matrix[i][j] = f64::NAN;
                 }
@@ -46608,6 +46712,74 @@ mod tests {
     fn tukey_hsd_edge_cases() {
         // Less than 2 groups
         assert!(tukey_hsd(&[&[1.0, 2.0]]).statistic.is_empty());
+    }
+
+    #[test]
+    fn tukey_hsd_matches_scipy_reference() {
+        // scipy.stats.tukey_hsd([1,2,3,4,5], [6,7,8,9,10], [3,4,5,6,7])
+        // Statistic matrix:
+        // [[ 0. -5. -2.]
+        //  [ 5.  0.  3.]
+        //  [ 2. -3.  0.]]
+        // P-value matrix:
+        // [[1.00000000e+00 8.34214637e-04 1.54579968e-01]
+        //  [8.34214637e-04 1.00000000e+00 2.77219156e-02]
+        //  [1.54579968e-01 2.77219156e-02 1.00000000e+00]]
+        let g1 = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let g2 = [6.0, 7.0, 8.0, 9.0, 10.0];
+        let g3 = [3.0, 4.0, 5.0, 6.0, 7.0];
+
+        let result = tukey_hsd(&[&g1, &g2, &g3]);
+
+        // Check statistics (mean differences)
+        assert!((result.statistic[0][1] - (-5.0)).abs() < 1e-10);
+        assert!((result.statistic[0][2] - (-2.0)).abs() < 1e-10);
+        assert!((result.statistic[1][0] - 5.0).abs() < 1e-10);
+        assert!((result.statistic[1][2] - 3.0).abs() < 1e-10);
+        assert!((result.statistic[2][0] - 2.0).abs() < 1e-10);
+        assert!((result.statistic[2][1] - (-3.0)).abs() < 1e-10);
+
+        // Check p-values match scipy exactly (within tolerance)
+        let tol = 1e-4;
+        assert!(
+            (result.pvalue[0][1] - 8.34214637e-04).abs() < tol,
+            "pvalue[0][1]={} vs scipy 8.34e-4",
+            result.pvalue[0][1]
+        );
+        assert!(
+            (result.pvalue[0][2] - 0.154579968).abs() < tol,
+            "pvalue[0][2]={} vs scipy 0.1546",
+            result.pvalue[0][2]
+        );
+        assert!(
+            (result.pvalue[1][2] - 0.0277219156).abs() < tol,
+            "pvalue[1][2]={} vs scipy 0.0277",
+            result.pvalue[1][2]
+        );
+    }
+
+    #[test]
+    fn studentized_range_sf_matches_scipy_reference() {
+        // scipy.stats.studentized_range.sf(q, k, df) reference values
+        let test_cases = [
+            (2, 5, 1.0, 5.110840804302805e-01),
+            (2, 5, 3.0, 8.735930812736137e-02),
+            (2, 10, 2.0, 1.876698708696012e-01),
+            (2, 20, 4.0, 1.038247705026962e-02),
+            (3, 12, 4.2426, 2.77219156e-02), // From tukey_hsd test case
+            (3, 12, 7.0711, 8.34214637e-04), // From tukey_hsd test case
+        ];
+
+        for (k, df, q, expected_sf) in test_cases {
+            let sr = StudentizedRange::new(k, df as f64);
+            let sf = sr.sf(q);
+            let rel_err = (sf - expected_sf).abs() / expected_sf.max(1e-10);
+            assert!(
+                rel_err < 0.05,
+                "studentized_range.sf({}, {}, {})={} vs scipy {}, rel_err={}",
+                q, k, df, sf, expected_sf, rel_err
+            );
+        }
     }
 
     // ── dunnett tests ──────────────────────────────────────────────
