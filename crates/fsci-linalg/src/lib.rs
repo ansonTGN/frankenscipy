@@ -12777,4 +12777,54 @@ mod proptest_tests {
         let u_diag_product = result.u[0][0] * result.u[1][1];
         assert!(u_diag_product.abs() > 1e-10, "U diagonal product should be non-zero");
     }
+
+    #[test]
+    fn sinm_matches_scipy_reference_values() {
+        // scipy.linalg.sinm([[0, 1], [-1, 0]]) -> [[0, sinh(1)], [-sinh(1), 0]]
+        // sinh(1) ≈ 1.17520119
+        let a = vec![vec![0.0, 1.0], vec![-1.0, 0.0]];
+        let result = sinm(&a, DecompOptions::default()).expect("sinm");
+        assert!(result[0][0].abs() < 1e-6, "sinm[0][0] = {}, expected ~0", result[0][0]);
+        assert!((result[0][1] - 1.17520119).abs() < 1e-4, "sinm[0][1] = {}, expected 1.17520119", result[0][1]);
+        assert!((result[1][0] + 1.17520119).abs() < 1e-4, "sinm[1][0] = {}, expected -1.17520119", result[1][0]);
+        assert!(result[1][1].abs() < 1e-6, "sinm[1][1] = {}, expected ~0", result[1][1]);
+    }
+
+    #[test]
+    fn cosm_matches_scipy_reference_values() {
+        // scipy.linalg.cosm([[0, 1], [-1, 0]]) -> [[cosh(1), 0], [0, cosh(1)]]
+        // cosh(1) ≈ 1.54308063
+        let a = vec![vec![0.0, 1.0], vec![-1.0, 0.0]];
+        let result = cosm(&a, DecompOptions::default()).expect("cosm");
+        assert!((result[0][0] - 1.54308063).abs() < 1e-4, "cosm[0][0] = {}, expected 1.54308063", result[0][0]);
+        assert!(result[0][1].abs() < 1e-6, "cosm[0][1] = {}, expected ~0", result[0][1]);
+        assert!(result[1][0].abs() < 1e-6, "cosm[1][0] = {}, expected ~0", result[1][0]);
+        assert!((result[1][1] - 1.54308063).abs() < 1e-4, "cosm[1][1] = {}, expected 1.54308063", result[1][1]);
+    }
+
+    #[test]
+    fn signm_matches_scipy_reference_values() {
+        // scipy.linalg.signm([[1, 0], [0, -1]]) -> [[1, 0], [0, -1]]
+        let a = vec![vec![1.0, 0.0], vec![0.0, -1.0]];
+        let result = signm(&a, DecompOptions::default()).expect("signm");
+        assert!((result[0][0] - 1.0).abs() < 1e-10, "signm[0][0] = {}, expected 1.0", result[0][0]);
+        assert!(result[0][1].abs() < 1e-10, "signm[0][1] = {}, expected 0.0", result[0][1]);
+        assert!(result[1][0].abs() < 1e-10, "signm[1][0] = {}, expected 0.0", result[1][0]);
+        assert!((result[1][1] + 1.0).abs() < 1e-10, "signm[1][1] = {}, expected -1.0", result[1][1]);
+    }
+
+    #[test]
+    fn polar_matches_scipy_reference_values() {
+        // scipy.linalg.polar([[1, 2], [3, 4]]) -> (u, p)
+        // u is unitary, p is positive semidefinite hermitian
+        let a = vec![vec![1.0, 2.0], vec![3.0, 4.0]];
+        let result = polar(&a, DecompOptions::default()).expect("polar");
+        // Verify U is orthogonal: U^T * U ≈ I
+        let ut_u_00 = result.u[0][0] * result.u[0][0] + result.u[1][0] * result.u[1][0];
+        let ut_u_11 = result.u[0][1] * result.u[0][1] + result.u[1][1] * result.u[1][1];
+        assert!((ut_u_00 - 1.0).abs() < 1e-6, "U^T*U[0][0] = {}, expected 1.0", ut_u_00);
+        assert!((ut_u_11 - 1.0).abs() < 1e-6, "U^T*U[1][1] = {}, expected 1.0", ut_u_11);
+        // P should be symmetric positive
+        assert!((result.p[0][1] - result.p[1][0]).abs() < 1e-6, "P should be symmetric");
+    }
 }
