@@ -6692,6 +6692,33 @@ mod tests {
         sorted.sort();
         assert_eq!(sorted, vec![0, 1, 2, 3], "should be valid permutation");
     }
+
+    #[test]
+    fn bicg_matches_scipy_reference_values() {
+        // scipy.sparse.linalg.bicg(A, b) solves Ax = b
+        // Simple 2x2 system: [[4, 1], [1, 3]] * x = [1, 2]
+        use crate::{CooMatrix, Shape2D};
+        let a = CooMatrix::from_triplets(
+            Shape2D::new(2, 2),
+            vec![4.0, 1.0, 1.0, 3.0],
+            vec![0, 0, 1, 1],
+            vec![0, 1, 0, 1],
+            false,
+        )
+        .expect("coo")
+        .to_csr()
+        .expect("csr");
+        let b = vec![1.0, 2.0];
+        let result = super::bicg(&a, &b, None, IterativeSolveOptions::default()).expect("bicg");
+        // Verify Ax ≈ b
+        let ax = super::spmv(&a, &result.solution);
+        for i in 0..2 {
+            assert!(
+                (ax[i] - b[i]).abs() < 1e-5,
+                "bicg residual too large at {i}"
+            );
+        }
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════
