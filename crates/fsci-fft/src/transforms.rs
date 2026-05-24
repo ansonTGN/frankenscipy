@@ -3073,8 +3073,9 @@ mod tests {
     use super::{
         FftError, FftOptions, TransformKind, WorkerPolicy, dct, dct_iv, dctn, dst_ii, dst_iii,
         estimate_fft_flops, fft, fft_with_audit, fft2, fftn, hfft, hfft2, hfftn, idct, idctn, ifft,
-        ifft2, ifftn, ihfft2, ihfftn, irfft, irfft2, irfftn, is_fast_len, next_fast_len, prev_fast_len,
-        rfft, rfft_with_audit, rfft2, rfftn, sync_audit_ledger, take_transform_traces,
+        ifft2, ifftn, ihfft2, ihfftn, irfft, irfft2, irfftn, is_fast_len, next_fast_len,
+        prev_fast_len, rfft, rfft_with_audit, rfft2, rfftn, sync_audit_ledger,
+        take_transform_traces,
     };
     use crate::Normalization;
     use crate::plan::{clear_shared_plan_cache, shared_cache_test_lock};
@@ -4036,10 +4037,7 @@ mod tests {
             "fftn[0] re got {}, expected 10",
             result[0].0
         );
-        assert!(
-            result[0].1.abs() < 1e-10,
-            "fftn[0] im should be ~0"
-        );
+        assert!(result[0].1.abs() < 1e-10, "fftn[0] im should be ~0");
     }
 
     #[test]
