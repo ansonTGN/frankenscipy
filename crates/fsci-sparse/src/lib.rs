@@ -19,6 +19,22 @@ pub use formats::{
     DokMatrix, LilMatrix, NalgebraBridge, Shape2D, SparseError, SparseFormat, SparseResult,
     SparseSliceSpec,
 };
+
+pub type csr_matrix = CsrMatrix;
+pub type csc_matrix = CscMatrix;
+pub type coo_matrix = CooMatrix;
+pub type bsr_matrix = BsrMatrix;
+pub type dia_matrix = DiaMatrix;
+pub type dok_matrix = DokMatrix;
+pub type lil_matrix = LilMatrix;
+
+pub type csr_array = CsrMatrix;
+pub type csc_array = CscMatrix;
+pub type coo_array = CooMatrix;
+pub type bsr_array = BsrMatrix;
+pub type dia_array = DiaMatrix;
+pub type dok_array = DokMatrix;
+pub type lil_array = LilMatrix;
 pub use linalg::{
     CaspIterativeDecision,
     CaspIterativeSolveOptions,
