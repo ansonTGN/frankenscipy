@@ -1,7 +1,8 @@
+use std::collections::HashMap;
 use std::f64::consts::PI;
 use std::fmt::{Display, Formatter};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock, RwLock};
 use std::time::Instant;
 
 pub use fsci_runtime::SyncSharedAuditLedger;
@@ -107,8 +108,40 @@ pub fn sync_audit_ledger() -> SyncSharedAuditLedger {
     AuditLedger::shared()
 }
 
+type TwiddleKey = (usize, bool);
+type TwiddleTable = Vec<Complex64>;
+static TWIDDLE_CACHE: OnceLock<RwLock<HashMap<TwiddleKey, TwiddleTable>>> = OnceLock::new();
+
+fn get_twiddle_cache() -> &'static RwLock<HashMap<TwiddleKey, TwiddleTable>> {
+    TWIDDLE_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+fn get_or_compute_twiddles(n: usize, inverse: bool) -> TwiddleTable {
+    let cache = get_twiddle_cache();
+    let key = (n, inverse);
+
+    if let Ok(guard) = cache.read() {
+        if let Some(table) = guard.get(&key) {
+            return table.clone();
+        }
+    }
+
+    let sign = if inverse { 1.0 } else { -1.0 };
+    let mut table = Vec::with_capacity(n);
+    for k in 0..n {
+        let angle = sign * 2.0 * PI * k as f64 / n as f64;
+        table.push((angle.cos(), angle.sin()));
+    }
+
+    if let Ok(mut guard) = cache.write() {
+        guard.insert(key, table.clone());
+    }
+
+    table
+}
+
 /// Radix-2 Cooley-Tukey FFT for power-of-2 lengths.
-/// Iterative (bottom-up) implementation for better cache behavior.
+/// Iterative (bottom-up) implementation with cached twiddle factors.
 fn cooley_tukey_radix2_inplace(data: &mut [Complex64], inverse: bool) {
     let n = data.len();
     debug_assert!(n.is_power_of_two());
@@ -122,26 +155,19 @@ fn cooley_tukey_radix2_inplace(data: &mut [Complex64], inverse: bool) {
         }
     }
 
-    // Butterfly stages
-    let sign = if inverse { 1.0 } else { -1.0 };
-    let mut twiddles = Vec::with_capacity(n / 2);
+    let twiddles = get_or_compute_twiddles(n, inverse);
+
     let mut stage_len = 2;
     while stage_len <= n {
         let half = stage_len / 2;
-        let angle_step = sign * 2.0 * PI / stage_len as f64;
-
-        // Precompute twiddle factors for this stage
-        twiddles.clear();
-        for k in 0..half {
-            let angle = angle_step * k as f64;
-            twiddles.push((angle.cos(), angle.sin()));
-        }
+        let stride = n / stage_len;
 
         let mut base = 0;
         while base < n {
-            for (k, &twiddle) in twiddles.iter().enumerate() {
+            for k in 0..half {
                 let even_idx = base + k;
                 let odd_idx = base + k + half;
+                let twiddle = twiddles[k * stride];
                 let odd_val = complex_mul(data[odd_idx], twiddle);
                 let even_val = data[even_idx];
                 data[even_idx] = complex_add(even_val, odd_val);
