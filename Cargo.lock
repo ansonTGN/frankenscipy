@@ -651,6 +651,7 @@ dependencies = [
  "fsci-io",
  "fsci-linalg",
  "fsci-ndimage",
+ "fsci-odr",
  "fsci-opt",
  "fsci-runtime",
  "fsci-signal",
