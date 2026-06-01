@@ -6,6 +6,7 @@ use fsci_runtime::{
     PolicyDecision, RuntimeMode, SolverAction, SolverEvidenceEntry, SolverPortfolio,
     StructuralEvidence, casp_now_unix_ms,
 };
+use std::borrow::Cow;
 
 type EigenDecomposition = (Vec<f64>, Option<Vec<Vec<f64>>>);
 
@@ -5257,12 +5258,13 @@ fn solve_triangular_internal(
     unit_diagonal: bool,
 ) -> Result<SolveResult, LinalgError> {
     let n = a.len();
-    let (mat, is_lower) = match trans {
-        TriangularTranspose::NoTranspose => (a.to_vec(), lower),
+    let (mat_storage, is_lower): (Cow<'_, [Vec<f64>]>, bool) = match trans {
+        TriangularTranspose::NoTranspose => (Cow::Borrowed(a), lower),
         TriangularTranspose::Transpose | TriangularTranspose::ConjugateTranspose => {
-            (transpose(a), !lower)
+            (Cow::Owned(transpose(a)), !lower)
         }
     };
+    let mat = mat_storage.as_ref();
 
     let mut x = vec![0.0; n];
     if is_lower {
@@ -5291,7 +5293,7 @@ fn solve_triangular_internal(
         }
     }
 
-    let backward_error = compute_backward_error_dense(&mat, &x, b);
+    let backward_error = compute_backward_error_dense(mat, &x, b);
 
     Ok(SolveResult {
         x,
