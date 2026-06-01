@@ -882,13 +882,22 @@ pub fn pinv_with_audit(
 
 /// Solve Aᵀ x = b using LU factorization PA = LU => Aᵀ = Uᵀ Lᵀ P.
 fn solve_lu_transpose(lu: &LU<f64, Dyn, Dyn>, b: &DVector<f64>) -> Option<DVector<f64>> {
+    let u_t = lu.u().transpose();
+    let l_t = lu.l().transpose();
+    solve_lu_transpose_with_transposes(lu, &u_t, &l_t, b)
+}
+
+fn solve_lu_transpose_with_transposes(
+    lu: &LU<f64, Dyn, Dyn>,
+    u_t: &DMatrix<f64>,
+    l_t: &DMatrix<f64>,
+    b: &DVector<f64>,
+) -> Option<DVector<f64>> {
     // Aᵀ = Uᵀ Lᵀ P
     // Uᵀ Lᵀ P x = b
     // 1. Solve Uᵀ y = b (lower triangular)
-    let u_t = lu.u().transpose();
     let y = u_t.solve_lower_triangular(b)?;
     // 2. Solve Lᵀ z = y (upper triangular)
-    let l_t = lu.l().transpose();
     let z = l_t.solve_upper_triangular(&y)?;
     // 3. P x = z => x = Pᵀ z
     let mut x = z;
@@ -948,11 +957,13 @@ fn fast_rcond_from_lu(lu: &LU<f64, Dyn, Dyn>, a_norm: f64, n: usize) -> f64 {
     // Estimate ||A⁻¹||₁ using Higham's iterative algorithm (up to 5 iterations)
     let mut x = DVector::from_element(n, 1.0 / (n as f64));
     let mut inv_a_norm = 0.0;
+    let u_t = lu.u().transpose();
+    let l_t = lu.l().transpose();
 
     for _ in 0..5 {
         // 1. Solve Aᵀ w = sign(x)
         let sign_x = x.map(|val| if val >= 0.0 { 1.0 } else { -1.0 });
-        let w = match solve_lu_transpose(lu, &sign_x) {
+        let w = match solve_lu_transpose_with_transposes(lu, &u_t, &l_t, &sign_x) {
             Some(w) => w,
             None => return 0.0,
         };
