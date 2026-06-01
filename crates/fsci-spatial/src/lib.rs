@@ -121,7 +121,9 @@ pub fn cosine(a: &[f64], b: &[f64]) -> f64 {
     let norm_b: f64 = b.iter().map(|bi| bi * bi).sum::<f64>().sqrt();
     let denom = norm_a * norm_b;
     if denom == 0.0 {
-        return 0.0;
+        // scipy returns NaN when either vector has zero norm: the cosine
+        // similarity 0/0 is undefined, so 1 - (0/0) propagates to NaN.
+        return f64::NAN;
     }
     1.0 - dot / denom
 }
@@ -169,7 +171,9 @@ pub fn correlation(a: &[f64], b: &[f64]) -> f64 {
     }
     let denom = (ssa * ssb).sqrt();
     if denom == 0.0 {
-        return 0.0;
+        // scipy returns NaN when either vector is constant (zero variance):
+        // the Pearson correlation 0/0 is undefined, so 1 - (0/0) is NaN.
+        return f64::NAN;
     }
     1.0 - ssab / denom
 }
@@ -5283,10 +5287,21 @@ mod tests {
     // ── Distance metric edge case tests ───────────────────────────
 
     #[test]
-    fn cosine_zero_vector_returns_zero() {
-        assert_eq!(cosine(&[0.0, 0.0], &[1.0, 2.0]), 0.0);
-        assert_eq!(cosine(&[1.0, 2.0], &[0.0, 0.0]), 0.0);
-        assert_eq!(cosine(&[0.0, 0.0], &[0.0, 0.0]), 0.0);
+    fn cosine_zero_vector_returns_nan() {
+        // scipy.spatial.distance.cosine returns NaN when either vector has
+        // zero norm (1 - 0/0 is undefined), not 0.0.
+        assert!(cosine(&[0.0, 0.0], &[1.0, 2.0]).is_nan());
+        assert!(cosine(&[1.0, 2.0], &[0.0, 0.0]).is_nan());
+        assert!(cosine(&[0.0, 0.0], &[0.0, 0.0]).is_nan());
+    }
+
+    #[test]
+    fn correlation_constant_vector_returns_nan() {
+        // scipy.spatial.distance.correlation returns NaN when either vector
+        // is constant (zero variance), even if the other varies.
+        assert!(correlation(&[2.0, 2.0, 2.0], &[5.0, 5.0, 5.0]).is_nan());
+        assert!(correlation(&[2.0, 2.0, 2.0], &[1.0, 2.0, 3.0]).is_nan());
+        assert!(correlation(&[1.0, 2.0, 3.0], &[7.0, 7.0, 7.0]).is_nan());
     }
 
     #[test]
