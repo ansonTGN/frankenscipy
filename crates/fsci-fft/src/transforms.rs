@@ -120,10 +120,8 @@ fn get_or_compute_twiddles(n: usize, inverse: bool) -> TwiddleTable {
     let cache = get_twiddle_cache();
     let key = (n, inverse);
 
-    if let Ok(guard) = cache.read() {
-        if let Some(table) = guard.get(&key) {
-            return table.clone();
-        }
+    if let Some(table) = cache.read().ok().and_then(|guard| guard.get(&key).cloned()) {
+        return table;
     }
 
     let sign = if inverse { 1.0 } else { -1.0 };
@@ -157,10 +155,8 @@ fn get_or_compute_bluestein_plan(n: usize, inverse: bool) -> BluesteinPlan {
     let cache = get_bluestein_cache();
     let key = (n, inverse);
 
-    if let Ok(guard) = cache.read() {
-        if let Some(plan) = guard.get(&key) {
-            return plan.clone();
-        }
+    if let Some(plan) = cache.read().ok().and_then(|guard| guard.get(&key).cloned()) {
+        return plan;
     }
 
     let m = (2 * n - 1).next_power_of_two();
@@ -238,24 +234,21 @@ fn bluestein_fft(input: &[Complex64], inverse: bool) -> Vec<Complex64> {
     let m = plan.m;
 
     let mut a = vec![(0.0, 0.0); m];
-    for k in 0..n {
-        a[k] = complex_mul(input[k], plan.chirp[k]);
+    for (slot, (&sample, &chirp)) in a.iter_mut().zip(input.iter().zip(&plan.chirp)) {
+        *slot = complex_mul(sample, chirp);
     }
 
     cooley_tukey_radix2_inplace(&mut a, false);
-    for i in 0..m {
-        a[i] = complex_mul(a[i], plan.b_fft[i]);
+    for (value, &b_fft) in a.iter_mut().zip(&plan.b_fft) {
+        *value = complex_mul(*value, b_fft);
     }
     cooley_tukey_radix2_inplace(&mut a, true);
 
     let inv_m = 1.0 / m as f64;
-    let mut output = Vec::with_capacity(n);
-    for k in 0..n {
-        let val = complex_scale(a[k], inv_m);
-        output.push(complex_mul(plan.chirp[k], val));
-    }
-
-    output
+    a.iter()
+        .zip(&plan.chirp)
+        .map(|(&value, &chirp)| complex_mul(chirp, complex_scale(value, inv_m)))
+        .collect()
 }
 
 /// Reverse the lower `bits` bits of `x`.
@@ -3268,7 +3261,7 @@ mod tests {
             let l = audit_ledger.clone();
             std::thread::spawn(move || {
                 let _g = l.lock().expect("acquire");
-                panic!("poison the FFT audit ledger on purpose");
+                std::panic::resume_unwind(Box::new("poison the FFT audit ledger on purpose"));
             })
             .join()
         };
