@@ -57051,6 +57051,54 @@ mod tests {
     }
 
     #[test]
+    fn continuous_ppfs_match_scipy_quantiles() {
+        // Inverse check: ppf(q) must equal scipy's quantile (catches a wrong
+        // closed-form ppf, distinct from the cdf guard).
+        fn check_ppf<D: ContinuousDistribution>(name: &str, d: &D, qs: [f64; 3]) {
+            for (&want, p) in qs.iter().zip([0.25, 0.5, 0.75]) {
+                let got = d.ppf(p);
+                assert!(
+                    (got - want).abs() < 2e-3 * (want.abs() + 1.0),
+                    "{name} ppf({p}) = {got}, expected {want}"
+                );
+            }
+        }
+        check_ppf("FoldedNormal", &FoldedNormal::new(1.5), [0.85442, 1.50335, 2.17486]);
+        check_ppf("SkewNorm", &SkewNorm::new(4.0), [0.30578, 0.67424, 1.15035]);
+        check_ppf("ExponNorm", &ExponNorm::new(1.5), [0.28782, 1.23665, 2.39918]);
+        check_ppf("PowerNorm", &PowerNorm::new(2.0), [-1.1078, -0.54495, 0.0]);
+        check_ppf("JohnsonSU", &JohnsonSU::new(1.0, 2.0), [-0.93855, -0.5211, -0.16347]);
+        check_ppf("JohnsonSB", &JohnsonSB::new(1.0, 2.0), [0.30212, 0.37754, 0.4594]);
+        check_ppf("LogGamma", &LogGamma::new(2.0), [-0.03949, 0.51781, 0.99052]);
+        check_ppf("Gompertz", &Gompertz::new(1.5), [0.17545, 0.37987, 0.65451]);
+        check_ppf("ExponWeibull", &ExponWeibull::new(2.0, 1.5), [0.78322, 1.14671, 1.59274]);
+        check_ppf("GenGamma", &GenGamma::new(2.0, 1.5), [0.97402, 1.41228, 1.93546]);
+        check_ppf(
+            "NoncentralChiSquared",
+            &NoncentralChiSquared::new(4.0, 3.0),
+            [3.67337, 6.12676, 9.38674],
+        );
+        check_ppf("NormInvGauss", &NormInvGauss::new(2.0, 0.7), [-0.12079, 0.30042, 0.78514]);
+        check_ppf("RelBreitWigner", &RelBreitWigner::new(0.5), [0.26912, 0.50294, 0.75067]);
+        check_ppf("Bradford", &Bradford::new(2.0), [0.15804, 0.36603, 0.63975]);
+        check_ppf("FatigueLife", &FatigueLife::new(1.5), [0.37798, 1.0, 2.64562]);
+        check_ppf("GenLogistic", &GenLogistic::new(2.0), [0.0, 0.88137, 1.86626]);
+        check_ppf("GenNorm", &GenNorm::new(1.5), [-0.52146, 0.0, 0.52146]);
+        check_ppf("Gumbel", &Gumbel::new(0.0, 1.0), [-0.32663, 0.36651, 1.2459]);
+        check_ppf("HalfGenNorm", &HalfGenNorm::new(1.5), [0.23615, 0.52146, 0.94088]);
+        check_ppf("Logistic", &Logistic::new(0.0, 1.0), [-1.09861, 0.0, 1.09861]);
+        check_ppf("Nakagami", &Nakagami::new(2.0), [0.69328, 0.91606, 1.16031]);
+        check_ppf("RDist", &RDist::new(3.0), [-0.40397, 0.0, 0.40397]);
+        check_ppf("Rayleigh", &Rayleigh::new(1.0), [0.75853, 1.17741, 1.66511]);
+        check_ppf("Rice", &Rice::new(1.0), [0.96292, 1.47548, 2.05189]);
+        check_ppf("Arcsine", &Arcsine, [0.14645, 0.5, 0.85355]);
+        check_ppf("Semicircular", &Semicircular, [-0.40397, 0.0, 0.40397]);
+        check_ppf("HypSecant", &HypSecant, [-0.88137, 0.0, 0.88137]);
+        check_ppf("Moyal", &Moyal, [-0.28013, 0.7876, 2.28739]);
+        check_ppf("Anglit", &Anglit, [-0.2618, 0.0, 0.2618]);
+    }
+
+    #[test]
     fn rel_breit_wigner_matches_scipy() {
         // scipy.stats.rel_breitwigner reference values (rho=0.5 and rho=1.0).
         let d = RelBreitWigner::new(0.5);
