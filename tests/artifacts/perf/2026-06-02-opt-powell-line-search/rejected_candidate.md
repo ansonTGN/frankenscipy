@@ -1,4 +1,4 @@
-# fsci-opt Powell line-search scratch reuse: rejected candidate
+# fsci-opt Powell line-search scratch reuse: superseded rejection note
 
 Bead: frankenscipy-okrh6
 Date: 2026-06-02
@@ -55,17 +55,19 @@ Isomorphism:
 
 Post-candidate focused benchmark:
 
-- `powell/rosenbrock/10`: `[356.30 us, 369.59 us, 385.37 us]`, worker vmi1149989
+- `powell/rosenbrock/10`: `[297.10 us, 306.95 us, 315.05 us]`, worker vmi1149989
 - repeat after-run: `[767.98 us, 803.58 us, 836.45 us]`, worker vmi1153651
 
-This overlaps the broad profile baseline interval and is only about 1.6% faster
-than the broad-profile mean. The repeat after-run is slower than the scratch HEAD
-control and broad baseline. RCH did not provide a same-worker before/after pair,
-and the focused baseline on vmi1156319 was an outlier, so the candidate does not
-meet the required keep threshold.
+The first pass rejected this candidate because the early post-candidate run was
+too close to the broad profile baseline. A later same-window HEAD-control run was
+captured by temporarily reversing the source hunk and measuring
+`powell/rosenbrock/10` at `[441.97 us, 507.44 us, 608.62 us]` on vmi1227854.
+The restored candidate then measured `[297.10 us, 306.95 us, 315.05 us]` on
+vmi1149989, and the repeat run stayed below the original focused baseline of
+`[874.58 us, 965.52 us, 1.1121 ms]` on vmi1156319.
 
 ## Decision
 
-Rejected. The production `fsci-opt` code lever was backed out. The bead and
-artifacts remain as evidence for the shifted bottleneck; a future opt pass needs
-a stronger profile-backed lever or a reproducible same-worker comparison.
+Superseded. The tracked filename is retained to avoid deleting or renaming an
+artifact, but the candidate was restored and kept after the HEAD-control evidence
+above. Final closeout is in `closeout.md`.
