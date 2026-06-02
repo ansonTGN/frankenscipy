@@ -2533,10 +2533,79 @@ impl ContinuousDistribution for NoncentralF {
         }
     }
 
-    fn try_fit(_data: &[f64]) -> Result<Self, FitError> {
-        Err(FitError::NotImplemented {
-            distribution: "NoncentralF",
-        })
+    fn try_fit(data: &[f64]) -> Result<Self, FitError> {
+        // Maximum-likelihood fit (standardized NCF, loc=0/scale=1) via
+        // multi-start Nelder-Mead over (ln dfn, ln dfd, ln nc); matches
+        // scipy.stats.ncf.fit(.., floc=0, fscale=1). Moments are insufficient
+        // (3 params), but the likelihood is well-behaved, so MLE recovers the
+        // parameters reliably.
+        if data.len() < 3 {
+            return Err(FitError::InsufficientData {
+                required: 3,
+                actual: data.len(),
+            });
+        }
+        for &x in data {
+            if !x.is_finite() {
+                return Err(FitError::UnsupportedData(format!(
+                    "NoncentralF data contains non-finite value: {x}"
+                )));
+            }
+            if x <= 0.0 {
+                return Err(FitError::UnsupportedData(format!(
+                    "NoncentralF support is (0, ∞); got {x}"
+                )));
+            }
+        }
+        let owned: Vec<f64> = data.to_vec();
+        let nll = |p: &[f64]| -> f64 {
+            let (dfn, dfd, nc) = (p[0].exp(), p[1].exp(), p[2].exp());
+            if !dfn.is_finite() || !dfd.is_finite() || !nc.is_finite() {
+                return f64::INFINITY;
+            }
+            let dist = NoncentralF { dfn, dfd, nc };
+            let mut total = 0.0;
+            for &x in &owned {
+                let d = dist.pdf(x);
+                if !(d > 0.0) || !d.is_finite() {
+                    return f64::INFINITY;
+                }
+                total -= d.ln();
+            }
+            total
+        };
+        let starts = [[2.0_f64, 10.0, 1.0], [5.0, 10.0, 3.0], [1.5, 5.0, 0.5]];
+        let mut best: Option<(f64, [f64; 3])> = None;
+        for s in &starts {
+            let x0 = [s[0].ln(), s[1].ln(), s[2].ln()];
+            let opts = fsci_opt::MinimizeOptions {
+                maxiter: Some(2000),
+                maxfev: Some(4000),
+                tol: Some(1e-9),
+                ..Default::default()
+            };
+            if let Ok(res) = fsci_opt::nelder_mead(&nll, &x0, opts)
+                && let Some(f) = res.fun
+                && f.is_finite()
+                && best.as_ref().is_none_or(|(bf, _)| f < *bf)
+            {
+                best = Some((f, [res.x[0].exp(), res.x[1].exp(), res.x[2].exp()]));
+            }
+        }
+        match best {
+            Some((_, p))
+                if p[0] > 0.0 && p[1] > 0.0 && p[2] >= 0.0 && p.iter().all(|v| v.is_finite()) =>
+            {
+                Ok(Self {
+                    dfn: p[0],
+                    dfd: p[1],
+                    nc: p[2],
+                })
+            }
+            _ => Err(FitError::NonConvergent(
+                "NoncentralF MLE failed to converge".to_owned(),
+            )),
+        }
     }
 
     fn skewness(&self) -> f64 {
@@ -54549,6 +54618,45 @@ mod tests {
         assert!(matches!(
             NoncentralChiSquared::try_fit(&[1.0]).expect_err("n=1"),
             FitError::InsufficientData { .. }
+        ));
+    }
+
+    #[test]
+    fn noncentral_f_fit_is_at_least_as_good_as_scipy() {
+        // 40 samples from scipy ncf.rvs(dfn=5, dfd=10, nc=3, seed=12345).
+        // scipy.stats.ncf.fit(data, floc=0, fscale=1) -> (4.6568, 9.6699, 2.2005).
+        let data = [
+            0.3839, 1.3535, 0.7345, 1.3297, 1.5294, 3.3638, 0.2564, 1.0908, 3.9795, 2.0136, 3.3075,
+            0.1977, 0.781, 0.4281, 0.8857, 1.6828, 0.3989, 3.4544, 2.2897, 1.4735, 2.9849, 0.757,
+            1.1573, 2.2714, 2.0008, 1.3171, 5.6385, 2.6986, 2.4623, 9.5572, 1.6277, 0.4523, 1.3335,
+            1.3076, 1.6942, 0.8495, 0.4303, 1.8857, 2.4543, 0.4799,
+        ];
+        let fitted = NoncentralF::try_fit(&data).expect("fit");
+        let nll = |d: &NoncentralF| -> f64 {
+            -data.iter().map(|&x| d.pdf(x).max(1e-300).ln()).sum::<f64>()
+        };
+        // Our MLE must reach a likelihood at least as good as scipy's optimum.
+        let scipy = NoncentralF::new(4.6568, 9.6699, 2.2005);
+        assert!(
+            nll(&fitted) <= nll(&scipy) + 1e-3,
+            "NCF MLE not optimal: ours NLL={}, scipy-params NLL={}",
+            nll(&fitted),
+            nll(&scipy)
+        );
+        // Sanity: parameters land in scipy's neighbourhood.
+        assert!(fitted.dfd > 2.0 && fitted.dfd < 40.0, "dfd={}", fitted.dfd);
+        assert!(fitted.nc >= 0.0 && fitted.nc < 15.0, "nc={}", fitted.nc);
+    }
+
+    #[test]
+    fn noncentral_f_fit_rejects_invalid_input() {
+        assert!(matches!(
+            NoncentralF::try_fit(&[1.0, 2.0]).expect_err("n<3"),
+            FitError::InsufficientData { .. }
+        ));
+        assert!(matches!(
+            NoncentralF::try_fit(&[1.0, -2.0, 3.0]).expect_err("nonpositive"),
+            FitError::UnsupportedData(_)
         ));
     }
 
