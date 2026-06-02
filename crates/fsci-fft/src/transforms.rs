@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::f64::consts::PI;
 use std::fmt::{Display, Formatter};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock, RwLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::Instant;
 
 pub use fsci_runtime::SyncSharedAuditLedger;
@@ -109,7 +109,7 @@ pub fn sync_audit_ledger() -> SyncSharedAuditLedger {
 }
 
 type TwiddleKey = (usize, bool);
-type TwiddleTable = Vec<Complex64>;
+type TwiddleTable = Arc<[Complex64]>;
 static TWIDDLE_CACHE: OnceLock<RwLock<HashMap<TwiddleKey, TwiddleTable>>> = OnceLock::new();
 
 fn get_twiddle_cache() -> &'static RwLock<HashMap<TwiddleKey, TwiddleTable>> {
@@ -131,8 +131,10 @@ fn get_or_compute_twiddles(n: usize, inverse: bool) -> TwiddleTable {
         table.push((angle.cos(), angle.sin()));
     }
 
+    let table = Arc::<[Complex64]>::from(table);
+
     if let Ok(mut guard) = cache.write() {
-        guard.insert(key, table.clone());
+        guard.insert(key, Arc::clone(&table));
     }
 
     table

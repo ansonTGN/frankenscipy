@@ -1,0 +1,25 @@
+Command:
+RCH_FORCE_REMOTE=1 CARGO_TARGET_DIR=/data/tmp/cargo-target-frankenscipy-olivesnow-fft rch exec -- cargo test -p fsci-fft --lib --locked -- --nocapture
+
+Worker:
+vmi1156319
+
+Relevant observed golden/reference tests:
+test tests::fft_matches_scipy_reference_values ... ok
+test tests::ifft_matches_scipy_reference_values ... ok
+test tests::rfft_matches_scipy_reference_values ... ok
+test tests::irfft_matches_scipy_reference_values ... ok
+test transforms::tests::fft_power_of_2_roundtrip ... ok
+test transforms::tests::repeated_calls_emit_plan_cache_hits_in_trace ... ok
+test transforms::tests::rfft_matches_scipy_reference_values ... ok
+
+Observed summary:
+test result: ok. 144 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+Golden contract:
+fft([1, 2, 3, 4]) = [(10, 0), (-2, 2), (-2, 0), (-2, -2)] within 1e-9.
+ifft([(10, 0), (-2, 2), (-2, 0), (-2, -2)]) = [(1, 0), (2, 0), (3, 0), (4, 0)] within 1e-9.
+rfft([1, 2, 3, 4]) = [(10, 0), (-2, 2), (-2, 0)] within 1e-9.
+irfft([(10, 0), (-2, 2), (-2, 0)], n=4) = [1, 2, 3, 4] within 1e-9.
+fft_power_of_2_roundtrip uses n=16 input ((i as f64).sin(), (i as f64).cos()) and roundtrips within 1e-9.
+repeated_calls_emit_plan_cache_hits_in_trace preserves operation_id sort order and miss-then-hit plan cache trace behavior.

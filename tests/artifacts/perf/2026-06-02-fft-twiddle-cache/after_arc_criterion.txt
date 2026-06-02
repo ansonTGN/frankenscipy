@@ -1,0 +1,17 @@
+Command:
+RCH_FORCE_REMOTE=1 CARGO_TARGET_DIR=/data/tmp/cargo-target-frankenscipy-olivesnow-fft RUSTFLAGS='-C force-frame-pointers=yes' rch exec -- cargo bench -p fsci-fft --bench fft_bench -- baseline_fft/fft/262144 --warm-up-time 1 --measurement-time 3 --sample-size 20
+
+State:
+Accepted lever with TwiddleTable = Arc<[Complex64]> and cache hits cloning only the shared immutable slice handle.
+
+Worker:
+vmi1149989
+
+Observed Criterion excerpt:
+Benchmarking baseline_fft/fft/262144
+Benchmarking baseline_fft/fft/262144: Warming up for 1.0000 s
+Benchmarking baseline_fft/fft/262144: Collecting 50 samples in estimated 3.1375 s (500 iterations)
+Benchmarking baseline_fft/fft/262144: Analyzing
+baseline_fft/fft/262144 time:   [6.1143 ms 6.2833 ms 6.4702 ms]
+Found 1 outliers among 50 measurements (2.00%)
+  1 (2.00%) high mild

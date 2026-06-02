@@ -1,0 +1,13 @@
+Command:
+RCH_FORCE_REMOTE=1 CARGO_TARGET_DIR=/data/tmp/cargo-target-frankenscipy-olivesnow-fft RUSTFLAGS='-C force-frame-pointers=yes' rch exec -- cargo bench -p fsci-fft --bench fft_bench -- fft_real/rfft/1024 --warm-up-time 1 --measurement-time 3 --sample-size 20
+
+Remote before:
+Worker vmi1293453
+fft_real/rfft/1024 time: [14.305 us 14.537 us 14.818 us]
+
+Remote after:
+Worker vmi1293453
+fft_real/rfft/1024 time: [14.365 us 14.774 us 15.135 us]
+
+Verdict:
+Rejected as the proof target because the mean regressed by 1.63%. The accepted proof target is the profiled large power-of-two FFT cache-hit workload in baseline_pre_arc_criterion.txt and after_arc_criterion.txt.
