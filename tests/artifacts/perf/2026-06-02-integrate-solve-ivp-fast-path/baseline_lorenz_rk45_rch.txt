@@ -1,0 +1,17 @@
+This file was captured through a local tee path while RCH wrote the useful
+transcript to stderr, so it is intentionally only a note.
+
+Use these committed artifacts for the c9j5d rejected-candidate evidence:
+
+- `baseline_lorenz_rk45_rch_repeat2.txt`: scratch HEAD baseline, worker
+  vmi1153651, mean 57.099 us.
+- `after_lorenz_rk45_rch.txt`: first candidate after-run, worker vmi1167313,
+  mean 53.903 us.
+- `after_lorenz_rk45_rch_repeat.txt`: candidate repeat, worker vmi1167313,
+  mean 61.627 us.
+- `after_lorenz_rk45_rch_repeat2.txt`: candidate repeat, worker vmi1167313,
+  mean 62.549 us.
+- `golden_after.sha256`: solve_ivp golden sha256
+  327b936597b6df9a5eb5d181a7f545a7c946458febea97652c73343781aa1eff.
+
+The candidate was rejected and the production source was restored.
