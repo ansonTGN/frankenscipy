@@ -1,0 +1,4 @@
+UBS_OPS_EXIT:0
+Scope: crates/fsci-sparse/src/ops.rs
+Critical findings: 0
+Notes: raw scanner output was captured locally but not committed because it contains terminal decoration.

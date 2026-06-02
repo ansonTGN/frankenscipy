@@ -1,0 +1,3 @@
+rustfmt_ops_final_exit:0
+Scope: crates/fsci-sparse/src/ops.rs
+Workspace note: cargo fmt -p fsci-sparse --check remains blocked by pre-existing crates/fsci-sparse/src/lib.rs formatting drift outside this bead.

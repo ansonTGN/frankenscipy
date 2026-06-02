@@ -4,8 +4,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use fsci_runtime::RuntimeMode;
 
 use crate::formats::{
-    BsrMatrix, CooMatrix, CscMatrix, CsrMatrix, DiaMatrix, DokMatrix, LilMatrix, Shape2D,
-    SparseError, SparseFormat, SparseResult,
+    BsrMatrix, CanonicalMeta, CooMatrix, CscMatrix, CsrMatrix, DiaMatrix, DokMatrix, LilMatrix,
+    Shape2D, SparseError, SparseFormat, SparseResult,
 };
 
 pub trait FormatConvertible {
@@ -382,16 +382,28 @@ pub fn spmv_coo(matrix: &CooMatrix, vector: &[f64]) -> SparseResult<Vec<f64>> {
 
 pub fn add_csr(lhs: &CsrMatrix, rhs: &CsrMatrix) -> SparseResult<CsrMatrix> {
     ensure_same_shape(lhs.shape(), rhs.shape())?;
-    if can_combine_csr_rows_directly(lhs, rhs) {
-        return combine_csr_rows_directly(lhs, rhs, 1.0);
+    match csr_row_combine_mode(lhs, rhs) {
+        CsrRowCombineMode::VerifiedCanonical => {
+            return combine_csr_rows_directly(lhs, rhs, 1.0, true);
+        }
+        CsrRowCombineMode::MetadataCanonical => {
+            return combine_csr_rows_directly(lhs, rhs, 1.0, false);
+        }
+        CsrRowCombineMode::Fallback => {}
     }
     combine_coo(lhs.to_coo()?, rhs.to_coo()?, 1.0)?.to_csr()
 }
 
 pub fn sub_csr(lhs: &CsrMatrix, rhs: &CsrMatrix) -> SparseResult<CsrMatrix> {
     ensure_same_shape(lhs.shape(), rhs.shape())?;
-    if can_combine_csr_rows_directly(lhs, rhs) {
-        return combine_csr_rows_directly(lhs, rhs, -1.0);
+    match csr_row_combine_mode(lhs, rhs) {
+        CsrRowCombineMode::VerifiedCanonical => {
+            return combine_csr_rows_directly(lhs, rhs, -1.0, true);
+        }
+        CsrRowCombineMode::MetadataCanonical => {
+            return combine_csr_rows_directly(lhs, rhs, -1.0, false);
+        }
+        CsrRowCombineMode::Fallback => {}
     }
     combine_coo(lhs.to_coo()?, rhs.to_coo()?, -1.0)?.to_csr()
 }
@@ -536,19 +548,54 @@ fn combine_coo(lhs: CooMatrix, rhs: CooMatrix, rhs_scale: f64) -> SparseResult<C
     CooMatrix::from_triplets(shape, data, rows, cols, false)
 }
 
-fn can_combine_csr_rows_directly(lhs: &CsrMatrix, rhs: &CsrMatrix) -> bool {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CsrRowCombineMode {
+    VerifiedCanonical,
+    MetadataCanonical,
+    Fallback,
+}
+
+fn csr_row_combine_mode(lhs: &CsrMatrix, rhs: &CsrMatrix) -> CsrRowCombineMode {
     let lhs_meta = lhs.canonical_meta();
     let rhs_meta = rhs.canonical_meta();
-    lhs_meta.sorted_indices
+    if !(lhs_meta.sorted_indices
         && lhs_meta.deduplicated
         && rhs_meta.sorted_indices
-        && rhs_meta.deduplicated
+        && rhs_meta.deduplicated)
+    {
+        return CsrRowCombineMode::Fallback;
+    }
+
+    if csr_input_segments_are_strictly_canonical(lhs)
+        && csr_input_segments_are_strictly_canonical(rhs)
+    {
+        CsrRowCombineMode::VerifiedCanonical
+    } else {
+        CsrRowCombineMode::MetadataCanonical
+    }
+}
+
+fn csr_input_segments_are_strictly_canonical(matrix: &CsrMatrix) -> bool {
+    matrix.indptr().len() == matrix.shape().rows + 1
+        && matrix.indices().len() == matrix.nnz()
+        && matrix.indptr().first() == Some(&0)
+        && matrix.indptr().last() == Some(&matrix.nnz())
+        && matrix
+            .indptr()
+            .windows(2)
+            .all(|window| window[0] <= window[1])
+        && compressed_segments_are_strictly_sorted(
+            matrix.shape().cols,
+            matrix.indptr(),
+            matrix.indices(),
+        )
 }
 
 fn combine_csr_rows_directly(
     lhs: &CsrMatrix,
     rhs: &CsrMatrix,
     rhs_scale: f64,
+    skip_output_validation: bool,
 ) -> SparseResult<CsrMatrix> {
     let shape = lhs.shape();
     let mut data = Vec::with_capacity(lhs.nnz() + rhs.nnz());
@@ -598,7 +645,16 @@ fn combine_csr_rows_directly(
         indptr.push(data.len());
     }
 
-    CsrMatrix::from_components(shape, data, indices, indptr, false)
+    if skip_output_validation {
+        let mut result = CsrMatrix::from_components_unchecked(shape, data, indices, indptr);
+        result.canonical = CanonicalMeta {
+            sorted_indices: true,
+            deduplicated: true,
+        };
+        Ok(result)
+    } else {
+        CsrMatrix::from_components(shape, data, indices, indptr, false)
+    }
 }
 
 fn push_nonzero_csr_entry(data: &mut Vec<f64>, indices: &mut Vec<usize>, col: usize, value: f64) {
@@ -915,6 +971,39 @@ mod tests {
         )
     }
 
+    fn snapshot_add_csr(label: &str, matrix: &CsrMatrix) -> String {
+        let meta = matrix.canonical_meta();
+        let indptr = matrix
+            .indptr()
+            .iter()
+            .map(usize::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        let indices = matrix
+            .indices()
+            .iter()
+            .map(usize::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        let data = matrix
+            .data()
+            .iter()
+            .map(|value| format!("{:016x}", value.to_bits()))
+            .collect::<Vec<_>>()
+            .join(",");
+        format!(
+            "FSCI_SPARSE_ADD_GOLDEN {label} csr shape={}x{} nnz={} sorted={} deduplicated={} indptr=[{}] indices=[{}] data=[{}]",
+            matrix.shape().rows,
+            matrix.shape().cols,
+            matrix.nnz(),
+            meta.sorted_indices,
+            meta.deduplicated,
+            indptr,
+            indices,
+            data
+        )
+    }
+
     #[test]
     fn tril_default_keeps_diagonal_and_below() {
         // /testing-conformance-harnesses for [frankenscipy-y9m6n]:
@@ -990,6 +1079,71 @@ mod tests {
         assert_eq!(sum.data(), &[1.0, 3.0, 2.0, 6.0]);
         assert!(sum.canonical_meta().sorted_indices);
         assert!(sum.canonical_meta().deduplicated);
+    }
+
+    #[test]
+    fn add_csr_mislabelled_canonical_input_keeps_validating_path() {
+        let lhs = CsrMatrix::from_components(
+            Shape2D::new(1, 4),
+            vec![1.0, 2.0],
+            vec![3, 1],
+            vec![0, 2],
+            true,
+        )
+        .expect("mislabelled lhs");
+        let rhs =
+            CsrMatrix::from_components(Shape2D::new(1, 4), vec![4.0], vec![2], vec![0, 1], true)
+                .expect("canonical rhs");
+
+        let sum = add_csr(&lhs, &rhs).expect("sum");
+
+        assert_eq!(sum.indices(), &[2, 3, 1]);
+        assert_eq!(sum.data(), &[4.0, 1.0, 2.0]);
+        assert!(!sum.canonical_meta().sorted_indices);
+        assert!(sum.canonical_meta().deduplicated);
+    }
+
+    #[test]
+    fn add_csr_golden_snapshot() {
+        let random_cases = [(8usize, 0.25, 0x1234_5678_u64), (256, 0.0025, 0xfeed_cafe)];
+        for (n, density, seed) in random_cases {
+            let lhs = crate::random(Shape2D::new(n, n), density, seed)
+                .expect("lhs coo")
+                .to_csr()
+                .expect("lhs csr");
+            let rhs = crate::random(Shape2D::new(n, n), density, seed ^ 0x5eed_1234)
+                .expect("rhs coo")
+                .to_csr()
+                .expect("rhs csr");
+            let sum = add_csr(&lhs, &rhs).expect("random add");
+            println!(
+                "{}",
+                snapshot_add_csr(&format!("random-{n}-{density}"), &sum)
+            );
+        }
+
+        let lhs = CooMatrix::from_triplets(
+            Shape2D::new(3, 4),
+            vec![1.0, 2.0, -4.0, f64::from_bits(0x7ff8_0000_0000_0042)],
+            vec![0, 1, 1, 2],
+            vec![1, 0, 3, 2],
+            false,
+        )
+        .expect("lhs")
+        .to_csr()
+        .expect("lhs csr");
+        let rhs = CooMatrix::from_triplets(
+            Shape2D::new(3, 4),
+            vec![3.0, 4.0, -5.0, 6.0],
+            vec![0, 1, 2, 2],
+            vec![2, 3, 2, 3],
+            false,
+        )
+        .expect("rhs")
+        .to_csr()
+        .expect("rhs csr");
+        let sum = add_csr(&lhs, &rhs).expect("edge add");
+        println!("{}", snapshot_add_csr("cancellation-and-nan", &sum));
     }
 
     #[test]
