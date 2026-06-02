@@ -57147,6 +57147,42 @@ mod tests {
     }
 
     #[test]
+    fn hypothesis_tests_match_scipy() {
+        // statistic/pvalue vs scipy on fixed samples (catches wrong test
+        // statistics or p-value formulas / tie / continuity conventions).
+        let a = [2.1, 3.4, 1.9, 4.2, 2.8, 3.1, 2.5, 3.9, 2.2, 3.6];
+        let b = [3.5, 2.9, 4.1, 3.8, 2.7, 4.5, 3.3, 3.0, 4.2, 3.7];
+        let chk = |name: &str, got: f64, want: f64, tol: f64| {
+            assert!(
+                (got - want).abs() <= tol * (want.abs() + 1.0),
+                "{name} = {got}, expected {want}"
+            );
+        };
+
+        let r = ttest_1samp(&a, 3.0);
+        chk("ttest_1samp stat", r.statistic, -0.118989, 1e-4);
+        chk("ttest_1samp p", r.pvalue, 0.907898, 1e-4);
+        let r = ttest_ind(&a, &b);
+        chk("ttest_ind stat", r.statistic, -1.903510, 1e-4);
+        chk("ttest_ind p", r.pvalue, 0.073089, 1e-4);
+        let r = ttest_rel(&a, &b);
+        chk("ttest_rel stat", r.statistic, -1.713121, 1e-4);
+        chk("ttest_rel p", r.pvalue, 0.120841, 1e-4);
+        let r = pearsonr(&a, &b);
+        chk("pearsonr stat", r.statistic, -0.244368, 1e-4);
+        chk("pearsonr p", r.pvalue, 0.496239, 1e-3);
+        let r = spearmanr(&a, &b);
+        chk("spearmanr stat", r.statistic, -0.212121, 1e-4);
+        let r = kendalltau(&a, &b);
+        chk("kendalltau stat", r.statistic, -0.111111, 1e-4);
+        let r = f_oneway(&[&a, &b]);
+        chk("f_oneway stat", r.statistic, 3.623350, 1e-4);
+        chk("f_oneway p", r.pvalue, 0.073089, 1e-4);
+        let r = ks_2samp(&a, &b);
+        chk("ks_2samp stat", r.statistic, 0.400000, 1e-4);
+    }
+
+    #[test]
     fn rel_breit_wigner_matches_scipy() {
         // scipy.stats.rel_breitwigner reference values (rho=0.5 and rho=1.0).
         let d = RelBreitWigner::new(0.5);
