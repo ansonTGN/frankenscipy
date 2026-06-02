@@ -573,7 +573,10 @@ fn xlog1py_scalar(x: f64, y: f64) -> f64 {
     if x.is_nan() || y.is_nan() {
         return f64::NAN;
     }
-    if x == 0.0 { 0.0 } else { x * (1.0 + y).ln() }
+    // scipy.special.xlog1py is x * log1p(y); use ln_1p so small |y| keeps full
+    // precision (a naive (1.0 + y).ln() rounds 1.0 + y to 1.0 for y ≲ 1e-16,
+    // returning 0 where scipy returns ~y).
+    if x == 0.0 { 0.0 } else { x * y.ln_1p() }
 }
 
 fn expit_scalar(x: f64) -> f64 {
