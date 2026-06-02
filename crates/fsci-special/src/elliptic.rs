@@ -127,6 +127,12 @@ pub fn ellipkinc(
     m_tensor: &SpecialTensor,
     mode: RuntimeMode,
 ) -> SpecialResult {
+    if let (SpecialTensor::RealScalar(phi), SpecialTensor::RealVec(m_values)) =
+        (phi_tensor, m_tensor)
+    {
+        return ellipkinc_scalar_phi_over_m_vec(*phi, m_values, mode);
+    }
+
     map_real_or_complex_binary(
         "ellipkinc",
         phi_tensor,
@@ -388,6 +394,40 @@ fn ellipkinc_scalar(phi: f64, m: f64, mode: RuntimeMode) -> Result<f64, SpecialE
     // Numerical integration via Gauss-Legendre 15-point quadrature
     let result = gauss_legendre_elliptic_f(phi, m);
     Ok(result)
+}
+
+fn ellipkinc_scalar_phi_over_m_vec(phi: f64, m_values: &[f64], mode: RuntimeMode) -> SpecialResult {
+    if phi.is_nan()
+        || (phi - PI / 2.0).abs() < 1e-15
+        || m_values.iter().any(|m| {
+            m.is_nan() || !(0.0..=1.0).contains(m) || (*m >= 1.0 && mode == RuntimeMode::Hardened)
+        })
+    {
+        return m_values
+            .iter()
+            .copied()
+            .map(|m| ellipkinc_scalar(phi, m, mode))
+            .collect::<Result<Vec<_>, _>>()
+            .map(SpecialTensor::RealVec);
+    }
+
+    if phi == 0.0 {
+        return Ok(SpecialTensor::RealVec(vec![0.0; m_values.len()]));
+    }
+
+    let nodes = ellipkinc_precomputed_sin2_nodes(phi);
+    let values = m_values
+        .iter()
+        .copied()
+        .map(|m| {
+            if m == 0.0 {
+                0.5 * phi * GAUSS_LEGENDRE_15_WEIGHT_SUM
+            } else {
+                gauss_legendre_elliptic_f_with_sin2(phi, m, &nodes)
+            }
+        })
+        .collect::<Vec<_>>();
+    Ok(SpecialTensor::RealVec(values))
 }
 
 fn ellipeinc_scalar(phi: f64, m: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
@@ -1176,6 +1216,61 @@ fn domain_error(
 }
 
 /// 15-point Gauss-Legendre quadrature for incomplete elliptic integral F(φ, m).
+struct EllipkincSin2Nodes {
+    pos: [f64; 8],
+    neg: [f64; 8],
+}
+
+fn ellipkinc_precomputed_sin2_nodes(phi: f64) -> EllipkincSin2Nodes {
+    const NODES: [f64; 8] = [
+        0.987_992_518_020_485_4,
+        0.937_273_392_400_706,
+        0.848_206_583_410_427_2,
+        0.724_417_731_360_170_1,
+        0.570_972_172_608_538_8,
+        0.394_151_347_077_563_4,
+        0.201_194_093_997_435,
+        0.0,
+    ];
+
+    let half_phi = 0.5 * phi;
+    let mut pos = [0.0; 8];
+    let mut neg = [0.0; 8];
+    for i in 0..8 {
+        let t_pos = half_phi * (1.0 + NODES[i]);
+        let t_neg = half_phi * (1.0 - NODES[i]);
+        pos[i] = t_pos.sin().powi(2);
+        neg[i] = t_neg.sin().powi(2);
+    }
+    EllipkincSin2Nodes { pos, neg }
+}
+
+fn gauss_legendre_elliptic_f_with_sin2(phi: f64, m: f64, nodes: &EllipkincSin2Nodes) -> f64 {
+    const WEIGHTS: [f64; 8] = [
+        0.030_753_241_996_117_3,
+        0.070_366_047_488_108_1,
+        0.107_159_220_467_171_9,
+        0.139_570_677_926_154_1,
+        0.166_269_205_816_994,
+        0.186_161_000_015_562_2,
+        0.198_431_485_327_111_6,
+        0.202_578_241_925_561_3,
+    ];
+
+    let half_phi = 0.5 * phi;
+    let mut sum = 0.0;
+    for (i, weight) in WEIGHTS.iter().enumerate() {
+        let f_pos = 1.0 / (1.0 - m * nodes.pos[i]).sqrt();
+        let f_neg = 1.0 / (1.0 - m * nodes.neg[i]).sqrt();
+        if i == 7 {
+            sum += *weight * f_pos;
+        } else {
+            sum += *weight * (f_pos + f_neg);
+        }
+    }
+    half_phi * sum
+}
+
 fn gauss_legendre_elliptic_f(phi: f64, m: f64) -> f64 {
     // Gauss-Legendre nodes and weights for [-1, 1], n=15
     const NODES: [f64; 8] = [
