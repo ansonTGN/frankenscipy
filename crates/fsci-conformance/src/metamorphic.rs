@@ -768,4 +768,107 @@ mod tests {
             }
         }
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LINALG DECOMPOSITION METAMORPHIC RELATIONS (extends linalg_relations)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    mod linalg_decomp_relations {
+        use super::*;
+        use fsci_linalg::{DecompOptions, det, qr};
+        use fsci_runtime::RuntimeMode;
+
+        fn make_diag_dominant(n: usize, seed: u64) -> Vec<Vec<f64>> {
+            let mut a = vec![vec![0.0; n]; n];
+            for i in 0..n {
+                for j in 0..n {
+                    let r = ((seed.wrapping_mul(i as u64 + 1).wrapping_add(j as u64)) % 1000)
+                        as f64
+                        / 1000.0;
+                    a[i][j] = if i == j { (n as f64) * 2.0 + r } else { r - 0.5 };
+                }
+            }
+            a
+        }
+
+        fn matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
+            let n = a.len();
+            let mut c = vec![vec![0.0; n]; n];
+            for i in 0..n {
+                for j in 0..n {
+                    c[i][j] = (0..n).map(|k| a[i][k] * b[k][j]).sum();
+                }
+            }
+            c
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(PROPTEST_CASES))]
+
+            /// MR-LINALG-3: QR factorization reconstructs the matrix, Q@R ≈ A.
+            #[test]
+            fn mr_qr_reconstructs(n in 2usize..=10, seed in 0u64..1000) {
+                let a = make_diag_dominant(n, seed);
+                let res = qr(&a, DecompOptions::default()).expect("qr failed");
+                let recon = matmul(&res.q, &res.r);
+                let max_diff = a.iter().zip(&recon)
+                    .flat_map(|(ra, rr)| ra.iter().zip(rr).map(|(x, y)| (x - y).abs()))
+                    .fold(0.0, f64::max);
+                prop_assert!(max_diff < LOOSE_TOL, "Q@R != A: max_diff={max_diff}, n={n}");
+            }
+
+            /// MR-LINALG-4: det is transpose-invariant, det(A^T) ≈ det(A).
+            #[test]
+            fn mr_det_transpose_invariant(n in 2usize..=8, seed in 0u64..1000) {
+                let a = make_diag_dominant(n, seed);
+                let at: Vec<Vec<f64>> = (0..n)
+                    .map(|i| (0..n).map(|j| a[j][i]).collect())
+                    .collect();
+                let da = det(&a, RuntimeMode::Strict, true).expect("det(A)");
+                let dat = det(&at, RuntimeMode::Strict, true).expect("det(A^T)");
+                prop_assert!(
+                    (da - dat).abs() < 1e-9 * (da.abs() + 1.0),
+                    "det(A^T) != det(A): {da} vs {dat}, n={n}"
+                );
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SPECIAL BETA/GAMMA METAMORPHIC RELATIONS (extends special_relations)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    mod special_beta_relations {
+        use super::*;
+        use fsci_runtime::RuntimeMode;
+        use fsci_special::{SpecialTensor, beta, gammaln};
+
+        fn sc(x: f64) -> SpecialTensor {
+            SpecialTensor::RealScalar(x)
+        }
+        fn val(t: &SpecialTensor) -> f64 {
+            match t {
+                SpecialTensor::RealScalar(v) => *v,
+                _ => panic!("expected scalar"),
+            }
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(PROPTEST_CASES))]
+
+            /// MR-SPECIAL-4: B(a,b) = exp(lnΓ(a) + lnΓ(b) − lnΓ(a+b)).
+            #[test]
+            fn mr_beta_gamma_identity(a in 0.5f64..12.0, b in 0.5f64..12.0) {
+                let beta_ab = val(&beta(&sc(a), &sc(b), RuntimeMode::Strict).expect("beta"));
+                let lga = val(&gammaln(&sc(a), RuntimeMode::Strict).expect("lnG(a)"));
+                let lgb = val(&gammaln(&sc(b), RuntimeMode::Strict).expect("lnG(b)"));
+                let lgab = val(&gammaln(&sc(a + b), RuntimeMode::Strict).expect("lnG(a+b)"));
+                let from_gamma = (lga + lgb - lgab).exp();
+                prop_assert!(
+                    (beta_ab - from_gamma).abs() < LOOSE_TOL * (from_gamma.abs() + 1.0),
+                    "beta identity failed: B({a},{b})={beta_ab}, gamma-form={from_gamma}"
+                );
+            }
+        }
+    }
 }
