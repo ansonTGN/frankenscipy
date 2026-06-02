@@ -1,0 +1,5 @@
+# Pass 1 profile sample counts
+
+lu_solve: total_success=25, failed=0, factorization=22, axcpy=15, lu_solve_or_rcond=2, triangular_internal=0, residual=0, validation=0, gemm=0
+solve_triangular_short: total_success=5, failed=15, factorization=0, axcpy=0, lu_solve_or_rcond=0, triangular_internal=3, residual=2, validation=2, gemm=0
+solve_triangular_long: total_success=16, failed=9, factorization=0, axcpy=0, lu_solve_or_rcond=0, triangular_internal=13, residual=11, validation=3, gemm=0

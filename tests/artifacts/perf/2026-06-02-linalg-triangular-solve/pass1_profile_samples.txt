@@ -1,0 +1,914 @@
+command: /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve lu_solve 1000 80 42
+sampler: gdb -batch -p <pid> -ex bt, 25 samples, sleep 0.20s
+===LU_SOLVE_SAMPLE 1===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x00006016d44e51c9 in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+699	                        *self
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  0x00006016d44e51c9 in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+#1  nalgebra::linalg::lu::gauss_step<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (matrix=0x7ffc6c7ef530, diag=<optimized out>, i=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:355
+#2  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::new<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (matrix=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:117
+#3  0x00006016d44e44e7 in nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::lu<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/decomposition.rs:53
+#4  fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2656
+#5  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 2===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+__memcpy_avx_unaligned_erms () at ../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:491
+
+warning: 491	../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S: No such file or directory
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  __memcpy_avx_unaligned_erms () at ../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:491
+#1  0x00006016d44d9b58 in core::ptr::copy_nonoverlapping<f64> (src=0x60170a9f4250, dst=0x60170b197fa0, count=1000) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:551
+#2  alloc::vec::Vec<f64, alloc::alloc::Global>::append_elements<f64, alloc::alloc::Global> (self=0x7ffc6c7ef4d0, other=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:2943
+#3  alloc::vec::spec_extend::{impl#4}::spec_extend<f64, alloc::alloc::Global> (self=0x7ffc6c7ef4d0, iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_extend.rs:56
+#4  alloc::vec::Vec<f64, alloc::alloc::Global>::extend_from_slice<f64, alloc::alloc::Global> (self=0x7ffc6c7ef4d0, other=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3564
+#5  fsci_linalg::dmatrix_from_rows (rows=...) at crates/fsci-linalg/src/lib.rs:5441
+#6  0x00006016d44e439b in fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2654
+#7  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 3===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x00006016d44e520c in core::ops::arith::{impl#14}::add (other=<optimized out>, self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/arith.rs:104
+104	            fn add(self, other: $t) -> $t { self + other }
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  0x00006016d44e520c in core::ops::arith::{impl#14}::add (other=<optimized out>, self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/arith.rs:104
+#1  nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=636, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:49
+#2  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#3  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#4  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#5  nalgebra::linalg::lu::gauss_step<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (matrix=0x7ffc6c7ef530, diag=<optimized out>, i=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:355
+#6  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::new<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (matrix=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:117
+#7  0x00006016d44e44e7 in nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::lu<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/decomposition.rs:53
+#8  fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2656
+#9  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 4===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=923, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:49
+49	            *y = a.clone() * x.get_unchecked(i * stride2).clone() * c.clone()
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=923, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:49
+#1  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#2  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#3  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#4  nalgebra::linalg::lu::gauss_step<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (matrix=0x7ffc6c7ef530, diag=<optimized out>, i=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:355
+#5  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::new<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (matrix=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:117
+#6  0x00006016d44e44e7 in nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::lu<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/decomposition.rs:53
+#7  fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2656
+#8  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 5===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+__memcpy_avx_unaligned_erms () at ../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:491
+
+warning: 491	../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S: No such file or directory
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  __memcpy_avx_unaligned_erms () at ../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:491
+#1  0x00006016d44d9b58 in core::ptr::copy_nonoverlapping<f64> (src=0x60170a82b3b0, dst=0x60170afcffa0, count=1000) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:551
+#2  alloc::vec::Vec<f64, alloc::alloc::Global>::append_elements<f64, alloc::alloc::Global> (self=0x7ffc6c7ef4d0, other=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:2943
+#3  alloc::vec::spec_extend::{impl#4}::spec_extend<f64, alloc::alloc::Global> (self=0x7ffc6c7ef4d0, iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_extend.rs:56
+#4  alloc::vec::Vec<f64, alloc::alloc::Global>::extend_from_slice<f64, alloc::alloc::Global> (self=0x7ffc6c7ef4d0, other=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3564
+#5  fsci_linalg::dmatrix_from_rows (rows=...) at crates/fsci-linalg/src/lib.rs:5441
+#6  0x00006016d44e439b in fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2654
+#7  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 6===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x00006016d44e51f6 in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+699	                        *self
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  0x00006016d44e51f6 in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+#1  nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=744, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:49
+#2  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#3  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#4  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#5  nalgebra::linalg::lu::gauss_step<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (matrix=0x7ffc6c7ef530, diag=<optimized out>, i=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:355
+#6  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::new<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (matrix=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:117
+#7  0x00006016d44e44e7 in nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::lu<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/decomposition.rs:53
+#8  fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2656
+#9  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 7===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+__brk (addr=0x60170beb3000) at ../sysdeps/unix/sysv/linux/brk_call.h:24
+
+warning: 24	../sysdeps/unix/sysv/linux/brk_call.h: No such file or directory
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  __brk (addr=0x60170beb3000) at ../sysdeps/unix/sysv/linux/brk_call.h:24
+#1  0x00007bcaf5f34278 in __GI___sbrk (increment=increment@entry=-23998464) at ./misc/sbrk.c:74
+#2  0x00007bcaf5eb2166 in __glibc_morecore (increment=increment@entry=-23998464) at ./malloc/morecore.c:29
+#3  0x00007bcaf5eb2200 in systrim (pad=<optimized out>, av=0x7bcaf6034ac0 <main_arena>) at ./malloc/malloc.c:3011
+#4  0x00007bcaf5eb299d in _int_free_chunk (av=<optimized out>, p=<optimized out>, size=<optimized out>, have_lock=<optimized out>) at ./malloc/malloc.c:4729
+#5  0x00006016d44db416 in std::sys::alloc::unix::{impl#0}::dealloc () at /rustc/14210df0e27ccd7d9e6a05b8085cbd438e4bbc65/library/std/src/sys/alloc/unix.rs:48
+#6  std::alloc::__default_lib_allocator::__rdl_dealloc () at /rustc/14210df0e27ccd7d9e6a05b8085cbd438e4bbc65/library/std/src/alloc.rs:463
+#7  alloc::alloc::dealloc_nonnull (layout=..., ptr=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:128
+#8  alloc::alloc::Global::deallocate_impl_runtime (layout=..., ptr=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:229
+#9  alloc::alloc::Global::deallocate_impl (layout=..., self=<optimized out>, ptr=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:344
+#10 alloc::alloc::{impl#1}::deallocate (layout=..., self=<optimized out>, ptr=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:462
+#11 alloc::raw_vec::RawVecInner<alloc::alloc::Global>::deallocate<alloc::alloc::Global> (elem_layout=..., self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:876
+#12 alloc::raw_vec::{impl#3}::drop<f64, alloc::alloc::Global> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:424
+#13 core::ptr::drop_glue<alloc::raw_vec::RawVec<f64, alloc::alloc::Global>> () at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825
+#14 core::ptr::drop_glue<alloc::vec::Vec<f64, alloc::alloc::Global>> () at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825
+#15 core::ptr::drop_glue<nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825
+#16 core::ptr::drop_glue<nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>> () at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825
+#17 fsci_linalg::fast_rcond_from_lu (lu=0x7ffc6c7ef690, a_norm=<optimized out>, n=<optimized out>) at crates/fsci-linalg/src/lib.rs:1004
+#18 0x00006016d44dffce in fsci_linalg::lu_solve (lu_factor=0x7ffc6c7ef690, b=...) at crates/fsci-linalg/src/lib.rs:2691
+#19 0x00006016d44f8b2f in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:142
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 8===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x00006016d44e5210 in core::ops::arith::{impl#14}::add (other=<optimized out>, self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/arith.rs:104
+104	            fn add(self, other: $t) -> $t { self + other }
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  0x00006016d44e5210 in core::ops::arith::{impl#14}::add (other=<optimized out>, self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/arith.rs:104
+#1  nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=460, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:49
+#2  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#3  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#4  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#5  nalgebra::linalg::lu::gauss_step<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (matrix=0x7ffc6c7ef530, diag=<optimized out>, i=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:355
+#6  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::new<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (matrix=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:117
+#7  0x00006016d44e44e7 in nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::lu<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/decomposition.rs:53
+#8  fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2656
+#9  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 9===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x00006016d44e5220 in nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=797, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:49
+49	            *y = a.clone() * x.get_unchecked(i * stride2).clone() * c.clone()
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  0x00006016d44e5220 in nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=797, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:49
+#1  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#2  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#3  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#4  nalgebra::linalg::lu::gauss_step<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (matrix=0x7ffc6c7ef530, diag=<optimized out>, i=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:355
+#5  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::new<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (matrix=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:117
+#6  0x00006016d44e44e7 in nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::lu<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/decomposition.rs:53
+#7  fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2656
+#8  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 10===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x00006016d44e5220 in nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=948, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:49
+49	            *y = a.clone() * x.get_unchecked(i * stride2).clone() * c.clone()
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  0x00006016d44e5220 in nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=948, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:49
+#1  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#2  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#3  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#4  nalgebra::linalg::lu::gauss_step<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (matrix=0x7ffc6c7ef530, diag=<optimized out>, i=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:355
+#5  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::new<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (matrix=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:117
+#6  0x00006016d44e44e7 in nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::lu<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/decomposition.rs:53
+#7  fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2656
+#8  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 11===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x00006016d44e51f6 in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+699	                        *self
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  0x00006016d44e51f6 in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+#1  nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=414, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:49
+#2  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#3  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#4  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#5  nalgebra::linalg::lu::gauss_step<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (matrix=0x7ffc6c7ef530, diag=<optimized out>, i=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:355
+#6  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::new<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (matrix=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:117
+#7  0x00006016d44e44e7 in nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::lu<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/decomposition.rs:53
+#8  fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2656
+#9  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 12===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x00006016d44e51f6 in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+699	                        *self
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  0x00006016d44e51f6 in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+#1  nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=809, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:49
+#2  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#3  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#4  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#5  nalgebra::linalg::lu::gauss_step<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (matrix=0x7ffc6c7ef530, diag=<optimized out>, i=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:355
+#6  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::new<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (matrix=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:117
+#7  0x00006016d44e44e7 in nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::lu<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/decomposition.rs:53
+#8  fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2656
+#9  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 13===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+__memcpy_avx_unaligned_erms () at ../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:489
+
+warning: 489	../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S: No such file or directory
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  __memcpy_avx_unaligned_erms () at ../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:489
+#1  0x00006016d44d9b58 in core::ptr::copy_nonoverlapping<f64> (src=0x60170aec39e0, dst=0x60170b664fe0, count=1000) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:551
+#2  alloc::vec::Vec<f64, alloc::alloc::Global>::append_elements<f64, alloc::alloc::Global> (self=0x7ffc6c7ef4d0, other=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:2943
+#3  alloc::vec::spec_extend::{impl#4}::spec_extend<f64, alloc::alloc::Global> (self=0x7ffc6c7ef4d0, iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_extend.rs:56
+#4  alloc::vec::Vec<f64, alloc::alloc::Global>::extend_from_slice<f64, alloc::alloc::Global> (self=0x7ffc6c7ef4d0, other=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3564
+#5  fsci_linalg::dmatrix_from_rows (rows=...) at crates/fsci-linalg/src/lib.rs:5441
+#6  0x00006016d44e439b in fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2654
+#7  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 14===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::ptr::write<f64> (dst=0x60170c3ca000, src=-0.11035497477368027) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1933
+1933	        intrinsics::write_via_move(dst, src)
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::ptr::write<f64> (dst=0x60170c3ca000, src=-0.11035497477368027) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1933
+#1  alloc::vec::Vec<f64, alloc::alloc::Global>::extend_desugared<f64, alloc::alloc::Global, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (self=0x7ffc6c7ef350, iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4044
+#2  alloc::vec::spec_extend::{impl#0}::spec_extend<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>, alloc::alloc::Global> (self=0x7ffc6c7ef350, iter=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_extend.rs:18
+#3  alloc::vec::spec_from_iter_nested::{impl#0}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_from_iter_nested.rs:41
+#4  alloc::vec::spec_from_iter::{impl#0}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_from_iter.rs:33
+#5  alloc::vec::{impl#16}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iter=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3933
+#6  core::iter::traits::iterator::Iterator::collect<core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>, alloc::vec::Vec<f64, alloc::alloc::Global>> (self=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2090
+#7  nalgebra::base::default_allocator::{impl#1}::allocate_from_iterator<nalgebra::base::dimension::Dyn, f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (nrows=..., ncols=..., iter=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/default_allocator.rs:131
+#8  0x00006016d44d9f75 in nalgebra::base::matrix_view::{impl#38}::clone_owned<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix_view.rs:230
+#9  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::clone_owned<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:620
+#10 nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::upper_triangle<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/edition.rs:26
+#11 nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::u<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (self=0x7ffc6c7ef690) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:181
+#12 fsci_linalg::fast_rcond_from_lu (lu=0x7ffc6c7ef690, a_norm=<optimized out>, n=1000) at crates/fsci-linalg/src/lib.rs:961
+#13 0x00006016d44dffce in fsci_linalg::lu_solve (lu_factor=0x7ffc6c7ef690, b=...) at crates/fsci-linalg/src/lib.rs:2691
+#14 0x00006016d44f8b2f in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:142
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 15===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x00006016d44e520c in core::ops::arith::{impl#14}::add (other=<optimized out>, self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/arith.rs:104
+104	            fn add(self, other: $t) -> $t { self + other }
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  0x00006016d44e520c in core::ops::arith::{impl#14}::add (other=<optimized out>, self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/arith.rs:104
+#1  nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=742, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:49
+#2  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#3  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#4  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#5  nalgebra::linalg::lu::gauss_step<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (matrix=0x7ffc6c7ef530, diag=<optimized out>, i=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:355
+#6  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::new<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (matrix=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:117
+#7  0x00006016d44e44e7 in nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::lu<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/decomposition.rs:53
+#8  fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2656
+#9  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 16===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::from_row_slice_generic<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (nrows=..., ncols=..., slice=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/construction.rs:117
+117	                    *res.get_unchecked_mut((i, j)) = MaybeUninit::new(iter.next().unwrap().clone())
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::from_row_slice_generic<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (nrows=..., ncols=..., slice=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/construction.rs:117
+#1  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::from_row_slice<f64> (nrows=1000, ncols=1000, data=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/construction.rs:751
+#2  fsci_linalg::dmatrix_from_rows (rows=...) at crates/fsci-linalg/src/lib.rs:5443
+#3  0x00006016d44e439b in fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2654
+#4  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 17===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=387, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:49
+49	            *y = a.clone() * x.get_unchecked(i * stride2).clone() * c.clone()
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=387, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:49
+#1  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#2  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#3  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#4  nalgebra::linalg::lu::gauss_step<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (matrix=0x7ffc6c7ef530, diag=<optimized out>, i=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:355
+#5  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::new<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (matrix=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:117
+#6  0x00006016d44e44e7 in nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::lu<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/decomposition.rs:53
+#7  fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2656
+#8  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 18===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x00006016d44e51fb in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+699	                        *self
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  0x00006016d44e51fb in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+#1  nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=771, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:50
+#2  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#3  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#4  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#5  nalgebra::linalg::lu::gauss_step<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (matrix=0x7ffc6c7ef530, diag=<optimized out>, i=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:355
+#6  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::new<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (matrix=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:117
+#7  0x00006016d44e44e7 in nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::lu<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/decomposition.rs:53
+#8  fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2656
+#9  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 19===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::num::{impl#11}::unchecked_add (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:971
+971	                intrinsics::unchecked_add(self, rhs)
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::num::{impl#11}::unchecked_add (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:971
+#1  core::iter::range::{impl#49}::forward_unchecked (start=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs:215
+#2  core::iter::range::{impl#5}::spec_next<usize> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs:903
+#3  core::iter::range::{impl#6}::next<usize> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs:985
+#4  nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=911, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:47
+#5  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#6  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#7  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#8  nalgebra::linalg::lu::gauss_step<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (matrix=0x7ffc6c7ef530, diag=<optimized out>, i=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:355
+#9  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::new<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (matrix=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:117
+#10 0x00006016d44e44e7 in nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::lu<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/decomposition.rs:53
+#11 fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2656
+#12 0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 20===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+__brk (addr=0x60170af74000) at ../sysdeps/unix/sysv/linux/brk_call.h:24
+
+warning: 24	../sysdeps/unix/sysv/linux/brk_call.h: No such file or directory
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  __brk (addr=0x60170af74000) at ../sysdeps/unix/sysv/linux/brk_call.h:24
+#1  0x00007bcaf5f34278 in __GI___sbrk (increment=increment@entry=-15986688) at ./misc/sbrk.c:74
+#2  0x00007bcaf5eb2166 in __glibc_morecore (increment=increment@entry=-15986688) at ./malloc/morecore.c:29
+#3  0x00007bcaf5eb2200 in systrim (pad=<optimized out>, av=0x7bcaf6034ac0 <main_arena>) at ./malloc/malloc.c:3011
+#4  0x00007bcaf5eb299d in _int_free_chunk (av=<optimized out>, p=<optimized out>, size=<optimized out>, have_lock=<optimized out>) at ./malloc/malloc.c:4729
+#5  0x00006016d44f8dfe in std::sys::alloc::unix::{impl#0}::dealloc () at /rustc/14210df0e27ccd7d9e6a05b8085cbd438e4bbc65/library/std/src/sys/alloc/unix.rs:48
+#6  std::alloc::__default_lib_allocator::__rdl_dealloc () at /rustc/14210df0e27ccd7d9e6a05b8085cbd438e4bbc65/library/std/src/alloc.rs:463
+#7  alloc::alloc::dealloc_nonnull (ptr=..., layout=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:128
+#8  alloc::alloc::Global::deallocate_impl_runtime (ptr=..., layout=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:229
+#9  alloc::alloc::Global::deallocate_impl (self=<optimized out>, ptr=..., layout=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:344
+#10 alloc::alloc::{impl#1}::deallocate (self=<optimized out>, ptr=..., layout=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:462
+#11 alloc::raw_vec::RawVecInner<alloc::alloc::Global>::deallocate<alloc::alloc::Global> (self=<optimized out>, elem_layout=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:876
+#12 alloc::raw_vec::{impl#3}::drop<f64, alloc::alloc::Global> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:424
+#13 core::ptr::drop_glue<alloc::raw_vec::RawVec<f64, alloc::alloc::Global>> () at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825
+#14 core::ptr::drop_glue<alloc::vec::Vec<f64, alloc::alloc::Global>> () at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825
+#15 core::ptr::drop_glue<nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825
+#16 core::ptr::drop_glue<nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>> () at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825
+#17 core::ptr::drop_glue<nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825
+#18 core::ptr::drop_glue<fsci_linalg::LuFactorResult> () at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825
+#19 0x00006016d44f8dfe in perf_solve::main ()
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 21===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x00006016d44e5202 in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+699	                        *self
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  0x00006016d44e5202 in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+#1  nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=513, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:50
+#2  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#3  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#4  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#5  nalgebra::linalg::lu::gauss_step<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (matrix=0x7ffc6c7ef530, diag=<optimized out>, i=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:355
+#6  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::new<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (matrix=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:117
+#7  0x00006016d44e44e7 in nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::lu<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/decomposition.rs:53
+#8  fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2656
+#9  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 22===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::num::{impl#11}::unchecked_add (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:971
+971	                intrinsics::unchecked_add(self, rhs)
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::num::{impl#11}::unchecked_add (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:971
+#1  core::iter::range::{impl#49}::forward_unchecked (start=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs:215
+#2  core::iter::range::{impl#5}::spec_next<usize> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs:903
+#3  core::iter::range::{impl#6}::next<usize> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs:985
+#4  nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=930, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:47
+#5  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#6  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#7  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#8  nalgebra::linalg::lu::gauss_step<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (matrix=0x7ffc6c7ef530, diag=<optimized out>, i=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:355
+#9  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::new<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (matrix=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:117
+#10 0x00006016d44e44e7 in nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::lu<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/decomposition.rs:53
+#11 fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2656
+#12 0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 23===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x00006016d44e51c9 in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+699	                        *self
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  0x00006016d44e51c9 in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+#1  nalgebra::linalg::lu::gauss_step<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (matrix=0x7ffc6c7ef530, diag=<optimized out>, i=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:355
+#2  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::new<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (matrix=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:117
+#3  0x00006016d44e44e7 in nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::lu<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/decomposition.rs:53
+#4  fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2656
+#5  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 24===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x00006016d44e5210 in core::ops::arith::{impl#14}::add (other=<optimized out>, self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/arith.rs:104
+104	            fn add(self, other: $t) -> $t { self + other }
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  0x00006016d44e5210 in core::ops::arith::{impl#14}::add (other=<optimized out>, self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/arith.rs:104
+#1  nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=889, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:49
+#2  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#3  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#4  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#5  nalgebra::linalg::lu::gauss_step<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (matrix=0x7ffc6c7ef530, diag=<optimized out>, i=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:355
+#6  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::new<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (matrix=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:117
+#7  0x00006016d44e44e7 in nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::lu<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> () at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/decomposition.rs:53
+#8  fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2656
+#9  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_SAMPLE 25===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+__memcpy_avx_unaligned_erms () at ../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:491
+
+warning: 491	../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S: No such file or directory
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  __memcpy_avx_unaligned_erms () at ../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:491
+#1  0x00006016d44d9b58 in core::ptr::copy_nonoverlapping<f64> (src=0x60170a80b2b0, dst=0x60170afaffa0, count=1000) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:551
+#2  alloc::vec::Vec<f64, alloc::alloc::Global>::append_elements<f64, alloc::alloc::Global> (self=0x7ffc6c7ef4d0, other=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:2943
+#3  alloc::vec::spec_extend::{impl#4}::spec_extend<f64, alloc::alloc::Global> (self=0x7ffc6c7ef4d0, iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_extend.rs:56
+#4  alloc::vec::Vec<f64, alloc::alloc::Global>::extend_from_slice<f64, alloc::alloc::Global> (self=0x7ffc6c7ef4d0, other=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3564
+#5  fsci_linalg::dmatrix_from_rows (rows=...) at crates/fsci-linalg/src/lib.rs:5441
+#6  0x00006016d44e439b in fsci_linalg::lu_factor (a=..., options=...) at crates/fsci-linalg/src/lib.rs:2654
+#7  0x00006016d44f8a73 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:141
+[Inferior 1 (process 1657336) detached]
+===LU_SOLVE_RUN_OUTPUT===
+{"mode":"lu_solve","n":1000,"repeats":80,"total_ms":12793.747,"per_call_ms":159.9218,"checksum":-7.875862e1}
+
+command: /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve solve_triangular 1000 500 42
+sampler: gdb -batch -p <pid> -ex bt, 20 samples, sleep 0.15s
+===SOLVE_TRIANGULAR_SAMPLE 1===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::iter::adapters::take::{impl#1}::next<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<f64>>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:37
+37	        if self.n != 0 {
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::iter::adapters::take::{impl#1}::next<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<f64>>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:37
+#1  fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5321
+#2  0x000057b84a9049b1 in fsci_linalg::solve_triangular_internal (a=..., b=..., trans=<optimized out>, lower=<optimized out>, unit_diagonal=false) at crates/fsci-linalg/src/lib.rs:5300
+#3  0x000057b84a90168f in fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:715
+#4  0x000057b84a9209ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1664684) detached]
+===SOLVE_TRIANGULAR_SAMPLE 2===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::iter::traits::iterator::Iterator::try_fold<core::slice::iter::Iter<f64>, (), &mut core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<optimized out>, init=<optimized out>, f=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2494
+2494	            accum = f(accum, x)?;
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::iter::traits::iterator::Iterator::try_fold<core::slice::iter::Iter<f64>, (), &mut core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<optimized out>, init=<optimized out>, f=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2494
+#1  core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>> (acc=<optimized out>, iter=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:566
+#2  core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>> (acc=<optimized out>, iter=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:423
+#3  core::iter::traits::iterator::Iterator::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, (), core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure_env#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<optimized out>, init=<optimized out>, f=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2494
+#4  core::iter::adapters::fuse::{impl#11}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, (), core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure_env#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>, acc=<optimized out>, fold=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/fuse.rs:397
+#5  core::iter::adapters::fuse::{impl#3}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, (), core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure_env#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>, acc=<optimized out>, fold=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/fuse.rs:89
+#6  core::iter::adapters::flatten::FlattenCompat<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>>::iter_try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>, (), core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>, acc=<optimized out>, fold=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:431
+#7  core::iter::adapters::flatten::{impl#20}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>, (), core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:569
+#8  core::iter::adapters::flatten::{impl#11}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>, (), core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:242
+#9  core::iter::traits::iterator::Iterator::any<core::iter::adapters::flatten::Flatten<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>>, fsci_linalg::validate_finite_matrix::{closure_env#0}> (self=<error reading variable: Cannot access memory at address 0x0>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2897
+#10 fsci_linalg::validate_finite_matrix (a=..., mode=<optimized out>, check_finite=<optimized out>) at crates/fsci-linalg/src/lib.rs:5405
+#11 fsci_linalg::validate_finite_matrix_and_vector (a=..., b=..., mode=<optimized out>, check_finite=<optimized out>) at crates/fsci-linalg/src/lib.rs:5417
+#12 fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:696
+#13 0x000057b84a9209ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1664684) detached]
+===SOLVE_TRIANGULAR_SAMPLE 3===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::iter::adapters::enumerate::{impl#1}::next<core::slice::iter::Iter<f64>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/enumerate.rs:82
+82	        self.count += 1;
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::iter::adapters::enumerate::{impl#1}::next<core::slice::iter::Iter<f64>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/enumerate.rs:82
+#1  core::iter::adapters::take::{impl#1}::next<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<f64>>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:39
+#2  fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5321
+#3  0x000057b84a9049b1 in fsci_linalg::solve_triangular_internal (a=..., b=..., trans=<optimized out>, lower=<optimized out>, unit_diagonal=false) at crates/fsci-linalg/src/lib.rs:5300
+#4  0x000057b84a90168f in fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:715
+#5  0x000057b84a9209ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1664684) detached]
+===SOLVE_TRIANGULAR_SAMPLE 4===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::iter::traits::iterator::Iterator::try_fold<core::slice::iter::Iter<f64>, (), &mut core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<optimized out>, init=<optimized out>, f=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2494
+2494	            accum = f(accum, x)?;
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::iter::traits::iterator::Iterator::try_fold<core::slice::iter::Iter<f64>, (), &mut core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<optimized out>, init=<optimized out>, f=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2494
+#1  core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>> (acc=<optimized out>, iter=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:566
+#2  core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>> (acc=<optimized out>, iter=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:423
+#3  core::iter::traits::iterator::Iterator::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, (), core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure_env#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<optimized out>, init=<optimized out>, f=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2494
+#4  core::iter::adapters::fuse::{impl#11}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, (), core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure_env#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>, acc=<optimized out>, fold=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/fuse.rs:397
+#5  core::iter::adapters::fuse::{impl#3}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, (), core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure_env#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>, acc=<optimized out>, fold=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/fuse.rs:89
+#6  core::iter::adapters::flatten::FlattenCompat<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>>::iter_try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>, (), core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>, acc=<optimized out>, fold=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:431
+#7  core::iter::adapters::flatten::{impl#20}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>, (), core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:569
+#8  core::iter::adapters::flatten::{impl#11}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>, (), core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:242
+#9  core::iter::traits::iterator::Iterator::any<core::iter::adapters::flatten::Flatten<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>>, fsci_linalg::validate_finite_matrix::{closure_env#0}> (self=<error reading variable: Cannot access memory at address 0x0>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2897
+#10 fsci_linalg::validate_finite_matrix (a=..., mode=<optimized out>, check_finite=<optimized out>) at crates/fsci-linalg/src/lib.rs:5405
+#11 fsci_linalg::validate_finite_matrix_and_vector (a=..., b=..., mode=<optimized out>, check_finite=<optimized out>) at crates/fsci-linalg/src/lib.rs:5417
+#12 fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:696
+#13 0x000057b84a9209ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1664684) detached]
+===SOLVE_TRIANGULAR_SAMPLE 5===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::ptr::non_null::{impl#15}::eq<f64> (self=<optimized out>, other=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1714
+1714	        self.as_ptr() == other.as_ptr()
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::ptr::non_null::{impl#15}::eq<f64> (self=<optimized out>, other=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1714
+#1  core::slice::iter::{impl#171}::next<f64> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:180
+#2  core::iter::adapters::enumerate::{impl#1}::next<core::slice::iter::Iter<f64>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/enumerate.rs:80
+#3  core::iter::adapters::skip::{impl#1}::next<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<f64>>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/skip.rs:44
+#4  fsci_linalg::solve_triangular_internal (a=..., b=..., trans=<optimized out>, lower=<optimized out>, unit_diagonal=false) at crates/fsci-linalg/src/lib.rs:5289
+#5  0x000057b84a90168f in fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:715
+#6  0x000057b84a9209ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1664684) detached]
+===SOLVE_TRIANGULAR_SAMPLE 6===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_SAMPLE 7===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_SAMPLE 8===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_SAMPLE 9===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_SAMPLE 10===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_SAMPLE 11===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_SAMPLE 12===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_SAMPLE 13===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_SAMPLE 14===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_SAMPLE 15===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_SAMPLE 16===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_SAMPLE 17===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_SAMPLE 18===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_SAMPLE 19===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_SAMPLE 20===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_RUN_OUTPUT===
+{"mode":"solve_triangular","n":1000,"repeats":500,"total_ms":1994.665,"per_call_ms":3.9893,"checksum":1.247515e5}
+
+command: /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve solve_triangular 1000 2000 42
+sampler: gdb -batch -p <pid> -ex bt, 25 samples, sleep 0.20s
+===SOLVE_TRIANGULAR_LONG_SAMPLE 1===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::ptr::non_null::{impl#15}::eq<f64> (self=<optimized out>, other=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1714
+1714	        self.as_ptr() == other.as_ptr()
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::ptr::non_null::{impl#15}::eq<f64> (self=<optimized out>, other=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1714
+#1  core::slice::iter::{impl#171}::next<f64> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:180
+#2  core::iter::adapters::enumerate::{impl#1}::next<core::slice::iter::Iter<f64>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/enumerate.rs:80
+#3  core::iter::adapters::skip::{impl#1}::next<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<f64>>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/skip.rs:44
+#4  fsci_linalg::solve_triangular_internal (a=..., b=..., trans=<optimized out>, lower=<optimized out>, unit_diagonal=false) at crates/fsci-linalg/src/lib.rs:5289
+#5  0x00005df24495068f in fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:715
+#6  0x00005df24496f9ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1668724) detached]
+===SOLVE_TRIANGULAR_LONG_SAMPLE 2===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::iter::adapters::take::{impl#1}::next<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<f64>>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:37
+37	        if self.n != 0 {
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::iter::adapters::take::{impl#1}::next<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<f64>>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:37
+#1  fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5321
+#2  0x00005df2449539b1 in fsci_linalg::solve_triangular_internal (a=..., b=..., trans=<optimized out>, lower=<optimized out>, unit_diagonal=false) at crates/fsci-linalg/src/lib.rs:5300
+#3  0x00005df24495068f in fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:715
+#4  0x00005df24496f9ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1668724) detached]
+===SOLVE_TRIANGULAR_LONG_SAMPLE 3===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5331
+5331	        for &val in row {
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5331
+#1  0x00005df2449539b1 in fsci_linalg::solve_triangular_internal (a=..., b=..., trans=<optimized out>, lower=<optimized out>, unit_diagonal=false) at crates/fsci-linalg/src/lib.rs:5300
+#2  0x00005df24495068f in fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:715
+#3  0x00005df24496f9ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1668724) detached]
+===SOLVE_TRIANGULAR_LONG_SAMPLE 4===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::iter::adapters::enumerate::{impl#1}::next<core::slice::iter::Iter<f64>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/enumerate.rs:82
+82	        self.count += 1;
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::iter::adapters::enumerate::{impl#1}::next<core::slice::iter::Iter<f64>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/enumerate.rs:82
+#1  core::iter::adapters::take::{impl#1}::next<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<f64>>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:39
+#2  fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5321
+#3  0x00005df2449539b1 in fsci_linalg::solve_triangular_internal (a=..., b=..., trans=<optimized out>, lower=<optimized out>, unit_diagonal=false) at crates/fsci-linalg/src/lib.rs:5300
+#4  0x00005df24495068f in fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:715
+#5  0x00005df24496f9ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1668724) detached]
+===SOLVE_TRIANGULAR_LONG_SAMPLE 5===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::iter::traits::iterator::Iterator::try_fold<core::slice::iter::Iter<f64>, (), &mut core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<optimized out>, init=<optimized out>, f=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2494
+2494	            accum = f(accum, x)?;
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::iter::traits::iterator::Iterator::try_fold<core::slice::iter::Iter<f64>, (), &mut core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<optimized out>, init=<optimized out>, f=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2494
+#1  core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>> (acc=<optimized out>, iter=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:566
+#2  core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>> (acc=<optimized out>, iter=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:423
+#3  core::iter::traits::iterator::Iterator::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, (), core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure_env#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<optimized out>, init=<optimized out>, f=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2494
+#4  core::iter::adapters::fuse::{impl#11}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, (), core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure_env#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>, acc=<optimized out>, fold=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/fuse.rs:397
+#5  core::iter::adapters::fuse::{impl#3}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, (), core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure_env#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>, acc=<optimized out>, fold=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/fuse.rs:89
+#6  core::iter::adapters::flatten::FlattenCompat<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>>::iter_try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>, (), core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>, acc=<optimized out>, fold=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:431
+#7  core::iter::adapters::flatten::{impl#20}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>, (), core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:569
+#8  core::iter::adapters::flatten::{impl#11}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>, (), core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:242
+#9  core::iter::traits::iterator::Iterator::any<core::iter::adapters::flatten::Flatten<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>>, fsci_linalg::validate_finite_matrix::{closure_env#0}> (self=<error reading variable: Cannot access memory at address 0x0>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2897
+#10 fsci_linalg::validate_finite_matrix (a=..., mode=<optimized out>, check_finite=<optimized out>) at crates/fsci-linalg/src/lib.rs:5405
+#11 fsci_linalg::validate_finite_matrix_and_vector (a=..., b=..., mode=<optimized out>, check_finite=<optimized out>) at crates/fsci-linalg/src/lib.rs:5417
+#12 fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:696
+#13 0x00005df24496f9ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1668724) detached]
+===SOLVE_TRIANGULAR_LONG_SAMPLE 6===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::iter::adapters::take::{impl#1}::next<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<f64>>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:37
+37	        if self.n != 0 {
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::iter::adapters::take::{impl#1}::next<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<f64>>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:37
+#1  fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5321
+#2  0x00005df2449539b1 in fsci_linalg::solve_triangular_internal (a=..., b=..., trans=<optimized out>, lower=<optimized out>, unit_diagonal=false) at crates/fsci-linalg/src/lib.rs:5300
+#3  0x00005df24495068f in fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:715
+#4  0x00005df24496f9ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1668724) detached]
+===SOLVE_TRIANGULAR_LONG_SAMPLE 7===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5331
+5331	        for &val in row {
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5331
+#1  0x00005df2449539b1 in fsci_linalg::solve_triangular_internal (a=..., b=..., trans=<optimized out>, lower=<optimized out>, unit_diagonal=false) at crates/fsci-linalg/src/lib.rs:5300
+#2  0x00005df24495068f in fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:715
+#3  0x00005df24496f9ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1668724) detached]
+===SOLVE_TRIANGULAR_LONG_SAMPLE 8===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::iter::traits::iterator::Iterator::try_fold<core::slice::iter::Iter<f64>, (), &mut core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<optimized out>, init=<optimized out>, f=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2494
+2494	            accum = f(accum, x)?;
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::iter::traits::iterator::Iterator::try_fold<core::slice::iter::Iter<f64>, (), &mut core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<optimized out>, init=<optimized out>, f=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2494
+#1  core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>> (acc=<optimized out>, iter=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:566
+#2  core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>> (acc=<optimized out>, iter=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:423
+#3  core::iter::traits::iterator::Iterator::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, (), core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure_env#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<optimized out>, init=<optimized out>, f=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2494
+#4  core::iter::adapters::fuse::{impl#11}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, (), core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure_env#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>, acc=<optimized out>, fold=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/fuse.rs:397
+#5  core::iter::adapters::fuse::{impl#3}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, (), core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure_env#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>, acc=<optimized out>, fold=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/fuse.rs:89
+#6  core::iter::adapters::flatten::FlattenCompat<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>>::iter_try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>, (), core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>, acc=<optimized out>, fold=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:431
+#7  core::iter::adapters::flatten::{impl#20}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>, (), core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:569
+#8  core::iter::adapters::flatten::{impl#11}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>, (), core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:242
+#9  core::iter::traits::iterator::Iterator::any<core::iter::adapters::flatten::Flatten<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>>, fsci_linalg::validate_finite_matrix::{closure_env#0}> (self=<error reading variable: Cannot access memory at address 0x0>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2897
+#10 fsci_linalg::validate_finite_matrix (a=..., mode=<optimized out>, check_finite=<optimized out>) at crates/fsci-linalg/src/lib.rs:5405
+#11 fsci_linalg::validate_finite_matrix_and_vector (a=..., b=..., mode=<optimized out>, check_finite=<optimized out>) at crates/fsci-linalg/src/lib.rs:5417
+#12 fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:696
+#13 0x00005df24496f9ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1668724) detached]
+===SOLVE_TRIANGULAR_LONG_SAMPLE 9===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::iter::adapters::take::{impl#1}::next<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<f64>>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:37
+37	        if self.n != 0 {
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::iter::adapters::take::{impl#1}::next<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<f64>>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:37
+#1  fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5321
+#2  0x00005df2449539b1 in fsci_linalg::solve_triangular_internal (a=..., b=..., trans=<optimized out>, lower=<optimized out>, unit_diagonal=false) at crates/fsci-linalg/src/lib.rs:5300
+#3  0x00005df24495068f in fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:715
+#4  0x00005df24496f9ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1668724) detached]
+===SOLVE_TRIANGULAR_LONG_SAMPLE 10===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5331
+5331	        for &val in row {
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5331
+#1  0x00005df2449539b1 in fsci_linalg::solve_triangular_internal (a=..., b=..., trans=<optimized out>, lower=<optimized out>, unit_diagonal=false) at crates/fsci-linalg/src/lib.rs:5300
+#2  0x00005df24495068f in fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:715
+#3  0x00005df24496f9ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1668724) detached]
+===SOLVE_TRIANGULAR_LONG_SAMPLE 11===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::ptr::non_null::{impl#15}::eq<f64> (self=<optimized out>, other=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1714
+1714	        self.as_ptr() == other.as_ptr()
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::ptr::non_null::{impl#15}::eq<f64> (self=<optimized out>, other=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1714
+#1  core::slice::iter::{impl#171}::next<f64> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:180
+#2  core::iter::adapters::enumerate::{impl#1}::next<core::slice::iter::Iter<f64>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/enumerate.rs:80
+#3  core::iter::adapters::skip::{impl#1}::next<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<f64>>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/skip.rs:44
+#4  fsci_linalg::solve_triangular_internal (a=..., b=..., trans=<optimized out>, lower=<optimized out>, unit_diagonal=false) at crates/fsci-linalg/src/lib.rs:5289
+#5  0x00005df24495068f in fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:715
+#6  0x00005df24496f9ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1668724) detached]
+===SOLVE_TRIANGULAR_LONG_SAMPLE 12===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::iter::adapters::take::{impl#1}::next<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<f64>>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:37
+37	        if self.n != 0 {
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::iter::adapters::take::{impl#1}::next<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<f64>>> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/take.rs:37
+#1  fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5321
+#2  0x00005df2449539b1 in fsci_linalg::solve_triangular_internal (a=..., b=..., trans=<optimized out>, lower=<optimized out>, unit_diagonal=false) at crates/fsci-linalg/src/lib.rs:5300
+#3  0x00005df24495068f in fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:715
+#4  0x00005df24496f9ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1668724) detached]
+===SOLVE_TRIANGULAR_LONG_SAMPLE 13===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5331
+5331	        for &val in row {
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5331
+#1  0x00005df2449539b1 in fsci_linalg::solve_triangular_internal (a=..., b=..., trans=<optimized out>, lower=<optimized out>, unit_diagonal=false) at crates/fsci-linalg/src/lib.rs:5300
+#2  0x00005df24495068f in fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:715
+#3  0x00005df24496f9ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1668724) detached]
+===SOLVE_TRIANGULAR_LONG_SAMPLE 14===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5331
+5331	        for &val in row {
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5331
+#1  0x00005df2449539b1 in fsci_linalg::solve_triangular_internal (a=..., b=..., trans=<optimized out>, lower=<optimized out>, unit_diagonal=false) at crates/fsci-linalg/src/lib.rs:5300
+#2  0x00005df24495068f in fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:715
+#3  0x00005df24496f9ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1668724) detached]
+===SOLVE_TRIANGULAR_LONG_SAMPLE 15===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5331
+5331	        for &val in row {
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  fsci_linalg::compute_backward_error_dense (a=..., x=..., b=...) at crates/fsci-linalg/src/lib.rs:5331
+#1  0x00005df2449539b1 in fsci_linalg::solve_triangular_internal (a=..., b=..., trans=<optimized out>, lower=<optimized out>, unit_diagonal=false) at crates/fsci-linalg/src/lib.rs:5300
+#2  0x00005df24495068f in fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:715
+#3  0x00005df24496f9ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1668724) detached]
+===SOLVE_TRIANGULAR_LONG_SAMPLE 16===
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::iter::traits::iterator::Iterator::try_fold<core::slice::iter::Iter<f64>, (), &mut core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<optimized out>, init=<optimized out>, f=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2494
+2494	            accum = f(accum, x)?;
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass1_bench_20260602b/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+#0  core::iter::traits::iterator::Iterator::try_fold<core::slice::iter::Iter<f64>, (), &mut core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<optimized out>, init=<optimized out>, f=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2494
+#1  core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>> (acc=<optimized out>, iter=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:566
+#2  core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>> (acc=<optimized out>, iter=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:423
+#3  core::iter::traits::iterator::Iterator::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, (), core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure_env#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<optimized out>, init=<optimized out>, f=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2494
+#4  core::iter::adapters::fuse::{impl#11}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, (), core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure_env#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>, acc=<optimized out>, fold=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/fuse.rs:397
+#5  core::iter::adapters::fuse::{impl#3}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, (), core::iter::adapters::flatten::{impl#18}::iter_try_fold::flatten::{closure_env#0}<&alloc::vec::Vec<f64, alloc::alloc::Global>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>, acc=<optimized out>, fold=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/fuse.rs:89
+#6  core::iter::adapters::flatten::FlattenCompat<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>>::iter_try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>, (), core::iter::adapters::flatten::{impl#20}::try_fold::flatten::{closure_env#0}<core::slice::iter::Iter<f64>, (), core::ops::control_flow::ControlFlow<(), ()>, core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>, acc=<optimized out>, fold=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:431
+#7  core::iter::adapters::flatten::{impl#20}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>, (), core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:569
+#8  core::iter::adapters::flatten::{impl#11}::try_fold<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>, core::slice::iter::Iter<f64>, (), core::iter::traits::iterator::Iterator::any::check::{closure_env#0}<&f64, fsci_linalg::validate_finite_matrix::{closure_env#0}>, core::ops::control_flow::ControlFlow<(), ()>> (self=<error reading variable: Cannot access memory at address 0x0>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/flatten.rs:242
+#9  core::iter::traits::iterator::Iterator::any<core::iter::adapters::flatten::Flatten<core::slice::iter::Iter<alloc::vec::Vec<f64, alloc::alloc::Global>>>, fsci_linalg::validate_finite_matrix::{closure_env#0}> (self=<error reading variable: Cannot access memory at address 0x0>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2897
+#10 fsci_linalg::validate_finite_matrix (a=..., mode=<optimized out>, check_finite=<optimized out>) at crates/fsci-linalg/src/lib.rs:5405
+#11 fsci_linalg::validate_finite_matrix_and_vector (a=..., b=..., mode=<optimized out>, check_finite=<optimized out>) at crates/fsci-linalg/src/lib.rs:5417
+#12 fsci_linalg::solve_triangular (a=..., b=..., options=...) at crates/fsci-linalg/src/lib.rs:696
+#13 0x00005df24496f9ee in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:146
+[Inferior 1 (process 1668724) detached]
+===SOLVE_TRIANGULAR_LONG_SAMPLE 17===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_LONG_SAMPLE 18===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_LONG_SAMPLE 19===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_LONG_SAMPLE 20===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_LONG_SAMPLE 21===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_LONG_SAMPLE 22===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_LONG_SAMPLE 23===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_LONG_SAMPLE 24===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_LONG_SAMPLE 25===
+ptrace: No such process.
+No stack.
+===SOLVE_TRIANGULAR_LONG_RUN_OUTPUT===
+{"mode":"solve_triangular","n":1000,"repeats":2000,"total_ms":7203.732,"per_call_ms":3.6019,"checksum":4.990062e5}

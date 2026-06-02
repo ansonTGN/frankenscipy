@@ -1,0 +1,1 @@
+{"mode":"solve_triangular","n":1000,"repeats":2000,"total_ms":7203.732,"per_call_ms":3.6019,"checksum":4.990062e5}
