@@ -1,0 +1,86 @@
+//! Profiling-only harness for stats hot paths.
+//!
+//! Usage:
+//!   `perf_stats golden [path]`
+//!   `perf_stats psd <repeats>`
+
+use std::fmt::Write as _;
+use std::hint::black_box;
+use std::path::Path;
+use std::time::Instant;
+
+use fsci_stats::psd_welch;
+
+fn deterministic_data(n: usize) -> Vec<f64> {
+    (0..n)
+        .map(|i| {
+            let x = i as f64;
+            (x * 0.017).sin() + (x * 0.031).cos() * 0.25 + (i % 17) as f64 * 0.001
+        })
+        .collect()
+}
+
+fn psd_case() -> Vec<f64> {
+    let data = deterministic_data(4096);
+    psd_welch(&data, 128, 64, 1.0)
+}
+
+fn golden_text() -> String {
+    let values = psd_case();
+    let mut output = String::new();
+    writeln!(output, "case=psd_welch_4096_w128_o64 len={}", values.len()).expect("write header");
+    output.push_str("psd=");
+    for value in &values {
+        write!(output, "{:016x},", value.to_bits()).expect("write psd bits");
+    }
+    output.push('\n');
+    output
+}
+
+fn write_or_print(output: String, path: Option<&str>) {
+    if let Some(path) = path {
+        let path = Path::new(path);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("create stats perf artifact parent");
+        }
+        std::fs::write(path, output).expect("write stats perf artifact");
+    } else {
+        print!("{output}");
+    }
+}
+
+fn timed_psd(repeats: usize) {
+    let data = deterministic_data(4096);
+    let t0 = Instant::now();
+    let mut checksum = 0.0_f64;
+    let mut len = 0usize;
+    for _ in 0..repeats {
+        let result = psd_welch(&data, 128, 64, 1.0);
+        checksum += result.iter().copied().sum::<f64>();
+        len += result.len();
+        black_box(&result);
+    }
+    let elapsed = t0.elapsed();
+    let total_ms = elapsed.as_secs_f64() * 1e3;
+    let per_call_us = elapsed.as_secs_f64() * 1e6 / repeats as f64;
+    println!(
+        "{{\"mode\":\"psd\",\"repeats\":{repeats},\"total_ms\":{total_ms:.3},\"per_call_us\":{per_call_us:.6},\"len\":{len},\"checksum\":{checksum:.12e}}}",
+    );
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let mode = args.get(1).map(String::as_str).unwrap_or("golden");
+
+    match mode {
+        "golden" => write_or_print(golden_text(), args.get(2).map(String::as_str)),
+        "psd" => {
+            let repeats = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(10);
+            timed_psd(repeats);
+        }
+        _ => {
+            eprintln!("unknown mode: {mode}");
+            std::process::exit(2);
+        }
+    }
+}

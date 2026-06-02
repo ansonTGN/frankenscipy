@@ -1,0 +1,85 @@
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use fsci_stats::{
+    HaltonSampler, SobolSampler, acf, argsort, centered_discrepancy, ecdf, histogram,
+    l2_star_discrepancy, mixture_discrepancy, pacf, psd_welch, wraparound_discrepancy,
+};
+
+fn deterministic_data(n: usize) -> Vec<f64> {
+    (0..n)
+        .map(|i| {
+            let x = i as f64;
+            (x * 0.017).sin() + (x * 0.031).cos() * 0.25 + (i % 17) as f64 * 0.001
+        })
+        .collect()
+}
+
+fn qmc_halton_sample(n: usize, dimension: usize) -> Vec<f64> {
+    let mut sampler = HaltonSampler::new(dimension).expect("valid Halton dimension");
+    sampler.sample(n)
+}
+
+fn qmc_sobol_sample(n: usize, dimension: usize) -> Vec<f64> {
+    let mut sampler = SobolSampler::new(dimension).expect("valid Sobol dimension");
+    sampler.sample(n)
+}
+
+fn bench_qmc_discrepancy(c: &mut Criterion) {
+    let sample = qmc_halton_sample(512, 2);
+    let mut group = c.benchmark_group("qmc_discrepancy");
+    group.bench_function("centered/512x2", |b| {
+        b.iter(|| centered_discrepancy(&sample, 2).expect("centered discrepancy"))
+    });
+    group.bench_function("mixture/512x2", |b| {
+        b.iter(|| mixture_discrepancy(&sample, 2).expect("mixture discrepancy"))
+    });
+    group.bench_function("l2_star/512x2", |b| {
+        b.iter(|| l2_star_discrepancy(&sample, 2).expect("l2 star discrepancy"))
+    });
+    group.bench_function("wraparound/512x2", |b| {
+        b.iter(|| wraparound_discrepancy(&sample, 2).expect("wraparound discrepancy"))
+    });
+    group.finish();
+}
+
+fn bench_qmc_sampling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("qmc_sampling");
+    for n in [1024usize, 4096] {
+        group.bench_function(BenchmarkId::new("halton_4d", n), |b| {
+            b.iter(|| qmc_halton_sample(n, 4))
+        });
+        group.bench_function(BenchmarkId::new("sobol_2d", n), |b| {
+            b.iter(|| qmc_sobol_sample(n, 2))
+        });
+    }
+    group.finish();
+}
+
+fn bench_ordering_and_bins(c: &mut Criterion) {
+    let data = deterministic_data(4096);
+    let x_eval = deterministic_data(512);
+    let mut group = c.benchmark_group("ordering_and_bins");
+    group.bench_function("argsort/4096", |b| b.iter(|| argsort(&data)));
+    group.bench_function("histogram/4096x64", |b| b.iter(|| histogram(&data, 64)));
+    group.bench_function("ecdf/4096x512", |b| b.iter(|| ecdf(&data, &x_eval)));
+    group.finish();
+}
+
+fn bench_time_series(c: &mut Criterion) {
+    let data = deterministic_data(4096);
+    let mut group = c.benchmark_group("time_series");
+    group.bench_function("acf/4096x64", |b| b.iter(|| acf(&data, 64)));
+    group.bench_function("pacf/4096x64", |b| b.iter(|| pacf(&data, 64)));
+    group.bench_function("psd_welch/4096_w128_o64", |b| {
+        b.iter(|| psd_welch(&data, 128, 64, 1.0))
+    });
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_qmc_discrepancy,
+    bench_qmc_sampling,
+    bench_ordering_and_bins,
+    bench_time_series
+);
+criterion_main!(benches);

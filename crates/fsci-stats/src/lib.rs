@@ -2183,7 +2183,7 @@ impl ContinuousDistribution for GeneralizedExponential {
             let mut total = 0.0;
             for &x in &owned {
                 let d = dist.pdf(x);
-                if !(d > 0.0) || !d.is_finite() {
+                if d <= 0.0 || !d.is_finite() {
                     return f64::INFINITY;
                 }
                 total -= d.ln();
@@ -2645,7 +2645,7 @@ impl ContinuousDistribution for NoncentralF {
             let mut total = 0.0;
             for &x in &owned {
                 let d = dist.pdf(x);
-                if !(d > 0.0) || !d.is_finite() {
+                if d <= 0.0 || !d.is_finite() {
                     return f64::INFINITY;
                 }
                 total -= d.ln();
@@ -3282,7 +3282,7 @@ impl ContinuousDistribution for GenGamma {
             let mut total = 0.0;
             for &x in &owned {
                 let d = dist.pdf(x);
-                if !(d > 0.0) || !d.is_finite() {
+                if d <= 0.0 || !d.is_finite() {
                     return f64::INFINITY;
                 }
                 total -= d.ln();
@@ -4502,7 +4502,7 @@ impl ContinuousDistribution for RelBreitWigner {
             let mut total = 0.0;
             for &x in &owned {
                 let d = dist.pdf(x);
-                if !(d > 0.0) || !d.is_finite() {
+                if d <= 0.0 || !d.is_finite() {
                     return f64::INFINITY;
                 }
                 total -= d.ln();
@@ -34380,6 +34380,16 @@ pub fn psd_welch(data: &[f64], window_size: usize, overlap: usize, fs: f64) -> V
         })
         .collect();
 
+    let two_pi = 2.0 * std::f64::consts::PI;
+    let twiddles: Vec<(f64, f64)> = (0..n_freq)
+        .flat_map(|k| {
+            (0..window_size).map(move |n| {
+                let angle = two_pi * k as f64 * n as f64 / window_size as f64;
+                (angle.cos(), angle.sin())
+            })
+        })
+        .collect();
+
     let mut start = 0;
     while start + window_size <= data.len() {
         let segment: Vec<f64> = data[start..start + window_size]
@@ -34389,14 +34399,13 @@ pub fn psd_welch(data: &[f64], window_size: usize, overlap: usize, fs: f64) -> V
             .collect();
 
         // Compute periodogram of segment
-        let two_pi = 2.0 * std::f64::consts::PI;
         for (k, psd_k) in psd.iter_mut().enumerate().take(n_freq) {
             let mut re = 0.0;
             let mut im = 0.0;
-            for (n, &s) in segment.iter().enumerate() {
-                let angle = two_pi * k as f64 * n as f64 / window_size as f64;
-                re += s * angle.cos();
-                im -= s * angle.sin();
+            let twiddle_row = &twiddles[k * window_size..(k + 1) * window_size];
+            for (&s, &(cos, sin)) in segment.iter().zip(twiddle_row.iter()) {
+                re += s * cos;
+                im -= s * sin;
             }
             let power = (re * re + im * im) / (window_size as f64 * fs);
             *psd_k += power;
@@ -47234,7 +47243,12 @@ mod tests {
             assert!(
                 rel_err < 0.05,
                 "studentized_range.sf({}, {}, {})={} vs scipy {}, rel_err={}",
-                q, k, df, sf, expected_sf, rel_err
+                q,
+                k,
+                df,
+                sf,
+                expected_sf,
+                rel_err
             );
         }
     }
@@ -54800,7 +54814,11 @@ mod tests {
             fitted.nc
         );
         // Fitted moments must reproduce the sample moments.
-        assert!((fitted.mean() - mean).abs() < 1e-9, "mean: {}", fitted.mean());
+        assert!(
+            (fitted.mean() - mean).abs() < 1e-9,
+            "mean: {}",
+            fitted.mean()
+        );
         assert!((fitted.var() - var).abs() < 1e-9, "var: {}", fitted.var());
     }
 
@@ -54919,9 +54937,8 @@ mod tests {
             1.4728, 0.5724, 0.8462, 3.2725, 2.2045, 1.7951, 0.6421,
         ];
         let fitted = GenGamma::try_fit(&data).expect("fit");
-        let nll = |d: &GenGamma| -> f64 {
-            -data.iter().map(|&x| d.pdf(x).max(1e-300).ln()).sum::<f64>()
-        };
+        let nll =
+            |d: &GenGamma| -> f64 { -data.iter().map(|&x| d.pdf(x).max(1e-300).ln()).sum::<f64>() };
         let scipy = GenGamma::new(1.9839, 1.542);
         assert!(
             nll(&fitted) <= nll(&scipy) + 1e-3,
@@ -54929,7 +54946,12 @@ mod tests {
             nll(&fitted),
             nll(&scipy)
         );
-        assert!(fitted.a > 0.0 && fitted.c > 0.0, "a={}, c={}", fitted.a, fitted.c);
+        assert!(
+            fitted.a > 0.0 && fitted.c > 0.0,
+            "a={}, c={}",
+            fitted.a,
+            fitted.c
+        );
     }
 
     #[test]
@@ -55010,11 +55032,19 @@ mod tests {
         let fitted = NormInvGauss::try_fit(&data).expect("fit");
         // Closed-form parameters.
         let s = 1.0 + mean * mean;
-        assert!((fitted.a - s.powf(1.5) / var).abs() < 1e-9, "a: {}", fitted.a);
+        assert!(
+            (fitted.a - s.powf(1.5) / var).abs() < 1e-9,
+            "a: {}",
+            fitted.a
+        );
         assert!((fitted.b - mean * s / var).abs() < 1e-9, "b: {}", fitted.b);
         assert!(fitted.a > fitted.b.abs(), "must satisfy a > |b|");
         // Round-trip: fitted distribution reproduces the sample moments.
-        assert!((fitted.mean() - mean).abs() < 1e-9, "mean: {}", fitted.mean());
+        assert!(
+            (fitted.mean() - mean).abs() < 1e-9,
+            "mean: {}",
+            fitted.mean()
+        );
         assert!((fitted.var() - var).abs() < 1e-9, "var: {}", fitted.var());
     }
 
@@ -57059,14 +57089,23 @@ mod tests {
         check("JohnsonSB", integ(&JohnsonSB::new(1.0, 2.0), 0.0, 1.0));
         check("LogGamma", integ(&LogGamma::new(2.0), -50.0, 50.0));
         check("Gompertz", integ(&Gompertz::new(1.5), 0.0, 50.0));
-        check("ExponWeibull", integ(&ExponWeibull::new(2.0, 1.5), 0.0, 60.0));
+        check(
+            "ExponWeibull",
+            integ(&ExponWeibull::new(2.0, 1.5), 0.0, 60.0),
+        );
         check("GenGamma", integ(&GenGamma::new(2.0, 1.5), 0.0, 60.0));
         check(
             "NoncentralChiSquared",
             integ(&NoncentralChiSquared::new(4.0, 3.0), 0.0, 120.0),
         );
-        check("NormInvGauss", integ(&NormInvGauss::new(2.0, 0.7), -60.0, 60.0));
-        check("RelBreitWigner", integ(&RelBreitWigner::new(0.5), 0.0, 400.0));
+        check(
+            "NormInvGauss",
+            integ(&NormInvGauss::new(2.0, 0.7), -60.0, 60.0),
+        );
+        check(
+            "RelBreitWigner",
+            integ(&RelBreitWigner::new(0.5), 0.0, 400.0),
+        );
         // Broader coverage (ranges validated against scipy).
         check("Bradford", integ(&Bradford::new(2.0), 0.0, 1.0));
         check("FatigueLife", integ(&FatigueLife::new(1.5), 0.0, 200.0));
@@ -57098,14 +57137,23 @@ mod tests {
         };
         check("Poisson", sum_pmf(&Poisson::new(3.0), 60));
         check("Binomial", sum_pmf(&Binomial::new(20, 0.3), 20));
-        check("BetaBinomial", sum_pmf(&BetaBinomial::new(20, 2.0, 3.0), 20));
+        check(
+            "BetaBinomial",
+            sum_pmf(&BetaBinomial::new(20, 2.0, 3.0), 20),
+        );
         check("Bernoulli", sum_pmf(&Bernoulli::new(0.4), 1));
         check("Boltzmann", sum_pmf(&Boltzmann::new(0.5, 10), 10));
         check("Planck", sum_pmf(&Planck::new(0.5), 300));
         check("Geometric", sum_pmf(&Geometric::new(0.3), 200));
         check("NegBinomial", sum_pmf(&NegBinomial::new(5.0, 0.4), 300));
-        check("Hypergeometric", sum_pmf(&Hypergeometric::new(40, 15, 12), 15));
-        check("NegHypergeometric", sum_pmf(&NegHypergeometric::new(20, 7, 3), 20));
+        check(
+            "Hypergeometric",
+            sum_pmf(&Hypergeometric::new(40, 15, 12), 15),
+        );
+        check(
+            "NegHypergeometric",
+            sum_pmf(&NegHypergeometric::new(20, 7, 3), 20),
+        );
         check("LogSeries", sum_pmf(&LogSeries::new(0.6), 400));
         check("Zipfian", sum_pmf(&Zipfian::new(2.0, 20), 20));
         check(
@@ -57129,36 +57177,89 @@ mod tests {
         fn check_cdf<D: ContinuousDistribution>(name: &str, d: &D, qs: [f64; 3]) {
             for (&x, p) in qs.iter().zip([0.25, 0.5, 0.75]) {
                 let c = d.cdf(x);
-                assert!(
-                    (c - p).abs() < 3e-3,
-                    "{name} cdf({x}) = {c}, expected {p}"
-                );
+                assert!((c - p).abs() < 3e-3, "{name} cdf({x}) = {c}, expected {p}");
             }
         }
-        check_cdf("FoldedNormal", &FoldedNormal::new(1.5), [0.85442, 1.50335, 2.17486]);
+        check_cdf(
+            "FoldedNormal",
+            &FoldedNormal::new(1.5),
+            [0.85442, 1.50335, 2.17486],
+        );
         check_cdf("SkewNorm", &SkewNorm::new(4.0), [0.30578, 0.67424, 1.15035]);
-        check_cdf("ExponNorm", &ExponNorm::new(1.5), [0.28782, 1.23665, 2.39918]);
+        check_cdf(
+            "ExponNorm",
+            &ExponNorm::new(1.5),
+            [0.28782, 1.23665, 2.39918],
+        );
         check_cdf("PowerNorm", &PowerNorm::new(2.0), [-1.1078, -0.54495, 0.0]);
-        check_cdf("JohnsonSU", &JohnsonSU::new(1.0, 2.0), [-0.93855, -0.5211, -0.16347]);
-        check_cdf("JohnsonSB", &JohnsonSB::new(1.0, 2.0), [0.30212, 0.37754, 0.4594]);
-        check_cdf("LogGamma", &LogGamma::new(2.0), [-0.03949, 0.51781, 0.99052]);
+        check_cdf(
+            "JohnsonSU",
+            &JohnsonSU::new(1.0, 2.0),
+            [-0.93855, -0.5211, -0.16347],
+        );
+        check_cdf(
+            "JohnsonSB",
+            &JohnsonSB::new(1.0, 2.0),
+            [0.30212, 0.37754, 0.4594],
+        );
+        check_cdf(
+            "LogGamma",
+            &LogGamma::new(2.0),
+            [-0.03949, 0.51781, 0.99052],
+        );
         check_cdf("Gompertz", &Gompertz::new(1.5), [0.17545, 0.37987, 0.65451]);
-        check_cdf("ExponWeibull", &ExponWeibull::new(2.0, 1.5), [0.78322, 1.14671, 1.59274]);
-        check_cdf("GenGamma", &GenGamma::new(2.0, 1.5), [0.97402, 1.41228, 1.93546]);
+        check_cdf(
+            "ExponWeibull",
+            &ExponWeibull::new(2.0, 1.5),
+            [0.78322, 1.14671, 1.59274],
+        );
+        check_cdf(
+            "GenGamma",
+            &GenGamma::new(2.0, 1.5),
+            [0.97402, 1.41228, 1.93546],
+        );
         check_cdf(
             "NoncentralChiSquared",
             &NoncentralChiSquared::new(4.0, 3.0),
             [3.67337, 6.12676, 9.38674],
         );
-        check_cdf("NormInvGauss", &NormInvGauss::new(2.0, 0.7), [-0.12079, 0.30042, 0.78514]);
-        check_cdf("RelBreitWigner", &RelBreitWigner::new(0.5), [0.26912, 0.50294, 0.75067]);
+        check_cdf(
+            "NormInvGauss",
+            &NormInvGauss::new(2.0, 0.7),
+            [-0.12079, 0.30042, 0.78514],
+        );
+        check_cdf(
+            "RelBreitWigner",
+            &RelBreitWigner::new(0.5),
+            [0.26912, 0.50294, 0.75067],
+        );
         check_cdf("Bradford", &Bradford::new(2.0), [0.15804, 0.36603, 0.63975]);
-        check_cdf("FatigueLife", &FatigueLife::new(1.5), [0.37798, 1.0, 2.64562]);
-        check_cdf("GenLogistic", &GenLogistic::new(2.0), [0.0, 0.88137, 1.86626]);
+        check_cdf(
+            "FatigueLife",
+            &FatigueLife::new(1.5),
+            [0.37798, 1.0, 2.64562],
+        );
+        check_cdf(
+            "GenLogistic",
+            &GenLogistic::new(2.0),
+            [0.0, 0.88137, 1.86626],
+        );
         check_cdf("GenNorm", &GenNorm::new(1.5), [-0.52146, 0.0, 0.52146]);
-        check_cdf("Gumbel", &Gumbel::new(0.0, 1.0), [-0.32663, 0.36651, 1.2459]);
-        check_cdf("HalfGenNorm", &HalfGenNorm::new(1.5), [0.23615, 0.52146, 0.94088]);
-        check_cdf("Logistic", &Logistic::new(0.0, 1.0), [-1.09861, 0.0, 1.09861]);
+        check_cdf(
+            "Gumbel",
+            &Gumbel::new(0.0, 1.0),
+            [-0.32663, 0.36651, 1.2459],
+        );
+        check_cdf(
+            "HalfGenNorm",
+            &HalfGenNorm::new(1.5),
+            [0.23615, 0.52146, 0.94088],
+        );
+        check_cdf(
+            "Logistic",
+            &Logistic::new(0.0, 1.0),
+            [-1.09861, 0.0, 1.09861],
+        );
         check_cdf("Nakagami", &Nakagami::new(2.0), [0.69328, 0.91606, 1.16031]);
         check_cdf("RDist", &RDist::new(3.0), [-0.40397, 0.0, 0.40397]);
         check_cdf("Rayleigh", &Rayleigh::new(1.0), [0.75853, 1.17741, 1.66511]);
@@ -57183,30 +57284,86 @@ mod tests {
                 );
             }
         }
-        check_ppf("FoldedNormal", &FoldedNormal::new(1.5), [0.85442, 1.50335, 2.17486]);
+        check_ppf(
+            "FoldedNormal",
+            &FoldedNormal::new(1.5),
+            [0.85442, 1.50335, 2.17486],
+        );
         check_ppf("SkewNorm", &SkewNorm::new(4.0), [0.30578, 0.67424, 1.15035]);
-        check_ppf("ExponNorm", &ExponNorm::new(1.5), [0.28782, 1.23665, 2.39918]);
+        check_ppf(
+            "ExponNorm",
+            &ExponNorm::new(1.5),
+            [0.28782, 1.23665, 2.39918],
+        );
         check_ppf("PowerNorm", &PowerNorm::new(2.0), [-1.1078, -0.54495, 0.0]);
-        check_ppf("JohnsonSU", &JohnsonSU::new(1.0, 2.0), [-0.93855, -0.5211, -0.16347]);
-        check_ppf("JohnsonSB", &JohnsonSB::new(1.0, 2.0), [0.30212, 0.37754, 0.4594]);
-        check_ppf("LogGamma", &LogGamma::new(2.0), [-0.03949, 0.51781, 0.99052]);
+        check_ppf(
+            "JohnsonSU",
+            &JohnsonSU::new(1.0, 2.0),
+            [-0.93855, -0.5211, -0.16347],
+        );
+        check_ppf(
+            "JohnsonSB",
+            &JohnsonSB::new(1.0, 2.0),
+            [0.30212, 0.37754, 0.4594],
+        );
+        check_ppf(
+            "LogGamma",
+            &LogGamma::new(2.0),
+            [-0.03949, 0.51781, 0.99052],
+        );
         check_ppf("Gompertz", &Gompertz::new(1.5), [0.17545, 0.37987, 0.65451]);
-        check_ppf("ExponWeibull", &ExponWeibull::new(2.0, 1.5), [0.78322, 1.14671, 1.59274]);
-        check_ppf("GenGamma", &GenGamma::new(2.0, 1.5), [0.97402, 1.41228, 1.93546]);
+        check_ppf(
+            "ExponWeibull",
+            &ExponWeibull::new(2.0, 1.5),
+            [0.78322, 1.14671, 1.59274],
+        );
+        check_ppf(
+            "GenGamma",
+            &GenGamma::new(2.0, 1.5),
+            [0.97402, 1.41228, 1.93546],
+        );
         check_ppf(
             "NoncentralChiSquared",
             &NoncentralChiSquared::new(4.0, 3.0),
             [3.67337, 6.12676, 9.38674],
         );
-        check_ppf("NormInvGauss", &NormInvGauss::new(2.0, 0.7), [-0.12079, 0.30042, 0.78514]);
-        check_ppf("RelBreitWigner", &RelBreitWigner::new(0.5), [0.26912, 0.50294, 0.75067]);
+        check_ppf(
+            "NormInvGauss",
+            &NormInvGauss::new(2.0, 0.7),
+            [-0.12079, 0.30042, 0.78514],
+        );
+        check_ppf(
+            "RelBreitWigner",
+            &RelBreitWigner::new(0.5),
+            [0.26912, 0.50294, 0.75067],
+        );
         check_ppf("Bradford", &Bradford::new(2.0), [0.15804, 0.36603, 0.63975]);
-        check_ppf("FatigueLife", &FatigueLife::new(1.5), [0.37798, 1.0, 2.64562]);
-        check_ppf("GenLogistic", &GenLogistic::new(2.0), [0.0, 0.88137, 1.86626]);
+        check_ppf(
+            "FatigueLife",
+            &FatigueLife::new(1.5),
+            [0.37798, 1.0, 2.64562],
+        );
+        check_ppf(
+            "GenLogistic",
+            &GenLogistic::new(2.0),
+            [0.0, 0.88137, 1.86626],
+        );
         check_ppf("GenNorm", &GenNorm::new(1.5), [-0.52146, 0.0, 0.52146]);
-        check_ppf("Gumbel", &Gumbel::new(0.0, 1.0), [-0.32663, 0.36651, 1.2459]);
-        check_ppf("HalfGenNorm", &HalfGenNorm::new(1.5), [0.23615, 0.52146, 0.94088]);
-        check_ppf("Logistic", &Logistic::new(0.0, 1.0), [-1.09861, 0.0, 1.09861]);
+        check_ppf(
+            "Gumbel",
+            &Gumbel::new(0.0, 1.0),
+            [-0.32663, 0.36651, 1.2459],
+        );
+        check_ppf(
+            "HalfGenNorm",
+            &HalfGenNorm::new(1.5),
+            [0.23615, 0.52146, 0.94088],
+        );
+        check_ppf(
+            "Logistic",
+            &Logistic::new(0.0, 1.0),
+            [-1.09861, 0.0, 1.09861],
+        );
         check_ppf("Nakagami", &Nakagami::new(2.0), [0.69328, 0.91606, 1.16031]);
         check_ppf("RDist", &RDist::new(3.0), [-0.40397, 0.0, 0.40397]);
         check_ppf("Rayleigh", &Rayleigh::new(1.0), [0.75853, 1.17741, 1.66511]);
@@ -57242,10 +57399,25 @@ mod tests {
         check_mom("JohnsonSB", &JohnsonSB::new(1.0, 2.0), 0.38402, 0.01262);
         check_mom("LogGamma", &LogGamma::new(2.0), 0.42278, 0.64493);
         check_mom("Gompertz", &Gompertz::new(1.5), 0.44826, 0.11349);
-        check_mom("ExponWeibull", &ExponWeibull::new(2.0, 1.5), 1.2368, 0.37911);
+        check_mom(
+            "ExponWeibull",
+            &ExponWeibull::new(2.0, 1.5),
+            1.2368,
+            0.37911,
+        );
         check_mom("GenGamma", &GenGamma::new(2.0, 1.5), 1.50458, 0.51441);
-        check_mom("NoncentralChiSquared", &NoncentralChiSquared::new(4.0, 3.0), 7.0, 20.0);
-        check_mom("NormInvGauss", &NormInvGauss::new(2.0, 0.7), 0.37363, 0.60827);
+        check_mom(
+            "NoncentralChiSquared",
+            &NoncentralChiSquared::new(4.0, 3.0),
+            7.0,
+            20.0,
+        );
+        check_mom(
+            "NormInvGauss",
+            &NormInvGauss::new(2.0, 0.7),
+            0.37363,
+            0.60827,
+        );
         check_mom("Bradford", &Bradford::new(2.0), 0.41024, 0.0817);
         check_mom("FatigueLife", &FatigueLife::new(1.5), 2.125, 8.57812);
         check_mom("GenLogistic", &GenLogistic::new(2.0), 1.0, 2.28987);
@@ -57285,7 +57457,7 @@ mod tests {
         let r = ttest_ind(&a, &b);
         chk("ttest_ind stat", r.statistic, -1.903510, 1e-4);
         chk("ttest_ind p", r.pvalue, 0.073089, 1e-4);
-        let r = ttest_rel(&a, &b);
+        let r = ttest_rel(&a, &b, None).expect("ttest_rel should accept default alternative");
         chk("ttest_rel stat", r.statistic, -1.713121, 1e-4);
         chk("ttest_rel p", r.pvalue, 0.120841, 1e-4);
         let r = pearsonr(&a, &b);
@@ -57320,17 +57492,28 @@ mod tests {
             );
         }
         // pdf integrates to 1 (it was mis-normalized before).
-        let integral =
-            simpson_integrate_adaptive(|x| d.pdf(x), 0.0, 400.0, 512, 1e-12, 1e-14, 24);
+        let integral = simpson_integrate_adaptive(|x| d.pdf(x), 0.0, 400.0, 512, 1e-12, 1e-14, 24);
         assert!((integral - 1.0).abs() < 1e-3, "pdf integral = {integral}");
         // Finite mean/var match scipy (were wrongly INFINITY before).
         assert!((d.mean() - 0.569190).abs() < 1e-3, "mean = {}", d.mean());
         assert!((d.var() - 0.235040).abs() < 1e-3, "var = {}", d.var());
 
         let d1 = RelBreitWigner::new(1.0);
-        assert!((d1.pdf(1.0) - 0.819450).abs() < 1e-5, "pdf(1.0;1.0) = {}", d1.pdf(1.0));
-        assert!((d1.mean() - 0.965391).abs() < 1e-3, "mean(1.0) = {}", d1.mean());
-        assert!((d1.var() - 0.482233).abs() < 1e-3, "var(1.0) = {}", d1.var());
+        assert!(
+            (d1.pdf(1.0) - 0.819450).abs() < 1e-5,
+            "pdf(1.0;1.0) = {}",
+            d1.pdf(1.0)
+        );
+        assert!(
+            (d1.mean() - 0.965391).abs() < 1e-3,
+            "mean(1.0) = {}",
+            d1.mean()
+        );
+        assert!(
+            (d1.var() - 0.482233).abs() < 1e-3,
+            "var(1.0) = {}",
+            d1.var()
+        );
     }
 
     #[test]
@@ -59526,10 +59709,21 @@ mod tests {
 
     #[test]
     fn false_discovery_control_matches_scipy_reference_values() {
-        let pvalues: Vec<f64> = vec![0.001, 0.008, 0.039, 0.041, 0.042, 0.06, 0.074, 0.081, 0.15, 0.25];
+        let pvalues: Vec<f64> = vec![
+            0.001, 0.008, 0.039, 0.041, 0.042, 0.06, 0.074, 0.081, 0.15, 0.25,
+        ];
         let result = false_discovery_control(&pvalues, None).expect("FDR should succeed");
         let expected: Vec<f64> = vec![
-            0.01, 0.04, 0.084, 0.084, 0.084, 0.1, 0.10125, 0.10125, 0.16666666666666666, 0.25,
+            0.01,
+            0.04,
+            0.084,
+            0.084,
+            0.084,
+            0.1,
+            0.10125,
+            0.10125,
+            0.16666666666666666,
+            0.25,
         ];
         assert_eq!(result.len(), expected.len(), "FDR result length mismatch");
         for (i, (got, exp)) in result.iter().zip(expected.iter()).enumerate() {
@@ -59546,7 +59740,10 @@ mod tests {
         let (low, high) = bootstrap_mean(&data, 1000, 0.95, 42);
         assert!(low < 5.5, "bootstrap CI low should be < mean, got {low}");
         assert!(high > 5.5, "bootstrap CI high should be > mean, got {high}");
-        assert!(low > 0.0 && high < 11.0, "bootstrap CI should be within data range");
+        assert!(
+            low > 0.0 && high < 11.0,
+            "bootstrap CI should be within data range"
+        );
     }
 
     #[test]
@@ -59777,7 +59974,11 @@ mod tests {
         let data: Vec<f64> = vec![1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0];
         let (counts, edges) = histogram(&data, 5);
         assert_eq!(counts, vec![1, 2, 3, 2, 1], "histogram counts mismatch");
-        assert_eq!(edges.len(), 6, "histogram should have 6 bin edges for 5 bins");
+        assert_eq!(
+            edges.len(),
+            6,
+            "histogram should have 6 bin edges for 5 bins"
+        );
         assert!(
             (edges[0] - 1.0).abs() < 1e-10,
             "histogram first edge should be 1.0"
@@ -59890,10 +60091,7 @@ mod tests {
     fn vtest_returns_valid_results() {
         let samples: Vec<f64> = vec![0.1, 0.2, 0.3, 0.15, 0.25];
         let (statistic, pvalue) = vtest(&samples, 0.2);
-        assert!(
-            statistic.is_finite(),
-            "vtest statistic should be finite"
-        );
+        assert!(statistic.is_finite(), "vtest statistic should be finite");
         assert!(
             pvalue >= 0.0 && pvalue <= 1.0,
             "vtest pvalue should be in [0,1], got {pvalue}"
@@ -59994,7 +60192,9 @@ mod tests {
 
     #[test]
     fn brunnermunzel_matches_scipy_reference_values() {
-        let x: Vec<f64> = vec![1.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 4.0, 1.0, 1.0];
+        let x: Vec<f64> = vec![
+            1.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 4.0, 1.0, 1.0,
+        ];
         let y: Vec<f64> = vec![3.0, 3.0, 4.0, 3.0, 1.0, 2.0, 3.0, 1.0, 1.0, 5.0, 4.0];
         let result = brunnermunzel(&x, &y);
         assert!(
@@ -60083,10 +60283,7 @@ mod tests {
 
     #[test]
     fn cramers_v_matches_scipy_reference_values() {
-        let observed = vec![
-            vec![10.0, 20.0, 30.0],
-            vec![20.0, 30.0, 40.0],
-        ];
+        let observed = vec![vec![10.0, 20.0, 30.0], vec![20.0, 30.0, 40.0]];
         let result = cramers_v(&observed);
         assert!(
             (result - 0.07273929674533079).abs() < 1e-10,
@@ -60422,10 +60619,7 @@ mod tests {
     fn skew_matches_scipy_reference_values() {
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
         let result = skew(&data);
-        assert!(
-            result.abs() < 1e-10,
-            "skew got {result}, expected 0.0"
-        );
+        assert!(result.abs() < 1e-10, "skew got {result}, expected 0.0");
     }
 
     #[test]
@@ -60471,10 +60665,7 @@ mod tests {
         let result = rankdata(&data, None).expect("rankdata should succeed");
         let expected = vec![1.0, 5.0, 3.5, 3.5, 2.0];
         for (i, (r, e)) in result.iter().zip(expected.iter()).enumerate() {
-            assert!(
-                (r - e).abs() < 1e-10,
-                "rankdata[{i}] got {r}, expected {e}"
-            );
+            assert!((r - e).abs() < 1e-10, "rankdata[{i}] got {r}, expected {e}");
         }
     }
 
@@ -60556,10 +60747,7 @@ mod tests {
     fn medcouple_matches_scipy_reference_values() {
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let result = medcouple(&data);
-        assert!(
-            result.abs() < 1e-10,
-            "medcouple got {result}, expected 0.0"
-        );
+        assert!(result.abs() < 1e-10, "medcouple got {result}, expected 0.0");
     }
 
     #[test]
@@ -61195,8 +61383,14 @@ mod tests {
         // Weibull basic properties: CDF(0) = 0, CDF increasing, CDF(inf) -> 1
         let dist = Weibull::new(1.5, 2.0);
         assert_close(dist.cdf(0.0), 0.0, 1e-12, "weibull.cdf(0)");
-        assert!(dist.cdf(1.0) > dist.cdf(0.5), "weibull CDF should be increasing");
-        assert!(dist.cdf(5.0) > dist.cdf(2.0), "weibull CDF should be increasing");
+        assert!(
+            dist.cdf(1.0) > dist.cdf(0.5),
+            "weibull CDF should be increasing"
+        );
+        assert!(
+            dist.cdf(5.0) > dist.cdf(2.0),
+            "weibull CDF should be increasing"
+        );
         assert!(dist.cdf(20.0) > 0.99, "weibull CDF should approach 1");
     }
 
@@ -61218,8 +61412,14 @@ mod tests {
         // Note: diverges from scipy ncx2 - see bead for investigation
         let dist = NoncentralChiSquared::new(3.0, 2.0);
         assert_close(dist.cdf(0.0), 0.0, 1e-12, "ncx2.cdf(0)");
-        assert!(dist.cdf(5.0) > dist.cdf(1.0), "ncx2 CDF should be increasing");
-        assert!(dist.cdf(10.0) > dist.cdf(5.0), "ncx2 CDF should be increasing");
+        assert!(
+            dist.cdf(5.0) > dist.cdf(1.0),
+            "ncx2 CDF should be increasing"
+        );
+        assert!(
+            dist.cdf(10.0) > dist.cdf(5.0),
+            "ncx2 CDF should be increasing"
+        );
         assert!(dist.cdf(50.0) > 0.99, "ncx2 CDF should approach 1");
     }
 
@@ -61229,8 +61429,14 @@ mod tests {
         // Note: diverges from scipy ncf - see bead for investigation
         let dist = NoncentralF::new(5.0, 10.0, 2.0);
         assert_close(dist.cdf(0.0), 0.0, 1e-12, "ncf.cdf(0)");
-        assert!(dist.cdf(2.0) > dist.cdf(1.0), "ncf CDF should be increasing");
-        assert!(dist.cdf(5.0) > dist.cdf(2.0), "ncf CDF should be increasing");
+        assert!(
+            dist.cdf(2.0) > dist.cdf(1.0),
+            "ncf CDF should be increasing"
+        );
+        assert!(
+            dist.cdf(5.0) > dist.cdf(2.0),
+            "ncf CDF should be increasing"
+        );
         assert!(dist.cdf(50.0) > 0.99, "ncf CDF should approach 1");
     }
 
@@ -61330,8 +61536,14 @@ mod tests {
         // Note: parameterization may differ from scipy - using property-based test
         let dist = Maxwell::new(1.0);
         assert_close(dist.cdf(0.0), 0.0, 1e-12, "maxwell.cdf(0)");
-        assert!(dist.cdf(1.0) > dist.cdf(0.5), "maxwell CDF should be increasing");
-        assert!(dist.cdf(3.0) > dist.cdf(2.0), "maxwell CDF should be increasing");
+        assert!(
+            dist.cdf(1.0) > dist.cdf(0.5),
+            "maxwell CDF should be increasing"
+        );
+        assert!(
+            dist.cdf(3.0) > dist.cdf(2.0),
+            "maxwell CDF should be increasing"
+        );
         assert!(dist.cdf(10.0) > 0.99, "maxwell CDF should approach 1");
     }
 
@@ -61420,9 +61632,18 @@ mod tests {
         // Note: may differ from scipy due to parameterization - using property test
         let dist = HypSecant;
         assert_close(dist.cdf(0.0), 0.5, 1e-12, "hypsecant.cdf(0)");
-        assert!(dist.cdf(-1.0) < dist.cdf(0.0), "hypsecant CDF should be increasing");
-        assert!(dist.cdf(1.0) > dist.cdf(0.0), "hypsecant CDF should be increasing");
-        assert!(dist.cdf(-5.0) < 0.01, "hypsecant CDF should be near 0 at -5");
+        assert!(
+            dist.cdf(-1.0) < dist.cdf(0.0),
+            "hypsecant CDF should be increasing"
+        );
+        assert!(
+            dist.cdf(1.0) > dist.cdf(0.0),
+            "hypsecant CDF should be increasing"
+        );
+        assert!(
+            dist.cdf(-5.0) < 0.01,
+            "hypsecant CDF should be near 0 at -5"
+        );
         assert!(dist.cdf(5.0) > 0.99, "hypsecant CDF should be near 1 at 5");
     }
 }

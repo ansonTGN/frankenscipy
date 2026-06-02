@@ -1,0 +1,4 @@
+timestamp=2026-06-02T11:29:02-04:00
+commit=f8b0e3eefab3f640566b1acb0eb7cb5574b6b4fa
+crate=fsci-stats
+bench=stats_bench

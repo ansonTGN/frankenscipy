@@ -1,0 +1,91 @@
+COMMAND: rch exec -- cargo test -p fsci-stats --lib --locked
+  [2m2026-06-02T15:52:14.832382Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSelected worker: vmi1153651 at ubuntu@38.242.134.66 (2 slots remaining after reservation, speed 50.0)[0m
+    [2;3mat[0m rch/src/hook.rs:514 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-02T15:52:15.083544Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mStarting remote compilation pipeline for frankenscipy (hash: 2282f19a2497fa69)[0m
+    [2;3mat[0m rch/src/hook.rs:5987 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-02T15:52:15.083609Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mPrepared dependency sync manifest for 20 roots[0m
+    [2;3mat[0m rch/src/hook.rs:6009 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-02T15:52:16.922044Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSyncing project to worker vmi1153651...[0m
+    [2;3mat[0m rch/src/hook.rs:6039 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-02T15:52:16.922091Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy -> /data/projects/frankenscipy on vmi1153651[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-02T15:52:21.216449Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 4294ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-02T15:52:21.216509Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-arrayapi -> /data/projects/frankenscipy/crates/fsci-arrayapi on vmi1153651[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-02T15:52:23.093221Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 1876ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-02T15:52:23.093278Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-cluster -> /data/projects/frankenscipy/crates/fsci-cluster on vmi1153651[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-02T15:52:25.021918Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 1928ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-02T15:52:25.021990Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-conformance -> /data/projects/frankenscipy/crates/fsci-conformance on vmi1153651[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-02T15:52:25.230115Z[0m [33m WARN[0m [1;33mrch::transfer[0m[33m: [33mrsync failed with retryable error (retries exhausted): kex_exchange_identification: read: Connection reset by peer
+Connection reset by 38.242.134.66 port 22
+rsync: connection unexpectedly closed (0 bytes received so far) [sender]
+rsync error: unexplained error (code 255) at io.c(232) [sender=3.4.1]
+[0m
+    [2;3mat[0m rch/src/transfer.rs:1430 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-02T15:52:25.282977Z[0m [33m WARN[0m [1;33mrch::hook[0m[33m: [33mRemote execution failed: Project sync failed: rsync failed, running locally[0m
+    [2;3mat[0m rch/src/hook.rs:658 [2;3mon[0m ThreadId(1)
+
+[RCH] local (remote execution failed)
+   Compiling fsci-stats v0.1.0 (/data/projects/frankenscipy/crates/fsci-stats)
+error[E0061]: this function takes 3 arguments but 2 arguments were supplied
+     --> crates/fsci-stats/src/lib.rs:57460:17
+      |
+57460 |         let r = ttest_rel(&a, &b);
+      |                 ^^^^^^^^^-------- argument #3 of type `Option<&str>` is missing
+      |
+note: function defined here
+     --> crates/fsci-stats/src/lib.rs:18965:8
+      |
+18965 | pub fn ttest_rel(
+      |        ^^^^^^^^^
+...
+18968 |     alternative: Option<&str>,
+      |     -------------------------
+help: provide the argument
+      |
+57460 |         let r = ttest_rel(&a, &b, /* Option<&str> */);
+      |                                 ++++++++++++++++++++
+
+error[E0609]: no field `statistic` on type `Result<TtestResult, StatsError>`
+     --> crates/fsci-stats/src/lib.rs:57461:33
+      |
+57461 |         chk("ttest_rel stat", r.statistic, -1.713121, 1e-4);
+      |                                 ^^^^^^^^^ unknown field
+      |
+help: one of the expressions' fields has a field of the same name
+      |
+57461 |         chk("ttest_rel stat", r.unwrap().statistic, -1.713121, 1e-4);
+      |                                 +++++++++
+
+error[E0609]: no field `pvalue` on type `Result<TtestResult, StatsError>`
+     --> crates/fsci-stats/src/lib.rs:57462:30
+      |
+57462 |         chk("ttest_rel p", r.pvalue, 0.120841, 1e-4);
+      |                              ^^^^^^ unknown field
+      |
+help: one of the expressions' fields has a field of the same name
+      |
+57462 |         chk("ttest_rel p", r.unwrap().pvalue, 0.120841, 1e-4);
+      |                              +++++++++
+
+Some errors have detailed explanations: E0061, E0609.
+For more information about an error, try `rustc --explain E0061`.
+error: could not compile `fsci-stats` (lib test) due to 3 previous errors
+RCH_STATS_LIB_TEST_EXIT:101
