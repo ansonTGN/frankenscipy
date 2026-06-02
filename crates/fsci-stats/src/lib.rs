@@ -4097,10 +4097,45 @@ impl ContinuousDistribution for NormInvGauss {
         }
     }
 
-    fn try_fit(_data: &[f64]) -> Result<Self, FitError> {
-        Err(FitError::NotImplemented {
-            distribution: "NormInvGauss",
-        })
+    fn try_fit(data: &[f64]) -> Result<Self, FitError> {
+        // Method-of-moments fit (standardized NIG, loc=0/scale=1), consistent
+        // with the crate's pragmatic per-distribution estimators. With
+        // gamma = sqrt(a^2 - b^2): E[X] = b/gamma and Var[X] = a^2/gamma^3.
+        // Letting s = 1 + mean^2, these invert in closed form to
+        //   gamma = s/var,  a = s^1.5/var,  b = mean*s/var
+        // (NIG support is all of R, so negative observations are valid).
+        if data.len() < 2 {
+            return Err(FitError::InsufficientData {
+                required: 2,
+                actual: data.len(),
+            });
+        }
+        let n = data.len() as f64;
+        let mut sum = 0.0;
+        for &x in data {
+            if !x.is_finite() {
+                return Err(FitError::UnsupportedData(format!(
+                    "NormInvGauss data contains non-finite value: {x}"
+                )));
+            }
+            sum += x;
+        }
+        let mean = sum / n;
+        let var = data.iter().map(|&x| (x - mean) * (x - mean)).sum::<f64>() / n;
+        if !var.is_finite() || var <= 0.0 {
+            return Err(FitError::NonConvergent(
+                "NormInvGauss fit requires a positive sample variance".to_owned(),
+            ));
+        }
+        let s = 1.0 + mean * mean;
+        let a = s.powf(1.5) / var;
+        let b = mean * s / var;
+        if !a.is_finite() || a <= 0.0 || !b.is_finite() || b.abs() >= a {
+            return Err(FitError::NonConvergent(format!(
+                "NormInvGauss MoM produced invalid parameters: a={a}, b={b}"
+            )));
+        }
+        Ok(Self { a, b })
     }
 
     fn skewness(&self) -> f64 {
@@ -54514,6 +54549,43 @@ mod tests {
         assert!(matches!(
             NoncentralChiSquared::try_fit(&[1.0]).expect_err("n=1"),
             FitError::InsufficientData { .. }
+        ));
+    }
+
+    #[test]
+    fn norm_inv_gauss_fit_round_trips_moments() {
+        // MoM is an exact closed-form inversion: NIG(a,b) built from the fit
+        // must reproduce the sample mean and variance. Data spans negatives
+        // (NIG support is all of R).
+        let data = [-1.0_f64, 0.5, 2.0, -0.3, 1.5, 0.8, -2.1, 3.0, 1.1, 0.2];
+        let n = data.len() as f64;
+        let mean = data.iter().sum::<f64>() / n;
+        let var = data.iter().map(|x| (x - mean) * (x - mean)).sum::<f64>() / n;
+        let fitted = NormInvGauss::try_fit(&data).expect("fit");
+        // Closed-form parameters.
+        let s = 1.0 + mean * mean;
+        assert!((fitted.a - s.powf(1.5) / var).abs() < 1e-9, "a: {}", fitted.a);
+        assert!((fitted.b - mean * s / var).abs() < 1e-9, "b: {}", fitted.b);
+        assert!(fitted.a > fitted.b.abs(), "must satisfy a > |b|");
+        // Round-trip: fitted distribution reproduces the sample moments.
+        assert!((fitted.mean() - mean).abs() < 1e-9, "mean: {}", fitted.mean());
+        assert!((fitted.var() - var).abs() < 1e-9, "var: {}", fitted.var());
+    }
+
+    #[test]
+    fn norm_inv_gauss_fit_rejects_invalid_input() {
+        assert!(matches!(
+            NormInvGauss::try_fit(&[1.0]).expect_err("n=1"),
+            FitError::InsufficientData { .. }
+        ));
+        assert!(matches!(
+            NormInvGauss::try_fit(&[1.0, f64::NAN]).expect_err("nan"),
+            FitError::UnsupportedData(_)
+        ));
+        // Zero-variance (all identical) cannot be fit.
+        assert!(matches!(
+            NormInvGauss::try_fit(&[2.0, 2.0, 2.0]).expect_err("zero var"),
+            FitError::NonConvergent(_)
         ));
     }
 
