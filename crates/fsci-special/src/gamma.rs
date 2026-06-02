@@ -4363,9 +4363,21 @@ mod tests {
         // scipy.special.binom(5, 2) = 10
         // scipy.special.binom(10, 3) = 120
         // scipy.special.binom(6, 0) = 1
-        assert!((binom(5.0, 2.0) - 10.0).abs() < 1e-10, "C(5,2) = {}, expected 10", binom(5.0, 2.0));
-        assert!((binom(10.0, 3.0) - 120.0).abs() < 1e-6, "C(10,3) = {}, expected 120", binom(10.0, 3.0));
-        assert!((binom(6.0, 0.0) - 1.0).abs() < 1e-10, "C(6,0) = {}, expected 1", binom(6.0, 0.0));
+        assert!(
+            (binom(5.0, 2.0) - 10.0).abs() < 1e-10,
+            "C(5,2) = {}, expected 10",
+            binom(5.0, 2.0)
+        );
+        assert!(
+            (binom(10.0, 3.0) - 120.0).abs() < 1e-6,
+            "C(10,3) = {}, expected 120",
+            binom(10.0, 3.0)
+        );
+        assert!(
+            (binom(6.0, 0.0) - 1.0).abs() < 1e-10,
+            "C(6,0) = {}, expected 1",
+            binom(6.0, 0.0)
+        );
     }
 
     #[test]
@@ -4373,9 +4385,17 @@ mod tests {
         // scipy.special.gammainc(1, 1) = 1 - exp(-1) ≈ 0.6321205588
         // scipy.special.gammainc(2, 1) ≈ 0.2642411177
         let val1 = gammainc_scalar(1.0, 1.0, RuntimeMode::Strict).expect("gammainc(1, 1)");
-        assert!((val1 - 0.6321205588).abs() < 1e-6, "gammainc(1,1) = {}, expected 0.6321205588", val1);
+        assert!(
+            (val1 - 0.6321205588).abs() < 1e-6,
+            "gammainc(1,1) = {}, expected 0.6321205588",
+            val1
+        );
 
         let val2 = gammainc_scalar(2.0, 1.0, RuntimeMode::Strict).expect("gammainc(2, 1)");
-        assert!((val2 - 0.2642411177).abs() < 1e-6, "gammainc(2,1) = {}, expected 0.2642411177", val2);
+        assert!(
+            (val2 - 0.2642411177).abs() < 1e-6,
+            "gammainc(2,1) = {}, expected 0.2642411177",
+            val2
+        );
     }
 }

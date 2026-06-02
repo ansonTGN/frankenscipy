@@ -1269,16 +1269,40 @@ mod tests {
         // scipy.special.airy(1) -> (Ai=0.1352924163, Ai'=-0.1591474413, Bi=1.2074235950, Bi'=0.9324359334)
         // scipy.special.airy(-1) -> (Ai=0.5355608833, Ai'=0.0106522540, Bi=0.1039973895, Bi'=0.5923756264)
         let r0 = airy_scalar(0.0, RuntimeMode::Strict).expect("airy(0)");
-        assert!((r0.ai - 0.3550280538).abs() < 1e-6, "Ai(0) = {}, expected 0.3550280538", r0.ai);
-        assert!((r0.bi - 0.6149266274).abs() < 1e-6, "Bi(0) = {}, expected 0.6149266274", r0.bi);
+        assert!(
+            (r0.ai - 0.3550280538).abs() < 1e-6,
+            "Ai(0) = {}, expected 0.3550280538",
+            r0.ai
+        );
+        assert!(
+            (r0.bi - 0.6149266274).abs() < 1e-6,
+            "Bi(0) = {}, expected 0.6149266274",
+            r0.bi
+        );
 
         let r1 = airy_scalar(1.0, RuntimeMode::Strict).expect("airy(1)");
-        assert!((r1.ai - 0.1352924163).abs() < 1e-6, "Ai(1) = {}, expected 0.1352924163", r1.ai);
-        assert!((r1.bi - 1.2074235950).abs() < 1e-6, "Bi(1) = {}, expected 1.2074235950", r1.bi);
+        assert!(
+            (r1.ai - 0.1352924163).abs() < 1e-6,
+            "Ai(1) = {}, expected 0.1352924163",
+            r1.ai
+        );
+        assert!(
+            (r1.bi - 1.2074235950).abs() < 1e-6,
+            "Bi(1) = {}, expected 1.2074235950",
+            r1.bi
+        );
 
         let rm1 = airy_scalar(-1.0, RuntimeMode::Strict).expect("airy(-1)");
-        assert!((rm1.ai - 0.5355608833).abs() < 1e-6, "Ai(-1) = {}, expected 0.5355608833", rm1.ai);
-        assert!((rm1.bi - 0.1039973895).abs() < 1e-6, "Bi(-1) = {}, expected 0.1039973895", rm1.bi);
+        assert!(
+            (rm1.ai - 0.5355608833).abs() < 1e-6,
+            "Ai(-1) = {}, expected 0.5355608833",
+            rm1.ai
+        );
+        assert!(
+            (rm1.bi - 0.1039973895).abs() < 1e-6,
+            "Bi(-1) = {}, expected 0.1039973895",
+            rm1.bi
+        );
     }
 
     #[test]
@@ -1287,9 +1311,21 @@ mod tests {
         // -> [-2.33810741, -4.08794944, -5.52055983]
         let zeros = ai_zeros(3);
         assert_eq!(zeros.len(), 3);
-        assert!((zeros[0] - (-2.33810741)).abs() < 1e-5, "ai_zeros[0] = {}, expected -2.33810741", zeros[0]);
-        assert!((zeros[1] - (-4.08794944)).abs() < 1e-5, "ai_zeros[1] = {}, expected -4.08794944", zeros[1]);
-        assert!((zeros[2] - (-5.52055983)).abs() < 1e-5, "ai_zeros[2] = {}, expected -5.52055983", zeros[2]);
+        assert!(
+            (zeros[0] - (-2.33810741)).abs() < 1e-5,
+            "ai_zeros[0] = {}, expected -2.33810741",
+            zeros[0]
+        );
+        assert!(
+            (zeros[1] - (-4.08794944)).abs() < 1e-5,
+            "ai_zeros[1] = {}, expected -4.08794944",
+            zeros[1]
+        );
+        assert!(
+            (zeros[2] - (-5.52055983)).abs() < 1e-5,
+            "ai_zeros[2] = {}, expected -5.52055983",
+            zeros[2]
+        );
     }
 
     #[test]
@@ -1298,9 +1334,21 @@ mod tests {
         // -> [-1.17371322, -3.27109330, -4.83073784]
         let zeros = bi_zeros(3);
         assert_eq!(zeros.len(), 3);
-        assert!((zeros[0] - (-1.17371322)).abs() < 1e-5, "bi_zeros[0] = {}, expected -1.17371322", zeros[0]);
-        assert!((zeros[1] - (-3.27109330)).abs() < 1e-5, "bi_zeros[1] = {}, expected -3.27109330", zeros[1]);
-        assert!((zeros[2] - (-4.83073784)).abs() < 1e-5, "bi_zeros[2] = {}, expected -4.83073784", zeros[2]);
+        assert!(
+            (zeros[0] - (-1.17371322)).abs() < 1e-5,
+            "bi_zeros[0] = {}, expected -1.17371322",
+            zeros[0]
+        );
+        assert!(
+            (zeros[1] - (-3.27109330)).abs() < 1e-5,
+            "bi_zeros[1] = {}, expected -3.27109330",
+            zeros[1]
+        );
+        assert!(
+            (zeros[2] - (-4.83073784)).abs() < 1e-5,
+            "bi_zeros[2] = {}, expected -4.83073784",
+            zeros[2]
+        );
     }
 
     #[test]
@@ -1320,7 +1368,15 @@ mod tests {
             SpecialTensor::RealVec(v) => v[0],
             _ => panic!("unexpected tensor type"),
         };
-        assert!((ai_e - 0.2635).abs() < 1e-3, "airye Ai(1) = {}, expected ~0.2635", ai_e);
-        assert!((bi_e - 0.6208).abs() < 1e-3, "airye Bi(1) = {}, expected ~0.6208", bi_e);
+        assert!(
+            (ai_e - 0.2635).abs() < 1e-3,
+            "airye Ai(1) = {}, expected ~0.2635",
+            ai_e
+        );
+        assert!(
+            (bi_e - 0.6208).abs() < 1e-3,
+            "airye Bi(1) = {}, expected ~0.6208",
+            bi_e
+        );
     }
 }

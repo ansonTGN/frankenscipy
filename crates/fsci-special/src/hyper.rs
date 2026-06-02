@@ -2927,7 +2927,12 @@ mod tests {
     fn hyp1f1_matches_scipy_reference_values() {
         // scipy.special.hyp1f1(1, 2, 1) = (e-1) ≈ 1.7182818284
         // scipy.special.hyp1f1(0.5, 1.5, 1) ≈ 2.0179...
-        let result = hyp1f1(&scalar(1.0), &scalar(2.0), &scalar(1.0), RuntimeMode::Strict);
+        let result = hyp1f1(
+            &scalar(1.0),
+            &scalar(2.0),
+            &scalar(1.0),
+            RuntimeMode::Strict,
+        );
         let val = get_scalar(&result).expect("hyp1f1 result");
         let expected = std::f64::consts::E - 1.0;
         assert!(
