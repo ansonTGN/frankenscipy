@@ -1,0 +1,33 @@
+Diff in /data/projects/frankenscipy/crates/fsci-special/examples/perf_special.rs:1:
+ #![forbid(unsafe_code)]
+ 
+ use fsci_runtime::RuntimeMode;
+[31m-use fsci_special::{ellipeinc, ellipkinc, erf, erfc, SpecialTensor};
+[m[32m+use fsci_special::{SpecialTensor, ellipeinc, ellipkinc, erf, erfc};
+[m use std::error::Error;
+ use std::f64::consts::PI;
+ use std::io::{Error as IoError, ErrorKind};
+Diff in /data/projects/frankenscipy/crates/fsci-special/src/elliptic.rs:16:
+ use fsci_runtime::RuntimeMode;
+ 
+ use crate::types::{
+[31m-    record_special_trace, Complex64, DispatchPlan, DispatchStep, KernelRegime, SpecialError,
+[m[31m-    SpecialErrorKind, SpecialResult, SpecialTensor,
+[m[32m+    Complex64, DispatchPlan, DispatchStep, KernelRegime, SpecialError, SpecialErrorKind,
+[m[32m+    SpecialResult, SpecialTensor, record_special_trace,
+[m };
+ 
+ const GAUSS_LEGENDRE_15_WEIGHT_SUM: f64 = 1.999_999_999_999_999_8;
+Diff in /data/projects/frankenscipy/crates/fsci-special/src/elliptic.rs:1509:
+     let mut yn = y;
+     let mut zn = z;
+     const TOL: f64 = 2e-3; // Carlson's recommended threshold for
+[31m-                           // truncating duplication and switching to
+[m[31m-                           // the Taylor series.
+[m[32m+    // truncating duplication and switching to
+[m[32m+    // the Taylor series.
+[m     for _ in 0..32 {
+         let mu = (xn + yn + zn) / 3.0;
+         let ex = 1.0 - xn / mu;
+
+FMT_CHECK_EXIT:1

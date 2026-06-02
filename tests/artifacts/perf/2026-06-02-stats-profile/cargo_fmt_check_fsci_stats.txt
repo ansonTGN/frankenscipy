@@ -1,0 +1,2 @@
+COMMAND: cargo fmt -p fsci-stats --check
+STATS_FMT_CHECK_EXIT:0

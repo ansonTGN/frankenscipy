@@ -1,0 +1,58 @@
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/ops.rs:383:
+ pub fn add_csr(lhs: &CsrMatrix, rhs: &CsrMatrix) -> SparseResult<CsrMatrix> {
+     ensure_same_shape(lhs.shape(), rhs.shape())?;
+     match csr_row_combine_mode(lhs, rhs) {
+[31m-        CsrRowCombineMode::VerifiedCanonical => return combine_csr_rows_directly(lhs, rhs, 1.0, true),
+[m[31m-        CsrRowCombineMode::MetadataCanonical => return combine_csr_rows_directly(lhs, rhs, 1.0, false),
+[m[32m+        CsrRowCombineMode::VerifiedCanonical => {
+[m[32m+            return combine_csr_rows_directly(lhs, rhs, 1.0, true)
+[m[32m+        }
+[m[32m+        CsrRowCombineMode::MetadataCanonical => {
+[m[32m+            return combine_csr_rows_directly(lhs, rhs, 1.0, false)
+[m[32m+        }
+[m         CsrRowCombineMode::Fallback => {}
+     }
+     combine_coo(lhs.to_coo()?, rhs.to_coo()?, 1.0)?.to_csr()
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/ops.rs:576:
+         && matrix.indices().len() == matrix.nnz()
+         && matrix.indptr().first() == Some(&0)
+         && matrix.indptr().last() == Some(&matrix.nnz())
+[31m-        && matrix.indptr().windows(2).all(|window| window[0] <= window[1])
+[m[32m+        && matrix
+[m[32m+            .indptr()
+[m[32m+            .windows(2)
+[m[32m+            .all(|window| window[0] <= window[1])
+[m         && compressed_segments_are_strictly_sorted(
+             matrix.shape().cols,
+             matrix.indptr(),
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/ops.rs:1084:
+             true,
+         )
+         .expect("mislabelled lhs");
+[31m-        let rhs = CsrMatrix::from_components(
+[m[31m-            Shape2D::new(1, 4),
+[m[31m-            vec![4.0],
+[m[31m-            vec![2],
+[m[31m-            vec![0, 1],
+[m[31m-            true,
+[m[31m-        )
+[m[31m-        .expect("canonical rhs");
+[m[32m+        let rhs =
+[m[32m+            CsrMatrix::from_components(Shape2D::new(1, 4), vec![4.0], vec![2], vec![0, 1], true)
+[m[32m+                .expect("canonical rhs");
+[m 
+         let sum = add_csr(&lhs, &rhs).expect("sum");
+ 
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/ops.rs:1114:
+                 .to_csr()
+                 .expect("rhs csr");
+             let sum = add_csr(&lhs, &rhs).expect("random add");
+[31m-            println!("{}", snapshot_add_csr(&format!("random-{n}-{density}"), &sum));
+[m[32m+            println!(
+[m[32m+                "{}",
+[m[32m+                snapshot_add_csr(&format!("random-{n}-{density}"), &sum)
+[m[32m+            );
+[m         }
+ 
+         let lhs = CooMatrix::from_triplets(
+RUSTFMT_OPS_EXIT:1

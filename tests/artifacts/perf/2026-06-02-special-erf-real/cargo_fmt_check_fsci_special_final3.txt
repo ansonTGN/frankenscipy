@@ -1,0 +1,11 @@
+Diff in /data/projects/frankenscipy/crates/fsci-special/src/bin/perf_special.rs:1:
+ #![forbid(unsafe_code)]
+ 
+ use fsci_runtime::RuntimeMode;
+[31m-use fsci_special::{ellipeinc, ellipkinc, erf, erfc, SpecialTensor};
+[m[32m+use fsci_special::{SpecialTensor, ellipeinc, ellipkinc, erf, erfc};
+[m use std::error::Error;
+ use std::f64::consts::PI;
+ use std::io::{Error as IoError, ErrorKind};
+
+FMT_CHECK_EXIT:1

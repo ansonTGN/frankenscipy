@@ -1,0 +1,23 @@
+Diff in /data/projects/frankenscipy/crates/fsci-special/src/bin/perf_special.rs:53:
+     let vector_inputs = [-3.0, -1.0, -0.5, 0.0, 0.5, 1.0, 3.0];
+     print_vector(
+         "erf_vec",
+[31m-        erf(&SpecialTensor::RealVec(vector_inputs.to_vec()), RuntimeMode::Strict),
+[m[32m+        erf(
+[m[32m+            &SpecialTensor::RealVec(vector_inputs.to_vec()),
+[m[32m+            RuntimeMode::Strict,
+[m[32m+        ),
+[m     )?;
+     print_vector(
+         "erfc_vec",
+Diff in /data/projects/frankenscipy/crates/fsci-special/src/bin/perf_special.rs:60:
+[31m-        erfc(&SpecialTensor::RealVec(vector_inputs.to_vec()), RuntimeMode::Strict),
+[m[32m+        erfc(
+[m[32m+            &SpecialTensor::RealVec(vector_inputs.to_vec()),
+[m[32m+            RuntimeMode::Strict,
+[m[32m+        ),
+[m     )
+ }
+ 
+
+FMT_CHECK_EXIT:1

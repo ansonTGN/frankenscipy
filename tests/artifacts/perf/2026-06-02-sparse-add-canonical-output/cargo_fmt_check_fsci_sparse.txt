@@ -1,0 +1,149 @@
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/lib.rs:149:
+ }
+ 
+ impl SparseMatrix for CsrMatrix {
+[31m-    fn format(&self) -> SparseFormat { SparseFormat::Csr }
+[m[31m-    fn shape(&self) -> Shape2D { self.shape() }
+[m[31m-    fn nnz(&self) -> usize { self.nnz() }
+[m[32m+    fn format(&self) -> SparseFormat {
+[m[32m+        SparseFormat::Csr
+[m[32m+    }
+[m[32m+    fn shape(&self) -> Shape2D {
+[m[32m+        self.shape()
+[m[32m+    }
+[m[32m+    fn nnz(&self) -> usize {
+[m[32m+        self.nnz()
+[m[32m+    }
+[m }
+ 
+ impl SparseMatrix for CscMatrix {
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/lib.rs:158:
+[31m-    fn format(&self) -> SparseFormat { SparseFormat::Csc }
+[m[31m-    fn shape(&self) -> Shape2D { self.shape() }
+[m[31m-    fn nnz(&self) -> usize { self.nnz() }
+[m[32m+    fn format(&self) -> SparseFormat {
+[m[32m+        SparseFormat::Csc
+[m[32m+    }
+[m[32m+    fn shape(&self) -> Shape2D {
+[m[32m+        self.shape()
+[m[32m+    }
+[m[32m+    fn nnz(&self) -> usize {
+[m[32m+        self.nnz()
+[m[32m+    }
+[m }
+ 
+ impl SparseMatrix for CooMatrix {
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/lib.rs:164:
+[31m-    fn format(&self) -> SparseFormat { SparseFormat::Coo }
+[m[31m-    fn shape(&self) -> Shape2D { self.shape() }
+[m[31m-    fn nnz(&self) -> usize { self.nnz() }
+[m[32m+    fn format(&self) -> SparseFormat {
+[m[32m+        SparseFormat::Coo
+[m[32m+    }
+[m[32m+    fn shape(&self) -> Shape2D {
+[m[32m+        self.shape()
+[m[32m+    }
+[m[32m+    fn nnz(&self) -> usize {
+[m[32m+        self.nnz()
+[m[32m+    }
+[m }
+ 
+ impl SparseMatrix for BsrMatrix {
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/lib.rs:170:
+[31m-    fn format(&self) -> SparseFormat { SparseFormat::Bsr }
+[m[31m-    fn shape(&self) -> Shape2D { self.shape() }
+[m[31m-    fn nnz(&self) -> usize { self.nnz() }
+[m[32m+    fn format(&self) -> SparseFormat {
+[m[32m+        SparseFormat::Bsr
+[m[32m+    }
+[m[32m+    fn shape(&self) -> Shape2D {
+[m[32m+        self.shape()
+[m[32m+    }
+[m[32m+    fn nnz(&self) -> usize {
+[m[32m+        self.nnz()
+[m[32m+    }
+[m }
+ 
+ impl SparseMatrix for DiaMatrix {
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/lib.rs:176:
+[31m-    fn format(&self) -> SparseFormat { SparseFormat::Dia }
+[m[31m-    fn shape(&self) -> Shape2D { self.shape() }
+[m[31m-    fn nnz(&self) -> usize { self.nnz() }
+[m[32m+    fn format(&self) -> SparseFormat {
+[m[32m+        SparseFormat::Dia
+[m[32m+    }
+[m[32m+    fn shape(&self) -> Shape2D {
+[m[32m+        self.shape()
+[m[32m+    }
+[m[32m+    fn nnz(&self) -> usize {
+[m[32m+        self.nnz()
+[m[32m+    }
+[m }
+ 
+ impl SparseMatrix for DokMatrix {
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/lib.rs:182:
+[31m-    fn format(&self) -> SparseFormat { SparseFormat::Dok }
+[m[31m-    fn shape(&self) -> Shape2D { self.shape() }
+[m[31m-    fn nnz(&self) -> usize { self.nnz() }
+[m[32m+    fn format(&self) -> SparseFormat {
+[m[32m+        SparseFormat::Dok
+[m[32m+    }
+[m[32m+    fn shape(&self) -> Shape2D {
+[m[32m+        self.shape()
+[m[32m+    }
+[m[32m+    fn nnz(&self) -> usize {
+[m[32m+        self.nnz()
+[m[32m+    }
+[m }
+ 
+ impl SparseMatrix for LilMatrix {
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/lib.rs:188:
+[31m-    fn format(&self) -> SparseFormat { SparseFormat::Lil }
+[m[31m-    fn shape(&self) -> Shape2D { self.shape() }
+[m[31m-    fn nnz(&self) -> usize { self.nnz() }
+[m[32m+    fn format(&self) -> SparseFormat {
+[m[32m+        SparseFormat::Lil
+[m[32m+    }
+[m[32m+    fn shape(&self) -> Shape2D {
+[m[32m+        self.shape()
+[m[32m+    }
+[m[32m+    fn nnz(&self) -> usize {
+[m[32m+        self.nnz()
+[m[32m+    }
+[m }
+ 
+ pub fn issparse<T: SparseMatrix>(_matrix: &T) -> bool {
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/lib.rs:246:
+             vec![0, 1],
+             vec![0, 1, 2],
+             false,
+[31m-        ).unwrap();
+[m[32m+        )
+[m[32m+        .unwrap();
+[m 
+         assert!(issparse(&csr));
+         assert!(isspmatrix(&csr));
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/lib.rs:260:
+             vec![0, 1],
+             vec![0, 1],
+             false,
+[31m-        ).unwrap();
+[m[32m+        )
+[m[32m+        .unwrap();
+[m 
+         assert!(issparse(&coo));
+         assert!(isspmatrix(&coo));
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/ops.rs:384:
+     ensure_same_shape(lhs.shape(), rhs.shape())?;
+     match csr_row_combine_mode(lhs, rhs) {
+         CsrRowCombineMode::VerifiedCanonical => {
+[31m-            return combine_csr_rows_directly(lhs, rhs, 1.0, true)
+[m[32m+            return combine_csr_rows_directly(lhs, rhs, 1.0, true);
+[m         }
+         CsrRowCombineMode::MetadataCanonical => {
+[31m-            return combine_csr_rows_directly(lhs, rhs, 1.0, false)
+[m[32m+            return combine_csr_rows_directly(lhs, rhs, 1.0, false);
+[m         }
+         CsrRowCombineMode::Fallback => {}
+     }
+CARGO_FMT_FSCI_SPARSE_EXIT:1
