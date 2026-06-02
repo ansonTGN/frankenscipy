@@ -1,0 +1,6 @@
+total_samples=25
+gauss_step_samples=18
+array_axcpy_samples=17
+matrixmultiply_samples=0
+casp_dispatch_samples=0
+matrix_copy_setup_samples=0
