@@ -56947,6 +56947,23 @@ mod tests {
         );
         check("NormInvGauss", integ(&NormInvGauss::new(2.0, 0.7), -60.0, 60.0));
         check("RelBreitWigner", integ(&RelBreitWigner::new(0.5), 0.0, 400.0));
+        // Broader coverage (ranges validated against scipy).
+        check("Bradford", integ(&Bradford::new(2.0), 0.0, 1.0));
+        check("FatigueLife", integ(&FatigueLife::new(1.5), 0.0, 200.0));
+        check("GenLogistic", integ(&GenLogistic::new(2.0), -60.0, 60.0));
+        check("GenNorm", integ(&GenNorm::new(1.5), -50.0, 50.0));
+        check("Gumbel", integ(&Gumbel::new(0.0, 1.0), -50.0, 50.0));
+        check("HalfGenNorm", integ(&HalfGenNorm::new(1.5), 0.0, 50.0));
+        check("Logistic", integ(&Logistic::new(0.0, 1.0), -60.0, 60.0));
+        check("Nakagami", integ(&Nakagami::new(2.0), 0.0, 30.0));
+        check("RDist", integ(&RDist::new(3.0), -1.0, 1.0));
+        check("Rayleigh", integ(&Rayleigh::new(1.0), 0.0, 40.0));
+        check("Rice", integ(&Rice::new(1.0), 0.0, 40.0));
+        check("Arcsine", integ(&Arcsine, 0.0, 1.0));
+        check("Semicircular", integ(&Semicircular, -1.0, 1.0));
+        check("HypSecant", integ(&HypSecant, -60.0, 60.0));
+        check("Moyal", integ(&Moyal, -30.0, 200.0));
+        check("Anglit", integ(&Anglit, -0.8, 0.8));
     }
 
     #[test]
