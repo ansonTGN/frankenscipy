@@ -1,0 +1,11 @@
+total_sample_blocks=50
+setup_factorization_samples=1
+timed_sample_blocks=49
+fast_rcond_from_lu=49
+triangular_solve_frames=8
+transpose_rcond_solver=4
+array_axcpy_or_blas=8
+allocation_or_clone=16
+rhs_from_column_slice=0
+final_lu_solve_without_rcond=0
+dealloc_or_malloc_trim=5

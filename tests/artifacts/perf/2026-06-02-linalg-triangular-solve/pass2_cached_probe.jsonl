@@ -1,0 +1,3 @@
+{"mode":"lu_solve_cached","n":1000,"repeats":200,"total_ms":3820.259,"per_call_ms":19.1013,"checksum":-1.968966e2}
+{"mode":"lu_solve_cached","n":1000,"repeats":200,"total_ms":3710.448,"per_call_ms":18.5522,"checksum":-1.968966e2}
+{"mode":"lu_solve_cached","n":1000,"repeats":200,"total_ms":3712.725,"per_call_ms":18.5636,"checksum":-1.968966e2}

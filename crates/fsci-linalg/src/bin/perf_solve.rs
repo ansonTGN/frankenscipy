@@ -10,7 +10,7 @@
 //! ```
 //!
 //! Usage: `perf_solve <mode> <n> <repeats> [seed]`
-//!   mode    = solve | lu_factor | lu_solve | solve_triangular
+//!   mode    = solve | lu_factor | lu_solve | lu_solve_cached | solve_triangular
 //!   n       = matrix dimension
 //!   repeats = number of timed iterations
 //!
@@ -122,6 +122,12 @@ fn main() {
         (make_matrix(n, seed), make_rhs(n, seed))
     };
 
+    let cached_lu = if mode == "lu_solve_cached" {
+        Some(lu_factor(&a, DecompOptions::default()).unwrap())
+    } else {
+        None
+    };
+
     let t0 = Instant::now();
     let mut checksum = 0.0_f64;
     for _ in 0..repeats {
@@ -140,6 +146,11 @@ fn main() {
             "lu_solve" => {
                 let f = lu_factor(&a, DecompOptions::default()).unwrap();
                 let r = lu_solve(black_box(&f), black_box(&b)).unwrap();
+                checksum += r.x.iter().sum::<f64>();
+            }
+            "lu_solve_cached" => {
+                let f = cached_lu.as_ref().unwrap();
+                let r = lu_solve(black_box(f), black_box(&b)).unwrap();
                 checksum += r.x.iter().sum::<f64>();
             }
             "solve_triangular" => {

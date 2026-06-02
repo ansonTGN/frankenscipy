@@ -1,0 +1,56 @@
+  [2m2026-06-02T06:10:00.657445Z[0m [33m WARN[0m [1;33mrch::hook[0m[33m: [33mexec called with non-compilation command: bash -lc 'set -euo pipefail
+export CARGO_TARGET_DIR=/tmp/rch_target_fsci_linalg_tri_pass2_baseline_repeat_20260602a
+export RUSTFLAGS="-C force-frame-pointers=yes"
+cargo build -p fsci-linalg --profile release-perf --bin perf_solve --locked
+BIN="$CARGO_TARGET_DIR/release-perf/perf_solve"
+hyperfine --warmup 3 --runs 15 --export-json tests/artifacts/perf/2026-06-02-linalg-triangular-solve/pass2_cached_baseline_repeat_rch.json "$BIN lu_solve_cached 1000 10 42"
+'[0m
+    [2;3mat[0m rch/src/hook.rs:402 [2;3mon[0m ThreadId(1)
+
+   Compiling autocfg v1.5.0
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.45
+   Compiling serde_core v1.0.228
+   Compiling shlex v1.3.0
+   Compiling find-msvc-tools v0.1.9
+   Compiling zmij v1.0.21
+   Compiling equivalent v1.0.2
+   Compiling serde_json v1.0.149
+   Compiling serde v1.0.228
+   Compiling bytemuck v1.25.0
+   Compiling hashbrown v0.17.0
+   Compiling paste v1.0.15
+   Compiling cfg-if v1.0.4
+   Compiling arrayref v0.3.9
+   Compiling itoa v1.0.18
+   Compiling constant_time_eq v0.4.2
+   Compiling memchr v2.8.0
+   Compiling cpufeatures v0.3.0
+   Compiling arrayvec v0.7.6
+   Compiling rawpointer v0.2.1
+   Compiling typenum v1.20.0
+   Compiling cc v1.2.60
+   Compiling safe_arch v0.7.4
+   Compiling num-traits v0.2.19
+   Compiling matrixmultiply v0.3.10
+   Compiling wide v0.7.33
+   Compiling indexmap v2.14.0
+   Compiling syn v2.0.117
+   Compiling blake3 v1.8.4
+   Compiling approx v0.5.1
+   Compiling num-integer v0.1.46
+   Compiling num-complex v0.4.6
+   Compiling num-rational v0.4.2
+   Compiling simba v0.9.1
+   Compiling serde_derive v1.0.228
+   Compiling nalgebra-macros v0.3.0
+   Compiling fsci-runtime v0.1.0 (/data/projects/frankenscipy/crates/fsci-runtime)
+   Compiling fsci-fft v0.1.0 (/data/projects/frankenscipy/crates/fsci-fft)
+   Compiling nalgebra v0.34.2
+   Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
+    Finished `release-perf` profile [optimized + debuginfo] target(s) in 16.64s
+Benchmark 1: /tmp/rch_target_fsci_linalg_tri_pass2_baseline_repeat_20260602a/release-perf/perf_solve lu_solve_cached 1000 10 42
+  Time (mean ± σ):     280.5 ms ±  10.4 ms    [User: 170.1 ms, System: 110.1 ms]
+  Range (min … max):   264.5 ms … 293.7 ms    15 runs
+ 

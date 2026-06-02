@@ -1,0 +1,626 @@
+  [2m2026-06-02T06:06:46.538882Z[0m [33m WARN[0m [1;33mrch::hook[0m[33m: [33mexec called with non-compilation command: bash -lc 'set -euo pipefail
+export CARGO_TARGET_DIR=/tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a
+export RUSTFLAGS="-C force-frame-pointers=yes"
+cargo build -p fsci-linalg --profile release-perf --bin perf_solve --locked
+BIN="$CARGO_TARGET_DIR/release-perf/perf_solve"
+"$BIN" lu_solve_cached 1000 120 42 >/tmp/fsci_linalg_pass2_cached_profile_run.out 2>&1 &
+pid=$!
+sleep 0.2
+for i in $(seq 1 40); do
+  echo "=== sample $i ==="
+  gdb -q -batch -ex "thread apply all bt 14" -p "$pid" || true
+  sleep 0.05
+done
+wait "$pid" || true
+cat /tmp/fsci_linalg_pass2_cached_profile_run.out
+'[0m
+    [2;3mat[0m rch/src/hook.rs:402 [2;3mon[0m ThreadId(1)
+
+   Compiling autocfg v1.5.0
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.45
+   Compiling unicode-ident v1.0.24
+   Compiling serde_core v1.0.228
+   Compiling shlex v1.3.0
+   Compiling find-msvc-tools v0.1.9
+   Compiling zmij v1.0.21
+   Compiling serde v1.0.228
+   Compiling hashbrown v0.17.0
+   Compiling serde_json v1.0.149
+   Compiling equivalent v1.0.2
+   Compiling paste v1.0.15
+   Compiling bytemuck v1.25.0
+   Compiling memchr v2.8.0
+   Compiling cpufeatures v0.3.0
+   Compiling cfg-if v1.0.4
+   Compiling arrayvec v0.7.6
+   Compiling constant_time_eq v0.4.2
+   Compiling itoa v1.0.18
+   Compiling arrayref v0.3.9
+   Compiling rawpointer v0.2.1
+   Compiling typenum v1.20.0
+   Compiling cc v1.2.60
+   Compiling safe_arch v0.7.4
+   Compiling num-traits v0.2.19
+   Compiling matrixmultiply v0.3.10
+   Compiling wide v0.7.33
+   Compiling indexmap v2.14.0
+   Compiling syn v2.0.117
+   Compiling blake3 v1.8.4
+   Compiling num-integer v0.1.46
+   Compiling approx v0.5.1
+   Compiling num-complex v0.4.6
+   Compiling num-rational v0.4.2
+   Compiling simba v0.9.1
+   Compiling serde_derive v1.0.228
+   Compiling nalgebra-macros v0.3.0
+   Compiling fsci-runtime v0.1.0 (/data/projects/frankenscipy/crates/fsci-runtime)
+   Compiling nalgebra v0.34.2
+   Compiling fsci-fft v0.1.0 (/data/projects/frankenscipy/crates/fsci-fft)
+   Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
+    Finished `release-perf` profile [optimized + debuginfo] target(s) in 16.76s
+=== sample 1 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x000056bd73e3a84d in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+699	                        *self
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  0x000056bd73e3a84d in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+#1  nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=861, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:50
+#2  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#3  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#4  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#5  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::solve_lower_triangular_with_diag_mut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>>> (self=<optimized out>, diag=1, b=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/solve.rs:128
+#6  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::solve_mut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>>> (self=<optimized out>, b=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:258
+#7  nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::solve<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>>> (self=<optimized out>, b=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:231
+#8  0x000056bd73e44f0b in fsci_linalg::fast_rcond_from_lu (lu=0x7fff8b0d5590, a_norm=<optimized out>, n=<optimized out>) at crates/fsci-linalg/src/lib.rs:974
+#9  0x000056bd73e4a04e in fsci_linalg::lu_solve (lu_factor=0x7fff8b0d5590, b=...) at crates/fsci-linalg/src/lib.rs:2691
+#10 0x000056bd73e62ba8 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:153
+[Inferior 1 (process 1856331) detached]
+=== sample 2 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x000056bd73e44a1d in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+699	                        *self
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  0x000056bd73e44a1d in core::clone::impls::{impl#38}::clone (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/clone.rs:699
+#1  nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=438, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:50
+#2  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#3  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#4  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#5  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::solve_lower_triangular_vector_mut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (self=<optimized out>, b=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/solve.rs:96
+#6  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::solve_lower_triangular_mut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>>> (self=<optimized out>, b=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/solve.rs:66
+#7  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::solve_lower_triangular<f64, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>>> (self=<optimized out>, b=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/solve.rs:25
+#8  fsci_linalg::solve_lu_transpose_with_transposes (lu=<optimized out>, u_t=<optimized out>, l_t=<optimized out>, b=<optimized out>) at crates/fsci-linalg/src/lib.rs:900
+#9  fsci_linalg::fast_rcond_from_lu (lu=0x7fff8b0d5590, a_norm=<optimized out>, n=<optimized out>) at crates/fsci-linalg/src/lib.rs:967
+#10 0x000056bd73e4a04e in fsci_linalg::lu_solve (lu_factor=0x7fff8b0d5590, b=...) at crates/fsci-linalg/src/lib.rs:2691
+#11 0x000056bd73e62ba8 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:153
+[Inferior 1 (process 1856331) detached]
+=== sample 3 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::ptr::write<f64> (dst=0x56bd7734c000, src=-0.086245358315311785) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1933
+1933	        intrinsics::write_via_move(dst, src)
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  core::ptr::write<f64> (dst=0x56bd7734c000, src=-0.086245358315311785) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1933
+#1  alloc::vec::Vec<f64, alloc::alloc::Global>::extend_desugared<f64, alloc::alloc::Global, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (self=0x7fff8b0d5270, iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4044
+#2  alloc::vec::spec_extend::{impl#0}::spec_extend<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>, alloc::alloc::Global> (self=0x7fff8b0d5270, iter=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_extend.rs:18
+#3  alloc::vec::spec_from_iter_nested::{impl#0}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_from_iter_nested.rs:41
+#4  alloc::vec::spec_from_iter::{impl#0}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_from_iter.rs:33
+#5  alloc::vec::{impl#16}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iter=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3933
+#6  core::iter::traits::iterator::Iterator::collect<core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>, alloc::vec::Vec<f64, alloc::alloc::Global>> (self=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2090
+#7  nalgebra::base::default_allocator::{impl#1}::allocate_from_iterator<nalgebra::base::dimension::Dyn, f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (nrows=..., ncols=..., iter=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/default_allocator.rs:131
+#8  0x000056bd73e43ff5 in nalgebra::base::matrix_view::{impl#38}::clone_owned<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix_view.rs:230
+#9  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::clone_owned<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:620
+#10 nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::upper_triangle<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/edition.rs:26
+#11 nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::u<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (self=0x7fff8b0d5590) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:181
+#12 fsci_linalg::fast_rcond_from_lu (lu=0x7fff8b0d5590, a_norm=<optimized out>, n=1000) at crates/fsci-linalg/src/lib.rs:961
+#13 0x000056bd73e4a04e in fsci_linalg::lu_solve (lu_factor=0x7fff8b0d5590, b=...) at crates/fsci-linalg/src/lib.rs:2691
+[Inferior 1 (process 1856331) detached]
+=== sample 4 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+nalgebra::base::uninit::{impl#1}::init<f64> (out=0x56bd78486000, t=-0.0010594694259830595) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/uninit.rs:64
+64	        *out = MaybeUninit::new(t);
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  nalgebra::base::uninit::{impl#1}::init<f64> (out=0x56bd78486000, t=-0.0010594694259830595) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/uninit.rs:64
+#1  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::transpose_to_uninit<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>, nalgebra::base::uninit::Uninit, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<core::mem::maybe_uninit::MaybeUninit<f64>, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (self=<optimized out>, _status=..., out=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:681
+#2  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::transpose<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:714
+#3  fsci_linalg::fast_rcond_from_lu (lu=0x7fff8b0d5590, a_norm=<optimized out>, n=1000) at crates/fsci-linalg/src/lib.rs:962
+#4  0x000056bd73e4a04e in fsci_linalg::lu_solve (lu_factor=0x7fff8b0d5590, b=...) at crates/fsci-linalg/src/lib.rs:2691
+#5  0x000056bd73e62ba8 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:153
+[Inferior 1 (process 1856331) detached]
+=== sample 5 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+nalgebra::base::uninit::{impl#1}::init<f64> (out=0x56bd77893000, t=0.18565921640632804) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/uninit.rs:64
+64	        *out = MaybeUninit::new(t);
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  nalgebra::base::uninit::{impl#1}::init<f64> (out=0x56bd77893000, t=0.18565921640632804) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/uninit.rs:64
+#1  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::transpose_to_uninit<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>, nalgebra::base::uninit::Uninit, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<core::mem::maybe_uninit::MaybeUninit<f64>, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (self=<optimized out>, _status=..., out=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:681
+#2  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::transpose<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:714
+#3  fsci_linalg::fast_rcond_from_lu (lu=0x7fff8b0d5590, a_norm=<optimized out>, n=1000) at crates/fsci-linalg/src/lib.rs:961
+#4  0x000056bd73e4a04e in fsci_linalg::lu_solve (lu_factor=0x7fff8b0d5590, b=...) at crates/fsci-linalg/src/lib.rs:2691
+#5  0x000056bd73e62ba8 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:153
+[Inferior 1 (process 1856331) detached]
+=== sample 6 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::num::{impl#11}::unchecked_add (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:971
+971	                intrinsics::unchecked_add(self, rhs)
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  core::num::{impl#11}::unchecked_add (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:971
+#1  core::iter::range::{impl#49}::forward_unchecked (start=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs:215
+#2  core::iter::range::{impl#5}::spec_next<usize> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs:903
+#3  core::iter::range::{impl#6}::next<usize> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/range.rs:985
+#4  nalgebra::base::blas_uninit::array_axcpy<nalgebra::base::uninit::Init, f64> (y=..., x=..., c=1, beta=1, stride1=1, stride2=1, len=427, a=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:47
+#5  nalgebra::base::blas_uninit::axcpy_uninit<nalgebra::base::uninit::Init, f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, status=..., y=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas_uninit.rs:112
+#6  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axcpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (c=1, b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:300
+#7  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::axpy<f64, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (b=1, self=<optimized out>, a=<optimized out>, x=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/blas.rs:323
+#8  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::solve_upper_triangular_vector_mut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorageMut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (self=<optimized out>, b=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/solve.rs:178
+#9  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::solve_upper_triangular_mut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>>> (self=<optimized out>, b=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/solve.rs:148
+#10 nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::solve_mut<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>>> (self=<optimized out>, b=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:259
+#11 nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::solve<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>>> (self=<optimized out>, b=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:231
+#12 0x000056bd73e4a01a in fsci_linalg::lu_solve (lu_factor=0x7fff8b0d5590, b=...) at crates/fsci-linalg/src/lib.rs:2688
+#13 0x000056bd73e62ba8 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:153
+[Inferior 1 (process 1856331) detached]
+=== sample 7 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+nalgebra::base::uninit::{impl#1}::init<f64> (out=0x56bd78063000, t=0) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/uninit.rs:64
+64	        *out = MaybeUninit::new(t);
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  nalgebra::base::uninit::{impl#1}::init<f64> (out=0x56bd78063000, t=0) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/uninit.rs:64
+#1  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::transpose_to_uninit<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>, nalgebra::base::uninit::Uninit, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<core::mem::maybe_uninit::MaybeUninit<f64>, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (self=<optimized out>, _status=..., out=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:681
+#2  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::transpose<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:714
+#3  fsci_linalg::fast_rcond_from_lu (lu=0x7fff8b0d5590, a_norm=<optimized out>, n=1000) at crates/fsci-linalg/src/lib.rs:962
+#4  0x000056bd73e4a04e in fsci_linalg::lu_solve (lu_factor=0x7fff8b0d5590, b=...) at crates/fsci-linalg/src/lib.rs:2691
+#5  0x000056bd73e62ba8 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:153
+[Inferior 1 (process 1856331) detached]
+=== sample 8 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+__brk (addr=0x56bd77065000) at ../sysdeps/unix/sysv/linux/brk_call.h:24
+
+warning: 24	../sysdeps/unix/sysv/linux/brk_call.h: No such file or directory
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  __brk (addr=0x56bd77065000) at ../sysdeps/unix/sysv/linux/brk_call.h:24
+#1  0x000078157e334278 in __GI___sbrk (increment=increment@entry=-23965696) at ./misc/sbrk.c:74
+#2  0x000078157e2b2166 in __glibc_morecore (increment=increment@entry=-23965696) at ./malloc/morecore.c:29
+#3  0x000078157e2b2200 in systrim (pad=<optimized out>, av=0x78157e434ac0 <main_arena>) at ./malloc/malloc.c:3011
+#4  0x000078157e2b299d in _int_free_chunk (av=<optimized out>, p=<optimized out>, size=<optimized out>, have_lock=<optimized out>) at ./malloc/malloc.c:4729
+#5  0x000056bd73e45496 in std::sys::alloc::unix::{impl#0}::dealloc () at /rustc/14210df0e27ccd7d9e6a05b8085cbd438e4bbc65/library/std/src/sys/alloc/unix.rs:48
+#6  std::alloc::__default_lib_allocator::__rdl_dealloc () at /rustc/14210df0e27ccd7d9e6a05b8085cbd438e4bbc65/library/std/src/alloc.rs:463
+#7  alloc::alloc::dealloc_nonnull (layout=..., ptr=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:128
+#8  alloc::alloc::Global::deallocate_impl_runtime (layout=..., ptr=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:229
+#9  alloc::alloc::Global::deallocate_impl (layout=..., self=<optimized out>, ptr=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:344
+#10 alloc::alloc::{impl#1}::deallocate (layout=..., self=<optimized out>, ptr=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:462
+#11 alloc::raw_vec::RawVecInner<alloc::alloc::Global>::deallocate<alloc::alloc::Global> (elem_layout=..., self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:876
+#12 alloc::raw_vec::{impl#3}::drop<f64, alloc::alloc::Global> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:424
+#13 core::ptr::drop_glue<alloc::raw_vec::RawVec<f64, alloc::alloc::Global>> () at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825
+[Inferior 1 (process 1856331) detached]
+=== sample 9 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+nalgebra::base::uninit::{impl#1}::init<f64> (out=0x56bd77f82000, t=0) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/uninit.rs:64
+64	        *out = MaybeUninit::new(t);
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  nalgebra::base::uninit::{impl#1}::init<f64> (out=0x56bd77f82000, t=0) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/uninit.rs:64
+#1  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::transpose_to_uninit<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>, nalgebra::base::uninit::Uninit, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<core::mem::maybe_uninit::MaybeUninit<f64>, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (self=<optimized out>, _status=..., out=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:681
+#2  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::transpose<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:714
+#3  fsci_linalg::fast_rcond_from_lu (lu=0x7fff8b0d5590, a_norm=<optimized out>, n=1000) at crates/fsci-linalg/src/lib.rs:962
+#4  0x000056bd73e4a04e in fsci_linalg::lu_solve (lu_factor=0x7fff8b0d5590, b=...) at crates/fsci-linalg/src/lib.rs:2691
+#5  0x000056bd73e62ba8 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:153
+[Inferior 1 (process 1856331) detached]
+=== sample 10 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::ptr::write<f64> (dst=0x56bd77527000, src=-0.0058975515385230378) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1933
+1933	        intrinsics::write_via_move(dst, src)
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  core::ptr::write<f64> (dst=0x56bd77527000, src=-0.0058975515385230378) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1933
+#1  alloc::vec::Vec<f64, alloc::alloc::Global>::extend_desugared<f64, alloc::alloc::Global, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (self=0x7fff8b0d5270, iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4044
+#2  alloc::vec::spec_extend::{impl#0}::spec_extend<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>, alloc::alloc::Global> (self=0x7fff8b0d5270, iter=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_extend.rs:18
+#3  alloc::vec::spec_from_iter_nested::{impl#0}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_from_iter_nested.rs:41
+#4  alloc::vec::spec_from_iter::{impl#0}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_from_iter.rs:33
+#5  alloc::vec::{impl#16}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iter=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3933
+#6  core::iter::traits::iterator::Iterator::collect<core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>, alloc::vec::Vec<f64, alloc::alloc::Global>> (self=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2090
+#7  nalgebra::base::default_allocator::{impl#1}::allocate_from_iterator<nalgebra::base::dimension::Dyn, f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (nrows=..., ncols=..., iter=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/default_allocator.rs:131
+#8  0x000056bd73e43ff5 in nalgebra::base::matrix_view::{impl#38}::clone_owned<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix_view.rs:230
+#9  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::clone_owned<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:620
+#10 nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::upper_triangle<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/edition.rs:26
+#11 nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::u<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (self=0x7fff8b0d5590) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:181
+#12 fsci_linalg::fast_rcond_from_lu (lu=0x7fff8b0d5590, a_norm=<optimized out>, n=1000) at crates/fsci-linalg/src/lib.rs:961
+#13 0x000056bd73e4a04e in fsci_linalg::lu_solve (lu_factor=0x7fff8b0d5590, b=...) at crates/fsci-linalg/src/lib.rs:2691
+[Inferior 1 (process 1856331) detached]
+=== sample 11 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::ptr::write<f64> (dst=0x56bd771b2000, src=-0.27433373944960548) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1933
+1933	        intrinsics::write_via_move(dst, src)
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  core::ptr::write<f64> (dst=0x56bd771b2000, src=-0.27433373944960548) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1933
+#1  alloc::vec::Vec<f64, alloc::alloc::Global>::extend_desugared<f64, alloc::alloc::Global, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (self=0x7fff8b0d5270, iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4044
+#2  alloc::vec::spec_extend::{impl#0}::spec_extend<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>, alloc::alloc::Global> (self=0x7fff8b0d5270, iter=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_extend.rs:18
+#3  alloc::vec::spec_from_iter_nested::{impl#0}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_from_iter_nested.rs:41
+#4  alloc::vec::spec_from_iter::{impl#0}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_from_iter.rs:33
+#5  alloc::vec::{impl#16}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iter=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3933
+#6  core::iter::traits::iterator::Iterator::collect<core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>, alloc::vec::Vec<f64, alloc::alloc::Global>> (self=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2090
+#7  nalgebra::base::default_allocator::{impl#1}::allocate_from_iterator<nalgebra::base::dimension::Dyn, f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (nrows=..., ncols=..., iter=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/default_allocator.rs:131
+#8  0x000056bd73e43ff5 in nalgebra::base::matrix_view::{impl#38}::clone_owned<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix_view.rs:230
+#9  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::clone_owned<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:620
+#10 nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::upper_triangle<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/edition.rs:26
+#11 nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::u<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (self=0x7fff8b0d5590) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:181
+#12 fsci_linalg::fast_rcond_from_lu (lu=0x7fff8b0d5590, a_norm=<optimized out>, n=1000) at crates/fsci-linalg/src/lib.rs:961
+#13 0x000056bd73e4a04e in fsci_linalg::lu_solve (lu_factor=0x7fff8b0d5590, b=...) at crates/fsci-linalg/src/lib.rs:2691
+[Inferior 1 (process 1856331) detached]
+=== sample 12 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+core::ptr::write<f64> (dst=0x56bd77317000, src=0.00066201010729763897) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1933
+1933	        intrinsics::write_via_move(dst, src)
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  core::ptr::write<f64> (dst=0x56bd77317000, src=0.00066201010729763897) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1933
+#1  alloc::vec::Vec<f64, alloc::alloc::Global>::extend_desugared<f64, alloc::alloc::Global, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (self=0x7fff8b0d5270, iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4044
+#2  alloc::vec::spec_extend::{impl#0}::spec_extend<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>, alloc::alloc::Global> (self=0x7fff8b0d5270, iter=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_extend.rs:18
+#3  alloc::vec::spec_from_iter_nested::{impl#0}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_from_iter_nested.rs:41
+#4  alloc::vec::spec_from_iter::{impl#0}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_from_iter.rs:33
+#5  alloc::vec::{impl#16}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iter=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3933
+#6  core::iter::traits::iterator::Iterator::collect<core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>, alloc::vec::Vec<f64, alloc::alloc::Global>> (self=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2090
+#7  nalgebra::base::default_allocator::{impl#1}::allocate_from_iterator<nalgebra::base::dimension::Dyn, f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (nrows=..., ncols=..., iter=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/default_allocator.rs:131
+#8  0x000056bd73e43ff5 in nalgebra::base::matrix_view::{impl#38}::clone_owned<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix_view.rs:230
+#9  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::clone_owned<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:620
+#10 nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::upper_triangle<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/edition.rs:26
+#11 nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::u<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (self=0x7fff8b0d5590) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:181
+#12 fsci_linalg::fast_rcond_from_lu (lu=0x7fff8b0d5590, a_norm=<optimized out>, n=1000) at crates/fsci-linalg/src/lib.rs:961
+#13 0x000056bd73e4a04e in fsci_linalg::lu_solve (lu_factor=0x7fff8b0d5590, b=...) at crates/fsci-linalg/src/lib.rs:2691
+[Inferior 1 (process 1856331) detached]
+=== sample 13 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+nalgebra::base::uninit::{impl#1}::init<f64> (out=0x56bd77de6000, t=0) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/uninit.rs:64
+64	        *out = MaybeUninit::new(t);
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  nalgebra::base::uninit::{impl#1}::init<f64> (out=0x56bd77de6000, t=0) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/uninit.rs:64
+#1  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::transpose_to_uninit<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>, nalgebra::base::uninit::Uninit, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<core::mem::maybe_uninit::MaybeUninit<f64>, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (self=<optimized out>, _status=..., out=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:681
+#2  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::transpose<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:714
+#3  fsci_linalg::fast_rcond_from_lu (lu=0x7fff8b0d5590, a_norm=<optimized out>, n=1000) at crates/fsci-linalg/src/lib.rs:961
+#4  0x000056bd73e4a04e in fsci_linalg::lu_solve (lu_factor=0x7fff8b0d5590, b=...) at crates/fsci-linalg/src/lib.rs:2691
+#5  0x000056bd73e62ba8 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:153
+[Inferior 1 (process 1856331) detached]
+=== sample 14 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+nalgebra::base::uninit::{impl#1}::init<f64> (out=0x56bd780be000, t=0) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/uninit.rs:64
+64	        *out = MaybeUninit::new(t);
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  nalgebra::base::uninit::{impl#1}::init<f64> (out=0x56bd780be000, t=0) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/uninit.rs:64
+#1  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::transpose_to_uninit<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>, nalgebra::base::uninit::Uninit, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<core::mem::maybe_uninit::MaybeUninit<f64>, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (self=<optimized out>, _status=..., out=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:681
+#2  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::transpose<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:714
+#3  fsci_linalg::fast_rcond_from_lu (lu=0x7fff8b0d5590, a_norm=<optimized out>, n=1000) at crates/fsci-linalg/src/lib.rs:962
+#4  0x000056bd73e4a04e in fsci_linalg::lu_solve (lu_factor=0x7fff8b0d5590, b=...) at crates/fsci-linalg/src/lib.rs:2691
+#5  0x000056bd73e62ba8 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:153
+[Inferior 1 (process 1856331) detached]
+=== sample 15 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+__brk (addr=0x56bd77065000) at ../sysdeps/unix/sysv/linux/brk_call.h:24
+
+warning: 24	../sysdeps/unix/sysv/linux/brk_call.h: No such file or directory
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  __brk (addr=0x56bd77065000) at ../sysdeps/unix/sysv/linux/brk_call.h:24
+#1  0x000078157e334278 in __GI___sbrk (increment=increment@entry=-23965696) at ./misc/sbrk.c:74
+#2  0x000078157e2b2166 in __glibc_morecore (increment=increment@entry=-23965696) at ./malloc/morecore.c:29
+#3  0x000078157e2b2200 in systrim (pad=<optimized out>, av=0x78157e434ac0 <main_arena>) at ./malloc/malloc.c:3011
+#4  0x000078157e2b299d in _int_free_chunk (av=<optimized out>, p=<optimized out>, size=<optimized out>, have_lock=<optimized out>) at ./malloc/malloc.c:4729
+#5  0x000056bd73e45496 in std::sys::alloc::unix::{impl#0}::dealloc () at /rustc/14210df0e27ccd7d9e6a05b8085cbd438e4bbc65/library/std/src/sys/alloc/unix.rs:48
+#6  std::alloc::__default_lib_allocator::__rdl_dealloc () at /rustc/14210df0e27ccd7d9e6a05b8085cbd438e4bbc65/library/std/src/alloc.rs:463
+#7  alloc::alloc::dealloc_nonnull (layout=..., ptr=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:128
+#8  alloc::alloc::Global::deallocate_impl_runtime (layout=..., ptr=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:229
+#9  alloc::alloc::Global::deallocate_impl (layout=..., self=<optimized out>, ptr=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:344
+#10 alloc::alloc::{impl#1}::deallocate (layout=..., self=<optimized out>, ptr=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:462
+#11 alloc::raw_vec::RawVecInner<alloc::alloc::Global>::deallocate<alloc::alloc::Global> (elem_layout=..., self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:876
+#12 alloc::raw_vec::{impl#3}::drop<f64, alloc::alloc::Global> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:424
+#13 core::ptr::drop_glue<alloc::raw_vec::RawVec<f64, alloc::alloc::Global>> () at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825
+[Inferior 1 (process 1856331) detached]
+=== sample 16 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+alloc::vec::Vec<f64, alloc::alloc::Global>::extend_desugared<f64, alloc::alloc::Global, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (self=0x7fff8b0d5270, iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4048
+4048	                self.set_len(len + 1);
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  alloc::vec::Vec<f64, alloc::alloc::Global>::extend_desugared<f64, alloc::alloc::Global, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (self=0x7fff8b0d5270, iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4048
+#1  alloc::vec::spec_extend::{impl#0}::spec_extend<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>, alloc::alloc::Global> (self=0x7fff8b0d5270, iter=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_extend.rs:18
+#2  alloc::vec::spec_from_iter_nested::{impl#0}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_from_iter_nested.rs:41
+#3  alloc::vec::spec_from_iter::{impl#0}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_from_iter.rs:33
+#4  alloc::vec::{impl#16}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iter=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3933
+#5  core::iter::traits::iterator::Iterator::collect<core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>, alloc::vec::Vec<f64, alloc::alloc::Global>> (self=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2090
+#6  nalgebra::base::default_allocator::{impl#1}::allocate_from_iterator<nalgebra::base::dimension::Dyn, f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (nrows=..., ncols=..., iter=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/default_allocator.rs:131
+#7  0x000056bd73e44400 in nalgebra::base::matrix_view::{impl#38}::clone_owned<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix_view.rs:230
+#8  nalgebra::base::matrix_view::{impl#38}::into_owned<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn> (self=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix_view.rs:222
+#9  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::into_owned<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (self=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:579
+#10 nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::l<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (self=0x7fff8b0d5590) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:137
+#11 fsci_linalg::fast_rcond_from_lu (lu=0x7fff8b0d5590, a_norm=<optimized out>, n=1000) at crates/fsci-linalg/src/lib.rs:962
+#12 0x000056bd73e4a04e in fsci_linalg::lu_solve (lu_factor=0x7fff8b0d5590, b=...) at crates/fsci-linalg/src/lib.rs:2691
+#13 0x000056bd73e62ba8 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:153
+[Inferior 1 (process 1856331) detached]
+=== sample 17 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+nalgebra::base::uninit::{impl#1}::init<f64> (out=0x56bd77d86000, t=0) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/uninit.rs:64
+64	        *out = MaybeUninit::new(t);
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  nalgebra::base::uninit::{impl#1}::init<f64> (out=0x56bd77d86000, t=0) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/uninit.rs:64
+#1  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::transpose_to_uninit<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>, nalgebra::base::uninit::Uninit, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<core::mem::maybe_uninit::MaybeUninit<f64>, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (self=<optimized out>, _status=..., out=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:681
+#2  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::transpose<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:714
+#3  fsci_linalg::fast_rcond_from_lu (lu=0x7fff8b0d5590, a_norm=<optimized out>, n=1000) at crates/fsci-linalg/src/lib.rs:961
+#4  0x000056bd73e4a04e in fsci_linalg::lu_solve (lu_factor=0x7fff8b0d5590, b=...) at crates/fsci-linalg/src/lib.rs:2691
+#5  0x000056bd73e62ba8 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:153
+[Inferior 1 (process 1856331) detached]
+=== sample 18 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x000056bd73e425fb in nalgebra::base::iter::{impl#19}::next<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/iter.rs:82
+82	                        if self.ptr == self.inner_end {
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  0x000056bd73e425fb in nalgebra::base::iter::{impl#19}::next<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/iter.rs:82
+#1  nalgebra::base::iter::{impl#24}::next<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/iter.rs:198
+#2  core::iter::adapters::cloned::{impl#1}::next<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>, f64> (self=<optimized out>) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/cloned.rs:41
+#3  alloc::vec::Vec<f64, alloc::alloc::Global>::extend_desugared<f64, alloc::alloc::Global, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (self=0x7fff8b0d5270, iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4037
+#4  alloc::vec::spec_extend::{impl#0}::spec_extend<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>, alloc::alloc::Global> (self=0x7fff8b0d5270, iter=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_extend.rs:18
+#5  alloc::vec::spec_from_iter_nested::{impl#0}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_from_iter_nested.rs:41
+#6  alloc::vec::spec_from_iter::{impl#0}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iterator=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/spec_from_iter.rs:33
+#7  alloc::vec::{impl#16}::from_iter<f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (iter=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3933
+#8  core::iter::traits::iterator::Iterator::collect<core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>, alloc::vec::Vec<f64, alloc::alloc::Global>> (self=...) at /home/ubuntu/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/iterator.rs:2090
+#9  nalgebra::base::default_allocator::{impl#1}::allocate_from_iterator<nalgebra::base::dimension::Dyn, f64, core::iter::adapters::cloned::Cloned<nalgebra::base::iter::MatrixIter<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>>> (nrows=..., ncols=..., iter=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/default_allocator.rs:131
+#10 0x000056bd73e44400 in nalgebra::base::matrix_view::{impl#38}::clone_owned<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix_view.rs:230
+#11 nalgebra::base::matrix_view::{impl#38}::into_owned<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn> (self=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix_view.rs:222
+#12 nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>>::into_owned<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::matrix_view::ViewStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Const<1>, nalgebra::base::dimension::Dyn>> (self=...) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:579
+#13 nalgebra::linalg::lu::LU<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>::l<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn> (self=0x7fff8b0d5590) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/linalg/lu.rs:137
+[Inferior 1 (process 1856331) detached]
+=== sample 19 ===
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+nalgebra::base::uninit::{impl#1}::init<f64> (out=0x56bd780ca000, t=0) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/uninit.rs:64
+64	        *out = MaybeUninit::new(t);
+warning: Missing auto-load script at offset 0 in section .debug_gdb_scripts
+of file /tmp/rch_target_fsci_linalg_tri_pass2_profile_20260602a/release-perf/perf_solve.
+Use `info auto-load python-scripts [REGEXP]' to list them.
+
+Thread 1 (Thread 0x78157e45ed00 (LWP 1856331) "perf_solve"):
+#0  nalgebra::base::uninit::{impl#1}::init<f64> (out=0x56bd780ca000, t=0) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/uninit.rs:64
+#1  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::transpose_to_uninit<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>, nalgebra::base::uninit::Uninit, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<core::mem::maybe_uninit::MaybeUninit<f64>, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (self=<optimized out>, _status=..., out=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:681
+#2  nalgebra::base::matrix::Matrix<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>>::transpose<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn, nalgebra::base::vec_storage::VecStorage<f64, nalgebra::base::dimension::Dyn, nalgebra::base::dimension::Dyn>> (self=<optimized out>) at /home/ubuntu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nalgebra-0.34.2/src/base/matrix.rs:714
+#3  fsci_linalg::fast_rcond_from_lu (lu=0x7fff8b0d5590, a_norm=<optimized out>, n=1000) at crates/fsci-linalg/src/lib.rs:962
+#4  0x000056bd73e4a04e in fsci_linalg::lu_solve (lu_factor=0x7fff8b0d5590, b=...) at crates/fsci-linalg/src/lib.rs:2691
+#5  0x000056bd73e62ba8 in perf_solve::main () at crates/fsci-linalg/src/bin/perf_solve.rs:153
+[Inferior 1 (process 1856331) detached]
+=== sample 20 ===
+ptrace: No such process.
+=== sample 21 ===
+ptrace: No such process.
+=== sample 22 ===
+ptrace: No such process.
+=== sample 23 ===
+ptrace: No such process.
+=== sample 24 ===
+ptrace: No such process.
+=== sample 25 ===
+ptrace: No such process.
+=== sample 26 ===
+ptrace: No such process.
+=== sample 27 ===
+ptrace: No such process.
+=== sample 28 ===
+ptrace: No such process.
+=== sample 29 ===
+ptrace: No such process.
+=== sample 30 ===
+ptrace: No such process.
+=== sample 31 ===
+ptrace: No such process.
+=== sample 32 ===
+ptrace: No such process.
+=== sample 33 ===
+ptrace: No such process.
+=== sample 34 ===
+ptrace: No such process.
+=== sample 35 ===
+ptrace: No such process.
+=== sample 36 ===
+ptrace: No such process.
+=== sample 37 ===
+ptrace: No such process.
+=== sample 38 ===
+ptrace: No such process.
+=== sample 39 ===
+ptrace: No such process.
+=== sample 40 ===
+ptrace: No such process.
+{"mode":"lu_solve_cached","n":1000,"repeats":120,"total_ms":5936.730,"per_call_ms":49.4728,"checksum":-1.181379e2}
