@@ -1,0 +1,10 @@
+total_sample_blocks=60
+successful_fsci_blocks=60
+compute_backward_error_blocks=0
+directlu_dispatch_blocks=0
+condition_diagnostics_blocks=57
+fast_rcond_blocks=15
+lu_factorization_blocks=44
+array_axcpy_or_blas_blocks=39
+dmatrix_from_rows_blocks=0
+allocation_clone_memcpy_blocks=23

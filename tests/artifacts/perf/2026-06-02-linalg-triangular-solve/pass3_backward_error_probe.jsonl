@@ -1,0 +1,5 @@
+{"mode":"backward_error_probe","n":1000,"repeats":1000,"total_ms":291.944,"per_call_ms":0.2919,"checksum":5.353532e-14}
+{"mode":"backward_error_probe","n":1000,"repeats":1000,"total_ms":278.595,"per_call_ms":0.2786,"checksum":5.353532e-14}
+{"mode":"backward_error_probe","n":1000,"repeats":1000,"total_ms":305.836,"per_call_ms":0.3058,"checksum":5.353532e-14}
+{"mode":"backward_error_probe","n":1000,"repeats":1000,"total_ms":301.579,"per_call_ms":0.3016,"checksum":5.353532e-14}
+{"mode":"backward_error_probe","n":1000,"repeats":1000,"total_ms":290.161,"per_call_ms":0.2902,"checksum":5.353532e-14}

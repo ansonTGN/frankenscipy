@@ -11,6 +11,7 @@
 //!
 //! Usage: `perf_solve <mode> <n> <repeats> [seed]`
 //!   mode    = solve | lu_factor | lu_solve | lu_solve_cached | solve_triangular
+//!             | backward_error_probe
 //!   n       = matrix dimension
 //!   repeats = number of timed iterations
 //!
@@ -26,6 +27,7 @@ use fsci_linalg::{
     lu_factor, lu_solve, solve, solve_triangular, DecompOptions, SolveOptions,
     TriangularSolveOptions,
 };
+use nalgebra::{DMatrix, DVector};
 
 /// Deterministic diagonally-dominant matrix; no RNG crate so the workload is
 /// byte-for-byte reproducible across runs/hosts.
@@ -83,6 +85,34 @@ fn make_linear_rhs(n: usize) -> Vec<f64> {
     (0..n).map(|i| (i + 1) as f64).collect()
 }
 
+fn dmatrix_from_rows_for_probe(rows: &[Vec<f64>]) -> DMatrix<f64> {
+    let row_count = rows.len();
+    let column_count = rows.first().map_or(0, Vec::len);
+    let mut data = Vec::with_capacity(row_count * column_count);
+    for row in rows {
+        data.extend_from_slice(row);
+    }
+    DMatrix::from_row_slice(row_count, column_count, &data)
+}
+
+fn compute_backward_error_probe(
+    matrix: &DMatrix<f64>,
+    x: &DVector<f64>,
+    rhs: &DVector<f64>,
+) -> f64 {
+    let residual = matrix * x - rhs;
+    let residual_norm = residual.norm();
+    let denom = matrix.norm() * x.norm() + rhs.norm();
+    if !residual_norm.is_finite() || !denom.is_finite() {
+        return f64::INFINITY;
+    }
+    if denom > 0.0 {
+        residual_norm / denom
+    } else {
+        0.0
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mode = args.get(1).map(String::as_str).unwrap_or("solve");
@@ -113,6 +143,30 @@ fn main() {
                 }
             }
         }
+        return;
+    }
+
+    if mode == "backward_error_probe" {
+        let a = make_matrix(n, seed);
+        let b = make_rhs(n, seed);
+        let solved = solve(&a, &b, SolveOptions::default()).unwrap();
+        let matrix = dmatrix_from_rows_for_probe(&a);
+        let x = DVector::from_column_slice(&solved.x);
+        let rhs = DVector::from_column_slice(&b);
+        let t0 = Instant::now();
+        let mut checksum = 0.0_f64;
+        for _ in 0..repeats {
+            checksum +=
+                compute_backward_error_probe(black_box(&matrix), black_box(&x), black_box(&rhs));
+        }
+        let elapsed = t0.elapsed();
+        let per_call_ms = elapsed.as_secs_f64() * 1e3 / repeats as f64;
+        println!(
+            "{{\"mode\":\"{mode}\",\"n\":{n},\"repeats\":{repeats},\"total_ms\":{:.3},\"per_call_ms\":{:.4},\"checksum\":{:.6e}}}",
+            elapsed.as_secs_f64() * 1e3,
+            per_call_ms,
+            checksum
+        );
         return;
     }
 

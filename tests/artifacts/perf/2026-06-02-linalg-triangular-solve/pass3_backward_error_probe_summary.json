@@ -1,0 +1,9 @@
+{
+  "runs": 5,
+  "mean_per_call_ms": 0.29362000000000005,
+  "min_per_call_ms": 0.2786,
+  "max_per_call_ms": 0.3058,
+  "checksum_unique": [
+    5.353532E-14
+  ]
+}

@@ -1,0 +1,1 @@
+cmp_before_vs_no_backward_error_exit=1
