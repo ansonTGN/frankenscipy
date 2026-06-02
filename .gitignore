@@ -183,3 +183,5 @@ crates/fsci-special/src/bin/
 .rch-target/
 .rch-target-*/
 .rch-deploy-root/
+.env
+.claude/settings.local.json

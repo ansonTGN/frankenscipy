@@ -17,7 +17,7 @@ mod tests {
 
     mod fft_relations {
         use super::*;
-        use fsci_fft::{FftOptions, fft, ifft, rfft, irfft};
+        use fsci_fft::{FftOptions, fft, ifft, irfft, rfft};
 
         type Complex64 = (f64, f64);
 
@@ -126,13 +126,15 @@ mod tests {
 
     mod linalg_relations {
         use super::*;
-        use fsci_linalg::{SolveOptions, solve, inv, InvOptions};
+        use fsci_linalg::{InvOptions, SolveOptions, inv, solve};
 
         fn make_diag_dominant(n: usize, seed: u64) -> Vec<Vec<f64>> {
             let mut a = vec![vec![0.0; n]; n];
             for i in 0..n {
                 for j in 0..n {
-                    let pseudo_rand = ((seed.wrapping_mul(i as u64 + 1).wrapping_add(j as u64)) % 1000) as f64 / 1000.0;
+                    let pseudo_rand = ((seed.wrapping_mul(i as u64 + 1).wrapping_add(j as u64))
+                        % 1000) as f64
+                        / 1000.0;
                     a[i][j] = if i == j {
                         (n as f64) * 2.0 + pseudo_rand
                     } else {
@@ -161,7 +163,10 @@ mod tests {
         }
 
         fn max_diff_vec(a: &[f64], b: &[f64]) -> f64 {
-            a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0, f64::max)
+            a.iter()
+                .zip(b.iter())
+                .map(|(x, y)| (x - y).abs())
+                .fold(0.0, f64::max)
         }
 
         fn max_diff_mat(a: &[Vec<f64>], b: &[Vec<f64>]) -> f64 {
@@ -341,7 +346,7 @@ mod tests {
 
     mod stats_relations {
         use super::*;
-        use fsci_stats::{nanmean, nanvar, skew, kurtosis};
+        use fsci_stats::{kurtosis, nanmean, nanvar, skew};
 
         fn shuffle_with_seed(data: &[f64], seed: u64) -> Vec<f64> {
             let n = data.len();
@@ -574,8 +579,8 @@ mod tests {
 
     mod special_relations {
         use super::*;
-        use fsci_special::{SpecialTensor, gamma, gammaln, erf, erfc};
         use fsci_runtime::RuntimeMode;
+        use fsci_special::{SpecialTensor, erf, erfc, gamma, gammaln};
 
         fn scalar(x: f64) -> SpecialTensor {
             SpecialTensor::RealScalar(x)

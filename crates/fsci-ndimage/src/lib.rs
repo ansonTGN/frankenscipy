@@ -6759,9 +6759,20 @@ pub fn watershed_ift(
     let ndim = input.ndim();
     let default_struct = generate_binary_structure(ndim, 1);
     let struct_arr = structure.unwrap_or(&default_struct);
+    if struct_arr.ndim() != ndim {
+        return Err(NdimageError::DimensionMismatch(format!(
+            "input ndim {} != structure ndim {}",
+            ndim,
+            struct_arr.ndim()
+        )));
+    }
+    if struct_arr.shape.contains(&0) {
+        return Err(NdimageError::InvalidArgument(
+            "structure dimensions must be positive".to_string(),
+        ));
+    }
 
-    let struct_offsets =
-        compute_structure_offsets(&input.shape, &struct_arr.shape, &struct_arr.data);
+    let struct_offsets = compute_structure_offsets(&struct_arr.shape, &struct_arr.data);
 
     let mut output = markers.data.clone();
     let mut costs: Vec<f64> = vec![f64::INFINITY; input.size()];
@@ -6781,12 +6792,26 @@ pub fn watershed_ift(
             continue;
         }
 
-        for &offset in &struct_offsets {
-            let neighbor = idx as i64 + offset;
-            if neighbor < 0 || neighbor >= input.size() as i64 {
+        let coords = input.unravel(idx);
+        for offset in &struct_offsets {
+            let mut neighbor_coords = Vec::with_capacity(ndim);
+            let mut in_bounds = true;
+            for axis in 0..ndim {
+                let coord = coords[axis] as i64 + offset[axis];
+                if coord < 0 || coord >= input.shape[axis] as i64 {
+                    in_bounds = false;
+                    break;
+                }
+                neighbor_coords.push(coord as usize);
+            }
+            if !in_bounds {
                 continue;
             }
-            let neighbor_idx = neighbor as usize;
+            let neighbor_idx = neighbor_coords
+                .iter()
+                .zip(input.strides.iter())
+                .map(|(&coord, &stride)| coord * stride)
+                .sum::<usize>();
 
             let new_cost = current_cost.max(input.data[neighbor_idx]);
             if new_cost < costs[neighbor_idx] {
@@ -6803,14 +6828,10 @@ pub fn watershed_ift(
     Ok(NdArray::new(output, input.shape.clone()).unwrap())
 }
 
-fn compute_structure_offsets(
-    shape: &[usize],
-    struct_shape: &[usize],
-    struct_data: &[f64],
-) -> Vec<i64> {
-    let ndim = shape.len();
+fn compute_structure_offsets(struct_shape: &[usize], struct_data: &[f64]) -> Vec<Vec<i64>> {
+    let ndim = struct_shape.len();
     let mut offsets = Vec::new();
-    let center: Vec<usize> = struct_shape.iter().map(|&s| s / 2).collect();
+    let center: Vec<i64> = struct_shape.iter().map(|&s| s as i64 / 2).collect();
 
     let struct_size: usize = struct_shape.iter().product();
     for (struct_idx, &struct_value) in struct_data.iter().enumerate().take(struct_size) {
@@ -6826,17 +6847,15 @@ fn compute_structure_offsets(
         }
         struct_coords.reverse();
 
-        if struct_coords == center {
+        let offset = struct_coords
+            .iter()
+            .zip(&center)
+            .map(|(&coord, &center)| coord as i64 - center)
+            .collect::<Vec<_>>();
+        if offset.iter().all(|&delta| delta == 0) {
             continue;
         }
 
-        let mut offset: i64 = 0;
-        let mut stride: i64 = 1;
-        for d in (0..ndim).rev() {
-            let delta = struct_coords[d] as i64 - center[d] as i64;
-            offset += delta * stride;
-            stride *= shape[d] as i64;
-        }
         offsets.push(offset);
     }
 
@@ -10465,6 +10484,38 @@ mod tests {
     }
 
     #[test]
+    fn watershed_ift_does_not_wrap_row_edges() {
+        #[rustfmt::skip]
+        let input = NdArray::new(vec![
+            9.0, 9.0, 0.0,
+            0.0, 0.0, 9.0,
+        ], vec![2, 3]).unwrap();
+        #[rustfmt::skip]
+        let markers = NdArray::new(vec![
+            0.0, 0.0, 1.0,
+            0.0, 2.0, 0.0,
+        ], vec![2, 3]).unwrap();
+
+        let result = watershed_ift(&input, &markers, None).unwrap();
+
+        assert_eq!(result.data[2], 1.0);
+        assert_eq!(result.data[4], 2.0);
+        assert_eq!(
+            result.data[3], 2.0,
+            "right edge of first row must not be adjacent to left edge of second row"
+        );
+    }
+
+    #[test]
+    fn watershed_ift_validates_structure_shape() {
+        let input = NdArray::new(vec![0.0; 4], vec![2, 2]).unwrap();
+        let markers = NdArray::new(vec![1.0, 0.0, 0.0, 0.0], vec![2, 2]).unwrap();
+        let bad_structure = NdArray::new(vec![1.0, 1.0, 1.0], vec![3]).unwrap();
+
+        assert!(watershed_ift(&input, &markers, Some(&bad_structure)).is_err());
+    }
+
+    #[test]
     fn find_objects_bounding_boxes() {
         #[rustfmt::skip]
         let labels_data = vec![
@@ -11712,8 +11763,11 @@ mod tests {
     fn binary_dilation_matches_scipy_reference_values() {
         // scipy.ndimage.binary_dilation([[0,0,0],[0,1,0],[0,0,0]], structure=ones(3,3))
         // With 3x3 structure, center pixel expands to fill the whole grid
-        let input = NdArray::new(vec![0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], vec![3, 3])
-            .unwrap();
+        let input = NdArray::new(
+            vec![0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            vec![3, 3],
+        )
+        .unwrap();
         let result = binary_dilation(&input, 3, 1).unwrap();
         // With 3x3 structure, single center pixel dilates to fill everything
         let total_ones: f64 = result.data.iter().sum();
@@ -11727,8 +11781,11 @@ mod tests {
     fn label_matches_scipy_reference_values() {
         // scipy.ndimage.label([[0, 1, 0], [1, 1, 1], [0, 1, 0]])
         // -> single connected component, num_features=1
-        let arr = NdArray::new(vec![0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0, 0.0], vec![3, 3])
-            .unwrap();
+        let arr = NdArray::new(
+            vec![0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0, 0.0],
+            vec![3, 3],
+        )
+        .unwrap();
         let (labels, num_features) = label(&arr).expect("label");
         assert_eq!(num_features, 1, "should find 1 connected component");
         // All non-zero pixels should have label 1
@@ -11786,43 +11843,63 @@ mod tests {
         // scipy.ndimage.zoom([[1, 2], [3, 4]], 2) produces 4x4 array
         let arr = NdArray::new(vec![1.0, 2.0, 3.0, 4.0], vec![2, 2]).unwrap();
         let result = zoom(&arr, &[2.0, 2.0], 3, BoundaryMode::Constant, 0.0).expect("zoom");
-        assert_eq!(result.shape, vec![4, 4], "zoom(2x) should produce 4x4 array");
+        assert_eq!(
+            result.shape,
+            vec![4, 4],
+            "zoom(2x) should produce 4x4 array"
+        );
     }
 
     #[test]
     fn binary_erosion_single_pixel_matches_scipy() {
         // scipy.ndimage.binary_erosion([[0,0,0], [0,1,0], [0,0,0]])
         // With default structure, center pixel erodes to 0
-        let arr = NdArray::new(vec![0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], vec![3, 3]).unwrap();
+        let arr = NdArray::new(
+            vec![0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            vec![3, 3],
+        )
+        .unwrap();
         let result = binary_erosion(&arr, 3, 1).expect("binary_erosion");
         // All should be 0 after erosion
-        assert!(result.data.iter().all(|&x| x == 0.0), "single pixel should erode to 0");
+        assert!(
+            result.data.iter().all(|&x| x == 0.0),
+            "single pixel should erode to 0"
+        );
     }
 
     #[test]
     fn binary_dilation_single_pixel_matches_scipy() {
         // scipy.ndimage.binary_dilation([[0,0,0], [0,1,0], [0,0,0]])
         // With default cross structure, dilates to cross pattern
-        let arr = NdArray::new(vec![0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], vec![3, 3]).unwrap();
+        let arr = NdArray::new(
+            vec![0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            vec![3, 3],
+        )
+        .unwrap();
         let result = binary_dilation(&arr, 3, 1).expect("binary_dilation");
         // Center should be 1
         assert_eq!(result.data[4], 1.0, "center should remain 1");
         // At least some neighbors should be 1 (cross pattern)
         let dilated_count = result.data.iter().filter(|&&x| x == 1.0).count();
-        assert!(dilated_count >= 3, "dilation should expand, got {} ones", dilated_count);
+        assert!(
+            dilated_count >= 3,
+            "dilation should expand, got {} ones",
+            dilated_count
+        );
     }
 
     #[test]
     fn binary_opening_removes_isolated_pixels_scipy() {
         // scipy.ndimage.binary_opening: erosion followed by dilation
         // Small isolated regions should be removed
-        let arr = NdArray::new(vec![
-            1.0, 0.0, 0.0, 0.0, 1.0,
-            1.0, 1.0, 0.0, 1.0, 1.0,
-            0.0, 0.0, 0.0, 1.0, 1.0,
-            0.0, 0.0, 0.0, 1.0, 1.0,
-            0.0, 0.0, 0.0, 0.0, 0.0,
-        ], vec![5, 5]).unwrap();
+        let arr = NdArray::new(
+            vec![
+                1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0,
+                0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            ],
+            vec![5, 5],
+        )
+        .unwrap();
         let result = binary_opening(&arr, 3, 1).expect("binary_opening");
         // The large 2x2 block should survive, isolated pixels removed
         assert_eq!(result.shape, vec![5, 5], "shape should be preserved");
@@ -11832,11 +11909,11 @@ mod tests {
     fn binary_closing_fills_holes_scipy() {
         // scipy.ndimage.binary_closing: dilation followed by erosion
         // Small holes should be filled
-        let arr = NdArray::new(vec![
-            1.0, 1.0, 1.0,
-            1.0, 0.0, 1.0,
-            1.0, 1.0, 1.0,
-        ], vec![3, 3]).unwrap();
+        let arr = NdArray::new(
+            vec![1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0],
+            vec![3, 3],
+        )
+        .unwrap();
         let result = binary_closing(&arr, 3, 1).expect("binary_closing");
         // The center hole should be filled
         let center = result.data[4];
@@ -11847,21 +11924,37 @@ mod tests {
     fn grey_erosion_local_minimum_scipy() {
         // scipy.ndimage.grey_erosion([[1, 2, 3], [4, 5, 6], [7, 8, 9]], size=3)
         // Returns local minimum in 3x3 window
-        let arr = NdArray::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], vec![3, 3]).unwrap();
+        let arr = NdArray::new(
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+            vec![3, 3],
+        )
+        .unwrap();
         let result = grey_erosion(&arr, 3, BoundaryMode::Constant, 0.0).expect("grey_erosion");
         // Center element should be min of 3x3 = 1.0 (considering boundary)
         // With constant=0 padding, min should be 0
-        assert!(result.data[4] <= 1.0, "grey_erosion center got {}, expected <= 1", result.data[4]);
+        assert!(
+            result.data[4] <= 1.0,
+            "grey_erosion center got {}, expected <= 1",
+            result.data[4]
+        );
     }
 
     #[test]
     fn grey_dilation_local_maximum_scipy() {
         // scipy.ndimage.grey_dilation([[1, 2, 3], [4, 5, 6], [7, 8, 9]], size=3)
         // Returns local maximum in 3x3 window
-        let arr = NdArray::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], vec![3, 3]).unwrap();
+        let arr = NdArray::new(
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+            vec![3, 3],
+        )
+        .unwrap();
         let result = grey_dilation(&arr, 3, BoundaryMode::Constant, 0.0).expect("grey_dilation");
         // Center element should be max of 3x3 = 9.0
-        assert_eq!(result.data[4], 9.0, "grey_dilation center got {}, expected 9", result.data[4]);
+        assert_eq!(
+            result.data[4], 9.0,
+            "grey_dilation center got {}, expected 9",
+            result.data[4]
+        );
     }
 
     #[test]
@@ -11869,7 +11962,10 @@ mod tests {
         // scipy.ndimage.sobel on constant array should give 0
         let arr = NdArray::new(vec![5.0; 9], vec![3, 3]).unwrap();
         let result = sobel(&arr, 0, BoundaryMode::Reflect, 0.0).expect("sobel");
-        assert!(result.data.iter().all(|&x| x.abs() < 1e-10), "sobel on constant should be 0");
+        assert!(
+            result.data.iter().all(|&x| x.abs() < 1e-10),
+            "sobel on constant should be 0"
+        );
     }
 
     #[test]
@@ -11877,6 +11973,9 @@ mod tests {
         // scipy.ndimage.laplace on constant array should give 0
         let arr = NdArray::new(vec![5.0; 9], vec![3, 3]).unwrap();
         let result = laplace(&arr, BoundaryMode::Reflect, 0.0).expect("laplace");
-        assert!(result.data.iter().all(|&x| x.abs() < 1e-10), "laplace on constant should be 0");
+        assert!(
+            result.data.iter().all(|&x| x.abs() < 1e-10),
+            "laplace on constant should be 0"
+        );
     }
 }
