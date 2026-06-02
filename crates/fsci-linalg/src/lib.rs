@@ -7502,21 +7502,78 @@ pub fn matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, LinalgErr
         });
     }
     let mut c = vec![vec![0.0; n]; m];
-    // ikj loop order: the inner j-loop is a stride-1 SAXPY over contiguous rows
-    // (c[i][..] += a[i][k] * b[k][..]), which is cache-friendly and
-    // autovectorizes, unlike the column-strided naive ijk inner loop. This is
-    // bit-identical to ijk: each c[i][j] still accumulates k in 0..ka order
-    // because k is the outer loop relative to j. [frankenscipy-vx65u]
-    for i in 0..m {
-        let ci = &mut c[i];
-        let ai = &a[i];
-        for k in 0..ka {
-            let aik = ai[k];
-            let bk = &b[k];
-            for j in 0..n {
-                ci[j] += aik * bk[j];
+    // Register-blocked GEMM micro-kernel [frankenscipy-8l8r1]. A flat ikj loop
+    // streams every B element through one mul+add per FMA (B[k][j] and C[i][j]
+    // both touched per multiply), so it is memory-bound on the C read/modify/
+    // write. This kernel computes an MR x NR tile of C in register-resident
+    // accumulators: across the k-loop each loaded a[i0+di][k] is reused for NR
+    // columns and each loaded b[k][j0+dj] is reused for MR rows, so MR*NR FMAs
+    // ride on only MR+NR scalar loads. The NR-wide accumulator rows map onto
+    // SIMD lanes for autovectorization.
+    //
+    // Bit-identical to naive ijk / flat ikj: every acc[di][dj] accumulates k in
+    // 0..ka monotonic order, the identical sequence of separate mul+add ops as
+    // the reference (Rust does not contract a*b+c to a fused FMA without
+    // fast-math), so each c[i][j] has the same FP bit pattern. Ragged edges
+    // (mr<MR or nr<NR) fall back to the same monotonic-k scalar reduction.
+    const MR: usize = 4;
+    const NR: usize = 4;
+    let mut i0 = 0;
+    while i0 < m {
+        let mr = (m - i0).min(MR);
+        let mut j0 = 0;
+        while j0 < n {
+            let nr = (n - j0).min(NR);
+            if mr == MR && nr == NR {
+                let mut acc = [[0.0f64; NR]; MR];
+                for k in 0..ka {
+                    let a0 = a[i0][k];
+                    let a1 = a[i0 + 1][k];
+                    let a2 = a[i0 + 2][k];
+                    let a3 = a[i0 + 3][k];
+                    let bk = &b[k];
+                    let b0 = bk[j0];
+                    let b1 = bk[j0 + 1];
+                    let b2 = bk[j0 + 2];
+                    let b3 = bk[j0 + 3];
+                    acc[0][0] += a0 * b0;
+                    acc[0][1] += a0 * b1;
+                    acc[0][2] += a0 * b2;
+                    acc[0][3] += a0 * b3;
+                    acc[1][0] += a1 * b0;
+                    acc[1][1] += a1 * b1;
+                    acc[1][2] += a1 * b2;
+                    acc[1][3] += a1 * b3;
+                    acc[2][0] += a2 * b0;
+                    acc[2][1] += a2 * b1;
+                    acc[2][2] += a2 * b2;
+                    acc[2][3] += a2 * b3;
+                    acc[3][0] += a3 * b0;
+                    acc[3][1] += a3 * b1;
+                    acc[3][2] += a3 * b2;
+                    acc[3][3] += a3 * b3;
+                }
+                for di in 0..MR {
+                    let ci = &mut c[i0 + di];
+                    ci[j0] = acc[di][0];
+                    ci[j0 + 1] = acc[di][1];
+                    ci[j0 + 2] = acc[di][2];
+                    ci[j0 + 3] = acc[di][3];
+                }
+            } else {
+                for di in 0..mr {
+                    for dj in 0..nr {
+                        let mut s = 0.0;
+                        for k in 0..ka {
+                            s += a[i0 + di][k] * b[k][j0 + dj];
+                        }
+                        c[i0 + di][j0 + dj] = s;
+                    }
+                }
             }
+            j0 += NR;
         }
+        i0 += MR;
     }
     Ok(c)
 }
@@ -7625,6 +7682,94 @@ mod tests {
         }
     }
 
+    /// Isomorphism proof for the matmul register MICRO-KERNEL lever
+    /// [frankenscipy-8l8r1]: the MRxNR register-tiled order must be
+    /// BIT-IDENTICAL to a flat ikj triple loop. Uses dimensions that straddle
+    /// the MR=NR=4 tile boundary with non-zero remainders (17, 25, 33, 9, 5) so
+    /// both the full-tile and the ragged scalar-edge paths are exercised.
+    #[test]
+    fn matmul_microkernel_is_bit_identical_to_flat_ikj() {
+        let make_matrix = |rows: usize, cols: usize, seed: u64| -> Vec<Vec<f64>> {
+            (0..rows)
+                .map(|i| {
+                    (0..cols)
+                        .map(|j| {
+                            let r = (seed
+                                .wrapping_mul(i as u64 * 3 + 1)
+                                .wrapping_add(j as u64 * 11 + 1)
+                                % 4099) as f64
+                                / 1373.0;
+                            r - 1.5
+                        })
+                        .collect()
+                })
+                .collect()
+        };
+        for &(m, ka, n, seed) in &[
+            (17usize, 23usize, 19usize, 7u64),
+            (25, 8, 31, 11),
+            (33, 17, 8, 13),
+            (8, 8, 8, 17),
+            (9, 4, 5, 19),
+        ] {
+            let a = make_matrix(m, ka, seed);
+            let b = make_matrix(ka, n, seed.wrapping_add(50));
+            // Reference: flat ikj (same per-element accumulation order as naive
+            // ijk, since k is outer relative to j).
+            let mut expected = vec![vec![0.0f64; n]; m];
+            for i in 0..m {
+                for k in 0..ka {
+                    let aik = a[i][k];
+                    for j in 0..n {
+                        expected[i][j] += aik * b[k][j];
+                    }
+                }
+            }
+            let got = matmul(&a, &b).expect("matmul");
+            for i in 0..m {
+                for j in 0..n {
+                    assert_eq!(
+                        got[i][j].to_bits(),
+                        expected[i][j].to_bits(),
+                        "micro-kernel matmul not bit-identical at ({i},{j}), m={m} ka={ka} n={n}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Golden-output proof for the matmul register micro-kernel lever
+    /// [frankenscipy-8l8r1]: a fixed deterministic 80x80 product hashes to a
+    /// frozen 64-bit FNV-1a digest over the raw f64 bit patterns (self-contained,
+    /// no external crate). If any future edit perturbs a single output bit, this
+    /// digest changes and the test fails. 80 is a multiple of MR=NR=4 so the
+    /// product is computed entirely through the full-tile path.
+    #[test]
+    fn matmul_microkernel_golden_digest() {
+        let n = 80usize;
+        let a: Vec<Vec<f64>> = (0..n)
+            .map(|i| (0..n).map(|j| ((i * 31 + j * 17) % 97) as f64 * 0.01).collect())
+            .collect();
+        let b: Vec<Vec<f64>> = (0..n)
+            .map(|i| (0..n).map(|j| ((i * 13 + j * 7) % 89) as f64 * 0.01).collect())
+            .collect();
+        let c = matmul(&a, &b).expect("matmul");
+        // FNV-1a 64-bit over little-endian f64 bit patterns.
+        let mut digest: u64 = 0xcbf2_9ce4_8422_2325;
+        for row in &c {
+            for &v in row {
+                for byte in v.to_bits().to_le_bytes() {
+                    digest ^= byte as u64;
+                    digest = digest.wrapping_mul(0x0000_0100_0000_01b3);
+                }
+            }
+        }
+        assert_eq!(
+            digest, 0xf9aa_16d2_dc37_468f,
+            "matmul golden digest changed — output is no longer bit-identical (got {digest:#018x})"
+        );
+    }
+
     /// Isomorphism proof for the eig_banded Q*tri_evecs ikj reorder [perf]:
     /// the cache-friendly ikj order must be BIT-IDENTICAL to the naive ijk
     /// triple loop used for the eigenvector back-transform.
@@ -7716,6 +7861,67 @@ mod tests {
             "matmul {n}x{n}: naive_ijk={naive_ns:.4}s ikj={ikj_ns:.4}s speedup={speedup:.2}x"
         );
         assert!(speedup > 1.0, "ikj should be faster: {speedup:.2}x");
+    }
+
+    /// Perf witness for the matmul register micro-kernel lever
+    /// [frankenscipy-8l8r1]. Compares the shipped register-blocked `matmul`
+    /// against the previous flat ikj baseline (B streamed once per output row).
+    /// Run with
+    /// `cargo test -p fsci-linalg --release matmul_microkernel_perf -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "perf measurement; run explicitly in --release"]
+    fn matmul_microkernel_perf_vs_flat_ikj() {
+        // Flat ikj: identical math, one output row at a time (the pre-lever loop).
+        fn matmul_flat_ikj(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
+            let (m, ka) = (a.len(), a[0].len());
+            let n = b[0].len();
+            let mut c = vec![vec![0.0f64; n]; m];
+            for i in 0..m {
+                let ci = &mut c[i];
+                let ai = &a[i];
+                for k in 0..ka {
+                    let aik = ai[k];
+                    let bk = &b[k];
+                    for j in 0..n {
+                        ci[j] += aik * bk[j];
+                    }
+                }
+            }
+            c
+        }
+
+        for &n in &[768usize, 1024usize] {
+            let a: Vec<Vec<f64>> = (0..n)
+                .map(|i| (0..n).map(|j| ((i * 31 + j * 17) % 97) as f64 * 0.01).collect())
+                .collect();
+            let b: Vec<Vec<f64>> = (0..n)
+                .map(|i| (0..n).map(|j| ((i * 13 + j * 7) % 89) as f64 * 0.01).collect())
+                .collect();
+
+            // Warm + measure flat ikj.
+            let t_flat = std::time::Instant::now();
+            let flat = matmul_flat_ikj(&a, &b);
+            let flat_s = t_flat.elapsed().as_secs_f64();
+            std::hint::black_box(&flat);
+
+            // Measure shipped blocked matmul.
+            let t_blk = std::time::Instant::now();
+            let blk = matmul(&a, &b).expect("matmul");
+            let blk_s = t_blk.elapsed().as_secs_f64();
+            std::hint::black_box(&blk);
+
+            // Bit-identical guard alongside the timing.
+            for i in 0..n {
+                for j in 0..n {
+                    assert_eq!(flat[i][j].to_bits(), blk[i][j].to_bits());
+                }
+            }
+
+            let speedup = flat_s / blk_s;
+            println!(
+                "matmul {n}x{n}: flat_ikj={flat_s:.4}s microkernel={blk_s:.4}s speedup={speedup:.2}x"
+            );
+        }
     }
 
     fn assert_close_slice(actual: &[f64], expected: &[f64], atol: f64, rtol: f64) {
