@@ -77,6 +77,36 @@ This worker result is not compared against the hyperfine host because the
 hardware differs. It confirms the kept state executes remotely through `rch` and
 preserves the canonical cached checksum value.
 
+Additional remote-normalized evidence:
+
+- `pass5_golden_rch_raw.txt`
+- `pass5_golden_rch_normalized.txt`
+- `pass5_golden_rch_normalized.sha256`
+- `pass5_lu_solve_cached_rch_raw.txt`
+- `pass5_lu_solve_cached_rch_normalized.txt`
+- `pass5_lu_solve_cached_rch_canonical.txt`
+- `pass5_lu_solve_cached_rch_canonical.sha256`
+
+`pass5_golden_rch_raw.txt` captures the same `rch exec cargo run -- golden`
+stream plus the `[RCH] remote vmi1153651` footer; the normalized file removes
+only that footer. Its sha256 is:
+
+```text
+5809995418488c93cc66dc6f2dc01a0d5fd8e2d8faab6f9a7c44241e99025bdd
+```
+
+`pass5_lu_solve_cached_rch_canonical.txt` extracts the canonical checksum line
+from the remote JSON timing run. Its sha256 is:
+
+```text
+999b301ff7191ddd3eacb3e1379c981693484a32889e7566ec812b6c2c9afa35
+```
+
+The zero-byte files `pass5_golden_rch.txt` and
+`pass5_golden_rch_stdout.txt` are retained failed stdout-only capture attempts.
+They are not used as proof; `rch` forwards the remote program stream on stderr,
+so proof artifacts use the raw-plus-normalized capture path above.
+
 ## Golden / Isomorphism
 
 Retained Pass 4 artifacts:
@@ -135,6 +165,8 @@ Passed:
 - `jq empty tests/artifacts/perf/2026-06-02-linalg-triangular-solve/pass5_final_rch.json`
 - `sha256sum -c tests/artifacts/perf/2026-06-02-linalg-triangular-solve/pass3_cached_rcond_golden_after.sha256`
 - `sha256sum -c tests/artifacts/perf/2026-06-02-linalg-triangular-solve/pass3_cached_rcond_lu_solve_cached_after.sha256`
+- `cmp -s tests/artifacts/perf/2026-06-02-linalg-triangular-solve/pass5_golden_rch_normalized.txt tests/artifacts/perf/2026-06-02-linalg-triangular-solve/pass3_cached_rcond_golden_after.txt`
+- `cmp -s tests/artifacts/perf/2026-06-02-linalg-triangular-solve/pass5_lu_solve_cached_rch_canonical.txt tests/artifacts/perf/2026-06-02-linalg-triangular-solve/pass3_cached_rcond_lu_solve_cached_after.txt`
 
 No code changed in Pass 5, so no new Rust validation was required beyond the
 Pass 4 rch check, focused test, and clippy evidence.
