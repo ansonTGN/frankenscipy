@@ -1737,10 +1737,42 @@ impl ContinuousDistribution for NoncentralChiSquared {
         }
     }
 
-    fn try_fit(_data: &[f64]) -> Result<Self, FitError> {
-        Err(FitError::NotImplemented {
-            distribution: "NoncentralChiSquared",
-        })
+    fn try_fit(data: &[f64]) -> Result<Self, FitError> {
+        // Method-of-moments fit (consistent with the crate's pragmatic per-
+        // distribution estimators). For NCS: E[X] = df + nc and
+        // Var[X] = 2(df + 2*nc), which invert in closed form to
+        //   nc = var/2 - mean,  df = 2*mean - var/2.
+        if data.len() < 2 {
+            return Err(FitError::InsufficientData {
+                required: 2,
+                actual: data.len(),
+            });
+        }
+        let n = data.len() as f64;
+        let mut sum = 0.0;
+        for &x in data {
+            if !x.is_finite() {
+                return Err(FitError::UnsupportedData(format!(
+                    "NoncentralChiSquared data contains non-finite value: {x}"
+                )));
+            }
+            if x < 0.0 {
+                return Err(FitError::UnsupportedData(format!(
+                    "NoncentralChiSquared support is [0, ∞); got {x}"
+                )));
+            }
+            sum += x;
+        }
+        let mean = sum / n;
+        let var = data.iter().map(|&x| (x - mean) * (x - mean)).sum::<f64>() / n;
+        let nc = var / 2.0 - mean;
+        let df = 2.0 * mean - var / 2.0;
+        if !df.is_finite() || df <= 0.0 || !nc.is_finite() || nc < 0.0 {
+            return Err(FitError::NonConvergent(format!(
+                "NoncentralChiSquared MoM produced invalid parameters: df={df}, nc={nc}"
+            )));
+        }
+        Ok(Self { df, nc })
     }
 
     fn skewness(&self) -> f64 {
@@ -54423,6 +54455,66 @@ mod tests {
     fn chi_fit_rejects_zero_data() {
         let err = Chi::try_fit(&[0.0, 0.0]).expect_err("all-zero data must be rejected");
         assert!(matches!(err, FitError::NonConvergent(_)));
+    }
+
+    #[test]
+    fn noncentral_chi_squared_fit_inverts_moments() {
+        // MoM must invert exactly: E[X]=df+nc, Var=2(df+2nc)
+        //   => nc = var/2 - mean, df = 2*mean - var/2.
+        // var (21) >= 2*mean (14) so MoM yields valid df=3.5, nc=3.5.
+        let data = [0.0_f64, 1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 14.0, 7.0];
+        let n = data.len() as f64;
+        let mean = data.iter().sum::<f64>() / n;
+        let var = data.iter().map(|x| (x - mean) * (x - mean)).sum::<f64>() / n;
+        let fitted = NoncentralChiSquared::try_fit(&data).expect("fit");
+        assert!(
+            (fitted.df - (2.0 * mean - var / 2.0)).abs() < 1e-10,
+            "NCS df inversion: got {}",
+            fitted.df
+        );
+        assert!(
+            (fitted.nc - (var / 2.0 - mean)).abs() < 1e-10,
+            "NCS nc inversion: got {}",
+            fitted.nc
+        );
+        // Fitted moments must reproduce the sample moments.
+        assert!((fitted.mean() - mean).abs() < 1e-9, "mean: {}", fitted.mean());
+        assert!((fitted.var() - var).abs() < 1e-9, "var: {}", fitted.var());
+    }
+
+    #[test]
+    fn noncentral_chi_squared_fit_synthetic_recovery() {
+        // Synthesize NCS(df=4, nc=3) via its ppf grid; MoM recovers within 10%.
+        let truth = NoncentralChiSquared::new(4.0, 3.0);
+        let n = 4000;
+        let samples: Vec<f64> = (1..=n)
+            .map(|i| truth.ppf((i as f64 - 0.5) / n as f64))
+            .filter(|x| x.is_finite() && *x >= 0.0)
+            .collect();
+        assert!(samples.len() > 3000, "got {} usable samples", samples.len());
+        let fitted = NoncentralChiSquared::try_fit(&samples).expect("fit");
+        assert!(
+            (fitted.df - 4.0).abs() / 4.0 < 0.1,
+            "NCS df recovery: got {}",
+            fitted.df
+        );
+        assert!(
+            (fitted.nc - 3.0).abs() / 3.0 < 0.1,
+            "NCS nc recovery: got {}",
+            fitted.nc
+        );
+    }
+
+    #[test]
+    fn noncentral_chi_squared_fit_rejects_negative_and_short() {
+        assert!(matches!(
+            NoncentralChiSquared::try_fit(&[1.0, -2.0, 3.0]).expect_err("neg"),
+            FitError::UnsupportedData(_)
+        ));
+        assert!(matches!(
+            NoncentralChiSquared::try_fit(&[1.0]).expect_err("n=1"),
+            FitError::InsufficientData { .. }
+        ));
     }
 
     #[test]
