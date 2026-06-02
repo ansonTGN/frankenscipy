@@ -117,21 +117,10 @@ impl FormatConvertible for DiaMatrix {
     }
 
     fn to_coo(&self) -> SparseResult<CooMatrix> {
-        let mut rows = Vec::with_capacity(self.nnz());
-        let mut cols = Vec::with_capacity(self.nnz());
-        let mut data = Vec::with_capacity(self.nnz());
-
-        for (&offset, diagonal) in self.offsets().iter().zip(self.data().iter()) {
-            let start_row = if offset < 0 { (-offset) as usize } else { 0 };
-            let start_col = if offset > 0 { offset as usize } else { 0 };
-            for (idx, &value) in diagonal.iter().enumerate() {
-                rows.push(start_row + idx);
-                cols.push(start_col + idx);
-                data.push(value);
-            }
-        }
-
-        CooMatrix::from_triplets(self.shape(), data, rows, cols, false)
+        // Delegate to the inherent method so the trait-object path (vstack/
+        // hstack) matches scipy's dia_matrix.tocoo(), which filters explicit
+        // zeros. The previous standalone copy materialized stored zeros.
+        DiaMatrix::to_coo(self)
     }
 }
 
@@ -681,6 +670,28 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn dia_to_coo_trait_object_filters_explicit_zeros() {
+        use crate::formats::DiaMatrix;
+        // Main diagonal holds an explicit zero; scipy's dia_matrix.tocoo()
+        // filters it, and so must the FormatConvertible trait-object path
+        // (used by vstack/hstack), matching the inherent DiaMatrix::to_coo.
+        let dia = DiaMatrix::from_diagonals(Shape2D::new(2, 2), vec![0], vec![vec![1.0, 0.0]])
+            .expect("dia");
+
+        let via_method = dia.to_coo().expect("inherent to_coo");
+        let via_trait = (&dia as &dyn FormatConvertible)
+            .to_coo()
+            .expect("trait to_coo");
+
+        assert_eq!(via_method.nnz(), 1, "inherent should drop the explicit zero");
+        assert_eq!(
+            via_trait.nnz(),
+            via_method.nnz(),
+            "trait-object path must match the inherent method (no materialized zeros)"
+        );
     }
 
     #[test]
