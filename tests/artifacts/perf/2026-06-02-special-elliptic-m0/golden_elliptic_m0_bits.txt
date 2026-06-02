@@ -1,0 +1,21 @@
+bead: frankenscipy-rqh0o
+contract: bit-preserving m == 0.0 incomplete elliptic output
+
+The m == 0.0 fast path intentionally returns the same rounded value as the previous 15-point Gauss-Legendre quadrature, not the mathematically simplified phi value. This preserves the prior observable f64 bits for Strict and Hardened real scalar dispatch.
+
+weight_sum = 1.9999999999999998
+
+phi=0.52359877559829882 result=0.5235987755982987 bits=0x3fe0c152382d7364
+phi=0.78539816339744828 result=0.78539816339744817 bits=0x3fe921fb54442d17
+phi=1.0471975511965976 result=1.0471975511965974 bits=0x3ff0c152382d7364
+phi=1.4707963267948965 result=1.4707963267948962 bits=0x3ff78861baaa937d
+phi=1.5707963267948966 result=1.5707963267948966 bits=0x3ff921fb54442d18
+
+Ordering/tie-breaking:
+No ordering or tie-breaking logic changed. The existing map_real_or_complex_binary traversal and vector output order are unchanged.
+
+Floating point:
+The branch is placed after the existing phi == 0 and near-pi/2 checks. The pi/2 case still delegates to the complete integral path, preserving the exact prior complete-integral edge behavior. Other m == 0.0 real scalar cases use the prior quadrature weight sum and multiplication order 0.5 * phi * weight_sum.
+
+RNG:
+No random number generation is involved.

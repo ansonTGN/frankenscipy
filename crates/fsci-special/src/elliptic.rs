@@ -20,6 +20,8 @@ use crate::types::{
     SpecialResult, SpecialTensor, record_special_trace,
 };
 
+const GAUSS_LEGENDRE_15_WEIGHT_SUM: f64 = 1.999_999_999_999_999_8;
+
 pub const ELLIPTIC_DISPATCH_PLAN: &[DispatchPlan] = &[
     DispatchPlan {
         function: "ellipk",
@@ -379,6 +381,9 @@ fn ellipkinc_scalar(phi: f64, m: f64, mode: RuntimeMode) -> Result<f64, SpecialE
     if (phi - PI / 2.0).abs() < 1e-15 {
         return ellipk_scalar(m, mode);
     }
+    if m == 0.0 {
+        return Ok(0.5 * phi * GAUSS_LEGENDRE_15_WEIGHT_SUM);
+    }
 
     // Numerical integration via Gauss-Legendre 15-point quadrature
     let result = gauss_legendre_elliptic_f(phi, m);
@@ -397,6 +402,9 @@ fn ellipeinc_scalar(phi: f64, m: f64, mode: RuntimeMode) -> Result<f64, SpecialE
     }
     if (phi - PI / 2.0).abs() < 1e-15 {
         return ellipe_scalar(m, mode);
+    }
+    if m == 0.0 {
+        return Ok(0.5 * phi * GAUSS_LEGENDRE_15_WEIGHT_SUM);
     }
 
     // Numerical integration via Gauss-Legendre 15-point quadrature
@@ -1814,6 +1822,26 @@ mod tests {
         let m = SpecialTensor::RealScalar(0.5);
         let result = eval_scalar(ellipkinc(&phi, &m, RuntimeMode::Strict));
         assert_close(result, 0.0, 1e-12, "F(0, m) = 0");
+    }
+
+    #[test]
+    fn incomplete_elliptic_m_zero_preserves_quadrature_bits() {
+        for phi in [PI / 6.0, PI / 4.0, PI / 3.0, PI / 2.0 - 0.1] {
+            let expected = 0.5 * phi * GAUSS_LEGENDRE_15_WEIGHT_SUM;
+            let phi_tensor = SpecialTensor::RealScalar(phi);
+            let m = SpecialTensor::RealScalar(0.0);
+            let kinc = eval_scalar(ellipkinc(&phi_tensor, &m, RuntimeMode::Strict));
+            let einc = eval_scalar(ellipeinc(&phi_tensor, &m, RuntimeMode::Strict));
+            assert_eq!(kinc.to_bits(), expected.to_bits(), "F(phi, 0) bits");
+            assert_eq!(einc.to_bits(), expected.to_bits(), "E(phi, 0) bits");
+        }
+
+        let phi = SpecialTensor::RealScalar(PI / 2.0);
+        let m = SpecialTensor::RealScalar(0.0);
+        let kinc = eval_scalar(ellipkinc(&phi, &m, RuntimeMode::Strict));
+        let einc = eval_scalar(ellipeinc(&phi, &m, RuntimeMode::Strict));
+        assert_eq!(kinc.to_bits(), (PI / 2.0).to_bits());
+        assert_eq!(einc.to_bits(), (PI / 2.0).to_bits());
     }
 
     #[test]

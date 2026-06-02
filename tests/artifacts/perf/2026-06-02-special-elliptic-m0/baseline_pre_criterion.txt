@@ -1,0 +1,25 @@
+bead: frankenscipy-rqh0o
+subsystem: fsci-special incomplete elliptic integrals
+date: 2026-06-02
+
+Profile command:
+RCH_FORCE_REMOTE=1 CARGO_TARGET_DIR=/data/tmp/cargo-target-frankenscipy-olivesnow-special RUSTFLAGS='-C force-frame-pointers=yes' rch exec -- cargo bench -p fsci-special --bench special_bench -- --warm-up-time 1 --measurement-time 2 --sample-size 10
+
+Worker:
+vmi1156319
+
+Profile-backed target:
+crates/fsci-special/src/elliptic.rs ellipkinc_scalar and ellipeinc_scalar took the 15-point Gauss-Legendre quadrature path for m == 0.0. For m == 0.0 the F and E integrands are exactly 1, but direct phi would not be bit-preserving because the existing 15-point weight sum is 1.9999999999999998.
+
+Baseline Criterion rows:
+special_incomplete_elliptic/ellipkinc_scalar/phi0.524_m0.0
+  time: [271.59 ns 292.86 ns 314.99 ns]
+
+special_incomplete_elliptic/ellipeinc_scalar/phi0.524_m0.0
+  time: [250.97 ns 258.90 ns 264.57 ns]
+
+special_incomplete_elliptic/ellipkinc_broadcast_m/scalar_phi_over_m_vec
+  time: [1.1037 us 1.1300 us 1.1566 us]
+
+special_incomplete_elliptic/ellipeinc_pairwise_vec/phi_vec_m_vec
+  time: [954.02 ns 981.22 ns 1.0163 us]

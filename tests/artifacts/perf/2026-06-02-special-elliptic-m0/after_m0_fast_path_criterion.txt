@@ -1,0 +1,33 @@
+bead: frankenscipy-rqh0o
+subsystem: fsci-special incomplete elliptic integrals
+date: 2026-06-02
+
+Lever:
+Add a bit-preserving m == 0.0 scalar fast path in ellipkinc_scalar and ellipeinc_scalar:
+  0.5 * phi * 1.9999999999999998
+
+Re-benchmark command:
+RCH_FORCE_REMOTE=1 CARGO_TARGET_DIR=/data/tmp/cargo-target-frankenscipy-olivesnow-special RUSTFLAGS='-C force-frame-pointers=yes' rch exec -- cargo bench -p fsci-special --bench special_bench -- special_incomplete_elliptic --warm-up-time 1 --measurement-time 2 --sample-size 10
+
+Worker:
+vmi1293453
+
+After Criterion rows:
+special_incomplete_elliptic/ellipkinc_scalar/phi0.524_m0.0
+  time: [8.7562 ns 8.9452 ns 9.1845 ns]
+  mean delta: 292.86 ns -> 8.9452 ns, 96.9% faster
+
+special_incomplete_elliptic/ellipeinc_scalar/phi0.524_m0.0
+  time: [8.4595 ns 8.5350 ns 8.6823 ns]
+  mean delta: 258.90 ns -> 8.5350 ns, 96.7% faster
+
+special_incomplete_elliptic/ellipkinc_broadcast_m/scalar_phi_over_m_vec
+  time: [441.41 ns 449.52 ns 457.74 ns]
+  mean delta: 1.1300 us -> 449.52 ns, 60.2% faster
+
+special_incomplete_elliptic/ellipeinc_pairwise_vec/phi_vec_m_vec
+  time: [439.71 ns 468.04 ns 500.77 ns]
+  mean delta: 981.22 ns -> 468.04 ns, 52.3% faster
+
+Keep score:
+Impact 3.0 x Confidence 3.0 / Effort 1.0 = 9.0
