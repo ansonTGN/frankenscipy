@@ -1,0 +1,4 @@
+command: ubs crates/fsci-linalg/src/lib.rs
+result: exit 0
+critical_findings: 0
+artifact_note: raw UBS transcripts are retained in the worktree but not committed because their terminal banner carries trailing whitespace.

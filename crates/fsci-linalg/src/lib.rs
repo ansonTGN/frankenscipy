@@ -5119,7 +5119,7 @@ pub fn solve_toeplitz(c: &[f64], r: Option<&[f64]>, b: &[f64]) -> Result<Vec<f64
     bk.push(1.0 / t0);
     x.push(b[0] / t0);
 
-    for m in 1..n {
+    for (m, &bm) in b.iter().enumerate().take(n).skip(1) {
         // Forward error ε_f = Σ_j T[m][j] f_j and backward error
         // ε_b = Σ_j T[0][j+1] bk_j over the current submatrix of size m.
         let mut ef = 0.0;
@@ -5147,10 +5147,10 @@ pub fn solve_toeplitz(c: &[f64], r: Option<&[f64]>, b: &[f64]) -> Result<Vec<f64
 
         // θ = b[m] - Σ_j T[m][j] x_j ; x ← [x;0] + θ·bk (with the new bk).
         let mut ex = 0.0;
-        for j in 0..m {
-            ex += diag(m as isize - j as isize) * x[j];
+        for (j, &xj) in x.iter().enumerate().take(m) {
+            ex += diag(m as isize - j as isize) * xj;
         }
-        let theta = b[m] - ex;
+        let theta = bm - ex;
         x.push(0.0);
         for i in 0..=m {
             x[i] += theta * bk[i];
@@ -7688,6 +7688,129 @@ pub fn eye(n: usize, m: usize) -> Vec<Vec<f64>> {
 /// Matrix-matrix multiplication C = A * B.
 ///
 /// Matches `numpy.matmul` / `A @ B`.
+const MATMUL_FLAT_WORKSPACE_MIN_DIM: usize = 1024;
+
+fn rows_are_rectangular(rows: &[Vec<f64>], width: usize) -> bool {
+    rows.iter().all(|row| row.len() == width)
+}
+
+fn matmul_flat_workspace(
+    a: &[Vec<f64>],
+    b: &[Vec<f64>],
+    m: usize,
+    ka: usize,
+    n: usize,
+) -> Option<Vec<Vec<f64>>> {
+    let a_len = m.checked_mul(ka)?;
+    let b_len = ka.checked_mul(n)?;
+    let c_len = m.checked_mul(n)?;
+    let mut a_flat = Vec::with_capacity(a_len);
+    for row in a {
+        a_flat.extend_from_slice(row);
+    }
+    let mut b_flat = Vec::with_capacity(b_len);
+    for row in b {
+        b_flat.extend_from_slice(row);
+    }
+    let mut c_flat = vec![0.0; c_len];
+
+    const MR: usize = 4;
+    const NR: usize = 8;
+    let mut i0 = 0;
+    while i0 < m {
+        let mr = (m - i0).min(MR);
+        let mut j0 = 0;
+        while j0 < n {
+            let nr = (n - j0).min(NR);
+            if mr == MR && nr == NR {
+                let a0_base = i0 * ka;
+                let a1_base = (i0 + 1) * ka;
+                let a2_base = (i0 + 2) * ka;
+                let a3_base = (i0 + 3) * ka;
+                let mut acc = [[0.0f64; NR]; MR];
+                for k in 0..ka {
+                    let a0 = a_flat[a0_base + k];
+                    let a1 = a_flat[a1_base + k];
+                    let a2 = a_flat[a2_base + k];
+                    let a3 = a_flat[a3_base + k];
+                    let b_base = k * n + j0;
+                    let b0 = b_flat[b_base];
+                    let b1 = b_flat[b_base + 1];
+                    let b2 = b_flat[b_base + 2];
+                    let b3 = b_flat[b_base + 3];
+                    let b4 = b_flat[b_base + 4];
+                    let b5 = b_flat[b_base + 5];
+                    let b6 = b_flat[b_base + 6];
+                    let b7 = b_flat[b_base + 7];
+                    acc[0][0] += a0 * b0;
+                    acc[0][1] += a0 * b1;
+                    acc[0][2] += a0 * b2;
+                    acc[0][3] += a0 * b3;
+                    acc[0][4] += a0 * b4;
+                    acc[0][5] += a0 * b5;
+                    acc[0][6] += a0 * b6;
+                    acc[0][7] += a0 * b7;
+                    acc[1][0] += a1 * b0;
+                    acc[1][1] += a1 * b1;
+                    acc[1][2] += a1 * b2;
+                    acc[1][3] += a1 * b3;
+                    acc[1][4] += a1 * b4;
+                    acc[1][5] += a1 * b5;
+                    acc[1][6] += a1 * b6;
+                    acc[1][7] += a1 * b7;
+                    acc[2][0] += a2 * b0;
+                    acc[2][1] += a2 * b1;
+                    acc[2][2] += a2 * b2;
+                    acc[2][3] += a2 * b3;
+                    acc[2][4] += a2 * b4;
+                    acc[2][5] += a2 * b5;
+                    acc[2][6] += a2 * b6;
+                    acc[2][7] += a2 * b7;
+                    acc[3][0] += a3 * b0;
+                    acc[3][1] += a3 * b1;
+                    acc[3][2] += a3 * b2;
+                    acc[3][3] += a3 * b3;
+                    acc[3][4] += a3 * b4;
+                    acc[3][5] += a3 * b5;
+                    acc[3][6] += a3 * b6;
+                    acc[3][7] += a3 * b7;
+                }
+                for (di, acc_row) in acc.iter().enumerate().take(MR) {
+                    let c_base = (i0 + di) * n + j0;
+                    c_flat[c_base] = acc_row[0];
+                    c_flat[c_base + 1] = acc_row[1];
+                    c_flat[c_base + 2] = acc_row[2];
+                    c_flat[c_base + 3] = acc_row[3];
+                    c_flat[c_base + 4] = acc_row[4];
+                    c_flat[c_base + 5] = acc_row[5];
+                    c_flat[c_base + 6] = acc_row[6];
+                    c_flat[c_base + 7] = acc_row[7];
+                }
+            } else {
+                for di in 0..mr {
+                    let a_base = (i0 + di) * ka;
+                    let c_base = (i0 + di) * n + j0;
+                    for dj in 0..nr {
+                        let mut s = 0.0;
+                        for k in 0..ka {
+                            s += a_flat[a_base + k] * b_flat[k * n + j0 + dj];
+                        }
+                        c_flat[c_base + dj] = s;
+                    }
+                }
+            }
+            j0 += NR;
+        }
+        i0 += MR;
+    }
+
+    let mut c = Vec::with_capacity(m);
+    for row in c_flat.chunks(n) {
+        c.push(row.to_vec());
+    }
+    Some(c)
+}
+
 pub fn matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, LinalgError> {
     if a.is_empty() || b.is_empty() {
         return Ok(vec![]);
@@ -7699,6 +7822,15 @@ pub fn matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, LinalgErr
             a_shape: (m, ka),
             b_len: kb,
         });
+    }
+    if m >= MATMUL_FLAT_WORKSPACE_MIN_DIM
+        && ka >= MATMUL_FLAT_WORKSPACE_MIN_DIM
+        && n >= MATMUL_FLAT_WORKSPACE_MIN_DIM
+        && rows_are_rectangular(a, ka)
+        && rows_are_rectangular(b, n)
+        && let Some(c) = matmul_flat_workspace(a, b, m, ka, n)
+    {
+        return Ok(c);
     }
     let mut c = vec![vec![0.0; n]; m];
     // Register-blocked GEMM micro-kernel [frankenscipy-8l8r1]. A flat ikj loop
@@ -7999,6 +8131,60 @@ mod tests {
             digest, 0xf9aa_16d2_dc37_468f,
             "matmul golden digest changed — output is no longer bit-identical (got {digest:#018x})"
         );
+    }
+
+    /// Isomorphism proof for the deep flat-workspace GEMM primitive
+    /// [frankenscipy-8l8r1.19]: direct helper exercise keeps the public dispatch
+    /// gate at 1024 while proving full tiles and ragged edges are bit-identical
+    /// to naive ijk accumulation.
+    #[test]
+    fn matmul_flat_workspace_is_bit_identical_to_naive_ijk() {
+        assert_eq!(MATMUL_FLAT_WORKSPACE_MIN_DIM, 1024);
+
+        let make_matrix = |rows: usize, cols: usize, seed: u64| -> Vec<Vec<f64>> {
+            (0..rows)
+                .map(|i| {
+                    (0..cols)
+                        .map(|j| {
+                            let raw = seed
+                                .wrapping_mul(i as u64 + 5)
+                                .wrapping_add(j as u64 * 17 + 3)
+                                % 8191;
+                            raw as f64 / 2047.0 - 2.0
+                        })
+                        .collect()
+                })
+                .collect()
+        };
+
+        for &(m, ka, n, seed) in &[
+            (16usize, 16usize, 16usize, 23u64),
+            (17, 23, 19, 29),
+            (9, 5, 13, 31),
+        ] {
+            let a = make_matrix(m, ka, seed);
+            let b = make_matrix(ka, n, seed.wrapping_add(100));
+            let mut expected = vec![vec![0.0f64; n]; m];
+            for i in 0..m {
+                for j in 0..n {
+                    for k in 0..ka {
+                        expected[i][j] += a[i][k] * b[k][j];
+                    }
+                }
+            }
+
+            let got =
+                matmul_flat_workspace(&a, &b, m, ka, n).expect("flat workspace dimensions fit");
+            for i in 0..m {
+                for j in 0..n {
+                    assert_eq!(
+                        got[i][j].to_bits(),
+                        expected[i][j].to_bits(),
+                        "flat workspace matmul not bit-identical at ({i},{j}), m={m} ka={ka} n={n}"
+                    );
+                }
+            }
+        }
     }
 
     /// Isomorphism proof for the eig_banded Q*tri_evecs ikj reorder [perf]:

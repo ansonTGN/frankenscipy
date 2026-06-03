@@ -1,0 +1,1 @@
+tests/artifacts/perf/2026-06-03-linalg-matmul-flat-workspace/golden_before_sorted_normalized.txt: OK
