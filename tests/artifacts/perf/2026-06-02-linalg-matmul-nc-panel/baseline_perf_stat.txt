@@ -1,0 +1,79 @@
+  [2m2026-06-02T23:14:25.567618Z[0m [33m WARN[0m [1;33mrch::hook[0m[33m: [33mexec called with non-compilation command: bash -lc 'set -euo pipefail
+cargo test -p fsci-linalg --release matmul_microkernel_perf --no-run --message-format=json > /tmp/fsci_linalg_matmul_build.json
+python3 - <<'\''PY'\'' >/tmp/fsci_linalg_matmul_exe
+import json
+exe = ""
+with open("/tmp/fsci_linalg_matmul_build.json", "r", encoding="utf-8") as f:
+    for line in f:
+        try:
+            msg = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        target = msg.get("target") or {}
+        if target.get("name") == "fsci_linalg" and msg.get("executable"):
+            exe = msg["executable"]
+print(exe)
+PY
+exe=$(cat /tmp/fsci_linalg_matmul_exe)
+echo "profile_executable=$exe"
+perf stat -e cycles,instructions,cache-references,cache-misses,branches,branch-misses "$exe" matmul_microkernel_perf --ignored --nocapture
+'[0m
+    [2;3mat[0m rch/src/hook.rs:402 [2;3mon[0m ThreadId(1)
+
+   Compiling proc-macro2 v1.0.106
+   Compiling autocfg v1.5.0
+   Compiling serde_json v1.0.149
+   Compiling paste v1.0.15
+   Compiling cc v1.2.60
+   Compiling itertools v0.13.0
+   Compiling clap_builder v4.6.0
+   Compiling tempfile v3.27.0
+   Compiling num-traits v0.2.19
+   Compiling matrixmultiply v0.3.10
+   Compiling rusty-fork v0.3.1
+   Compiling quote v1.0.45
+   Compiling syn v2.0.117
+   Compiling blake3 v1.8.4
+   Compiling alloca v0.4.0
+   Compiling num-integer v0.1.46
+   Compiling approx v0.5.1
+   Compiling num-complex v0.4.6
+   Compiling plotters v0.3.7
+   Compiling num-rational v0.4.2
+   Compiling criterion-plot v0.8.2
+   Compiling simba v0.9.1
+   Compiling clap v4.6.1
+   Compiling serde_derive v1.0.228
+   Compiling zerocopy-derive v0.8.48
+   Compiling nalgebra-macros v0.3.0
+   Compiling zerocopy v0.8.48
+   Compiling serde v1.0.228
+   Compiling fsci-runtime v0.1.0 (/data/projects/frankenscipy/crates/fsci-runtime)
+   Compiling tinytemplate v1.2.1
+   Compiling nalgebra v0.34.2
+   Compiling fsci-fft v0.1.0 (/data/projects/frankenscipy/crates/fsci-fft)
+   Compiling half v2.7.1
+   Compiling ppv-lite86 v0.2.21
+   Compiling ciborium-ll v0.2.2
+   Compiling rand_chacha v0.9.0
+   Compiling ciborium v0.2.2
+   Compiling proptest v1.11.0
+   Compiling criterion v0.8.2
+   Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
+    Finished `release` profile [optimized] target(s) in 14.93s
+profile_executable=/data/tmp/cargo-target/release/deps/fsci_linalg-c77e6f7433863ced
+Error:
+Access to performance monitoring and observability operations is limited.
+Consider adjusting /proc/sys/kernel/perf_event_paranoid setting to open
+access to performance monitoring and observability operations for processes
+without CAP_PERFMON, CAP_SYS_PTRACE or CAP_SYS_ADMIN Linux capability.
+More information can be found at 'Perf events and tool security' document:
+https://www.kernel.org/doc/html/latest/admin-guide/perf-security.html
+perf_event_paranoid setting is 4:
+  -1: Allow use of (almost) all events by all users
+      Ignore mlock limit after perf_event_mlock_kb without CAP_IPC_LOCK
+>= 0: Disallow raw and ftrace function tracepoint access
+>= 1: Disallow CPU event access
+>= 2: Disallow kernel profiling
+To make the adjusted perf_event_paranoid setting permanent preserve it
+in /etc/sysctl.conf (e.g. kernel.perf_event_paranoid = <setting>)

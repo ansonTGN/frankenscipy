@@ -7748,10 +7748,18 @@ mod tests {
     fn matmul_microkernel_golden_digest() {
         let n = 80usize;
         let a: Vec<Vec<f64>> = (0..n)
-            .map(|i| (0..n).map(|j| ((i * 31 + j * 17) % 97) as f64 * 0.01).collect())
+            .map(|i| {
+                (0..n)
+                    .map(|j| ((i * 31 + j * 17) % 97) as f64 * 0.01)
+                    .collect()
+            })
             .collect();
         let b: Vec<Vec<f64>> = (0..n)
-            .map(|i| (0..n).map(|j| ((i * 13 + j * 7) % 89) as f64 * 0.01).collect())
+            .map(|i| {
+                (0..n)
+                    .map(|j| ((i * 13 + j * 7) % 89) as f64 * 0.01)
+                    .collect()
+            })
             .collect();
         let c = matmul(&a, &b).expect("matmul");
         // FNV-1a 64-bit over little-endian f64 bit patterns.
@@ -7781,7 +7789,9 @@ mod tests {
                 .map(|i| {
                     (0..n)
                         .map(|j| {
-                            ((seed.wrapping_mul(i as u64 + 3).wrapping_add(j as u64 * 11 + 2))
+                            ((seed
+                                .wrapping_mul(i as u64 + 3)
+                                .wrapping_add(j as u64 * 11 + 2))
                                 % 1997) as f64
                                 / 983.0
                                 - 1.0
@@ -7833,10 +7843,18 @@ mod tests {
     fn matmul_ikj_perf_vs_naive_ijk() {
         let n = 768usize;
         let a: Vec<Vec<f64>> = (0..n)
-            .map(|i| (0..n).map(|j| ((i * 31 + j * 17) % 97) as f64 * 0.01).collect())
+            .map(|i| {
+                (0..n)
+                    .map(|j| ((i * 31 + j * 17) % 97) as f64 * 0.01)
+                    .collect()
+            })
             .collect();
         let b: Vec<Vec<f64>> = (0..n)
-            .map(|i| (0..n).map(|j| ((i * 13 + j * 7) % 89) as f64 * 0.01).collect())
+            .map(|i| {
+                (0..n)
+                    .map(|j| ((i * 13 + j * 7) % 89) as f64 * 0.01)
+                    .collect()
+            })
             .collect();
 
         let t_naive = std::time::Instant::now();
@@ -7857,9 +7875,7 @@ mod tests {
         std::hint::black_box(&ikj);
 
         let speedup = naive_ns / ikj_ns;
-        println!(
-            "matmul {n}x{n}: naive_ijk={naive_ns:.4}s ikj={ikj_ns:.4}s speedup={speedup:.2}x"
-        );
+        println!("matmul {n}x{n}: naive_ijk={naive_ns:.4}s ikj={ikj_ns:.4}s speedup={speedup:.2}x");
         assert!(speedup > 1.0, "ikj should be faster: {speedup:.2}x");
     }
 
@@ -7892,10 +7908,18 @@ mod tests {
 
         for &n in &[768usize, 1024usize] {
             let a: Vec<Vec<f64>> = (0..n)
-                .map(|i| (0..n).map(|j| ((i * 31 + j * 17) % 97) as f64 * 0.01).collect())
+                .map(|i| {
+                    (0..n)
+                        .map(|j| ((i * 31 + j * 17) % 97) as f64 * 0.01)
+                        .collect()
+                })
                 .collect();
             let b: Vec<Vec<f64>> = (0..n)
-                .map(|i| (0..n).map(|j| ((i * 13 + j * 7) % 89) as f64 * 0.01).collect())
+                .map(|i| {
+                    (0..n)
+                        .map(|j| ((i * 13 + j * 7) % 89) as f64 * 0.01)
+                        .collect()
+                })
                 .collect();
 
             // Warm + measure flat ikj.
