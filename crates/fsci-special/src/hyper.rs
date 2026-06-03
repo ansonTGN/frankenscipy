@@ -2023,11 +2023,13 @@ fn complex_pochhammer(x: Complex64, k: u64) -> Complex64 {
 ///                                            - ψ(a+k+m) - ψ(c-a-k-m)]
 ///
 /// where F is the regularized 2F1/Γ(c). Using reciprocal-Γ for the denominator
-/// Γ's keeps the infinite-sum terms finite (1/Γ → 0 at its poles), and the
-/// running term recurrence avoids overflow of (k+m)! at large k. The further
-/// c == a / c == b reductions are taken earlier in `hyp2f1_complex_parameters`,
-/// so the residual triple-degenerate (c-a-m a nonpositive integer) corner is
-/// rare; it surfaces as a non-finite value and is reported as before.
+/// Γ's keeps the infinite-sum terms finite (1/Γ → 0 at its poles), and a running
+/// term recurrence avoids overflow of (k+m)! at large k. When c - a is *also* an
+/// integer the sum's 1/Γ(c-a-k-m) hits poles where ψ(c-a-k-m) → ∞: the term is
+/// then the finite 0·∞ limit Cp_k·(-1)^p p! (the fully logarithmic DLMF
+/// 15.8.9/15.8.11 forms), so this one path also covers the triple-degenerate
+/// corner. The c == a / c == b reductions are taken earlier in
+/// `hyp2f1_complex_parameters`.
 fn hyp2f1_inv_z_connection_degenerate(
     a: Complex64,
     b: Complex64,
@@ -2041,25 +2043,6 @@ fn hyp2f1_inv_z_connection_degenerate(
     let (pa, pb) = if (a - b).re <= 0.0 { (a, b) } else { (b, a) };
     let m_f = (pb - pa).re.round();
     let m = m_f as u64;
-
-    // When c - a is also an integer, the log sum's Γ(c-a-k-m) hits poles where
-    // the regularized term is an indeterminate 0·∞ requiring the fully
-    // logarithmic DLMF 15.8.9/15.8.11 forms. That triple-degenerate corner is
-    // out of scope here; fail closed (the c == a / c == b reductions upstream
-    // already capture its most common instances).
-    let ca = c - pa;
-    if ca.im.abs() < 1.0e-12 && (ca.re - ca.re.round()).abs() < 1.0e-12 {
-        if mode == RuntimeMode::Hardened {
-            return Err(SpecialError {
-                function: "hyp2f1",
-                kind: SpecialErrorKind::DomainError,
-                mode,
-                detail: "complex hyp2f1 with a-b and c-a both integer outside \
-                         the unit disk is not yet supported",
-            });
-        }
-        return Ok(complex_nan());
-    }
 
     let neg_z = -z;
     let inv_z = z.recip();
@@ -2078,47 +2061,66 @@ fn hyp2f1_inv_z_connection_degenerate(
     }
     s1 = s1 * complex_recip_gamma(pa + Complex64::from_real(m_f)); // /Γ(a+m)
 
-    // Infinite log sum, Σ_{k=0}^{∞}, divided by Γ(a). The summand core
-    //   C_k = (a+m)_k (-1)^k z^{-k-m} / (k! (k+m)! Γ(c-a-k-m))
-    // is advanced by C_{k+1}/C_k = (a+m+k)(c-a-k-m-1) / ((k+1)(k+1+m)) · (-1/z).
+    // Infinite log sum, Σ_{k=0}^{∞}, divided by Γ(a). Track the regular core
+    //   Cp_k = (a+m)_k (-1)^k z^{-k-m} / (k! (k+m)!)
+    // (advanced by Cp_{k+1}/Cp_k = (a+m+k) / ((k+1)(k+1+m)) · (-1/z)) separately
+    // from the 1/Γ(c-a-k-m) factor. For non-pole indices the term is
+    //   Cp_k · rgamma(c-a-k-m) · [ln(-z) + ψ(k+1) + ψ(k+m+1) - ψ(a+k+m)
+    //                             - ψ(c-a-k-m)].
+    // When c - a is also an integer, x = c-a-k-m hits the nonpositive integer -p
+    // for some k: there rgamma → 0 and ψ(x) → ∞ and the term is the finite 0·∞
+    // limit  Cp_k · (-1)^p p!  (DLMF 15.8.9/15.8.11), since
+    // lim_{x→-p} rgamma(x) ψ(x) = (-1)^{p+1} p!. This single path therefore
+    // covers both the generic (c-a non-integer) and triple-degenerate corners.
     let tol = 1.0e-15;
     let max_terms = 4_000u64;
-    let mut term_core = Complex64::from_real(1.0 / factorial(m))
-        * complex_recip_gamma(c - pa - Complex64::from_real(m_f))
-        * inv_z.powc(Complex64::from_real(m_f)); // z^{-m}
+    let mut cp_core = Complex64::from_real(1.0 / factorial(m))
+        * inv_z.powc(Complex64::from_real(m_f)); // Cp_0 = z^{-m}/m!
     let mut s2 = Complex64::from_real(0.0);
+    let mut converged = false;
     for k in 0..max_terms {
         let kf = k as f64;
-        if !term_core.is_finite() {
-            if mode == RuntimeMode::Hardened {
-                return Err(SpecialError {
-                    function: "hyp2f1",
-                    kind: SpecialErrorKind::OverflowRisk,
-                    mode,
-                    detail: "degenerate z -> 1/z log series overflowed",
-                });
-            }
-            return Ok(complex_nan());
+        if !cp_core.is_finite() {
+            break;
         }
-        if !complex_is_zero(term_core) {
+        let x = c - pa - Complex64::from_real(kf + m_f); // c - a - k - m
+        let xr = x.re.round();
+        let is_pole = x.im.abs() < 1.0e-9 && xr <= 0.0 && (x.re - xr).abs() < 1.0e-9;
+        let term = if is_pole {
+            let p = (-xr) as u64;
+            let sign = if p.is_multiple_of(2) { 1.0 } else { -1.0 };
+            cp_core * Complex64::from_real(sign * factorial(p)) // Cp_k·(-1)^p p!
+        } else {
             let bracket = ln_neg_z
                 + complex_digamma_scalar(Complex64::from_real(kf + 1.0))
                 + complex_digamma_scalar(Complex64::from_real(kf + m_f + 1.0))
                 - complex_digamma_scalar(pa + Complex64::from_real(kf + m_f))
-                - complex_digamma_scalar(c - pa - Complex64::from_real(kf + m_f));
-            let contrib = term_core * bracket;
-            s2 = s2 + contrib;
-            if k > m + 2 && complex_series_converged(contrib, s2, tol) {
-                break;
-            }
-        } else if k > m {
-            break; // term core has terminated to zero
+                - complex_digamma_scalar(x);
+            cp_core * complex_recip_gamma(x) * bracket
+        };
+        if !term.is_finite() {
+            break;
         }
-        // advance core to k+1
-        let num = (pa + Complex64::from_real(m_f + kf))
-            * (c - pa - Complex64::from_real(m_f + kf + 1.0));
+        s2 = s2 + term;
+        if k > m + 2 && complex_series_converged(term, s2, tol) {
+            converged = true;
+            break;
+        }
+        // advance Cp core to k+1
+        let num = pa + Complex64::from_real(m_f + kf);
         let den = (kf + 1.0) * (kf + 1.0 + m_f);
-        term_core = term_core * num / Complex64::from_real(-den) * inv_z;
+        cp_core = cp_core * num / Complex64::from_real(-den) * inv_z;
+    }
+    if !converged {
+        if mode == RuntimeMode::Hardened {
+            return Err(SpecialError {
+                function: "hyp2f1",
+                kind: SpecialErrorKind::OverflowRisk,
+                mode,
+                detail: "degenerate z -> 1/z log series failed to converge",
+            });
+        }
+        return Ok(complex_nan());
     }
     s2 = s2 * complex_recip_gamma(pa); // /Γ(a)
 
@@ -3404,8 +3406,9 @@ mod tests {
             );
         }
 
-        // Re(z) >= 1/2 outside the unit disk still fails closed (NaN) — the
-        // documented frankenscipy-f69ch gap; assert no spurious value.
+        // a == b (a-b = 0) with c-a = 1 also integer: the triple-degenerate
+        // DLMF 15.8.9 corner, now resolved (frankenscipy-wwi45). mpmath 1.4.1
+        // reference at z = 2+1i is 0.97633716024281776 + 0.44586478294123795i.
         let beyond = hyp2f1(
             &complex(0.5, 0.0),
             &complex(0.5, 0.0),
@@ -3414,8 +3417,37 @@ mod tests {
             RuntimeMode::Strict,
         );
         let v = get_complex_scalar(&beyond).unwrap_or_else(|| Complex64::new(f64::NAN, f64::NAN));
-        // a == b (a-b = 0, integer) is the degenerate log-form case — still NaN.
-        assert!(!v.is_finite(), "expected NaN for degenerate a==b, Re(z)>=1/2, got {v:?}");
+        assert_complex_close(
+            v,
+            Complex64::new(0.97633716024281776, 0.44586478294123795),
+            1.0e-9,
+        );
+    }
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from mpmath
+    fn hyp2f1_complex_triple_degenerate_matches_mpmath() {
+        // a-b integer AND c-a integer (c != a, c != b) outside the unit disk:
+        // the fully-logarithmic DLMF 15.8.9/15.8.11 corner (frankenscipy-wwi45).
+        // Golden values from mpmath 1.4.1 (mp.dps=30).
+        let cases: [(f64, f64, f64, (f64, f64), (f64, f64)); 4] = [
+            (0.5, 0.5, 2.5, (2.0, 1.0), (1.0764492159986923, 0.28361960044123111)),
+            (0.3, 1.3, 2.3, (1.6, 0.7), (1.0667148233989199, 0.42844504985442885)),
+            (1.5, 0.5, 2.5, (1.4, -0.9), (0.95593059253373275, -0.65513882101253395)),
+            (0.5, 0.5, 3.5, (1.2, 1.1), (1.0525162721774637, 0.12780600458121074)),
+        ];
+        for (a, b, c, (zr, zi), (vr, vi)) in cases {
+            let result = hyp2f1(
+                &scalar(a),
+                &scalar(b),
+                &scalar(c),
+                &complex(zr, zi),
+                RuntimeMode::Strict,
+            );
+            let got =
+                get_complex_scalar(&result).unwrap_or_else(|| Complex64::new(f64::NAN, f64::NAN));
+            assert_complex_close(got, Complex64::new(vr, vi), 1.0e-9);
+        }
     }
 
     // Complex 2F1 in the right half-plane Re(z) >= 1/2, |z| >= 1, via the
