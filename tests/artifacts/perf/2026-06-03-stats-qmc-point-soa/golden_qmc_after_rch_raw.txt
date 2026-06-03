@@ -1,0 +1,36 @@
+[RCH] local (no admissible workers: insufficient_slots=6,active_project_exclusion=1)
+   Compiling num-traits v0.2.19
+   Compiling serde_core v1.0.228
+   Compiling serde v1.0.228
+   Compiling paste v1.0.15
+   Compiling matrixmultiply v0.3.10
+   Compiling libc v0.2.185
+   Compiling getrandom v0.4.2
+   Compiling rand_core v0.10.1
+   Compiling cc v1.2.60
+   Compiling syn v2.0.117
+   Compiling chacha20 v0.10.0
+   Compiling num-integer v0.1.46
+   Compiling approx v0.5.1
+   Compiling num-complex v0.4.6
+   Compiling blake3 v1.8.4
+   Compiling num-rational v0.4.2
+   Compiling simba v0.9.1
+   Compiling rand v0.10.1
+   Compiling serde_json v1.0.149
+   Compiling serde_derive v1.0.228
+   Compiling nalgebra-macros v0.3.0
+   Compiling nalgebra v0.34.2
+   Compiling fsci-runtime v0.1.0 (/data/projects/frankenscipy/crates/fsci-runtime)
+   Compiling fsci-fft v0.1.0 (/data/projects/frankenscipy/crates/fsci-fft)
+   Compiling fsci-opt v0.1.0 (/data/projects/frankenscipy/crates/fsci-opt)
+   Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
+   Compiling fsci-special v0.1.0 (/data/projects/frankenscipy/crates/fsci-special)
+   Compiling fsci-stats v0.1.0 (/data/projects/frankenscipy/crates/fsci-stats)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.84s
+     Running `/data/tmp/cargo-target/debug/perf_stats qmc-golden`
+case=qmc_discrepancy_512x2 len=1024
+centered=3eef42483d6e0000
+mixture=3eef147788540000
+l2_star=3f67c5072f2a347c
+wraparound=3ee455e9ae6c0000
