@@ -40,12 +40,13 @@ The intended preserved surfaces were:
 - Formula term order and final `sqrt`.
 - RNG absence, tie-breaking absence, and global-state absence.
 
-Golden before:
+Golden before and after:
 
 `1fb5885cc35367f57b0e818e165a28f87cbb0b9a43fdc7ba4728a6778af44daf`
 
-The after-golden extraction was malformed and produced an empty extracted file,
-so the trial was not accepted on behavior proof. The source was then restored.
+The after-golden RCH job completed after the rejection commit; extracting the
+late stdout shows the QMC golden output matched byte-for-byte. The source was
+still restored because the focused RCH benchmark regressed.
 
 ## Benchmark Gate
 
