@@ -5544,53 +5544,81 @@ pub fn solve_sylvester(
     // Transform Q: F = U^T Q V
     let f = u.transpose() * &q_mat * &v;
 
-    // Solve T_A Y + Y T_B = F by vectorization:
-    // vec(Y) satisfies (I_n ⊗ T_A + T_B^T ⊗ I_m) vec(Y) = vec(F)
-    // For small problems this is direct; for larger ones we use the column-by-column
-    // approach with the Schur structure.
-    //
-    // Direct approach: build the (mn × mn) system and solve via LU.
-    let mn = m * n;
-    let mut system = DMatrix::<f64>::zeros(mn, mn);
-
-    // I_n ⊗ T_A: for each block (j,j), place T_A
-    for j in 0..n {
-        for r in 0..m {
-            for c in 0..m {
-                system[(j * m + r, j * m + c)] += ta[(r, c)];
-            }
-        }
-    }
-
-    // T_B^T ⊗ I_m: for each (j,k) in T_B^T, place T_B[k,j] * I_m
-    for j in 0..n {
-        for k in 0..n {
-            let tbkj = tb[(k, j)]; // T_B^T[j,k] = T_B[k,j]
-            if tbkj.abs() > 0.0 {
-                for i in 0..m {
-                    system[(j * m + i, k * m + i)] += tbkj;
+    // Solve T_A Y + Y T_B = F with the Bartels–Stewart back-substitution that
+    // SciPy/LAPACK use, instead of forming the full (mn × mn) Kronecker operator
+    // (I_n ⊗ T_A + T_B^T ⊗ I_m) and an O((mn)^3) full-pivot LU. T_B is upper
+    // quasi-triangular (real Schur form), so column j of Y depends only on
+    // columns k ≤ j: (T_A Y + Y T_B)[:,j] = T_A y_j + Σ_k y_k·tb[k,j], and
+    // tb[k,j] = 0 for k > j+1. Sweeping the columns left→right turns the solve
+    // into one m×m (1×1 diagonal block) or 2m×2m (2×2 block, complex eigenpair)
+    // system per block — overall O(n·m^3) rather than O(m^3·n^3). Behavior parity
+    // is preserved at the conformance level (residual ‖T_A Y + Y T_B − F‖ and the
+    // SciPy differential at 1e-9): this matches SciPy's own algorithm, and a
+    // singular Sylvester operator still surfaces as `SingularMatrix` because the
+    // per-block LU returns no solution exactly when a block is singular.
+    let mut y = DMatrix::<f64>::zeros(m, n);
+    let mut j = 0;
+    while j < n {
+        // A nonzero subdiagonal entry marks a 2×2 Schur block (real Schur form
+        // zeroes the subdiagonal everywhere else exactly).
+        let is_2x2 = j + 1 < n && tb[(j + 1, j)] != 0.0;
+        if !is_2x2 {
+            // 1×1 block: (T_A + tb[j,j] I) y_j = f_j − Σ_{k<j} tb[k,j]·y_k.
+            let mut rhs = f.column(j).into_owned();
+            for k in 0..j {
+                let tbkj = tb[(k, j)];
+                if tbkj != 0.0 {
+                    rhs.axpy(-tbkj, &y.column(k), 1.0);
                 }
             }
-        }
-    }
-
-    // RHS: vec(F)
-    let mut rhs_vec = nalgebra::DVector::<f64>::zeros(mn);
-    for j in 0..n {
-        for i in 0..m {
-            rhs_vec[j * m + i] = f[(i, j)];
-        }
-    }
-
-    // Solve via LU
-    let lu = system.full_piv_lu();
-    let sol = lu.solve(&rhs_vec).ok_or(LinalgError::SingularMatrix)?;
-
-    // Unvectorize Y
-    let mut y = DMatrix::<f64>::zeros(m, n);
-    for j in 0..n {
-        for i in 0..m {
-            y[(i, j)] = sol[j * m + i];
+            let mut sys = ta.clone();
+            let shift = tb[(j, j)];
+            for d in 0..m {
+                sys[(d, d)] += shift;
+            }
+            let yj = sys.lu().solve(&rhs).ok_or(LinalgError::SingularMatrix)?;
+            y.set_column(j, &yj);
+            j += 1;
+        } else {
+            // 2×2 block: columns j and j+1 are coupled. Stack [y_j; y_{j+1}] and
+            // solve the 2m×2m system
+            //   (T_A + tb[j,j] I) y_j     + tb[j+1,j]   y_{j+1} = rhs_j
+            //   tb[j,j+1]      y_j        + (T_A + tb[j+1,j+1] I) y_{j+1} = rhs_{j+1}
+            // with rhs_c = f_c − Σ_{k<j} tb[k,c]·y_k.
+            let mut rhs_j = f.column(j).into_owned();
+            let mut rhs_j1 = f.column(j + 1).into_owned();
+            for k in 0..j {
+                let t_kj = tb[(k, j)];
+                if t_kj != 0.0 {
+                    rhs_j.axpy(-t_kj, &y.column(k), 1.0);
+                }
+                let t_kj1 = tb[(k, j + 1)];
+                if t_kj1 != 0.0 {
+                    rhs_j1.axpy(-t_kj1, &y.column(k), 1.0);
+                }
+            }
+            let mut bigm = DMatrix::<f64>::zeros(2 * m, 2 * m);
+            for r in 0..m {
+                for c in 0..m {
+                    bigm[(r, c)] = ta[(r, c)];
+                    bigm[(m + r, m + c)] = ta[(r, c)];
+                }
+                bigm[(r, r)] += tb[(j, j)];
+                bigm[(m + r, m + r)] += tb[(j + 1, j + 1)];
+                bigm[(r, m + r)] = tb[(j + 1, j)];
+                bigm[(m + r, r)] = tb[(j, j + 1)];
+            }
+            let mut bigr = DVector::<f64>::zeros(2 * m);
+            for r in 0..m {
+                bigr[r] = rhs_j[r];
+                bigr[m + r] = rhs_j1[r];
+            }
+            let sol = bigm.lu().solve(&bigr).ok_or(LinalgError::SingularMatrix)?;
+            for r in 0..m {
+                y[(r, j)] = sol[r];
+                y[(r, j + 1)] = sol[m + r];
+            }
+            j += 2;
         }
     }
 
@@ -11719,6 +11747,141 @@ mod proptest_tests {
                     q[i][j]
                 );
             }
+        }
+    }
+
+    /// Exercises the 2×2-Schur-block (complex-eigenpair) path of the
+    /// Bartels–Stewart back-substitution [frankenscipy-8l8r1]. A = [[0,-1],[1,0]]
+    /// has eigenvalues ±i, so its real Schur form keeps a genuine 2×2 block and
+    /// the coupled 2m×2m branch must run. Verified by residual A X + X B = Q.
+    #[test]
+    fn solve_sylvester_complex_eigenvalues_2x2_block() {
+        let a = vec![vec![0.0, -1.0], vec![1.0, 0.0]]; // eigenvalues ±i
+        let b = vec![vec![3.0, -2.0], vec![1.0, 4.0]]; // complex pair too
+        // Pick X, derive Q = A X + X B so the residual has a known target.
+        let x_true = vec![vec![1.0, 2.0], vec![-1.0, 0.5]];
+        let n = 2;
+        let mut q = vec![vec![0.0; n]; n];
+        for i in 0..n {
+            for j in 0..n {
+                let mut v = 0.0;
+                for k in 0..n {
+                    v += a[i][k] * x_true[k][j] + x_true[i][k] * b[k][j];
+                }
+                q[i][j] = v;
+            }
+        }
+        let x = solve_sylvester(&a, &b, &q, DecompOptions::default()).expect("sylvester 2x2");
+        for i in 0..n {
+            for j in 0..n {
+                let mut ax_xb = 0.0;
+                for k in 0..n {
+                    ax_xb += a[i][k] * x[k][j] + x[i][k] * b[k][j];
+                }
+                assert!(
+                    (ax_xb - q[i][j]).abs() < 1e-9,
+                    "AX+XB[{i},{j}] = {ax_xb}, expected {}",
+                    q[i][j]
+                );
+            }
+        }
+    }
+
+    /// Perf witness for the Bartels–Stewart Sylvester rewrite [frankenscipy-8l8r1]:
+    /// column-block back-substitution (O(n·m^3)) vs the previous full Kronecker
+    /// (I_n⊗T_A + T_B^T⊗I_m) operator with an O((mn)^3) full-pivot LU. Both share
+    /// the same Schur reduction; only the inner solve differs, and both satisfy
+    /// the same residual. Run with
+    /// `cargo test -p fsci-linalg --release solve_sylvester_perf -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "perf measurement; run explicitly in --release"]
+    fn solve_sylvester_perf_vs_kronecker() {
+        // Previous implementation: full Kronecker operator + full_piv_lu.
+        fn sylvester_kronecker(a: &[Vec<f64>], b: &[Vec<f64>], q: &[Vec<f64>]) -> Vec<Vec<f64>> {
+            let m = a.len();
+            let n = b.len();
+            let a_mat = dmatrix_from_rows(a).unwrap();
+            let b_mat = dmatrix_from_rows(b).unwrap();
+            let q_mat = dmatrix_from_rows(q).unwrap();
+            let (u, ta) = a_mat.clone().schur().unpack();
+            let (v, tb) = b_mat.clone().schur().unpack();
+            let f = u.transpose() * &q_mat * &v;
+            let mn = m * n;
+            let mut system = DMatrix::<f64>::zeros(mn, mn);
+            for j in 0..n {
+                for r in 0..m {
+                    for c in 0..m {
+                        system[(j * m + r, j * m + c)] += ta[(r, c)];
+                    }
+                }
+            }
+            for j in 0..n {
+                for k in 0..n {
+                    let tbkj = tb[(k, j)];
+                    if tbkj.abs() > 0.0 {
+                        for i in 0..m {
+                            system[(j * m + i, k * m + i)] += tbkj;
+                        }
+                    }
+                }
+            }
+            let mut rhs = DVector::<f64>::zeros(mn);
+            for j in 0..n {
+                for i in 0..m {
+                    rhs[j * m + i] = f[(i, j)];
+                }
+            }
+            let sol = system.full_piv_lu().solve(&rhs).unwrap();
+            let mut y = DMatrix::<f64>::zeros(m, n);
+            for j in 0..n {
+                for i in 0..m {
+                    y[(i, j)] = sol[j * m + i];
+                }
+            }
+            rows_from_dmatrix(&(&u * y * v.transpose()))
+        }
+
+        for &nn in &[16usize, 24, 32] {
+            // Diagonally dominant (non-singular, real spectrum) test matrices.
+            let mk = |seed: usize| -> Vec<Vec<f64>> {
+                (0..nn)
+                    .map(|i| {
+                        (0..nn)
+                            .map(|j| {
+                                if i == j {
+                                    (nn as f64) + ((i * 7 + seed) % 5) as f64
+                                } else {
+                                    (((i * 13 + j * 17 + seed) % 7) as f64 - 3.0) * 0.1
+                                }
+                            })
+                            .collect()
+                    })
+                    .collect()
+            };
+            let a = mk(1);
+            let b = mk(2);
+            let q = mk(3);
+
+            let t0 = std::time::Instant::now();
+            let x_kron = sylvester_kronecker(&a, &b, &q);
+            let kron_s = t0.elapsed().as_secs_f64();
+
+            let t1 = std::time::Instant::now();
+            let x_new = solve_sylvester(&a, &b, &q, DecompOptions::default()).expect("sylvester");
+            let new_s = t1.elapsed().as_secs_f64();
+
+            // Both solve the same equation: agree to solver tolerance.
+            let mut max_d = 0.0f64;
+            for i in 0..nn {
+                for j in 0..nn {
+                    max_d = max_d.max((x_kron[i][j] - x_new[i][j]).abs());
+                }
+            }
+            let speedup = kron_s / new_s;
+            println!(
+                "solve_sylvester {nn}x{nn}: kronecker={kron_s:.4}s bartels_stewart={new_s:.4}s speedup={speedup:.2}x max|Δ|={max_d:.2e}"
+            );
+            assert!(max_d < 1e-8, "{nn}: solutions diverge: {max_d:e}");
         }
     }
 
