@@ -2271,7 +2271,7 @@ pub fn kmedoids(
     if n == 0 {
         return Err(ClusterError::EmptyData);
     }
-    validate_feature_dimensions(data, "kmedoids")?;
+    let d = validate_feature_dimensions(data, "kmedoids")?;
     if data.iter().flatten().any(|v| !v.is_finite()) {
         return Err(ClusterError::InvalidArgument(
             "kmedoids input must be finite".to_string(),
@@ -2299,22 +2299,42 @@ pub fn kmedoids(
         }
     }
 
+    // The assignment scan re-walks every observation against every medoid each
+    // iteration, and the medoid-update step gathers scattered cluster members for
+    // its M×M distance matrix — both index `Vec<Vec<f64>>` rows (`data[i]`,
+    // `data[med]`, `data[members[i]]`), paying a heap-pointer load + cache miss per
+    // access. Pack the ragged rows into one contiguous `n × d` buffer once (the
+    // observation set is loop-invariant) so every inner distance streams a
+    // contiguous slice. Same lever as the vq/dbscan assignment paths; bit-identical
+    // because `sq_dist` sums the same terms in the same index order regardless of
+    // where the slice lives. See
+    // `tests/artifacts/perf/2026-06-03-cluster-kmedoids-flatten/` for the sha256 proof.
+    let flat = flatten_points(data, d);
+    let row = |idx: usize| -> &[f64] { &flat[idx * d..idx * d + d] };
+
     let mut labels = vec![0usize; n];
     let mut actual_iter = 0;
+
+    // Reused across iterations: contiguous k×d buffer of the current medoid rows
+    // so the nearest-medoid scan streams + prefetches and the prefilter/abandonment
+    // bound (see `nearest_centroid`) rejects most medoids after a few dimensions.
+    let mut medoids_flat = vec![0.0_f64; k * d];
 
     for iter in 0..max_iter {
         actual_iter = iter + 1;
 
-        // Assign to nearest medoid
+        // Pack the current medoid rows into the contiguous buffer.
+        for (c, &med) in medoid_indices.iter().enumerate() {
+            medoids_flat[c * d..c * d + d].copy_from_slice(row(med));
+        }
+
+        // Assign each observation to its nearest medoid. `nearest_centroid` is a
+        // bit-identical replacement for the strict-`<` argmin: same lowest-index
+        // tie-break, same fully-summed minimum (the winner is never abandoned).
         for i in 0..n {
-            let mut min_dist = f64::INFINITY;
-            for (c, &med) in medoid_indices.iter().enumerate() {
-                let d = sq_dist(&data[i], &data[med]);
-                if d < min_dist {
-                    min_dist = d;
-                    labels[i] = c;
-                }
-            }
+            let (best_c, _) =
+                nearest_centroid(&flat[i * d..i * d + d], &medoids_flat, k, d);
+            labels[i] = best_c;
         }
 
         // Update medoids: for each cluster, find the point that
@@ -2330,13 +2350,22 @@ pub fn kmedoids(
             }
             let m = members.len();
 
-            // Symmetric M×M intra-cluster distance matrix.
+            // Gather this cluster's member rows into one contiguous m×d buffer so
+            // the M(M-1)/2 distance evaluations stream sequentially instead of
+            // chasing `members[i]` scattered indices back into `data`.
+            let mut member_flat = Vec::with_capacity(m * d);
+            for &mi in &members {
+                member_flat.extend_from_slice(row(mi));
+            }
+
+            // Symmetric M×M intra-cluster distance matrix over the contiguous buffer.
             let mut dmat = vec![vec![0.0_f64; m]; m];
             for i in 0..m {
+                let mi = &member_flat[i * d..i * d + d];
                 for j in (i + 1)..m {
-                    let d = sq_dist(&data[members[i]], &data[members[j]]).sqrt();
-                    dmat[i][j] = d;
-                    dmat[j][i] = d;
+                    let dist = sq_dist(mi, &member_flat[j * d..j * d + d]).sqrt();
+                    dmat[i][j] = dist;
+                    dmat[j][i] = dist;
                 }
             }
 
@@ -2366,7 +2395,7 @@ pub fn kmedoids(
 
     // Compute final inertia
     let inertia: f64 = (0..n)
-        .map(|i| sq_dist(&data[i], &data[medoid_indices[labels[i]]]))
+        .map(|i| sq_dist(row(i), row(medoid_indices[labels[i]])))
         .sum();
 
     let centroids: Vec<Vec<f64>> = medoid_indices.iter().map(|&i| data[i].clone()).collect();

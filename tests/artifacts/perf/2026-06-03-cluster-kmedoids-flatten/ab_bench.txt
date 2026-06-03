@@ -1,0 +1,11 @@
+# kmedoids flatten + abandonment lever — in-process A/B (same binary, worker-invariant)
+# base = scattered Vec<Vec<f64>> rows (pre-opt mirror); opt = contiguous flatten + nearest_centroid prefilter/abandonment
+# shape: n d k repeats | base_ms opt_ms speedup
+n=1500 d=32 k=8 r=40 | base=13.314234ms opt=11.779600ms speedup=1.130x
+n=2500 d=64 k=16 r=20 | base=39.096962ms opt=29.513220ms speedup=1.324x
+n=4000 d=32 k=24 r=12 | base=65.863682ms opt=48.492752ms speedup=1.358x
+n=6000 d=16 k=128 r=5 | base=61.116445ms opt=34.431241ms speedup=1.775x
+n=8000 d=16 k=256 r=4 | base=185.116757ms opt=96.783946ms speedup=1.912x
+n=6000 d=32 k=256 r=4 | base=260.662674ms opt=84.268092ms speedup=3.093x
+n=10000 d=16 k=384 r=3 | base=279.928192ms opt=138.450181ms speedup=2.021x
+n=8000 d=16 k=512 r=3 | base=197.665619ms opt=97.173501ms speedup=2.034x

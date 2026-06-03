@@ -23,7 +23,88 @@ use std::hint::black_box;
 use std::path::Path;
 use std::time::Instant;
 
-use fsci_cluster::{dbscan, kmeans, vq};
+use fsci_cluster::{dbscan, kmeans, kmedoids, vq};
+
+/// Reference k-medoids mirroring the pre-optimization library algorithm: nearest
+/// medoid assignment and the M×M intra-cluster distance matrix both index
+/// scattered `Vec<Vec<f64>>` rows (`data[med]`, `data[members[i]]`). Used by the
+/// `kmedoids-base` mode so this harness can A/B the contiguous-buffer flatten
+/// lever within one binary build. Returns `(labels, inertia, n_iter)`.
+fn kmedoids_baseline(
+    data: &[Vec<f64>],
+    k: usize,
+    max_iter: usize,
+    seed: u64,
+) -> (Vec<usize>, f64, usize) {
+    let n = data.len();
+    let mut rng = seed;
+    let mut medoid_indices: Vec<usize> = Vec::with_capacity(k);
+    let mut used = vec![false; n];
+    for _ in 0..k {
+        loop {
+            rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let idx = (rng >> 33) as usize % n;
+            if !used[idx] {
+                used[idx] = true;
+                medoid_indices.push(idx);
+                break;
+            }
+        }
+    }
+
+    let mut labels = vec![0usize; n];
+    let mut actual_iter = 0;
+    for iter in 0..max_iter {
+        actual_iter = iter + 1;
+        for i in 0..n {
+            let mut min_dist = f64::INFINITY;
+            for (c, &med) in medoid_indices.iter().enumerate() {
+                let dd = sq_dist_ref(&data[i], &data[med]);
+                if dd < min_dist {
+                    min_dist = dd;
+                    labels[i] = c;
+                }
+            }
+        }
+        let mut changed = false;
+        for (c, medoid_index) in medoid_indices.iter_mut().enumerate().take(k) {
+            let members: Vec<usize> = (0..n).filter(|&i| labels[i] == c).collect();
+            if members.is_empty() {
+                continue;
+            }
+            let m = members.len();
+            let mut dmat = vec![vec![0.0_f64; m]; m];
+            for i in 0..m {
+                for j in (i + 1)..m {
+                    let dd = sq_dist_ref(&data[members[i]], &data[members[j]]).sqrt();
+                    dmat[i][j] = dd;
+                    dmat[j][i] = dd;
+                }
+            }
+            let mut best_local = 0usize;
+            let mut best_cost = dmat[0].iter().sum::<f64>();
+            for (i, row) in dmat.iter().enumerate().skip(1) {
+                let cost: f64 = row.iter().sum();
+                if cost < best_cost {
+                    best_cost = cost;
+                    best_local = i;
+                }
+            }
+            let best_med = members[best_local];
+            if best_med != *medoid_index {
+                *medoid_index = best_med;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    let inertia: f64 = (0..n)
+        .map(|i| sq_dist_ref(&data[i], &data[medoid_indices[labels[i]]]))
+        .sum();
+    (labels, inertia, actual_iter)
+}
 
 /// Reference (non-abandoning) squared Euclidean distance, mirroring the library's
 /// pre-optimization `sq_dist`. Used only by the `vq-base` mode so this harness
@@ -188,6 +269,21 @@ fn golden_text() -> String {
             write!(&mut output, "c{idx} ").expect("write dbscan cores");
         }
         output.push('\n');
+
+        // k-medoids is deterministic for a fixed seed; capture labels + inertia
+        // bits + n_iter so the flatten lever is proven bit-identical.
+        let result = kmedoids(&data, k, 50, 0x1234_5678).expect("kmedoids");
+        write!(
+            &mut output,
+            "mode=kmedoids n={n} d={d} k={k} n_iter={} inertia={:016x} ",
+            result.n_iter,
+            result.inertia.to_bits()
+        )
+        .expect("write kmedoids header");
+        for &label in &result.labels {
+            write!(&mut output, "{label} ").expect("write kmedoids labels");
+        }
+        output.push('\n');
     }
     output
 }
@@ -255,6 +351,19 @@ fn main() {
             let (n_clusters, labels, n_cores) = dbscan_baseline(black_box(&data), 3.0, 4);
             checksum +=
                 n_clusters as f64 + labels.iter().map(|&l| l as f64).sum::<f64>() + n_cores as f64;
+            black_box(&labels);
+        }
+    } else if mode == "kmedoids" {
+        for _ in 0..repeats {
+            let result = kmedoids(black_box(&data), k, 50, 0x1234_5678).expect("kmedoids");
+            checksum += result.inertia + result.labels.iter().sum::<usize>() as f64;
+            black_box(&result.labels);
+        }
+    } else if mode == "kmedoids-base" {
+        for _ in 0..repeats {
+            let (labels, inertia, n_iter) =
+                kmedoids_baseline(black_box(&data), k, 50, 0x1234_5678);
+            checksum += inertia + labels.iter().sum::<usize>() as f64 + n_iter as f64;
             black_box(&labels);
         }
     } else {
