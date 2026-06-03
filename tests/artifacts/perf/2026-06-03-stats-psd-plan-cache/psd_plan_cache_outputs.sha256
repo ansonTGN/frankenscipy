@@ -1,4 +1,4 @@
-a7377780fc3a4f9241171832d6b75d35418f20f686c2a44de945499f67808ff7  tests/artifacts/perf/2026-06-03-stats-psd-plan-cache/CONCLUSION.md
+bd68f434786bb89aba6df8a7152df7ac282ab042025722ffe72d6ed1e63152e2  tests/artifacts/perf/2026-06-03-stats-psd-plan-cache/CONCLUSION.md
 a9013fd11be12b9667a6f378a15d99a7c2d94e23705620864f4751adf1466f6b  tests/artifacts/perf/2026-06-03-stats-psd-plan-cache/after_psd_welch_rch.txt
 a313a299d7c4524cdfb0414eff2ffc4d57f4f908fb76a330c6cf9af17192f13b  tests/artifacts/perf/2026-06-03-stats-psd-plan-cache/after_psd_welch_summary.txt
 42ca6aad5a55bfe251fb9ad667c33bb4cae93247ccd0615ac4f97d947bab1145  tests/artifacts/perf/2026-06-03-stats-psd-plan-cache/baseline_psd_welch_rch.txt
@@ -14,5 +14,6 @@ e4b6457224daaf90646b77115f82ff00aee0681807afe09bdca322bbb0fa494f  tests/artifact
 85048a3c06ab045815cbeb238fee9e1e07a05c27ceed3c3782ec0fd5ea97c6b1  tests/artifacts/perf/2026-06-03-stats-psd-plan-cache/golden_before.txt
 091aedd551907987f08010fccb216cbcfadbe364d8dfca50cca091fd0253a325  tests/artifacts/perf/2026-06-03-stats-psd-plan-cache/golden_before_stdout_rch_raw.txt
 3be28c2284750c5881bd281836114314ef78b2bebdc5d85fa09b26bbbac500b2  tests/artifacts/perf/2026-06-03-stats-psd-plan-cache/golden_cmp.txt
+688be70f5d41570883849e4159af0eb6bcd8f8a5da41968ed3537d27c7b36db5  tests/artifacts/perf/2026-06-03-stats-psd-plan-cache/reprofile_after_psd_plan_cache_broad_rch.txt
 5956e3b81438bcb9f83bbe7b7cd1a777de64924728bfcabb28d9cac1c176320f  tests/artifacts/perf/2026-06-03-stats-psd-plan-cache/ubs_fsci_stats_lib.txt
 acdc7df362f5b0f3fe88f6fcae69322a8cf1f1c460d736ce1c42eb7b534f96ce  tests/artifacts/perf/2026-06-03-stats-psd-plan-cache/ubs_status.txt

@@ -63,3 +63,14 @@ Score: `5.2` = Impact 1.29 x Confidence 0.8 / Effort 0.2. The lever passes the S
 ## Verdict
 
 Kept. The cached 128-point plan removes repeated deterministic setup work from the profiled Welch case while preserving bit-identical output.
+
+## Post-lever reprofile
+
+RCH broad stats reprofile after commit `267eb0d2`:
+
+- `time_series/psd_welch/4096_w128_o64`: 751.08 us median
+- `qmc_discrepancy/mixture/512x2`: 677.65 us median
+- `qmc_sampling/halton_4d/4096`: 632.31 us median
+- `qmc_sampling/sobol_2d/4096`: 586.25 us median
+
+The bottleneck shifted down but remains in `psd_welch`.
