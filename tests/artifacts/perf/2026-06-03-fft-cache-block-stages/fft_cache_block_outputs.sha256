@@ -1,0 +1,10 @@
+d06c5a254ee702b689a01ad855d608e47a075d21b45d223551b9f2900b844e81  tests/artifacts/perf/2026-06-03-fft-cache-block-stages/CONCLUSION.md
+06a57f416c96bf8360e142cb0a2967e511a8af3bb038af207a5bccec80e826e6  tests/artifacts/perf/2026-06-03-fft-cache-block-stages/after_fft_262144_rch.txt
+68c2ed1e56ddd1c47c05ae6b5fa213c4c357f79d2f2b51b44f2cfaafd54ca247  tests/artifacts/perf/2026-06-03-fft-cache-block-stages/after_fft_262144_summary.txt
+efc030d74f0e6646cd82bc990c8119b68e77c37493bd1a989dd973afd5e3082c  tests/artifacts/perf/2026-06-03-fft-cache-block-stages/baseline_fft_262144_rch.txt
+3905b2731749cfe60259816a8a96489e6be6222a5b2e1ff0ffe5a651a321e301  tests/artifacts/perf/2026-06-03-fft-cache-block-stages/baseline_fft_262144_summary.txt
+9503f6a5c36d2833e6ef84b114c0127debf91a89d5cf41cc13c9b16249e61cdb  tests/artifacts/perf/2026-06-03-fft-cache-block-stages/cargo_check_fsci_fft_cache_block_rch.txt
+7ef1f56c2d66932de22edaec30b555b3f0eeeb18bb1d77ac7eb28136dfd5a4f0  tests/artifacts/perf/2026-06-03-fft-cache-block-stages/cargo_check_fsci_fft_restored_rch.txt
+30ed91bdfd0cd711a7e16148da7215f76e20e5d9214a64ae49ea0d833a606ca6  tests/artifacts/perf/2026-06-03-fft-cache-block-stages/golden_fft_262144_after.sha256
+0961f904726af2a43565fd297204d4d5671ec654ef2415176a5bedef8759447f  tests/artifacts/perf/2026-06-03-fft-cache-block-stages/golden_fft_262144_before.sha256
+3be28c2284750c5881bd281836114314ef78b2bebdc5d85fa09b26bbbac500b2  tests/artifacts/perf/2026-06-03-fft-cache-block-stages/golden_fft_262144_cmp.txt
