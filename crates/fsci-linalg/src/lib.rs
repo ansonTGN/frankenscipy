@@ -2222,9 +2222,19 @@ pub fn lstsq_with_casp(
     let matrix = dmatrix_from_rows(a)?;
     let rhs = DVector::from_column_slice(b);
 
-    // Compute condition estimate for lstsq
-    let svd_for_cond = safe_svd(matrix.clone(), false, false)?;
-    let singular_values: Vec<f64> = svd_for_cond.singular_values.iter().copied().collect();
+    let full_svd_for_rectangular = if rows == cols {
+        None
+    } else {
+        Some(safe_svd(matrix.clone(), true, true)?)
+    };
+
+    // Compute condition estimate for lstsq.
+    let singular_values: Vec<f64> = if let Some(svd) = full_svd_for_rectangular.as_ref() {
+        svd.singular_values.iter().copied().collect()
+    } else {
+        let svd_for_cond = safe_svd(matrix.clone(), false, false)?;
+        svd_for_cond.singular_values.iter().copied().collect()
+    };
     let max_s = singular_values.iter().copied().fold(0.0_f64, |acc, v| {
         if acc.is_nan() || v.is_nan() {
             f64::NAN
@@ -2277,7 +2287,11 @@ pub fn lstsq_with_casp(
         }
         _ => {
             // SVD solve (standard lstsq path)
-            let svd = safe_svd(matrix.clone(), true, true)?;
+            let svd = if let Some(svd) = full_svd_for_rectangular {
+                svd
+            } else {
+                safe_svd(matrix.clone(), true, true)?
+            };
             let pinv = pseudo_inverse_from_svd(&svd, threshold)?;
             let x_svd = pinv * rhs.clone();
             let rank = svd
