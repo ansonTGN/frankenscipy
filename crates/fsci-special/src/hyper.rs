@@ -1415,10 +1415,61 @@ pub fn hyperu_scalar(a: f64, b: f64, x: f64, mode: RuntimeMode) -> Result<f64, S
         return hyperu_connection_formula(a, b, x, mode);
     }
 
+    // a < 0 (non-integer), b a positive integer, x > 0: the Gamma-weighted
+    // connection formula is an indeterminate 0/0 here (Γ(1-b) and Γ(b-1) hit
+    // poles). The confluent integral 1/Γ(a)∫₀^∞ e^{-xt} t^{a-1}(1+t)^{b-a-1} dt
+    // is valid for any real b but only converges for a > 0, so seed two values
+    // at a+m, a+m+1 (both > 0) and walk downward in a via A&S 13.4.15:
+    //   U(a-1,b,x) = (2a + x - b) U(a,b,x) - a(a-b+1) U(a+1,b,x).
+    // This stays on the dominant (recessive-free) downward direction and
+    // recovers scipy.special.hyperu to ~1e-9 relative — frankenscipy-msy83.
+    // b = 0 stays NaN to match scipy; b < 0 integer is a separate gap.
+    if b.round() >= 1.0 {
+        return hyperu_integer_b_recurrence(a, b, x, mode);
+    }
+
     unsupported_hypergeometric_branch(
         "hyperu",
         mode,
-        "hyperu currently requires a > 0, nonpositive integer a, or noninteger b",
+        "hyperu currently requires a > 0, nonpositive integer a, noninteger b, \
+         or positive-integer b with negative a",
+    )
+}
+
+/// U(a, b, x) for a < 0 non-integer and b a positive integer (x > 0) via the
+/// confluent integral at positive a plus downward recurrence in a.
+fn hyperu_integer_b_recurrence(
+    a: f64,
+    b: f64,
+    x: f64,
+    mode: RuntimeMode,
+) -> Result<f64, SpecialError> {
+    // Smallest integer shift m >= 1 placing a + m strictly positive.
+    let mut m = 1_i32;
+    while a + f64::from(m) <= 0.0 {
+        m += 1;
+    }
+    let a_high = a + f64::from(m);
+
+    // Seeds from the positive-a integral (valid for any real b).
+    let mut u_ap1 = hyperu_positive_a_integral(a_high + 1.0, b, x, mode)?; // U(a_high + 1)
+    let mut u_a = hyperu_positive_a_integral(a_high, b, x, mode)?; // U(a_high)
+
+    let mut ai = a_high;
+    for _ in 0..m {
+        let u_am1 = (2.0 * ai + x - b) * u_a - ai * (ai - b + 1.0) * u_ap1;
+        u_ap1 = u_a;
+        u_a = u_am1;
+        ai -= 1.0;
+    }
+
+    if u_a.is_finite() {
+        return Ok(u_a);
+    }
+    unsupported_hypergeometric_branch(
+        "hyperu",
+        mode,
+        "integer-b hyperu recurrence produced a non-finite value",
     )
 }
 
@@ -2557,6 +2608,44 @@ mod tests {
         assert!(hardened_negative_x.is_err());
         assert!((finite_zero - 2.0).abs() <= 1.0e-12);
         assert!(singular_zero.is_infinite());
+    }
+
+    // Golden parity for U(a, b, x) with a < 0 non-integer and b a positive
+    // integer, x > 0 — frankenscipy-msy83. Previously these fell through to
+    // UnsupportedAnalyticContinuation (NaN); the connection formula is 0/0 at
+    // integer b. Now solved by the positive-a integral plus downward recurrence
+    // in a. Golden values from scipy 1.17.1 (sp.hyperu).
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy 1.17.1
+    fn hyperu_integer_b_negative_a_matches_scipy() {
+        let cases: [(f64, f64, f64, f64); 12] = [
+            (-0.5, 1.0, 2.0, 1.2459478282260943),
+            (-0.5, 2.0, 1.5, 0.5670844020302459),
+            (-1.5, 1.0, 3.0, 1.4575309529103873),
+            (-2.5, 3.0, 2.0, 6.027810851185301),
+            (-1.5, 2.0, 2.0, -1.4420471910282342),
+            (-0.5, 3.0, 4.0, 1.3129770242215841),
+            (-0.5, 2.0, 0.5, -0.5583597698714023),
+            (-3.5, 2.0, 5.0, -15.853761233741835),
+            (-0.5, 1.0, 1.0, 0.7704036149704431),
+            (-0.25, 1.0, 2.0, 1.1557629221557946),
+            (-0.75, 4.0, 3.0, -0.1699230467955729),
+            (-1.5, 5.0, 8.0, 2.8443411947620896),
+        ];
+        for (a, b, x, expected) in cases {
+            let actual = hyperu_scalar(a, b, x, RuntimeMode::Strict).unwrap_or(f64::NAN);
+            let scale = expected.abs().max(1.0);
+            assert!(
+                (actual - expected).abs() <= 5.0e-7 * scale,
+                "hyperu({a}, {b}, {x}) = {actual}, expected {expected}"
+            );
+        }
+
+        // b = 0 stays NaN to match scipy; no spurious finite continuation.
+        for (a, b, x) in [(-0.5, 0.0, 2.0), (-1.5, 0.0, 2.0)] {
+            let v = hyperu_scalar(a, b, x, RuntimeMode::Strict).unwrap_or(f64::NAN);
+            assert!(v.is_nan(), "hyperu({a}, {b}, {x}) = {v}, expected NaN");
+        }
     }
 
     // ── hyp2f1 tests ────────────────────────────────────────────────
