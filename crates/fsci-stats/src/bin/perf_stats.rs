@@ -3,13 +3,17 @@
 //! Usage:
 //!   `perf_stats golden [path]`
 //!   `perf_stats psd <repeats>`
+//!   `perf_stats qmc-golden [path]`
 
 use std::fmt::Write as _;
 use std::hint::black_box;
 use std::path::Path;
 use std::time::Instant;
 
-use fsci_stats::psd_welch;
+use fsci_stats::{
+    HaltonSampler, centered_discrepancy, l2_star_discrepancy, mixture_discrepancy, psd_welch,
+    wraparound_discrepancy,
+};
 
 fn deterministic_data(n: usize) -> Vec<f64> {
     (0..n)
@@ -34,6 +38,22 @@ fn golden_text() -> String {
         write!(output, "{:016x},", value.to_bits()).expect("write psd bits");
     }
     output.push('\n');
+    output
+}
+
+fn qmc_golden_text() -> String {
+    let mut sampler = HaltonSampler::new(2).expect("valid Halton dimension");
+    let sample = sampler.sample(512);
+    let centered = centered_discrepancy(&sample, 2).expect("centered discrepancy");
+    let mixture = mixture_discrepancy(&sample, 2).expect("mixture discrepancy");
+    let l2_star = l2_star_discrepancy(&sample, 2).expect("l2 star discrepancy");
+    let wraparound = wraparound_discrepancy(&sample, 2).expect("wraparound discrepancy");
+    let mut output = String::new();
+    writeln!(output, "case=qmc_discrepancy_512x2 len={}", sample.len()).expect("write qmc header");
+    writeln!(output, "centered={:016x}", centered.to_bits()).expect("write centered bits");
+    writeln!(output, "mixture={:016x}", mixture.to_bits()).expect("write mixture bits");
+    writeln!(output, "l2_star={:016x}", l2_star.to_bits()).expect("write l2-star bits");
+    writeln!(output, "wraparound={:016x}", wraparound.to_bits()).expect("write wraparound bits");
     output
 }
 
@@ -74,6 +94,7 @@ fn main() {
 
     match mode {
         "golden" => write_or_print(golden_text(), args.get(2).map(String::as_str)),
+        "qmc-golden" => write_or_print(qmc_golden_text(), args.get(2).map(String::as_str)),
         "psd" => {
             let repeats = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(10);
             timed_psd(repeats);

@@ -1,0 +1,50 @@
+[RCH] local (no admissible workers: insufficient_slots=6,active_project_exclusion=1)
+Benchmarking qmc_discrepancy/centered/512x2
+Benchmarking qmc_discrepancy/centered/512x2: Warming up for 1.0000 s
+Benchmarking qmc_discrepancy/centered/512x2: Collecting 10 samples in estimated 2.0085 s (9955 iterations)
+Benchmarking qmc_discrepancy/centered/512x2: Analyzing
+qmc_discrepancy/centered/512x2
+                        time:   [192.79 µs 194.45 µs 197.54 µs]
+Benchmarking qmc_discrepancy/mixture/512x2
+Benchmarking qmc_discrepancy/mixture/512x2: Warming up for 1.0000 s
+Benchmarking qmc_discrepancy/mixture/512x2: Collecting 10 samples in estimated 2.0087 s (7150 iterations)
+Benchmarking qmc_discrepancy/mixture/512x2: Analyzing
+qmc_discrepancy/mixture/512x2
+                        time:   [306.52 µs 311.51 µs 318.33 µs]
+Benchmarking qmc_discrepancy/l2_star/512x2
+Benchmarking qmc_discrepancy/l2_star/512x2: Warming up for 1.0000 s
+Benchmarking qmc_discrepancy/l2_star/512x2: Collecting 10 samples in estimated 2.0048 s (8635 iterations)
+Benchmarking qmc_discrepancy/l2_star/512x2: Analyzing
+qmc_discrepancy/l2_star/512x2
+                        time:   [217.40 µs 220.93 µs 228.31 µs]
+Benchmarking qmc_discrepancy/wraparound/512x2
+Benchmarking qmc_discrepancy/wraparound/512x2: Warming up for 1.0000 s
+Benchmarking qmc_discrepancy/wraparound/512x2: Collecting 10 samples in estimated 2.0066 s (9295 iterations)
+Benchmarking qmc_discrepancy/wraparound/512x2: Analyzing
+qmc_discrepancy/wraparound/512x2
+                        time:   [196.31 µs 199.88 µs 203.69 µs]
+Benchmarking qmc_discrepancy/centered/512x2
+Benchmarking qmc_discrepancy/centered/512x2: Warming up for 1.0000 s
+Benchmarking qmc_discrepancy/centered/512x2: Collecting 10 samples in estimated 2.0035 s (4180 iterations)
+Benchmarking qmc_discrepancy/centered/512x2: Analyzing
+qmc_discrepancy/centered/512x2
+                        time:   [438.65 µs 457.82 µs 470.44 µs]
+Benchmarking qmc_discrepancy/mixture/512x2
+Benchmarking qmc_discrepancy/mixture/512x2: Warming up for 1.0000 s
+Benchmarking qmc_discrepancy/mixture/512x2: Collecting 10 samples in estimated 2.0208 s (3135 iterations)
+Benchmarking qmc_discrepancy/mixture/512x2: Analyzing
+qmc_discrepancy/mixture/512x2
+                        time:   [585.18 µs 604.55 µs 627.01 µs]
+Benchmarking qmc_discrepancy/l2_star/512x2
+Benchmarking qmc_discrepancy/l2_star/512x2: Warming up for 1.0000 s
+Benchmarking qmc_discrepancy/l2_star/512x2: Collecting 10 samples in estimated 2.0231 s (4565 iterations)
+Benchmarking qmc_discrepancy/l2_star/512x2: Analyzing
+qmc_discrepancy/l2_star/512x2
+                        time:   [402.20 µs 420.64 µs 438.75 µs]
+Benchmarking qmc_discrepancy/wraparound/512x2
+Benchmarking qmc_discrepancy/wraparound/512x2: Warming up for 1.0000 s
+Benchmarking qmc_discrepancy/wraparound/512x2: Collecting 10 samples in estimated 2.0048 s (3850 iterations)
+Benchmarking qmc_discrepancy/wraparound/512x2: Analyzing
+qmc_discrepancy/wraparound/512x2
+                        time:   [451.58 µs 463.48 µs 478.07 µs]
+[RCH] remote vmi1167313 (131.0s)

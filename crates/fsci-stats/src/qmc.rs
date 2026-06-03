@@ -298,6 +298,142 @@ fn bits_to_unit(bits: u64) -> f64 {
 /// Returns `Err(StatsError::InvalidArgument)` when `dimension == 0`, when
 /// `sample.len()` is not a multiple of `dimension`, or when any coordinate is
 /// outside `[0, 1]`.
+#[derive(Clone, Copy)]
+struct DiscrepancyPoint2 {
+    x0: f64,
+    x1: f64,
+    centered0: f64,
+    centered1: f64,
+    abs0: f64,
+    abs1: f64,
+}
+
+fn discrepancy_points_2d(sample: &[f64], n: usize) -> Vec<DiscrepancyPoint2> {
+    let mut points = Vec::with_capacity(n);
+    for row in sample.chunks_exact(2) {
+        let x0 = row[0];
+        let x1 = row[1];
+        let centered0 = x0 - 0.5;
+        let centered1 = x1 - 0.5;
+        points.push(DiscrepancyPoint2 {
+            x0,
+            x1,
+            centered0,
+            centered1,
+            abs0: centered0.abs(),
+            abs1: centered1.abs(),
+        });
+    }
+    points
+}
+
+fn centered_discrepancy_2d(sample: &[f64], n: usize) -> f64 {
+    let points = discrepancy_points_2d(sample, n);
+    let leading = (13.0_f64 / 12.0).powi(2);
+
+    let mut single = 0.0_f64;
+    for point in &points {
+        let mut prod = 1.0_f64;
+        prod *= 1.0 + 0.5 * point.abs0 - 0.5 * point.centered0 * point.centered0;
+        prod *= 1.0 + 0.5 * point.abs1 - 0.5 * point.centered1 * point.centered1;
+        single += prod;
+    }
+
+    let mut double = 0.0_f64;
+    for point_i in &points {
+        for point_j in &points {
+            let mut prod = 1.0_f64;
+            prod *= 1.0 + 0.5 * point_i.abs0 + 0.5 * point_j.abs0
+                - 0.5 * (point_i.x0 - point_j.x0).abs();
+            prod *= 1.0 + 0.5 * point_i.abs1 + 0.5 * point_j.abs1
+                - 0.5 * (point_i.x1 - point_j.x1).abs();
+            double += prod;
+        }
+    }
+
+    let n_f = n as f64;
+    leading - 2.0 / n_f * single + double / (n_f * n_f)
+}
+
+fn mixture_discrepancy_2d(sample: &[f64], n: usize) -> f64 {
+    let points = discrepancy_points_2d(sample, n);
+    let leading = (19.0_f64 / 12.0).powi(2);
+
+    let mut single = 0.0_f64;
+    for point in &points {
+        let mut prod = 1.0_f64;
+        prod *= 5.0 / 3.0 - 0.25 * point.abs0 - 0.25 * point.centered0 * point.centered0;
+        prod *= 5.0 / 3.0 - 0.25 * point.abs1 - 0.25 * point.centered1 * point.centered1;
+        single += prod;
+    }
+
+    let mut double = 0.0_f64;
+    for point_i in &points {
+        for point_j in &points {
+            let delta0 = point_i.x0 - point_j.x0;
+            let d0 = delta0.abs();
+            let delta1 = point_i.x1 - point_j.x1;
+            let d1 = delta1.abs();
+            let mut prod = 1.0_f64;
+            prod *= 15.0 / 8.0 - 0.25 * point_i.abs0 - 0.25 * point_j.abs0 - 0.75 * d0
+                + 0.5 * delta0.powi(2);
+            prod *= 15.0 / 8.0 - 0.25 * point_i.abs1 - 0.25 * point_j.abs1 - 0.75 * d1
+                + 0.5 * delta1.powi(2);
+            double += prod;
+        }
+    }
+
+    let n_f = n as f64;
+    leading - 2.0 / n_f * single + double / (n_f * n_f)
+}
+
+fn l2_star_discrepancy_2d(sample: &[f64], n: usize) -> f64 {
+    let points = discrepancy_points_2d(sample, n);
+    let leading = (1.0_f64 / 3.0).powi(2);
+    let two_pow_one_minus_d = 2.0_f64.powi(-1);
+
+    let mut single = 0.0_f64;
+    for point in &points {
+        let mut prod = 1.0_f64;
+        prod *= 1.0 - point.x0 * point.x0;
+        prod *= 1.0 - point.x1 * point.x1;
+        single += prod;
+    }
+
+    let mut double = 0.0_f64;
+    for point_i in &points {
+        for point_j in &points {
+            let mut prod = 1.0_f64;
+            prod *= 1.0 - point_i.x0.max(point_j.x0);
+            prod *= 1.0 - point_i.x1.max(point_j.x1);
+            double += prod;
+        }
+    }
+
+    let n_f = n as f64;
+    (leading - two_pow_one_minus_d / n_f * single + double / (n_f * n_f)).sqrt()
+}
+
+fn wraparound_discrepancy_2d(sample: &[f64], n: usize) -> f64 {
+    let points = discrepancy_points_2d(sample, n);
+    let leading = -(4.0_f64 / 3.0).powi(2);
+
+    let mut double = 0.0_f64;
+    for point_i in &points {
+        for point_j in &points {
+            let d0 = (point_i.x0 - point_j.x0).abs();
+            let d1 = (point_i.x1 - point_j.x1).abs();
+            let mut prod = 1.0_f64;
+            prod *= 1.5 - d0 * (1.0 - d0);
+            prod *= 1.5 - d1 * (1.0 - d1);
+            double += prod;
+        }
+    }
+
+    let n_f = n as f64;
+    leading + double / (n_f * n_f)
+}
+
 pub fn centered_discrepancy(sample: &[f64], dimension: usize) -> Result<f64, StatsError> {
     if dimension == 0 {
         return Err(StatsError::InvalidArgument(
@@ -320,6 +456,9 @@ pub fn centered_discrepancy(sample: &[f64], dimension: usize) -> Result<f64, Sta
                 "centered_discrepancy: sample[{idx}] = {v} outside [0, 1]"
             )));
         }
+    }
+    if dimension == 2 {
+        return Ok(centered_discrepancy_2d(sample, n));
     }
 
     let leading = (13.0_f64 / 12.0).powi(dimension as i32);
@@ -391,6 +530,9 @@ pub fn mixture_discrepancy(sample: &[f64], dimension: usize) -> Result<f64, Stat
                 "mixture_discrepancy: sample[{idx}] = {v} outside [0, 1]"
             )));
         }
+    }
+    if dimension == 2 {
+        return Ok(mixture_discrepancy_2d(sample, n));
     }
     let leading = (19.0_f64 / 12.0).powi(dimension as i32);
     // Single-sum term.
@@ -609,6 +751,9 @@ pub fn l2_star_discrepancy(sample: &[f64], dimension: usize) -> Result<f64, Stat
             )));
         }
     }
+    if dimension == 2 {
+        return Ok(l2_star_discrepancy_2d(sample, n));
+    }
     let leading = (1.0_f64 / 3.0).powi(dimension as i32);
     let two_pow_one_minus_d = 2.0_f64.powi(1 - dimension as i32);
     // Single-sum Σ_i Π_k (1 - x_i^k²).
@@ -676,6 +821,9 @@ pub fn wraparound_discrepancy(sample: &[f64], dimension: usize) -> Result<f64, S
                 "wraparound_discrepancy: sample[{idx}] = {v} outside [0, 1]"
             )));
         }
+    }
+    if dimension == 2 {
+        return Ok(wraparound_discrepancy_2d(sample, n));
     }
     let leading = -(4.0_f64 / 3.0).powi(dimension as i32);
     let mut double = 0.0_f64;
