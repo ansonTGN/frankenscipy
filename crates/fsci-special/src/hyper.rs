@@ -1201,12 +1201,44 @@ fn bessel_i_asymptotic(nu: f64, x: f64) -> f64 {
     x.exp() * coeff * sum
 }
 
-/// Asymptotic approximation for J_nu(x) for large x.
+/// Asymptotic expansion of J_nu(x) for large x (DLMF 10.17.3):
+///
+///   J_ν(x) ~ sqrt(2/(πx)) [cos(ω) P(ν,x) - sin(ω) Q(ν,x)],   ω = x - νπ/2 - π/4,
+///   P = Σ_j (-1)^j a_{2j}/x^{2j},   Q = Σ_j (-1)^j a_{2j+1}/x^{2j+1},
+///   a_0 = 1,   a_k = a_{k-1} (4ν² - (2k-1)²) / (8k).
+///
+/// The previous implementation kept only the leading term (P = 1, Q = 0), which
+/// is accurate to O(1/x) and left 0F1's oscillatory (z < 0) branch ~1-3% off
+/// SciPy. The full series — summed to its smallest term, since it is asymptotic
+/// (divergent) — restores ~1e-14 agreement. frankenscipy-o9ws0.
 fn bessel_j_asymptotic(nu: f64, x: f64) -> f64 {
-    // J_nu(x) ~ sqrt(2/(pi*x)) * cos(x - nu*pi/2 - pi/4)
-    let phase = x - nu * std::f64::consts::FRAC_PI_2 - std::f64::consts::FRAC_PI_4;
+    let mu = 4.0 * nu * nu;
+    let mut term = 1.0_f64; // a_k / x^k, a_0 = 1
+    let mut prev_abs = 1.0_f64;
+    let mut p = 1.0_f64; // k = 0 term of P
+    let mut q = 0.0_f64;
+    for k in 1..64 {
+        let kf = k as f64;
+        term *= (mu - (2.0 * kf - 1.0).powi(2)) / (8.0 * kf * x);
+        let abs_term = term.abs();
+        if abs_term > prev_abs {
+            break; // asymptotic series past its smallest term — truncate
+        }
+        if k % 2 == 0 {
+            let sign = if (k / 2) % 2 == 0 { 1.0 } else { -1.0 };
+            p += sign * term;
+        } else {
+            let sign = if ((k - 1) / 2) % 2 == 0 { 1.0 } else { -1.0 };
+            q += sign * term;
+        }
+        prev_abs = abs_term;
+        if abs_term <= f64::EPSILON {
+            break;
+        }
+    }
+    let omega = x - nu * std::f64::consts::FRAC_PI_2 - std::f64::consts::FRAC_PI_4;
     let amplitude = (2.0 / (std::f64::consts::PI * x)).sqrt();
-    amplitude * phase.cos()
+    amplitude * (omega.cos() * p - omega.sin() * q)
 }
 
 /// Gauss hypergeometric function 2F1(a, b; c; z).
@@ -3573,6 +3605,29 @@ mod tests {
             let rel = ((v - expected) / expected).abs();
             assert!(rel < 1e-12, "hyp1f1({a},{b},{z}) = {v:e}, scipy {expected:e}, rel={rel:e}");
         }
+    }
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy/mpmath
+    fn hyp0f1_large_negative_z_matches_scipy() {
+        // Oscillatory (z < 0) branch via the full DLMF 10.17.3 J_ν asymptotic
+        // (frankenscipy-o9ws0): the leading-order form was 1-3% off. scipy 1.17.1.
+        let cases = [
+            (2.0, -50.0, 2.1893548253388965e-02),
+            (2.0, -200.0, 7.3270880329473410e-03),
+            (0.5, -400.0, -6.6693806165226180e-01),
+            (3.0, -800.0, -0.00019726526855692484),
+            (1.5, -100.0, 0.04564726253638135),
+            (2.5, -1000.0, -0.0006819625965429237),
+        ];
+        for (b, z, expected) in cases {
+            let v = hyp0f1_scalar(b, z, RuntimeMode::Strict).expect("finite");
+            let rel = ((v - expected) / expected).abs();
+            assert!(rel < 1e-9, "hyp0f1({b},{z}) = {v:e}, scipy {expected:e}, rel={rel:e}");
+        }
+        // Positive z (modified Bessel I) branch stays correct.
+        let pos = hyp0f1_scalar(2.0, 200.0, RuntimeMode::Strict).expect("finite");
+        assert!(((pos - 1.0056860439881468e10) / 1.0056860439881468e10).abs() < 1e-9);
     }
 
     #[test]
