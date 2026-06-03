@@ -7732,6 +7732,17 @@ fn matmul_flat_workspace(
     const MR: usize = 4;
     const NR: usize = 8;
     const RB: usize = 64;
+    let full_n_blocks = n / NR;
+    let packed_b_len = full_n_blocks.checked_mul(ka)?.checked_mul(NR)?;
+    let mut packed_b = Vec::with_capacity(packed_b_len);
+    for jb in 0..full_n_blocks {
+        let j0 = jb * NR;
+        for k in 0..ka {
+            let b_base = k * n + j0;
+            packed_b.extend_from_slice(&b_flat[b_base..b_base + NR]);
+        }
+    }
+
     let mut ib = 0;
     while ib < m {
         let i_limit = (ib + RB).min(m);
@@ -7747,21 +7758,22 @@ fn matmul_flat_workspace(
                     let a2_base = (i0 + 2) * ka;
                     let a3_base = (i0 + 3) * ka;
                     let mut acc = [Simd::<f64, NR>::splat(0.0); MR];
+                    let packed_panel_base = (j0 / NR) * ka * NR;
                     for k in 0..ka {
                         let a0 = a_flat[a0_base + k];
                         let a1 = a_flat[a1_base + k];
                         let a2 = a_flat[a2_base + k];
                         let a3 = a_flat[a3_base + k];
-                        let b_base = k * n + j0;
+                        let b_base = packed_panel_base + k * NR;
                         let b_vec = Simd::from_array([
-                            b_flat[b_base],
-                            b_flat[b_base + 1],
-                            b_flat[b_base + 2],
-                            b_flat[b_base + 3],
-                            b_flat[b_base + 4],
-                            b_flat[b_base + 5],
-                            b_flat[b_base + 6],
-                            b_flat[b_base + 7],
+                            packed_b[b_base],
+                            packed_b[b_base + 1],
+                            packed_b[b_base + 2],
+                            packed_b[b_base + 3],
+                            packed_b[b_base + 4],
+                            packed_b[b_base + 5],
+                            packed_b[b_base + 6],
+                            packed_b[b_base + 7],
                         ]);
                         acc[0] += Simd::splat(a0) * b_vec;
                         acc[1] += Simd::splat(a1) * b_vec;
