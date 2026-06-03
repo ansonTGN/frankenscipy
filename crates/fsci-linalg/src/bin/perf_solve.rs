@@ -25,7 +25,7 @@ use std::time::Instant;
 
 use fsci_linalg::{
     DecompOptions, SolveOptions, TriangularSolveOptions, lu_factor, lu_solve, solve,
-    solve_triangular,
+    solve_toeplitz, solve_triangular, toeplitz,
 };
 use nalgebra::{DMatrix, DVector};
 
@@ -65,6 +65,20 @@ fn make_rhs(n: usize, seed: u64) -> Vec<f64> {
             ((state >> 33) as f64) / (u32::MAX as f64) - 0.5
         })
         .collect()
+}
+
+/// Deterministic, strongly diagonally-dominant (well-conditioned) non-symmetric
+/// Toeplitz system: c[0] dominates so every leading principal minor is
+/// non-singular (Levinson is stable). r[0] is ignored by both paths.
+fn make_toeplitz(n: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+    let c: Vec<f64> = (0..n)
+        .map(|k| if k == 0 { 4.0 } else { 0.5f64.powi(k as i32) })
+        .collect();
+    let r: Vec<f64> = (0..n)
+        .map(|k| if k == 0 { 0.0 } else { 0.3f64.powi(k as i32) })
+        .collect();
+    let b: Vec<f64> = (0..n).map(|i| ((i % 7) as f64) - 3.0).collect();
+    (c, r, b)
 }
 
 fn make_upper_triangular(n: usize) -> Vec<Vec<f64>> {
@@ -158,6 +172,36 @@ fn main() {
         for _ in 0..repeats {
             checksum +=
                 compute_backward_error_probe(black_box(&matrix), black_box(&x), black_box(&rhs));
+        }
+        let elapsed = t0.elapsed();
+        let per_call_ms = elapsed.as_secs_f64() * 1e3 / repeats as f64;
+        println!(
+            "{{\"mode\":\"{mode}\",\"n\":{n},\"repeats\":{repeats},\"total_ms\":{:.3},\"per_call_ms\":{:.4},\"checksum\":{:.6e}}}",
+            elapsed.as_secs_f64() * 1e3,
+            per_call_ms,
+            checksum
+        );
+        return;
+    }
+
+    // Toeplitz A/B: `toeplitz_levinson` is the live O(n²) Levinson–Durbin
+    // path; `toeplitz_dense` reconstructs the previous O(n³) behaviour
+    // (materialise the dense n×n Toeplitz, then run a general LU solve). Same
+    // binary, same workload — the ratio of per_call_ms is the algorithmic win.
+    if mode == "toeplitz_levinson" || mode == "toeplitz_dense" {
+        let (tc, tr, tb) = make_toeplitz(n);
+        let t0 = Instant::now();
+        let mut checksum = 0.0_f64;
+        for _ in 0..repeats {
+            let x = if mode == "toeplitz_levinson" {
+                solve_toeplitz(black_box(&tc), Some(black_box(&tr)), black_box(&tb)).unwrap()
+            } else {
+                let matrix = toeplitz(black_box(&tc), Some(black_box(&tr)));
+                solve(black_box(&matrix), black_box(&tb), SolveOptions::default())
+                    .unwrap()
+                    .x
+            };
+            checksum += x.iter().sum::<f64>();
         }
         let elapsed = t0.elapsed();
         let per_call_ms = elapsed.as_secs_f64() * 1e3 / repeats as f64;

@@ -5089,8 +5089,75 @@ pub fn solve_toeplitz(c: &[f64], r: Option<&[f64]>, b: &[f64]) -> Result<Vec<f64
         return Ok(Vec::new());
     }
 
-    let matrix = toeplitz(c, r);
-    Ok(solve(&matrix, b, SolveOptions::default())?.x)
+    // Levinson–Durbin recursion (O(n²)) instead of building the dense n×n
+    // Toeplitz matrix and running an O(n³) LU solve. This is the same algorithm
+    // SciPy's `solve_toeplitz` uses, so it both matches SciPy's numerics more
+    // closely and scales as O(n²). The matrix is T[i][j] = c[i-j] for i>=j else
+    // r[j-i]; the diagonal is c[0] and row[0] is ignored (matching `toeplitz`).
+    //
+    // Forward/backward predictor vectors f, bk satisfy T^{(m)} f = e_1 and
+    // T^{(m)} bk = e_m for each leading principal submatrix; the solution x is
+    // grown one row at a time via x ← [x;0] + θ·bk. A zero recursion pivot means
+    // a singular leading principal minor — SciPy rejects the same inputs.
+    let diag = |k: isize| -> f64 {
+        if k >= 0 {
+            c[k as usize]
+        } else {
+            row[(-k) as usize]
+        }
+    };
+
+    let t0 = diag(0);
+    if t0 == 0.0 {
+        return Err(LinalgError::SingularMatrix);
+    }
+
+    let mut f = Vec::with_capacity(n); // forward predictor
+    let mut bk = Vec::with_capacity(n); // backward predictor
+    let mut x = Vec::with_capacity(n);
+    f.push(1.0 / t0);
+    bk.push(1.0 / t0);
+    x.push(b[0] / t0);
+
+    for m in 1..n {
+        // Forward error ε_f = Σ_j T[m][j] f_j and backward error
+        // ε_b = Σ_j T[0][j+1] bk_j over the current submatrix of size m.
+        let mut ef = 0.0;
+        let mut eb = 0.0;
+        for j in 0..m {
+            ef += diag(m as isize - j as isize) * f[j];
+            eb += diag(-(j as isize) - 1) * bk[j];
+        }
+        let denom = 1.0 - ef * eb;
+        if denom == 0.0 {
+            return Err(LinalgError::SingularMatrix);
+        }
+
+        // F = ([f;0] - ε_f[0;bk]) / denom ; B = ([0;bk] - ε_b[f;0]) / denom.
+        let mut f_new = Vec::with_capacity(m + 1);
+        let mut b_new = Vec::with_capacity(m + 1);
+        for i in 0..=m {
+            let fi = if i < m { f[i] } else { 0.0 };
+            let bi = if i == 0 { 0.0 } else { bk[i - 1] };
+            f_new.push((fi - ef * bi) / denom);
+            b_new.push((bi - eb * fi) / denom);
+        }
+        f = f_new;
+        bk = b_new;
+
+        // θ = b[m] - Σ_j T[m][j] x_j ; x ← [x;0] + θ·bk (with the new bk).
+        let mut ex = 0.0;
+        for j in 0..m {
+            ex += diag(m as isize - j as isize) * x[j];
+        }
+        let theta = b[m] - ex;
+        x.push(0.0);
+        for i in 0..=m {
+            x[i] += theta * bk[i];
+        }
+    }
+
+    Ok(x)
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -6409,11 +6476,13 @@ pub fn toeplitz(c: &[f64], r: Option<&[f64]>) -> Vec<Vec<f64>> {
     let mut result = vec![vec![0.0; m]; n];
     for i in 0..n {
         for j in 0..m {
-            result[i][j] = if j >= i {
-                if i == 0 && j == 0 { c[0] } else { row[j - i] }
-            } else {
-                c[i - j]
-            };
+            // Lower triangle + diagonal come from the first column `c`; the
+            // strict upper triangle comes from the first row `r`. This keeps the
+            // diagonal at c[0] for every i and ignores row[0] entirely, matching
+            // scipy.linalg.toeplitz (where r[0] is documented as ignored). The
+            // previous split put row[0] on the diagonal for i>0, corrupting it
+            // whenever r[0] != c[0].
+            result[i][j] = if i >= j { c[i - j] } else { row[j - i] };
         }
     }
     result
@@ -10713,6 +10782,20 @@ mod tests {
         assert_eq!(t[0], vec![1.0, 4.0, 5.0]);
         assert_eq!(t[1], vec![2.0, 1.0, 4.0]);
         assert_eq!(t[2], vec![3.0, 2.0, 1.0]);
+    }
+
+    #[test]
+    fn toeplitz_ignores_row_zero_keeps_constant_diagonal() {
+        // scipy.linalg.toeplitz documents that r[0] is ignored: the diagonal is
+        // always c[0]. Previously row[0] leaked onto the diagonal for i>0,
+        // corrupting it whenever r[0] != c[0]. Use r[0]=99 != c[0]=2 to lock it.
+        let c = vec![2.0, 1.0, 0.0];
+        let r = vec![99.0, -1.0, 0.5];
+        let t = toeplitz(&c, Some(&r));
+        // Diagonal is c[0]=2 everywhere; r[0]=99 never appears.
+        assert_eq!(t[0], vec![2.0, -1.0, 0.5]);
+        assert_eq!(t[1], vec![1.0, 2.0, -1.0]);
+        assert_eq!(t[2], vec![0.0, 1.0, 2.0]);
     }
 
     #[test]
