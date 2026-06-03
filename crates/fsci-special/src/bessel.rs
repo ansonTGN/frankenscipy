@@ -437,6 +437,11 @@ pub fn k1e_scalar(x: f64) -> f64 {
 /// Scalar: kve(v, x) = K_v(x) * exp(x).
 #[must_use]
 pub fn kve_scalar(v: f64, x: f64) -> f64 {
+    // Scaled directly so it stays finite past z ≈ 745, where K_v underflows to 0
+    // and the old kv·e^x form gave 0·∞ = NaN. SciPy's kve is finite there.
+    if x > 0.0 {
+        return kv_scaled_value(v.abs(), x);
+    }
     kv_scalar(v, x, RuntimeMode::Strict).unwrap_or(f64::NAN) * x.exp()
 }
 
@@ -1369,7 +1374,8 @@ fn iv_scalar(v: f64, z: f64) -> f64 {
     // the NaN returned by the power-series branch below.
     if v < 0.0 && v.fract() != 0.0 && z > 0.0 {
         let p = -v;
-        return iv_scalar(p, z) + (2.0 / PI) * (p * PI).sin() * kv_integral(p, z);
+        let kp = kv_scaled_value(p, z) * (-z).exp();
+        return iv_scalar(p, z) + (2.0 / PI) * (p * PI).sin() * kp;
     }
 
     if az > 50.0 {
@@ -1442,32 +1448,35 @@ fn kv_scalar(v: f64, z: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
         return domain_error_by_mode("kv", mode, format!("v={v},z={z}"), "kv requires z > 0");
     }
 
-    // K_v is symmetric: K_{-v}(z) = K_v(z)
-    let v_abs = v.abs();
+    // K_v = e^{-z} · (K_v·e^z). The scaled value is computed without ever forming
+    // the tiny K_v directly; for z ≳ 745 the e^{-z} underflows to 0, matching
+    // SciPy (kve stays finite via kve_scalar). K_v is symmetric: K_{-v} = K_v.
+    Ok(kv_scaled_value(v.abs(), z) * (-z).exp())
+}
 
-    // Large z: the integral representation has tiny magnitude (e.g. K_0(100) ≈
-    // 5e-45) which defeats adaptive_simpson's absolute tolerance, so use the
-    // DLMF 10.40.2 asymptotic. Valid once z is large relative to v² — gate on
-    // z ≥ max(30, v²/2), inside the region where it is machine-accurate.
+/// Exponentially scaled K_v: returns K_v(z)·e^z for z > 0, staying O(1)/finite
+/// for all z. Underpins both kv (×e^{-z}) and kve (directly), avoiding the
+/// underflow/overflow round-trip and the tiny-magnitude integral that defeated
+/// the absolute-tolerance quadrature. frankenscipy-j3bw7.
+fn kv_scaled_value(v_abs: f64, z: f64) -> f64 {
+    // Large z relative to v²: DLMF 10.40.2 asymptotic (scaled form, no e^{-z}).
     if z >= 30.0 && z >= 0.5 * v_abs * v_abs {
-        return Ok(kv_asymptotic(v_abs, z));
+        return kv_asymptotic_scaled(v_abs, z);
     }
-
-    // For non-integer v: use integral representation K_v(z) = ∫ exp(-z cosh t) cosh(vt) dt
-    // This avoids the I_{-v} formula which has numerical issues for non-integer negative orders.
+    // Non-integer order: scaled integral directly.
     if v_abs.fract() != 0.0 {
-        return Ok(kv_integral(v_abs, z));
+        return kv_integral_scaled(v_abs, z);
     }
-
-    // Integer order: use K_0, K_1 from integral, then recurrence K_{n+1} = K_{n-1} + 2n/z K_n
-    let k0 = kv_integer_zero(z);
-    let n = v.abs().round() as u32;
+    // Integer order: the recurrence K_{n+1} = K_{n-1} + (2n/z)K_n is identical for
+    // the e^z-scaled values, so build them from the scaled K_0, K_1.
+    let k0 = kv_integral_scaled(0.0, z);
+    let n = v_abs.round() as u32;
     if n == 0 {
-        return Ok(k0);
+        return k0;
     }
-    let k1 = kv_integer_one(z);
+    let k1 = kv_integral_scaled(1.0, z);
     if n == 1 {
-        return Ok(k1);
+        return k1;
     }
     let mut k_prev = k0;
     let mut k_curr = k1;
@@ -1476,25 +1485,13 @@ fn kv_scalar(v: f64, z: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
         k_prev = k_curr;
         k_curr = k_next;
     }
-    Ok(k_curr)
+    k_curr
 }
 
-fn kv_integer_zero(z: f64) -> f64 {
-    kv_integral(0.0, z)
-}
-
-fn kv_integer_one(z: f64) -> f64 {
-    kv_integral(1.0, z)
-}
-
-/// Large-z asymptotic for K_v(z) (DLMF 10.40.2):
-///   K_v(z) ~ sqrt(π/(2z)) e^{-z} Σ_k a_k(v)/z^k,
-///   a_0 = 1,  a_k = a_{k-1}(4v² - (2k-1)²)/(8k).
-/// Unlike the J_v expansion the coefficients are all-positive. The series is
-/// asymptotic (divergent); sum to its smallest term. Replaces the integral at
-/// large z, where the integral's tiny magnitude (≈ e^{-z}) defeated the
-/// adaptive-Simpson absolute tolerance and gave 12-39% errors. frankenscipy-c66a3.
-fn kv_asymptotic(v: f64, z: f64) -> f64 {
+/// Scaled DLMF 10.40.2 asymptotic: K_v(z)·e^z ~ sqrt(π/(2z)) Σ_k a_k/z^k,
+/// a_0 = 1, a_k = a_{k-1}(4v² − (2k-1)²)/(8k) (all-positive). The series is
+/// asymptotic (divergent); sum to its smallest term.
+fn kv_asymptotic_scaled(v: f64, z: f64) -> f64 {
     let mu = 4.0 * v * v;
     let mut term = 1.0_f64; // a_k / z^k, a_0 = 1
     let mut prev_abs = 1.0_f64;
@@ -1512,26 +1509,32 @@ fn kv_asymptotic(v: f64, z: f64) -> f64 {
             break;
         }
     }
-    (PI / (2.0 * z)).sqrt() * (-z).exp() * sum
+    (PI / (2.0 * z)).sqrt() * sum
 }
 
-fn kv_integral(v: f64, z: f64) -> f64 {
-    let upper = kv_integral_upper(z);
-    adaptive_simpson(
-        &|t| (-z * t.cosh()).exp() * (v * t).cosh(),
-        0.0,
-        upper,
-        1.0e-12,
-        16,
-    )
-}
-
-fn kv_integral_upper(z: f64) -> f64 {
-    let mut upper = 1.0_f64;
-    while z * upper.cosh() < 40.0 && upper < 12.0 {
-        upper += 1.0;
+/// Scaled integral form: K_v(z)·e^z = ∫_0^∞ e^{-z(cosh t − 1)} cosh(vt) dt.
+/// Factoring e^{-z} out of the integrand makes it O(1) (peak ≈ 1) so the
+/// absolute-tolerance adaptive Simpson resolves it correctly — the unfactored
+/// integrand was ≈ e^{-z}, defeating the tolerance and giving the coarse value
+/// of a spike. The integrand's saddle sits at t* = asinh(v/z) (0 for v = 0); we
+/// split the interval there and extend the upper limit until the exponent has
+/// fallen ~50 below the peak.
+fn kv_integral_scaled(v: f64, z: f64) -> f64 {
+    let t_star = (v / z).asinh();
+    // Exponent φ(t) = z(cosh t − 1) − v t; integrand ≈ e^{−(φ(t)−φ(t*))} near peak.
+    let phi = |t: f64| z * (t.cosh() - 1.0) - v * t;
+    let base = phi(t_star);
+    let mut upper = t_star + 1.0;
+    while phi(upper) - base < 50.0 && upper < 40.0 {
+        upper += 0.5;
     }
-    upper
+    let integrand = |t: f64| (-z * (t.cosh() - 1.0)).exp() * (v * t).cosh();
+    if t_star > 1.0e-9 && t_star < upper {
+        adaptive_simpson(&integrand, 0.0, t_star, 1.0e-13, 24)
+            + adaptive_simpson(&integrand, t_star, upper, 1.0e-13, 24)
+    } else {
+        adaptive_simpson(&integrand, 0.0, upper, 1.0e-13, 24)
+    }
 }
 
 fn adaptive_simpson(f: &impl Fn(f64) -> f64, a: f64, b: f64, tol: f64, depth: u32) -> f64 {
@@ -4115,6 +4118,43 @@ mod tests {
             let kval = rv(kv(&s(v), &s(z), m));
             let keval = rv(kve(&s(v), &s(z), m));
             assert!(((kval - kref) / kref).abs() < 1e-10, "kv({v},{z})={kval:e} vs {kref:e}");
+            assert!(((keval - keref) / keref).abs() < 1e-10, "kve({v},{z})={keval:e} vs {keref:e}");
+        }
+    }
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy/mpmath
+    fn kv_kve_integral_window_and_scaled_overflow() {
+        // frankenscipy-j3bw7: (a) large-v moderate-z still uses the integral
+        // (below the asymptotic threshold) — the e^{-z}-factored, saddle-aware
+        // form fixes it; (b) kve stays finite past z≈745 where kv underflows.
+        let rv = |r: SpecialResult| match r {
+            Ok(SpecialTensor::RealScalar(v)) => v,
+            _ => f64::NAN,
+        };
+        let s = SpecialTensor::RealScalar;
+        let m = RuntimeMode::Strict;
+        let cases = [
+            (15.0, 100.0, 1.4234832511447141e-44, 0.3826489728490269),
+            (20.0, 150.0, 2.765588292853233e-66, 0.3854426899928329),
+            (10.0, 40.0, 2.868029311367192e-18, 0.6750918447525612),
+            (30.0, 40.0, 3.6670011340654733e-14, 8631.58040433656),
+            (2.5, 10.0, 2.3931325864627893e-05, 0.5271225305815995),
+        ];
+        for (v, z, kref, keref) in cases {
+            let kval = rv(kv(&s(v), &s(z), m));
+            let keval = rv(kve(&s(v), &s(z), m));
+            assert!(((kval - kref) / kref).abs() < 1e-10, "kv({v},{z})={kval:e} vs {kref:e}");
+            assert!(((keval - keref) / keref).abs() < 1e-10, "kve({v},{z})={keval:e} vs {keref:e}");
+        }
+        // z > 745: kv underflows to 0 (matching scipy), kve stays finite.
+        for (v, z, keref) in [
+            (0.0, 750.0, 0.045756939928889066),
+            (2.0, 800.0, 0.04441525775942454),
+            (1.0, 900.0, 0.04179453901303371),
+        ] {
+            assert_eq!(rv(kv(&s(v), &s(z), m)), 0.0, "kv({v},{z}) should underflow to 0");
+            let keval = rv(kve(&s(v), &s(z), m));
             assert!(((keval - keref) / keref).abs() < 1e-10, "kve({v},{z})={keval:e} vs {keref:e}");
         }
     }
