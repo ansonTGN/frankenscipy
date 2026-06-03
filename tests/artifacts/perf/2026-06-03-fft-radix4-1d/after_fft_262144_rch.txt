@@ -1,0 +1,25 @@
+  [2m2026-06-03T04:36:43.864335Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mRemote command finished: exit=0 in 44883ms[0m
+    [2;3mat[0m rch/src/hook.rs:6364 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:36:43.864606Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mRetrieving build artifacts...[0m
+    [2;3mat[0m rch/src/hook.rs:6413 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:36:43.864636Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mRetrieving artifacts from /data/projects/frankenscipy on vmi1156319[0m
+    [2;3mat[0m rch/src/transfer.rs:2072 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:36:45.932252Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mArtifacts retrieved in 2067ms (1 files, 2852 bytes)[0m
+    [2;3mat[0m rch/src/transfer.rs:2111 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:36:45.932281Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mArtifacts retrieved: 1 files, 2852 bytes in 2067ms[0m
+    [2;3mat[0m rch/src/hook.rs:6446 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:36:45.932386Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mRetrieving artifacts from /data/projects/frankenscipy/.rch-target-vmi1156319-job-29869223945704018-1780461289969176147-0 on vmi1156319[0m
+    [2;3mat[0m rch/src/transfer.rs:2072 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:36:48.049684Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mArtifacts retrieved in 2117ms (31 files, 2153 bytes)[0m
+    [2;3mat[0m rch/src/transfer.rs:2111 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:36:48.049712Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mCustom CARGO_TARGET_DIR artifacts retrieved: 31 files, 2153 bytes in 2117ms[0m
+    [2;3mat[0m rch/src/hook.rs:6570 [2;3mon[0m ThreadId(1)
+
+[RCH] remote vmi1156319 (120.6s)

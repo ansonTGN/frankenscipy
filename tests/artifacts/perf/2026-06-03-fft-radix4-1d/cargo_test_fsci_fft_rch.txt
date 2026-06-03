@@ -1,0 +1,20 @@
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+  [2m2026-06-03T04:36:24.139845Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mRemote command finished: exit=0 in 31519ms[0m
+    [2;3mat[0m rch/src/hook.rs:6364 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:36:24.141661Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mRetrieving build artifacts...[0m
+    [2;3mat[0m rch/src/hook.rs:6413 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:36:24.141698Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mRetrieving artifacts from /data/projects/frankenscipy on vmi1293453[0m
+    [2;3mat[0m rch/src/transfer.rs:2072 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:36:26.143825Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mArtifacts retrieved in 2002ms (1 files, 2845 bytes)[0m
+    [2;3mat[0m rch/src/transfer.rs:2111 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:36:26.143846Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mArtifacts retrieved: 1 files, 2845 bytes in 2002ms[0m
+    [2;3mat[0m rch/src/hook.rs:6446 [2;3mon[0m ThreadId(1)
+
+[RCH] remote vmi1293453 (99.6s)

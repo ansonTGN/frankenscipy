@@ -1,0 +1,40 @@
+   Compiling rand_chacha v0.9.0
+   Compiling proptest v1.11.0
+   Compiling criterion v0.8.2
+    Finished `bench` profile [optimized] target(s) in 1m 03s
+     Running benches/fft_bench.rs (.rch-target-vmi1153651-job-29869223945703990-1780460814966364675-0/release/deps/fft_bench-878186e683917b2d)
+Gnuplot not found, using plotters backend
+Benchmarking baseline_fft/fft/262144
+Benchmarking baseline_fft/fft/262144: Warming up for 3.0000 s
+Benchmarking baseline_fft/fft/262144: Collecting 50 samples in estimated 5.4948 s (250 iterations)
+Benchmarking baseline_fft/fft/262144: Analyzing
+baseline_fft/fft/262144 time:   [17.355 ms 19.181 ms 21.363 ms]
+Found 6 outliers among 50 measurements (12.00%)
+  5 (10.00%) high mild
+  1 (2.00%) high severe
+
+  [2m2026-06-03T04:29:27.070166Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mRemote command finished: exit=0 in 79272ms[0m
+    [2;3mat[0m rch/src/hook.rs:6364 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:29:27.070458Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mRetrieving build artifacts...[0m
+    [2;3mat[0m rch/src/hook.rs:6413 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:29:27.070485Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mRetrieving artifacts from /data/projects/frankenscipy on vmi1153651[0m
+    [2;3mat[0m rch/src/transfer.rs:2072 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:29:29.419957Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mArtifacts retrieved in 2349ms (1 files, 2852 bytes)[0m
+    [2;3mat[0m rch/src/transfer.rs:2111 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:29:29.419978Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mArtifacts retrieved: 1 files, 2852 bytes in 2349ms[0m
+    [2;3mat[0m rch/src/hook.rs:6446 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:29:29.420064Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mRetrieving artifacts from /data/projects/frankenscipy/.rch-target-vmi1153651-job-29869223945703990-1780460814966364675-0 on vmi1153651[0m
+    [2;3mat[0m rch/src/transfer.rs:2072 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:29:31.906887Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mArtifacts retrieved in 2486ms (31 files, 995 bytes)[0m
+    [2;3mat[0m rch/src/transfer.rs:2111 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T04:29:31.906914Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mCustom CARGO_TARGET_DIR artifacts retrieved: 31 files, 995 bytes in 2486ms[0m
+    [2;3mat[0m rch/src/hook.rs:6570 [2;3mon[0m ThreadId(1)
+
+[RCH] remote vmi1153651 (160.0s)

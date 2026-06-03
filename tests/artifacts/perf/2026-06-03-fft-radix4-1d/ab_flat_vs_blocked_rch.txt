@@ -1,0 +1,3 @@
+mode=ab n=262144 reps=51 bit_identical=true flat_median_ns=6081896 blocked_median_ns=6040347 flat_ms=6.0819 blocked_ms=6.0403 score_flat_over_blocked=1.0069
+mode=ab n=262144 reps=51 bit_identical=true flat_median_ns=6071777 blocked_median_ns=6029807 flat_ms=6.0718 blocked_ms=6.0298 score_flat_over_blocked=1.0070
+mode=ab n=262144 reps=51 bit_identical=true flat_median_ns=6069492 blocked_median_ns=5964864 flat_ms=6.0695 blocked_ms=5.9649 score_flat_over_blocked=1.0175
