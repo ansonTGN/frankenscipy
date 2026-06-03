@@ -1,62 +1,66 @@
 # frankenscipy-e3713 conclusion
 
-## Lever kept
+## Verdict
 
-Changed exactly one production lever in `matmul_flat_workspace`: the large
-rectangular flat-workspace path now sweeps `j0` B-panels outside `i0` row tiles.
-The dispatch gate is unchanged (`m`, `ka`, and `n` all at least 1024,
-rectangular inputs only).
+Kept. The one production lever changes the large flat-workspace GEMM traversal
+from row-tile outer to B-panel outer.
 
-## Behavior proof
+## Baseline and after
 
-- Ordering preserved: public output is still materialized row-major from
-  `c_flat`.
-- Tie-breaking unchanged: GEMM has no tie-breaking surface.
-- Floating-point preserved: each `c[i][j]` still accumulates `k = 0..ka`
-  monotonically with the same separate `acc += a * b` updates.
-- RNG unchanged: no RNG surface exists.
-- Golden output: before/after sorted test-result SHA-256 stayed
-  `61e12eb58f34ccba1dcedd29425ff3292fd7df5769f7411352cd2a617a58d6c7`;
-  `cmp` of the sorted test-result goldens exited `0`.
+Fresh pre-edit RCH Criterion baseline on `vmi1227854`:
 
-The raw sorted RCH-log normalization files differ only in volatile timestamp and
-test scheduling order. The stable sorted test-result golden is identical.
+| row | before median |
+| --- | ---: |
+| `matmul/512x512` | `38.543 ms` |
+| `matmul/768x768` | `129.09 ms` |
+| `matmul/1024x1024` | `421.95 ms` |
 
-## Performance
+Focused after RCH Criterion on `vmi1293453`:
 
-Focused RCH Criterion baseline:
+| row | after median |
+| --- | ---: |
+| `matmul/512x512` | `39.942 ms` |
+| `matmul/768x768` | `139.92 ms` |
+| `matmul/1024x1024` | `372.14 ms` |
 
-| row | before | after | ratio |
-| --- | ---: | ---: | ---: |
-| `matmul/1024x1024` | `421.95 ms` | `375.15 ms` | `1.12x` |
+The production lever is gated to `m >= 1024`, `k >= 1024`, and `n >= 1024`, so
+the `512` and `768` rows remain below the optimized path. The keep row is
+`1024x1024`.
 
-Supporting same-worker profile row on `vmi1293453`:
+Comparable same-worker signal: the pre-edit broad reprofile on `vmi1293453`
+measured `matmul/1024x1024` at `504.32 ms`; the focused after run on the same
+worker measured `372.14 ms` (`1.36x`). The fresh baseline comparison is
+`421.95 ms -> 372.14 ms` (`1.13x`) across workers.
 
-| row | before profile | after focused | ratio |
-| --- | ---: | ---: | ---: |
-| `matmul/1024x1024` | `504.32 ms` | `375.15 ms` | `1.34x` |
+Score: `2.4 = impact 2 * confidence 3 / effort 2.5`.
 
-Keep score: `2.5 = impact 2 * confidence 2.5 / effort 2`.
+## Isomorphism proof
 
-## Validation
+- Ordering preserved: yes. Public output remains row-major `Vec<Vec<f64>>`.
+- Tie-breaking unchanged: yes. GEMM has no tie-breaking surface.
+- Floating-point preserved: yes. Each output cell still accumulates `k = 0..ka`
+  monotonically with separate `acc += a * b` updates.
+- RNG preserved: N/A. No RNG surface exists.
+- Golden tests: before and after sorted test-line SHA-256 both
+  `61e12eb58f34ccba1dcedd29425ff3292fd7df5769f7411352cd2a617a58d6c7`.
 
-- `cargo fmt -p fsci-linalg --check`: passed.
-- `ubs crates/fsci-linalg/src/lib.rs`: exit `0`, critical count `0`.
-- RCH `cargo check -p fsci-linalg --all-targets --locked`: passed.
-- RCH `cargo clippy -p fsci-linalg --all-targets --locked -- -D warnings`: passed.
-- RCH release matmul golden/isomorphism tests: passed.
+## Gates
+
+- `cargo fmt -p fsci-linalg --check`: pass.
+- `ubs crates/fsci-linalg/src/lib.rs`: critical `0`.
+- RCH `cargo test -p fsci-linalg --release --locked matmul -- --nocapture`:
+  pass on `vmi1149989`.
+- RCH `cargo check -p fsci-linalg --all-targets --locked`: pass on
+  `vmi1149989`.
+- RCH `cargo clippy -p fsci-linalg --all-targets --locked -- -D warnings`:
+  pass on `vmi1153651`.
 
 ## Reprofile
 
-RCH linalg reprofile on `vmi1149989` still ranks deep GEMM first:
+RCH linalg reprofile on `vmi1149989` was noisy across unrelated rows but still
+ranked `matmul/1024x1024` first at median `571.38 ms`, followed by
+`baseline_solve/1000x1000` at `380.01 ms`, `matmul/768x768` at `226.34 ms`,
+`lstsq/512x256` at `125.76 ms`, and `pinv/512x256` at `118.70 ms`.
 
-| rank | row | median |
-| ---: | --- | ---: |
-| 1 | `matmul/1024x1024` | `571.38 ms` |
-| 2 | `matmul/768x768` | `226.34 ms` |
-| 3 | `baseline_solve/1000x1000` | `171.38 ms` |
-| 4 | `lstsq/512x256` | `125.76 ms` |
-| 5 | `pinv/512x256` | `118.70 ms` |
-
-Next target should remain a deeper dense-GEMM primitive, not a solve/lstsq
-handoff.
+Next target: a deeper GEMM primitive again, likely recursive/cache-oblivious
+blocking or a packed-panel kernel with same-worker comparator discipline.
