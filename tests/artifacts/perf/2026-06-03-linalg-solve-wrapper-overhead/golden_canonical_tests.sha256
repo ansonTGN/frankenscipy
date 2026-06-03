@@ -1,0 +1,2 @@
+a4822514f1572ea3d973752dd54abcf188d9c42ebab538602ab6faa461ddfac8  tests/artifacts/perf/2026-06-03-linalg-solve-wrapper-overhead/golden_before_canonical_tests.txt
+a9abbdc8ec55b28ea55d2095e279bc6aef81d98ed7999e4f735fe48ff7ac2201  tests/artifacts/perf/2026-06-03-linalg-solve-wrapper-overhead/golden_after_canonical_tests.txt

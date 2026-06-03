@@ -1155,15 +1155,15 @@ fn condition_diagnostics_with_assumption_mode(
     } else if upper_triangular && !lower_triangular {
         fast_rcond_triangular(a, false)
     } else {
-        let matrix = dmatrix_from_rows(a)?;
+        let (matrix, matrix_norm_1) = dmatrix_from_rows_with_norm1(a)?;
         let lu = matrix.clone().lu();
         let rcond = if rows <= 4 {
             match safe_svd(matrix.clone(), false, false) {
                 Ok(svd) => rcond_from_singular_values(&svd.singular_values),
-                Err(_) => fast_rcond_from_lu(&lu, matrix_norm1(&matrix), rows),
+                Err(_) => fast_rcond_from_lu(&lu, matrix_norm_1, rows),
             }
         } else {
-            fast_rcond_from_lu(&lu, matrix_norm1(&matrix), rows)
+            fast_rcond_from_lu(&lu, matrix_norm_1, rows)
         };
         matrix_cache = Some(matrix);
         lu_cache = Some(lu);
@@ -5479,6 +5479,30 @@ fn dmatrix_from_rows(rows: &[Vec<f64>]) -> Result<DMatrix<f64>, LinalgError> {
     Ok(DMatrix::from_row_slice(m, n, &data))
 }
 
+fn dmatrix_from_rows_with_norm1(rows: &[Vec<f64>]) -> Result<(DMatrix<f64>, f64), LinalgError> {
+    let (m, n) = matrix_shape(rows)?;
+    let mut data = Vec::with_capacity(m * n);
+    let mut column_sums = vec![0.0_f64; n];
+    let mut non_finite = false;
+    for row in rows {
+        for (col, &value) in row.iter().enumerate() {
+            data.push(value);
+            let abs_value = value.abs();
+            if !abs_value.is_finite() {
+                non_finite = true;
+            } else {
+                column_sums[col] += abs_value;
+            }
+        }
+    }
+    let norm1 = if non_finite {
+        f64::NAN
+    } else {
+        column_sums.into_iter().fold(0.0_f64, f64::max)
+    };
+    Ok((DMatrix::from_row_slice(m, n, &data), norm1))
+}
+
 fn rows_from_dmatrix(m: &DMatrix<f64>) -> Vec<Vec<f64>> {
     let mut out = vec![vec![0.0; m.ncols()]; m.nrows()];
     for r in 0..m.nrows() {
@@ -8349,6 +8373,25 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn dmatrix_from_rows_with_norm1_matches_matrix_norm1() {
+        let rows = vec![
+            vec![1.0, -3.0, 2.0],
+            vec![-4.0, 5.0, -6.0],
+            vec![7.0, -8.0, 9.0],
+        ];
+        let (matrix, fused_norm) =
+            dmatrix_from_rows_with_norm1(&rows).expect("matrix build must work");
+        assert_eq!(rows_from_dmatrix(&matrix), rows);
+        assert_eq!(fused_norm, matrix_norm1(&matrix));
+
+        let non_finite = vec![vec![1.0, f64::INFINITY], vec![2.0, 3.0]];
+        let (matrix, fused_norm) =
+            dmatrix_from_rows_with_norm1(&non_finite).expect("matrix build must work");
+        assert!(fused_norm.is_nan());
+        assert!(matrix_norm1(&matrix).is_nan());
     }
 
     #[test]

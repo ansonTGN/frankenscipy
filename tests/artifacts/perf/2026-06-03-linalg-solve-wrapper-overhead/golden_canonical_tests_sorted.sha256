@@ -1,0 +1,2 @@
+004ce6132222a051085017a29591c730f42b16e1400a746ae653210145cbe228  tests/artifacts/perf/2026-06-03-linalg-solve-wrapper-overhead/golden_before_canonical_tests_sorted.txt
+004ce6132222a051085017a29591c730f42b16e1400a746ae653210145cbe228  tests/artifacts/perf/2026-06-03-linalg-solve-wrapper-overhead/golden_after_canonical_tests_sorted.txt
