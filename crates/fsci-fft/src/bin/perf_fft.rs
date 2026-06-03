@@ -18,7 +18,7 @@ use std::hint::black_box;
 use std::path::Path;
 use std::time::Instant;
 
-use fsci_fft::{FftOptions, fft2, irfft, polynomial_multiply_fft, rfft};
+use fsci_fft::{FftOptions, fft, fft2, ifft, irfft, polynomial_multiply_fft, rfft};
 
 fn make_polynomial_input(n: usize) -> Vec<f64> {
     (0..n)
@@ -163,6 +163,55 @@ fn main() {
     }
     if mode == "fft2-golden" {
         write_or_print_golden(fft2_golden_text(), args.get(2).map(String::as_str));
+        return;
+    }
+
+    if mode == "fftprobe" {
+        // Decompose fft() cost at large n: full fft(), full ifft(), and the
+        // isolated finiteness scan that the default (check_finite=false) path
+        // currently runs and discards. Median-of-reps, one process.
+        let probe_n = if n >= 2 { n } else { 262_144 };
+        let input = make_complex_input(probe_n);
+        let median = |f: &mut dyn FnMut() -> u64| -> u64 {
+            let mut s: Vec<u64> = (0..repeats).map(|_| f()).collect();
+            s.sort_unstable();
+            s[s.len() / 2]
+        };
+        let opts = FftOptions::default();
+        let mut fft_call = || {
+            let t = Instant::now();
+            let out = fft(black_box(&input), black_box(&opts)).expect("fft");
+            let e = t.elapsed().as_nanos() as u64;
+            black_box(out.len());
+            e
+        };
+        let fft_ns = median(&mut fft_call);
+        let spectrum = fft(&input, &opts).expect("fft");
+        let mut ifft_call = || {
+            let t = Instant::now();
+            let out = ifft(black_box(&spectrum), black_box(&opts)).expect("ifft");
+            let e = t.elapsed().as_nanos() as u64;
+            black_box(out.len());
+            e
+        };
+        let ifft_ns = median(&mut ifft_call);
+        let mut scan_call = || {
+            let t = Instant::now();
+            let bad = black_box(&input)
+                .iter()
+                .any(|&(re, im)| !re.is_finite() || !im.is_finite());
+            let e = t.elapsed().as_nanos() as u64;
+            black_box(bad);
+            e
+        };
+        let scan_ns = median(&mut scan_call);
+        println!(
+            "mode=fftprobe n={probe_n} reps={repeats} fft_ms={:.4} ifft_ms={:.4} dead_scan_ms={:.4} scan_pct_of_fft={:.2}",
+            fft_ns as f64 / 1e6,
+            ifft_ns as f64 / 1e6,
+            scan_ns as f64 / 1e6,
+            100.0 * scan_ns as f64 / fft_ns as f64,
+        );
         return;
     }
 

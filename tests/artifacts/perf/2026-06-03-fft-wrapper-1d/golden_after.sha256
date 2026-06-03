@@ -1,0 +1,4 @@
+d3e41795d153a1f884a968b318d23815a19ae7faeafbf01dc3d1f125af99c16a  tests/artifacts/perf/2026-06-03-fft-wrapper-1d/golden_rfft_after.txt
+5def432af7c8df2572704b874b4eb3fae42cd9df5e5dc1cf2e9a182d013009cc  tests/artifacts/perf/2026-06-03-fft-wrapper-1d/golden_irfft_after.txt
+79b17591371e8b8472ce6e9a89264628b960ae9fcde9f0e5c6b0c6de57bba5d8  tests/artifacts/perf/2026-06-03-fft-wrapper-1d/golden_fft2_after.txt
+8a0a18b1a0a30db819765de0d4caa1aab399714f0f4c966b35e899a232af6f95  tests/artifacts/perf/2026-06-03-fft-wrapper-1d/golden_polymul_after.txt

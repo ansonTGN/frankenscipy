@@ -2589,10 +2589,16 @@ fn validate_finite_complex_with_audit(
             "promoted finite-check policy for complex FFT input",
         );
     }
-    if input
-        .iter()
-        .any(|&(re, im)| !re.is_finite() || !im.is_finite())
-        && (options.check_finite || options.mode == RuntimeMode::Hardened)
+    // Short-circuit on the cheap policy flag BEFORE the O(n) finiteness scan:
+    // the scan's result only ever feeds `record_fail_closed`, which is gated on
+    // `check_finite || Hardened`. On the default path (check_finite=false,
+    // Strict) the scan can record nothing, so running it is a wasted full-array
+    // read pass (~2% of a large fft()). Behavior is unchanged — the record still
+    // fires exactly when policy demands a check and the input is non-finite.
+    if (options.check_finite || options.mode == RuntimeMode::Hardened)
+        && input
+            .iter()
+            .any(|&(re, im)| !re.is_finite() || !im.is_finite())
     {
         record_fail_closed(
             audit_ledger,
@@ -2618,8 +2624,10 @@ fn validate_finite_real_with_audit(
             "promoted finite-check policy for real FFT input",
         );
     }
-    if input.iter().any(|value| !value.is_finite())
-        && (options.check_finite || options.mode == RuntimeMode::Hardened)
+    // See validate_finite_complex_with_audit: gate the O(n) scan on the policy
+    // flag so the default (check_finite=false) path skips a wasted full pass.
+    if (options.check_finite || options.mode == RuntimeMode::Hardened)
+        && input.iter().any(|value| !value.is_finite())
     {
         record_fail_closed(
             audit_ledger,

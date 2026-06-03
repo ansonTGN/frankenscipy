@@ -1,0 +1,2 @@
+mode=fftprobe n=262144 reps=41 fft_ms=5.4330 ifft_ms=5.3916 dead_scan_ms=0.1227 scan_pct_of_fft=2.26
+mode=fftprobe n=262144 reps=41 fft_ms=5.7020 ifft_ms=5.2820 dead_scan_ms=0.1227 scan_pct_of_fft=2.15
