@@ -214,6 +214,16 @@ const HYP1F1_KUMMER_CHAIN: &[HypergeometricBranch] = &[
     HypergeometricBranch::DirectSeries,
     HypergeometricBranch::UnsupportedAnalyticContinuation,
 ];
+const HYP1F1_ASYMPTOTIC_CHAIN: &[HypergeometricBranch] = &[
+    HypergeometricBranch::AsymptoticExpansion,
+    HypergeometricBranch::UnsupportedAnalyticContinuation,
+];
+/// Above this real argument the 1F1 direct series (500-term cap, peak term near
+/// n ≈ z) can no longer converge, so large positive z switches to the DLMF
+/// 13.7.2 asymptotic expansion. Chosen well inside the asymptotic's accurate
+/// regime (~1e-14 rel for z ≥ 50) and far below the series' failure onset
+/// (z ≈ 440). frankenscipy-8a4qg.
+const HYP1F1_LARGE_Z_THRESHOLD: f64 = 200.0;
 const HYP2F1_DIRECT_CHAIN: &[HypergeometricBranch] = &[HypergeometricBranch::DirectSeries];
 const HYP2F1_TERMINATING_CHAIN: &[HypergeometricBranch] =
     &[HypergeometricBranch::TerminatingPolynomial];
@@ -850,6 +860,16 @@ fn select_hyp1f1_branch(problem: HyperCaspProblem) -> HyperCaspDecision {
         );
     }
 
+    if problem.z > HYP1F1_LARGE_Z_THRESHOLD {
+        return hyper_casp_decision(
+            HypergeometricBranch::AsymptoticExpansion,
+            problem,
+            500,
+            HYP1F1_ASYMPTOTIC_CHAIN,
+            "large positive z uses the DLMF 13.7.2 asymptotic expansion",
+        );
+    }
+
     hyper_casp_decision(
         HypergeometricBranch::DirectSeries,
         problem,
@@ -1294,6 +1314,7 @@ fn hyp1f1_scalar(a: f64, b: f64, z: f64, mode: RuntimeMode) -> Result<f64, Speci
             Ok(z.exp() * inner)
         }
         HypergeometricBranch::DirectSeries => hyp1f1_series(a, b, z, mode),
+        HypergeometricBranch::AsymptoticExpansion => hyp1f1_asymptotic(a, b, z),
         HypergeometricBranch::ParameterGuard => {
             guarded_hypergeometric_parameter("hyp1f1", mode, decision.reason)
         }
@@ -1346,6 +1367,53 @@ fn hyp1f1_series(a: f64, b: f64, z: f64, mode: RuntimeMode) -> Result<f64, Speci
     }
 
     hyp1f1_unconverged(mode, "series did not converge within 500 terms")
+}
+
+/// Large positive-z asymptotic for 1F1 (DLMF 13.7.2, dominant term as z → +∞):
+///
+///   M(a,b,z) ~ Γ(b)/Γ(a) · e^z · z^{a-b} · Σ_{s≥0} (b-a)_s (1-a)_s / (s! z^s).
+///
+/// The exponentially small e^{-z}-weighted companion term is negligible for the
+/// z > 200 regime this serves. The series is asymptotic (divergent); we sum to
+/// its smallest term (optimal truncation). The prefactor is built in log space
+/// to avoid overflowing the intermediate e^z, which lets us return correct
+/// finite values well past where the direct series fails.
+///
+/// Parity: SciPy evaluates e^z directly and therefore overflows to ±inf once
+/// z exceeds ln(f64::MAX) ≈ 709.7827, even when the true value is representable.
+/// We reproduce that boundary so conformance matches `scipy.special.hyp1f1`.
+fn hyp1f1_asymptotic(a: f64, b: f64, z: f64) -> Result<f64, SpecialError> {
+    const LN_F64_MAX: f64 = 709.782_712_893_384;
+
+    // Prefactor sign and log-magnitude: Γ(b)/Γ(a) · e^z · z^{a-b}, z > 0.
+    let (ln_gb, sign_b) = ln_gamma_with_sign(b);
+    let (ln_ga, sign_a) = ln_gamma_with_sign(a);
+    let sign = sign_a * sign_b;
+    let ln_pref = ln_gb - ln_ga + z + (a - b) * z.ln();
+
+    // Optimal-truncation asymptotic series Σ (b-a)_s (1-a)_s / (s! z^s).
+    let mut series = 1.0_f64;
+    let mut term = 1.0_f64;
+    let mut prev_abs = 1.0_f64;
+    for s in 0..1024 {
+        let sf = s as f64;
+        term *= (b - a + sf) * (1.0 - a + sf) / ((sf + 1.0) * z);
+        let abs_term = term.abs();
+        if abs_term > prev_abs {
+            break; // asymptotic series past its smallest term — truncate
+        }
+        series += term;
+        prev_abs = abs_term;
+        if abs_term <= f64::EPSILON * series.abs() {
+            break;
+        }
+    }
+
+    // Match SciPy's e^z overflow boundary.
+    if z > LN_F64_MAX {
+        return Ok(sign * series.signum() * f64::INFINITY);
+    }
+    Ok(sign * ln_pref.exp() * series)
 }
 
 fn hyp1f1_unconverged(mode: RuntimeMode, detail: &'static str) -> Result<f64, SpecialError> {
@@ -2615,29 +2683,34 @@ mod tests {
     }
 
     #[test]
-    fn hyp1f1_large_positive_unconverged_returns_nan_strict() {
+    #[allow(clippy::excessive_precision)]
+    fn hyp1f1_large_positive_z_strict_uses_asymptotic() {
+        // Formerly returned NaN (500-term direct-series cap); now the DLMF
+        // 13.7.2 asymptotic computes it. scipy.special.hyp1f1(1,2,500).
         let r = hyp1f1(
             &scalar(1.0),
             &scalar(2.0),
             &scalar(500.0),
             RuntimeMode::Strict,
         );
-        let val = get_scalar(&r).unwrap_or(0.0);
-        assert!(
-            val.is_nan(),
-            "strict mode must not return a finite partial sum when 1F1 fails to converge"
-        );
+        let val = get_scalar(&r).expect("finite asymptotic value");
+        let expected = 2.8071844357056744e214;
+        assert!(((val - expected) / expected).abs() < 1e-12, "got {val:e}");
     }
 
     #[test]
-    fn hyp1f1_large_positive_unconverged_errors_hardened() {
+    #[allow(clippy::excessive_precision)]
+    fn hyp1f1_large_positive_z_hardened_uses_asymptotic() {
+        // Hardened mode no longer fails closed here — the value is computable.
         let r = hyp1f1(
             &scalar(1.0),
             &scalar(2.0),
             &scalar(500.0),
             RuntimeMode::Hardened,
         );
-        assert_eq!(error_kind(&r), Some(SpecialErrorKind::OverflowRisk));
+        let val = get_scalar(&r).expect("finite asymptotic value");
+        let expected = 2.8071844357056744e214;
+        assert!(((val - expected) / expected).abs() < 1e-12, "got {val:e}");
     }
 
     #[test]
@@ -3352,6 +3425,33 @@ mod tests {
             (val - expected).abs() < 1e-6,
             "hyp1f1(1, 2, 1) got {val}, expected {expected}"
         );
+    }
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy/mpmath
+    fn hyp1f1_large_positive_z_matches_scipy() {
+        // z > 200 exercises the DLMF 13.7.2 asymptotic path (frankenscipy-8a4qg):
+        // the 500-term direct series returns NaN for z ≳ 440. Golden values from
+        // scipy.special.hyp1f1 1.17.1 (cross-checked against mpmath 1.4.1).
+        let cases = [
+            (2.0, 3.0, 250.0, 2.98517503683573e106),
+            (2.0, 3.0, 450.0, 1.2005165889159134e193),
+            (2.0, 3.0, 500.0, 5.603140133668527e214),
+            (2.0, 3.0, 700.0, 2.893666147999053e301),
+            (0.5, 1.5, 300.0, 3.2428001599029676e127),
+            (0.5, 1.5, 650.0, 1.5059293665485805e279),
+            (1.0, 3.0, 220.0, 1.4486739567102264e91),
+        ];
+        for (a, b, z, expected) in cases {
+            let r = hyp1f1(&scalar(a), &scalar(b), &scalar(z), RuntimeMode::Strict);
+            let v = get_scalar(&r).expect("finite hyp1f1");
+            let rel = ((v - expected) / expected).abs();
+            assert!(rel < 1e-12, "hyp1f1({a},{b},{z}) = {v:e}, scipy {expected:e}, rel={rel:e}");
+        }
+
+        // SciPy overflows e^z to +inf for z past ln(f64::MAX) ≈ 709.78; match it.
+        let inf = hyp1f1(&scalar(1.0), &scalar(2.0), &scalar(710.0), RuntimeMode::Strict);
+        assert_eq!(get_scalar(&inf), Some(f64::INFINITY));
     }
 
     #[test]
