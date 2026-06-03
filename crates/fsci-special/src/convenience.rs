@@ -3009,9 +3009,12 @@ fn erfi_impl(x: f64) -> f64 {
         }
         2.0 * x / std::f64::consts::PI.sqrt() * sum
     } else {
-        // For large |x|, erfi grows like exp(x²)/(x√π)
-        x.signum() * erfcx_scalar(-x.abs()) * (x * x).exp()
-            - x.signum() / (x.abs() * std::f64::consts::PI.sqrt())
+        // erfi(x) = (2/√π) e^{x²} D(x), with Dawson's D(x) = e^{-x²}∫₀ˣe^{t²}dt
+        // (O(1/x)). The old form multiplied erfcx(-|x|) — which already carries an
+        // e^{x²} — by e^{x²} again, a spurious double exponential (erfi(10) was
+        // 1.4e87 vs 1.5e42). For x² > ln(f64::MAX) the e^{x²} overflows to ±inf,
+        // matching scipy. frankenscipy-sxr71.
+        2.0 / std::f64::consts::PI.sqrt() * (x * x).exp() * dawsn_scalar(x)
     }
 }
 
@@ -5748,6 +5751,30 @@ pub fn binary_cross_entropy_scalar(p: f64, q: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy/mpmath
+    fn erfi_large_x_matches_scipy() {
+        // frankenscipy-sxr71: erfi(x)=(2/√π)e^{x²}D(x) replaces the double-
+        // exponential erfcx form (erfi(10) was 1.4e87 vs 1.5e42). scipy 1.17.1.
+        let cases = [
+            (6.0, 411275145582823.94),
+            (7.0, 1.553486253460504e20),
+            (10.0, 1.52430742270867e42),
+            (15.0, 1.9613845638673805e96),
+            (25.0, 6.135986249821945e269),
+            (26.0, 8.31463716473099e291),
+        ];
+        for (x, expected) in cases {
+            let got = erfi_scalar(x);
+            let rel = ((got - expected) / expected).abs();
+            assert!(rel < 1e-9, "erfi({x}) = {got:e}, scipy {expected:e}, rel={rel:e}");
+            // Odd symmetry.
+            assert!((erfi_scalar(-x) + got).abs() <= 1e-9 * got.abs());
+        }
+        // x² past ln(f64::MAX) ≈ 709.78 overflows to +inf, matching scipy.
+        assert_eq!(erfi_scalar(27.0), f64::INFINITY);
+    }
 
     #[test]
     #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy/mpmath
