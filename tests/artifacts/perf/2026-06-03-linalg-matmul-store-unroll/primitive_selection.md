@@ -32,7 +32,7 @@ Explicitly unroll only the full 4x4 tile store:
 - Ordering/tie-breaking: no ordering or tie decisions exist in this kernel.
 - RNG: no RNG is used.
 - Global state: no global state is read or written.
-- Golden proof: normalized sha256 must remain `0def10fbd95d1bf20c417af563de181eeab314cae762cc82fd67c1ebac6f406c`.
+- Golden proof: sorted normalized sha256 must remain `ee5c848e69cc7ef4c22d0312f61633ade9fc88aca66ae2343fd6a0b6403c4b4b`; raw output-order hashes are recorded separately because test output order can vary.
 
 ## Score Gate
 

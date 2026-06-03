@@ -53,7 +53,7 @@ The paired run confirms the lever was negative rather than worker noise.
   add, or per-cell accumulation order.
 - RNG: not applicable.
 - Golden output: RCH `matmul_microkernel` tests passed before, during the
-  candidate, and after restore. Sorted normalized golden sha256 stayed
+  candidate, and after restore. The stable sorted normalized golden sha256 stayed
   `ee5c848e69cc7ef4c22d0312f61633ade9fc88aca66ae2343fd6a0b6403c4b4b`.
 
 ## Closeout
@@ -62,7 +62,8 @@ Score: `0.0`; performance impact was negative in the exact paired run and on
 the largest rows in the focused before/after run, below the required `>=2.0`
 keep gate.
 
-The production source was restored. `source_restored_diff.txt` is zero bytes.
+The production source was restored and the temporary paired benchmark helper was
+removed. `source_restored_diff.txt` is zero bytes.
 Post-restore validation passed:
 
 - `cargo fmt -p fsci-linalg --check`
