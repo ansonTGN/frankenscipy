@@ -1,66 +1,60 @@
-# fsci-linalg matmul scalar-accumulator trial - ABANDONED
+# fsci-linalg matmul scalar-accumulator trial
 
 Bead: `frankenscipy-8l8r1.13`
-Target: `fsci_linalg::matmul`, full 4x4 register-tile path.
 
-## Lever
+Verdict: rejected and restored. Score `0.0`, below the required keep gate of `2.0`.
 
-Trial lever: replace only the full-tile `acc[[f64; 4]; 4]` aggregate with
-sixteen named scalar accumulators `c00..c33`. The `k` loop, A loads, B loads,
-ragged scalar path, API, and error surfaces were unchanged.
+## Profile-backed target
 
-## Baseline and after
+The target remained `fsci_linalg::matmul`, selected from the linalg perf backlog after the prior committed linalg profiles continued to rank 1024x1024 matmul as the dominant completed linalg hotspot.
 
-Fresh RCH Criterion baseline on `vmi1227854`:
+## Baseline
 
-| row | baseline median |
-| --- | ---: |
-| `matmul/256x256` | 4.6168 ms |
-| `matmul/512x512` | 35.109 ms |
-| `matmul/768x768` | 119.92 ms |
-| `matmul/1024x1024` | 608.85 ms |
+RCH Criterion `matmul` baseline on `vmi1227854`:
 
-RCH Criterion after an initial scalar/direct-store candidate on `vmi1264463`:
+- 256x256 median `4.6168 ms`
+- 512x512 median `35.109 ms`
+- 768x768 median `119.92 ms`
+- 1024x1024 median `608.85 ms`
 
-| row | after median | result |
-| --- | ---: | ---: |
-| `matmul/256x256` | 15.203 ms | 0.30x |
-| `matmul/512x512` | 212.20 ms | 0.17x |
-| `matmul/768x768` | 1.2097 s | 0.10x |
-| `matmul/1024x1024` | 2.4790 s | 0.25x |
+## Candidate
 
-Exact paired RCH Criterion on `vmi1227854` compared the prior array accumulator
-against the scalar-accumulator candidate in one run:
+Single lever: replace only the full-tile `acc[[f64; 4]; 4]` accumulator with named scalar locals `c00..c33`, preserving loop order, input validation, output order, RNG absence, tie-breaking absence, global-state absence, and the ragged scalar path.
 
-| row | prior median | candidate median | result |
-| --- | ---: | ---: | ---: |
-| `matmul_scalar_accum_pair/256x256` | 3.0599 ms | 4.5333 ms | 0.68x |
-| `matmul_scalar_accum_pair/512x512` | 25.525 ms | 35.015 ms | 0.73x |
-| `matmul_scalar_accum_pair/768x768` | 89.355 ms | 129.97 ms | 0.69x |
-| `matmul_scalar_accum_pair/1024x1024` | 673.78 ms | 678.86 ms | 0.99x |
+The first direct after-run exposed an intermediate variant that repacked scalar locals into a temporary `acc` array before writeback. That artifact is retained as evidence but was not used for the keep/reject decision. The corrected candidate used direct scalar writeback and was re-proven before final timing.
 
-Result: rejected. The exact paired run showed material regressions for the
-smaller three rows and no meaningful 1024x1024 win.
+Corrected candidate direct RCH Criterion `matmul` on `vmi1153651`:
 
-## Isomorphism proof
+- 256x256 median `11.182 ms`
+- 512x512 median `177.54 ms`
+- 768x768 median `984.18 ms`
+- 1024x1024 median `2.3127 s`
 
-- Ordering preserved: yes. The same per-cell accumulation order was used during
-  the candidate.
-- Tie-breaking unchanged: not applicable.
-- Floating-point behavior: unchanged. The candidate kept the same separate
-  multiply then add sequence for every output cell.
-- RNG: not applicable.
-- Golden output: RCH `matmul_microkernel` tests passed before, during the
-  candidate, and after restore. Stable normalized golden sha256 stayed
-  `4e96161ff0bd1aaf1a7d46d299b3b0255984350bbee513da271bb90ea1436578`.
+## Exact paired gate
 
-## Closeout
+Same-worker RCH Criterion on `vmi1227854` compared the prior array accumulator against the corrected scalar-accumulator candidate:
 
-Score: `0.0`; performance impact was negative in the exact paired run and far
-below the required `>=2.0` keep gate.
+- 256x256: `3.0599 ms -> 4.5333 ms` (`0.68x`)
+- 512x512: `25.525 ms -> 35.015 ms` (`0.73x`)
+- 768x768: `89.355 ms -> 129.97 ms` (`0.69x`)
+- 1024x1024: `673.78 ms -> 678.86 ms` (`0.99x`)
 
-The production source was restored. `source_restored_diff.txt` is zero bytes.
-Post-restore validation passed:
+This is negative on the first three sizes and only noisy parity on the largest size, so the lever fails the keep gate.
 
-- `cargo fmt -p fsci-linalg --check`
-- RCH `cargo test -p fsci-linalg --release matmul_microkernel --locked -- --nocapture`
+## Behavior proof
+
+RCH `cargo test -p fsci-linalg --release matmul_microkernel --locked -- --nocapture` passed before the candidate, after the corrected candidate, and after restore.
+
+Stable sorted normalized golden sha256:
+
+`85e17039e61d4a5e59aaa6f2ad70a28bb7e24a95b07d621ca6dbc392f652d9a1`
+
+The same sha appears in:
+
+- `golden_before_stable_sorted_normalized.txt`
+- `golden_after_direct_store_stable_sorted_normalized.txt`
+- `golden_after_restore_stable_sorted_normalized.txt`
+
+## Restore
+
+Production source and the temporary paired benchmark helper were restored. `source_restored_diff.txt` is empty. `cargo fmt -p fsci-linalg --check` passed after restore.
