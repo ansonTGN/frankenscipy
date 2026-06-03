@@ -1,0 +1,27 @@
+running 0 tests
+running 0 tests
+running 0 tests
+running 0 tests
+running 10 tests
+running 3 tests
+test diff_pinv_identity ... ok
+test diff_pinv_wide ... ok
+test meta_pinv_moore_penrose ... ok
+test mr_pinv_satisfies_penrose_one ... ok
+test proptest_tests::pinv_matches_scipy_reference_values ... ok
+test proptest_tests::pinv_rank_bounded ... ok
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in <time>
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in <time>
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in <time>
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in <time>
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 58 filtered out; finished in <time>
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 340 filtered out; finished in <time>
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 31 filtered out; finished in <time>
+test tests::pinv_involution_pinv_of_pinv_recovers_a ... ok
+test tests::pinv_moore_penrose_condition ... ok
+test tests::pinv_moore_penrose_conditions_2_3_4 ... ok
+test tests::pinv_negative_thresholds_are_rejected ... ok
+test tests::pinv_rank_deficient ... ok
+test tests::pinv_rectangular_and_rank ... ok
+test tests::pinv_square_nonsingular_matches_inv ... ok
+test tests::pinv_zero_matrix ... ok
