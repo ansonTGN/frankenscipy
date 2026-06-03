@@ -362,3 +362,132 @@
    Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
    Compiling fsci-special v0.1.0 (/data/projects/frankenscipy/crates/fsci-special)
    Compiling fsci-stats v0.1.0 (/data/projects/frankenscipy/crates/fsci-stats)
+    Finished `bench` profile [optimized] target(s) in 2m 00s
+     Running benches/stats_bench.rs (.rch-target-vmi1153651-job-29869223945703770-1780454938856950379-0/release/deps/stats_bench-23790af84d33c422)
+Gnuplot not found, using plotters backend
+Benchmarking qmc_discrepancy/centered/512x2
+Benchmarking qmc_discrepancy/centered/512x2: Warming up for 1.0000 s
+Benchmarking qmc_discrepancy/centered/512x2: Collecting 10 samples in estimated 2.0286 s (3850 iterations)
+Benchmarking qmc_discrepancy/centered/512x2: Analyzing
+qmc_discrepancy/centered/512x2
+                        time:   [420.99 µs 439.86 µs 482.25 µs]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+Benchmarking qmc_discrepancy/mixture/512x2
+Benchmarking qmc_discrepancy/mixture/512x2: Warming up for 1.0000 s
+Benchmarking qmc_discrepancy/mixture/512x2: Collecting 10 samples in estimated 2.0289 s (2915 iterations)
+Benchmarking qmc_discrepancy/mixture/512x2: Analyzing
+qmc_discrepancy/mixture/512x2
+                        time:   [581.11 µs 606.43 µs 642.13 µs]
+Benchmarking qmc_discrepancy/l2_star/512x2
+Benchmarking qmc_discrepancy/l2_star/512x2: Warming up for 1.0000 s
+Benchmarking qmc_discrepancy/l2_star/512x2: Collecting 10 samples in estimated 2.0195 s (4070 iterations)
+Benchmarking qmc_discrepancy/l2_star/512x2: Analyzing
+qmc_discrepancy/l2_star/512x2
+                        time:   [497.31 µs 539.88 µs 570.70 µs]
+Benchmarking qmc_discrepancy/wraparound/512x2
+Benchmarking qmc_discrepancy/wraparound/512x2: Warming up for 1.0000 s
+Benchmarking qmc_discrepancy/wraparound/512x2: Collecting 10 samples in estimated 2.0172 s (3850 iterations)
+Benchmarking qmc_discrepancy/wraparound/512x2: Analyzing
+qmc_discrepancy/wraparound/512x2
+                        time:   [415.49 µs 442.20 µs 478.52 µs]
+
+Benchmarking qmc_sampling/halton_4d/1024
+Benchmarking qmc_sampling/halton_4d/1024: Warming up for 1.0000 s
+Benchmarking qmc_sampling/halton_4d/1024: Collecting 10 samples in estimated 2.0066 s (15k iterations)
+Benchmarking qmc_sampling/halton_4d/1024: Analyzing
+qmc_sampling/halton_4d/1024
+                        time:   [126.12 µs 134.48 µs 150.81 µs]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking qmc_sampling/sobol_2d/1024
+Benchmarking qmc_sampling/sobol_2d/1024: Warming up for 1.0000 s
+Benchmarking qmc_sampling/sobol_2d/1024: Collecting 10 samples in estimated 2.0020 s (16k iterations)
+Benchmarking qmc_sampling/sobol_2d/1024: Analyzing
+qmc_sampling/sobol_2d/1024
+                        time:   [122.76 µs 133.38 µs 149.57 µs]
+Benchmarking qmc_sampling/halton_4d/4096
+Benchmarking qmc_sampling/halton_4d/4096: Warming up for 1.0000 s
+Benchmarking qmc_sampling/halton_4d/4096: Collecting 10 samples in estimated 2.0299 s (3025 iterations)
+Benchmarking qmc_sampling/halton_4d/4096: Analyzing
+qmc_sampling/halton_4d/4096
+                        time:   [645.09 µs 695.73 µs 731.43 µs]
+Benchmarking qmc_sampling/sobol_2d/4096
+Benchmarking qmc_sampling/sobol_2d/4096: Warming up for 1.0000 s
+Benchmarking qmc_sampling/sobol_2d/4096: Collecting 10 samples in estimated 2.0248 s (3190 iterations)
+Benchmarking qmc_sampling/sobol_2d/4096: Analyzing
+qmc_sampling/sobol_2d/4096
+                        time:   [553.92 µs 579.69 µs 596.37 µs]
+
+Benchmarking ordering_and_bins/argsort/4096
+Benchmarking ordering_and_bins/argsort/4096: Warming up for 1.0000 s
+Benchmarking ordering_and_bins/argsort/4096: Collecting 10 samples in estimated 2.0094 s (11k iterations)
+Benchmarking ordering_and_bins/argsort/4096: Analyzing
+ordering_and_bins/argsort/4096
+                        time:   [175.63 µs 187.29 µs 202.15 µs]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking ordering_and_bins/histogram/4096x64
+Benchmarking ordering_and_bins/histogram/4096x64: Warming up for 1.0000 s
+Benchmarking ordering_and_bins/histogram/4096x64: Collecting 10 samples in estimated 2.0001 s (38k iterations)
+Benchmarking ordering_and_bins/histogram/4096x64: Analyzing
+ordering_and_bins/histogram/4096x64
+                        time:   [53.648 µs 57.693 µs 63.226 µs]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking ordering_and_bins/ecdf/4096x512
+Benchmarking ordering_and_bins/ecdf/4096x512: Warming up for 1.0000 s
+Benchmarking ordering_and_bins/ecdf/4096x512: Collecting 10 samples in estimated 2.0012 s (13k iterations)
+Benchmarking ordering_and_bins/ecdf/4096x512: Analyzing
+ordering_and_bins/ecdf/4096x512
+                        time:   [146.84 µs 149.05 µs 152.11 µs]
+Found 3 outliers among 10 measurements (30.00%)
+  1 (10.00%) low mild
+  1 (10.00%) high mild
+  1 (10.00%) high severe
+
+Benchmarking time_series/acf/4096x64
+Benchmarking time_series/acf/4096x64: Warming up for 1.0000 s
+Benchmarking time_series/acf/4096x64: Collecting 10 samples in estimated 2.0152 s (7040 iterations)
+Benchmarking time_series/acf/4096x64: Analyzing
+time_series/acf/4096x64 time:   [272.79 µs 292.23 µs 306.79 µs]
+Benchmarking time_series/pacf/4096x64
+Benchmarking time_series/pacf/4096x64: Warming up for 1.0000 s
+Benchmarking time_series/pacf/4096x64: Collecting 10 samples in estimated 2.0034 s (6160 iterations)
+Benchmarking time_series/pacf/4096x64: Analyzing
+time_series/pacf/4096x64
+                        time:   [345.17 µs 392.19 µs 462.28 µs]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking time_series/psd_welch/4096_w128_o64
+Benchmarking time_series/psd_welch/4096_w128_o64: Warming up for 1.0000 s
+Benchmarking time_series/psd_welch/4096_w128_o64: Collecting 10 samples in estimated 2.0002 s (1760 iterations)
+Benchmarking time_series/psd_welch/4096_w128_o64: Analyzing
+time_series/psd_welch/4096_w128_o64
+                        time:   [1.0813 ms 1.1153 ms 1.1788 ms]
+
+  [2m2026-06-03T02:53:07.865404Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mRemote command finished: exit=0 in 172143ms[0m
+    [2;3mat[0m rch/src/hook.rs:6364 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T02:53:07.865694Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mRetrieving build artifacts...[0m
+    [2;3mat[0m rch/src/hook.rs:6413 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T02:53:07.865726Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mRetrieving artifacts from /data/projects/frankenscipy on vmi1153651[0m
+    [2;3mat[0m rch/src/transfer.rs:2072 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T02:53:10.012869Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mArtifacts retrieved in 2147ms (1 files, 2852 bytes)[0m
+    [2;3mat[0m rch/src/transfer.rs:2111 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T02:53:10.012885Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mArtifacts retrieved: 1 files, 2852 bytes in 2147ms[0m
+    [2;3mat[0m rch/src/hook.rs:6446 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T02:53:10.012958Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mRetrieving artifacts from /data/projects/frankenscipy/.rch-target-vmi1153651-job-29869223945703770-1780454938856950379-0 on vmi1153651[0m
+    [2;3mat[0m rch/src/transfer.rs:2072 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T02:53:12.282139Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mArtifacts retrieved in 2269ms (388 files, 2600 bytes)[0m
+    [2;3mat[0m rch/src/transfer.rs:2111 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-03T02:53:12.282162Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mCustom CARGO_TARGET_DIR artifacts retrieved: 388 files, 2600 bytes in 2269ms[0m
+    [2;3mat[0m rch/src/hook.rs:6570 [2;3mon[0m ThreadId(1)
+
+[RCH] remote vmi1153651 (256.0s)

@@ -78,3 +78,15 @@ Verdict: keep.
 - RCH `cargo clippy -p fsci-stats --lib --bin perf_stats --bench stats_bench --locked -- -D warnings`: pass.
 - `cargo fmt -p fsci-stats --check`: pass.
 - `ubs crates/fsci-stats/src/qmc.rs crates/fsci-stats/src/bin/perf_stats.rs crates/fsci-stats/benches/stats_bench.rs`: exit 0, critical 0.
+
+## Reprofile after kept lever
+
+RCH broad stats Criterion reprofile: `reprofile_after_qmc_broad_rch.txt`.
+
+Shifted top rows after this lever:
+
+- `time_series/psd_welch/4096_w128_o64`: 1.1153 ms median
+- `qmc_sampling/halton_4d/4096`: 695.73 us median
+- `qmc_discrepancy/mixture/512x2`: 606.43 us median
+- `qmc_sampling/sobol_2d/4096`: 579.69 us median
+- `qmc_discrepancy/l2_star/512x2`: 539.88 us median
