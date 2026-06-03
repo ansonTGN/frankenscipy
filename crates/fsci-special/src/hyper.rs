@@ -935,16 +935,30 @@ fn select_hyp2f1_branch(
         ));
     }
 
-    if problem.z > 1.0
-        && ((problem.b == c && is_integer(problem.a)) || (problem.a == c && is_integer(problem.b)))
-    {
-        return Ok(hyper_casp_decision(
-            HypergeometricBranch::LinearFractionalIdentity,
-            problem,
-            0,
-            HYP2F1_IDENTITY_CHAIN,
-            "z > 1 case reduces through a SciPy-compatible linear-fractional identity",
-        ));
+    if problem.z > 1.0 {
+        // Euler's transformation 2F1(a,b;c;z) = (1-z)^{c-a-b} 2F1(c-a,c-b;c;z)
+        // produces a *terminating* series whenever c-a or c-b is a nonpositive
+        // integer, so the analytic continuation is an exact finite polynomial in
+        // z divided by an integer power of (1-z). For real z > 1 the prefactor
+        // (1-z)^{c-a-b} is real-valued only when the exponent is an integer; the
+        // matching integrality requirement on the *other* parameter (b integer
+        // when c-a terminates, a integer when c-b terminates) guarantees that.
+        // This generalizes the old c==a / c==b linear-fractional identity (the
+        // n=0 special case) to the full Euler-terminating family that
+        // scipy.special.hyp2f1 returns finitely — frankenscipy-nwvrw. Inputs
+        // outside this family stay on SciPy's branch cut and return +inf below.
+        let terminates_b = is_nonpositive_integer(c - problem.a) && is_integer(problem.b);
+        let terminates_a = is_nonpositive_integer(c - problem.b) && is_integer(problem.a);
+        if terminates_a || terminates_b {
+            return Ok(hyper_casp_decision(
+                HypergeometricBranch::LinearFractionalIdentity,
+                problem,
+                0,
+                HYP2F1_IDENTITY_CHAIN,
+                "z > 1 Euler-terminating case reduces to a finite polynomial via \
+                 (1-z)^{c-a-b} 2F1(c-a,c-b;c;z)",
+            ));
+        }
     }
 
     if problem.z > 1.0 {
@@ -1695,10 +1709,17 @@ fn hyp2f1_scalar(a: f64, b: f64, c: f64, z: f64, mode: RuntimeMode) -> Result<f6
             Ok(factor * inner)
         }
         HypergeometricBranch::LinearFractionalIdentity => {
-            if b == c && is_integer(a) {
-                return Ok((1.0 - z).powi(-(a as i32)));
-            }
-            Ok((1.0 - z).powi(-(b as i32)))
+            // Euler transformation: 2F1(a,b;c;z) = (1-z)^{c-a-b} 2F1(c-a,c-b;c;z).
+            // Selection guarantees c-a or c-b is a nonpositive integer, so the
+            // transformed series terminates exactly (hyp2f1_series stops when a
+            // numerator parameter reaches zero), and c-a-b is an integer so the
+            // (1-z) power is real-valued for z > 1. The old c==a / c==b identity
+            // is recovered here: the inner 2F1 collapses to 1 and the exponent
+            // becomes -b or -a respectively.
+            let exponent = (c - a - b).round() as i32;
+            let factor = (1.0 - z).powi(exponent);
+            let inner = hyp2f1_series(c - a, c - b, c, z)?;
+            Ok(factor * inner)
         }
         HypergeometricBranch::DivergentAtUnitArgument => divergent_hyp2f1_at_unit_argument(mode),
         HypergeometricBranch::ParameterGuard => {
