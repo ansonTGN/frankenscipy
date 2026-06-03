@@ -1,0 +1,1 @@
+[RCH] local (no admissible workers: insufficient_slots=5,active_project_exclusion=2)

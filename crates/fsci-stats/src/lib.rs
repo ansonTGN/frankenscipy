@@ -34362,7 +34362,8 @@ const WELCH_CACHED_WINDOW_SIZE: usize = 128;
 
 struct WelchPlan {
     win: Vec<f64>,
-    twiddles: Vec<(f64, f64)>,
+    twiddle_cos: Vec<f64>,
+    twiddle_sin: Vec<f64>,
 }
 
 impl WelchPlan {
@@ -34379,16 +34380,22 @@ impl WelchPlan {
 
         let n_freq = window_size / 2 + 1;
         let two_pi = 2.0 * PI;
-        let twiddles: Vec<(f64, f64)> = (0..n_freq)
-            .flat_map(|k| {
-                (0..window_size).map(move |n| {
-                    let angle = two_pi * k as f64 * n as f64 / window_size as f64;
-                    (angle.cos(), angle.sin())
-                })
-            })
-            .collect();
+        let twiddle_len = n_freq * window_size;
+        let mut twiddle_cos = Vec::with_capacity(twiddle_len);
+        let mut twiddle_sin = Vec::with_capacity(twiddle_len);
+        for k in 0..n_freq {
+            for n in 0..window_size {
+                let angle = two_pi * k as f64 * n as f64 / window_size as f64;
+                twiddle_cos.push(angle.cos());
+                twiddle_sin.push(angle.sin());
+            }
+        }
 
-        Self { win, twiddles }
+        Self {
+            win,
+            twiddle_cos,
+            twiddle_sin,
+        }
     }
 }
 
@@ -34411,13 +34418,22 @@ pub fn psd_welch(data: &[f64], window_size: usize, overlap: usize, fs: f64) -> V
     let mut psd = vec![0.0; n_freq];
     let mut n_segments = 0;
     let owned_plan: WelchPlan;
-    let (win, twiddles): (&[f64], &[(f64, f64)]) = if window_size == WELCH_CACHED_WINDOW_SIZE {
-        let plan = cached_welch_plan_128();
-        (plan.win.as_slice(), plan.twiddles.as_slice())
-    } else {
-        owned_plan = WelchPlan::new(window_size);
-        (owned_plan.win.as_slice(), owned_plan.twiddles.as_slice())
-    };
+    let (win, twiddle_cos, twiddle_sin): (&[f64], &[f64], &[f64]) =
+        if window_size == WELCH_CACHED_WINDOW_SIZE {
+            let plan = cached_welch_plan_128();
+            (
+                plan.win.as_slice(),
+                plan.twiddle_cos.as_slice(),
+                plan.twiddle_sin.as_slice(),
+            )
+        } else {
+            owned_plan = WelchPlan::new(window_size);
+            (
+                owned_plan.win.as_slice(),
+                owned_plan.twiddle_cos.as_slice(),
+                owned_plan.twiddle_sin.as_slice(),
+            )
+        };
 
     let mut start = 0;
     while start + window_size <= data.len() {
@@ -34431,8 +34447,11 @@ pub fn psd_welch(data: &[f64], window_size: usize, overlap: usize, fs: f64) -> V
         for (k, psd_k) in psd.iter_mut().enumerate().take(n_freq) {
             let mut re = 0.0;
             let mut im = 0.0;
-            let twiddle_row = &twiddles[k * window_size..(k + 1) * window_size];
-            for (&s, &(cos, sin)) in segment.iter().zip(twiddle_row.iter()) {
+            let row_start = k * window_size;
+            let row_end = row_start + window_size;
+            let cos_row = &twiddle_cos[row_start..row_end];
+            let sin_row = &twiddle_sin[row_start..row_end];
+            for ((&s, &cos), &sin) in segment.iter().zip(cos_row.iter()).zip(sin_row.iter()) {
                 re += s * cos;
                 im -= s * sin;
             }
