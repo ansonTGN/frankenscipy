@@ -1269,8 +1269,40 @@ fn gamma_sign_fn(x: f64) -> f64 {
 
 /// Asymptotic expansion for J_v(z) for large |z|.
 fn jv_asymptotic(v: f64, z: f64) -> f64 {
-    let phase = z - v * PI / 2.0 - PI / 4.0;
-    (FRAC_2_PI / z).sqrt() * phase.cos()
+    // DLMF 10.17.3 large-z asymptotic for J_v(z):
+    //   J_v(z) ~ sqrt(2/(πz)) [cos(ω) P(v,z) - sin(ω) Q(v,z)],  ω = z - vπ/2 - π/4,
+    //   P = Σ_j (-1)^j a_{2j}/z^{2j},  Q = Σ_j (-1)^j a_{2j+1}/z^{2j+1},
+    //   a_0 = 1,  a_k = a_{k-1}(4v² - (2k-1)²)/(8k).
+    // The earlier leading-order form (P = 1, Q = 0) was accurate only to O(1/z),
+    // leaving non-integer-order J_v — and the Y_v built from J_{±v} — ~1% off
+    // SciPy at large z. Sum the (divergent) asymptotic series to its smallest
+    // term. frankenscipy-rbmy5.
+    let mu = 4.0 * v * v;
+    let mut term = 1.0_f64; // a_k / z^k, a_0 = 1
+    let mut prev_abs = 1.0_f64;
+    let mut p = 1.0_f64; // k = 0 term of P
+    let mut q = 0.0_f64;
+    for k in 1..64 {
+        let kf = k as f64;
+        term *= (mu - (2.0 * kf - 1.0).powi(2)) / (8.0 * kf * z);
+        let abs_term = term.abs();
+        if abs_term > prev_abs {
+            break; // asymptotic series past its smallest term — truncate
+        }
+        if k % 2 == 0 {
+            let sign = if (k / 2) % 2 == 0 { 1.0 } else { -1.0 };
+            p += sign * term;
+        } else {
+            let sign = if ((k - 1) / 2) % 2 == 0 { 1.0 } else { -1.0 };
+            q += sign * term;
+        }
+        prev_abs = abs_term;
+        if abs_term <= f64::EPSILON {
+            break;
+        }
+    }
+    let omega = z - v * PI / 2.0 - PI / 4.0;
+    (FRAC_2_PI / z).sqrt() * (omega.cos() * p - omega.sin() * q)
 }
 
 /// Y_v(z) for real order v.
@@ -3997,6 +4029,30 @@ pub fn jn_zeros(n: u32, k: usize) -> Vec<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy/mpmath
+    fn jv_yv_noninteger_order_large_z_matches_scipy() {
+        // Non-integer order large-z now uses the full DLMF 10.17.3 J_v asymptotic
+        // (frankenscipy-rbmy5): the leading-order form was ~1% off (yv ~2.6%).
+        // (v, z, jv_scipy, yv_scipy) from scipy.special 1.17.1.
+        let cases = [
+            (2.5, 200.0, 0.04885452923635855, 0.02822361750823702),
+            (3.5, 500.0, -0.031335750692154954, -0.017068709147445744),
+            (2.5, 50.0, 0.02303721950962553, 0.11053044455625441),
+            (4.5, 300.0, -0.046065538475612275, -0.0005175841159171315),
+            (0.5, 100.0, -0.04040213271625212, -0.0688030914687281),
+            (10.5, 400.0, 0.03650518806158982, -0.016108011911492963),
+        ];
+        for (v, z, jref, yref) in cases {
+            let jval = real_value(tensor_result(jv(&scalar(v), &scalar(z), RuntimeMode::Strict)).unwrap())
+                .unwrap();
+            let yval = real_value(tensor_result(yv(&scalar(v), &scalar(z), RuntimeMode::Strict)).unwrap())
+                .unwrap();
+            assert!(((jval - jref) / jref).abs() < 1e-10, "jv({v},{z})={jval:e} vs {jref:e}");
+            assert!(((yval - yref) / yref).abs() < 1e-10, "yv({v},{z})={yval:e} vs {yref:e}");
+        }
+    }
 
     fn scalar(value: f64) -> SpecialTensor {
         SpecialTensor::RealScalar(value)
