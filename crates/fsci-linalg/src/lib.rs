@@ -5680,52 +5680,115 @@ pub fn solve_discrete_lyapunov(
         return Ok(Vec::new());
     }
 
-    // Direct approach: vectorize the equation
-    // A X A^T - X = -Q
-    // (A ⊗ A) vec(X) - vec(X) = -vec(Q)
-    // (A ⊗ A - I) vec(X) = -vec(Q)
+    // Stein equation A X A^T - X = -Q solved by Schur back-substitution (as
+    // SciPy/SLICOT do), not by forming the full (A ⊗ A - I) n²×n² operator and
+    // an O(n^6) full-pivot LU. Reduce A to real Schur form A = U T U^T (T upper
+    // quasi-triangular) and set Y = U^T X U, C = -U^T Q U; the equation becomes
+    //   T Y T^T - Y = C.
+    // Column j of (T Y T^T) is Σ_q T[j,q]·(T y_q), and T[j,q] = 0 for q < j
+    // except the subdiagonal of a 2×2 block. Sweeping columns bottom→top, every
+    // y_q with q > j is already known, so column j reduces to one n×n solve
+    //   (T[j,j]·T - I) y_j = c_j - Σ_{q>j} T[j,q]·(T y_q),
+    // and a 2×2 Schur block (complex eigenpair) couples its two columns into one
+    // 2n×2n solve. Overall O(n·n^3) instead of O(n^6). Parity is at the
+    // conformance level (residual ‖A X A^T - X + Q‖ and the SciPy differential at
+    // 1e-9); a unit-modulus-product eigenpair (operator singular) still surfaces
+    // as `SingularMatrix` because the per-block LU then has no solution.
     let a_mat = dmatrix_from_rows(a)?;
     let q_mat = dmatrix_from_rows(q)?;
-    let nn = n * n;
 
-    let mut system = DMatrix::<f64>::zeros(nn, nn);
+    let (u, t) = a_mat.clone().schur().unpack();
+    let c = -(u.transpose() * &q_mat * &u); // C = -U^T Q U
 
-    // Build A ⊗ A
-    for i in 0..n {
-        for j in 0..n {
-            for k in 0..n {
-                for l in 0..n {
-                    // (A ⊗ A)[i*n+k, j*n+l] = A[i,j] * A[k,l]
-                    system[(i * n + k, j * n + l)] += a_mat[(i, j)] * a_mat[(k, l)];
+    let mut y = DMatrix::<f64>::zeros(n, n);
+    // ty[:,q] caches T·y_q for every already-solved column q.
+    let mut ty = DMatrix::<f64>::zeros(n, n);
+
+    let mut jj = n as isize - 1;
+    while jj >= 0 {
+        let j = jj as usize;
+        // A nonzero subdiagonal marks j as the lower row of a 2×2 Schur block.
+        let is_2x2 = j >= 1 && t[(j, j - 1)] != 0.0;
+        if !is_2x2 {
+            // 1×1 block: (T[j,j]·T - I) y_j = c_j - Σ_{q>j} T[j,q]·ty_q.
+            let mut rhs = c.column(j).into_owned();
+            for q in (j + 1)..n {
+                let tjq = t[(j, q)];
+                if tjq != 0.0 {
+                    rhs.axpy(-tjq, &ty.column(q), 1.0);
                 }
             }
+            let tjj = t[(j, j)];
+            let mut sys = DMatrix::<f64>::zeros(n, n);
+            for r in 0..n {
+                for col in 0..n {
+                    sys[(r, col)] = tjj * t[(r, col)];
+                }
+                sys[(r, r)] -= 1.0;
+            }
+            let yj = sys.lu().solve(&rhs).ok_or(LinalgError::SingularMatrix)?;
+            let tyj = &t * &yj;
+            y.set_column(j, &yj);
+            ty.set_column(j, &tyj);
+            jj -= 1;
+        } else {
+            // 2×2 block {j-1, j}: solve the coupled 2n×2n system
+            //   [ t00·T - I   t01·T     ][y0]   [rhs0]
+            //   [ t10·T       t11·T - I ][y1] = [rhs1]
+            // with rhs_c = c_c - Σ_{q>j} T[c,q]·ty_q.
+            let j0 = j - 1;
+            let mut rhs0 = c.column(j0).into_owned();
+            let mut rhs1 = c.column(j).into_owned();
+            for q in (j + 1)..n {
+                let t0q = t[(j0, q)];
+                if t0q != 0.0 {
+                    rhs0.axpy(-t0q, &ty.column(q), 1.0);
+                }
+                let t1q = t[(j, q)];
+                if t1q != 0.0 {
+                    rhs1.axpy(-t1q, &ty.column(q), 1.0);
+                }
+            }
+            let t00 = t[(j0, j0)];
+            let t01 = t[(j0, j)];
+            let t10 = t[(j, j0)];
+            let t11 = t[(j, j)];
+            let mut bigm = DMatrix::<f64>::zeros(2 * n, 2 * n);
+            for r in 0..n {
+                for col in 0..n {
+                    let trc = t[(r, col)];
+                    bigm[(r, col)] = t00 * trc;
+                    bigm[(r, n + col)] = t01 * trc;
+                    bigm[(n + r, col)] = t10 * trc;
+                    bigm[(n + r, n + col)] = t11 * trc;
+                }
+                bigm[(r, r)] -= 1.0;
+                bigm[(n + r, n + r)] -= 1.0;
+            }
+            let mut bigr = DVector::<f64>::zeros(2 * n);
+            for r in 0..n {
+                bigr[r] = rhs0[r];
+                bigr[n + r] = rhs1[r];
+            }
+            let sol = bigm.lu().solve(&bigr).ok_or(LinalgError::SingularMatrix)?;
+            let mut y0 = DVector::<f64>::zeros(n);
+            let mut y1 = DVector::<f64>::zeros(n);
+            for r in 0..n {
+                y0[r] = sol[r];
+                y1[r] = sol[n + r];
+            }
+            let ty0 = &t * &y0;
+            let ty1 = &t * &y1;
+            y.set_column(j0, &y0);
+            y.set_column(j, &y1);
+            ty.set_column(j0, &ty0);
+            ty.set_column(j, &ty1);
+            jj -= 2;
         }
     }
 
-    // Subtract identity
-    for i in 0..nn {
-        system[(i, i)] -= 1.0;
-    }
-
-    // RHS = -vec(Q)
-    let mut rhs = nalgebra::DVector::<f64>::zeros(nn);
-    for j in 0..n {
-        for i in 0..n {
-            rhs[j * n + i] = -q_mat[(i, j)];
-        }
-    }
-
-    // Solve
-    let lu = system.full_piv_lu();
-    let sol = lu.solve(&rhs).ok_or(LinalgError::SingularMatrix)?;
-
-    // Unvectorize
-    let mut x = DMatrix::<f64>::zeros(n, n);
-    for j in 0..n {
-        for i in 0..n {
-            x[(i, j)] = sol[j * n + i];
-        }
-    }
+    // Transform back: X = U Y U^T.
+    let x = &u * y * u.transpose();
 
     emit_trace(LinalgTrace {
         operation: "solve_discrete_lyapunov",
@@ -12076,6 +12139,119 @@ mod proptest_tests {
         let err = solve_discrete_lyapunov(&a, &q, DecompOptions::default())
             .expect_err("singular discrete Lyapunov operator");
         assert_eq!(err, LinalgError::SingularMatrix);
+    }
+
+    /// Exercises the 2×2-Schur-block (complex-eigenpair) branch of the
+    /// Schur/Stein back-substitution [frankenscipy-kti79]. A rotation-scaled by
+    /// 0.6 has complex eigenvalues 0.6·e^{±iθ} inside the unit circle, so its
+    /// real Schur form keeps a genuine 2×2 block and the coupled 2n×2n path runs.
+    /// Verified by the discrete residual A X A^T − X + Q = 0.
+    #[test]
+    fn solve_discrete_lyapunov_complex_eigenvalues_2x2_block() {
+        // 0.6 * [[cosθ,-sinθ],[sinθ,cosθ]], θ ≈ 0.9 rad → complex pair |λ|=0.6 < 1.
+        let (c, s) = (0.9f64.cos(), 0.9f64.sin());
+        let a = vec![vec![0.6 * c, -0.6 * s], vec![0.6 * s, 0.6 * c]];
+        let q = vec![vec![2.0, 0.3], vec![0.3, 1.5]];
+        let x = solve_discrete_lyapunov(&a, &q, DecompOptions::default())
+            .expect("discrete lyapunov 2x2");
+        let n = 2;
+        for i in 0..n {
+            for j in 0..n {
+                let mut axa_t = 0.0;
+                for k in 0..n {
+                    for l in 0..n {
+                        axa_t += a[i][k] * x[k][l] * a[j][l];
+                    }
+                }
+                let residual = axa_t - x[i][j] + q[i][j];
+                assert!(residual.abs() < 1e-9, "AXA^T-X+Q[{i},{j}] = {residual}");
+            }
+        }
+    }
+
+    /// Perf witness for the discrete-Lyapunov Schur/Stein rewrite
+    /// [frankenscipy-kti79]: O(n·n^3) Schur back-substitution vs the previous
+    /// full (A⊗A − I) n²×n² operator + O(n^6) full-pivot LU. Both solve the same
+    /// Stein equation, so they agree to solver tolerance. Run with
+    /// `cargo test -p fsci-linalg --release solve_discrete_lyapunov_perf -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "perf measurement; run explicitly in --release"]
+    fn solve_discrete_lyapunov_perf_vs_kronecker() {
+        // Previous implementation: full (A⊗A − I) operator + full_piv_lu.
+        fn dlyap_kronecker(a: &[Vec<f64>], q: &[Vec<f64>]) -> Vec<Vec<f64>> {
+            let n = a.len();
+            let a_mat = dmatrix_from_rows(a).unwrap();
+            let q_mat = dmatrix_from_rows(q).unwrap();
+            let nn = n * n;
+            let mut system = DMatrix::<f64>::zeros(nn, nn);
+            for i in 0..n {
+                for j in 0..n {
+                    for k in 0..n {
+                        for l in 0..n {
+                            system[(i * n + k, j * n + l)] += a_mat[(i, j)] * a_mat[(k, l)];
+                        }
+                    }
+                }
+            }
+            for i in 0..nn {
+                system[(i, i)] -= 1.0;
+            }
+            let mut rhs = DVector::<f64>::zeros(nn);
+            for j in 0..n {
+                for i in 0..n {
+                    rhs[j * n + i] = -q_mat[(i, j)];
+                }
+            }
+            let sol = system.full_piv_lu().solve(&rhs).unwrap();
+            let mut x = DMatrix::<f64>::zeros(n, n);
+            for j in 0..n {
+                for i in 0..n {
+                    x[(i, j)] = sol[j * n + i];
+                }
+            }
+            rows_from_dmatrix(&x)
+        }
+
+        for &nn in &[12usize, 16, 24] {
+            // Stable A: scaled diagonally-dominant so spectral radius < 1.
+            let raw: Vec<Vec<f64>> = (0..nn)
+                .map(|i| {
+                    (0..nn)
+                        .map(|j| {
+                            if i == j {
+                                0.3
+                            } else {
+                                (((i * 13 + j * 7) % 5) as f64 - 2.0) * 0.02
+                            }
+                        })
+                        .collect()
+                })
+                .collect();
+            let a = raw;
+            let q: Vec<Vec<f64>> = (0..nn)
+                .map(|i| (0..nn).map(|j| if i == j { 1.0 } else { 0.1 }).collect())
+                .collect();
+
+            let t0 = std::time::Instant::now();
+            let x_kron = dlyap_kronecker(&a, &q);
+            let kron_s = t0.elapsed().as_secs_f64();
+
+            let t1 = std::time::Instant::now();
+            let x_new = solve_discrete_lyapunov(&a, &q, DecompOptions::default()).expect("dlyap");
+            let new_s = t1.elapsed().as_secs_f64();
+
+            let mut max_d = 0.0f64;
+            for i in 0..nn {
+                for j in 0..nn {
+                    max_d = max_d.max((x_kron[i][j] - x_new[i][j]).abs());
+                }
+            }
+            let speedup = kron_s / new_s;
+            println!(
+                "solve_discrete_lyapunov {nn}x{nn}: kronecker={kron_s:.4}s schur_stein={new_s:.4}s speedup={speedup:.2}x max|Δ|={max_d:.2e}"
+            );
+            assert!(max_d < 1e-7, "{nn}: solutions diverge: {max_d:e}");
+        }
     }
 
     // ── solve_continuous_are / solve_discrete_are tests (br-60cm) ─────
