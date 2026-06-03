@@ -7716,12 +7716,12 @@ fn matmul_flat_workspace(
 
     const MR: usize = 4;
     const NR: usize = 8;
-    let mut i0 = 0;
-    while i0 < m {
-        let mr = (m - i0).min(MR);
-        let mut j0 = 0;
-        while j0 < n {
-            let nr = (n - j0).min(NR);
+    let mut j0 = 0;
+    while j0 < n {
+        let nr = (n - j0).min(NR);
+        let mut i0 = 0;
+        while i0 < m {
+            let mr = (m - i0).min(MR);
             if mr == MR && nr == NR {
                 let a0_base = i0 * ka;
                 let a1_base = (i0 + 1) * ka;
@@ -7799,9 +7799,9 @@ fn matmul_flat_workspace(
                     }
                 }
             }
-            j0 += NR;
+            i0 += MR;
         }
-        i0 += MR;
+        j0 += NR;
     }
 
     let mut c = Vec::with_capacity(m);

@@ -1,0 +1,8 @@
+--- tests/artifacts/perf/2026-06-03-linalg-matmul-b-panel-sweep/golden_before_sorted_normalized.txt	2026-06-03 12:49:44.429177042 -0400
++++ tests/artifacts/perf/2026-06-03-linalg-matmul-b-panel-sweep/golden_after_sorted_normalized.txt	2026-06-03 12:49:44.418176853 -0400
+@@ -1,4 +1,4 @@
+-  [2m2026-06-03T16:43:18.096567Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mExecuting command remotely: cargo test -p fsci-linalg --release --locked matmul -- --nocapture[0m
++  [2m2026-06-03T16:48:05.911903Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mExecuting command remotely: cargo test -p fsci-linalg --release --locked matmul -- --nocapture[0m
+ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
