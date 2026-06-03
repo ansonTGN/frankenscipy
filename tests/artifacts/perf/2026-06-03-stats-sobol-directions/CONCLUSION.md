@@ -15,15 +15,15 @@ Focused RCH Criterion target:
 
 Baseline on `vmi1264463`: `[648.26 us, 914.73 us, 1.3581 ms]`.
 
-After on `vmi1227854`: `[307.27 us, 319.23 us, 325.81 us]`.
+After on `vmi1167313`: `[544.38 us, 560.72 us, 598.85 us]`.
 
-Median speedup: `2.86x`.
+Median speedup: `1.63x`.
 
-Broad post-change stats reprofile on `vmi1293453` measured:
+Broad post-change stats reprofile on `vmi1167313` measured:
 
-- `time_series/psd_welch/4096_w128_o64`: `449.66us` median.
-- `qmc_sampling/sobol_2d/4096`: `323.21us` median.
-- `qmc_discrepancy/mixture/512x2`: `322.03us` median.
+- `time_series/psd_welch/4096_w128_o64`: `723.56us` median.
+- `qmc_sampling/sobol_2d/4096`: `631.49us` median.
+- `qmc_discrepancy/mixture/512x2`: `627.41us` median.
 
 ## Behavior Proof
 
@@ -53,8 +53,8 @@ Isomorphism contract:
 - RCH `cargo check -p fsci-stats --all-targets --locked`: passed.
 - RCH `cargo clippy -p fsci-stats --all-targets --locked -- -D warnings`: passed.
 - `cargo fmt -p fsci-stats --check`: passed.
-- UBS on changed stats files: exit 0.
+- UBS on changed stats files: exit 0, critical 0.
 
 ## Score
 
-`8.0 = impact 4 * confidence 4 / effort 2`.
+`6.0 = impact 3 * confidence 4 / effort 2`.
