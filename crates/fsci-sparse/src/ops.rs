@@ -566,119 +566,237 @@ fn csr_row_combine_mode(lhs: &CsrMatrix, rhs: &CsrMatrix) -> CsrRowCombineMode {
 
 fn combine_csr_rows_directly(lhs: &CsrMatrix, rhs: &CsrMatrix, rhs_scale: f64) -> CsrMatrix {
     let shape = lhs.shape();
-    let mut data = Vec::with_capacity(lhs.nnz() + rhs.nnz());
-    let mut indices = Vec::with_capacity(lhs.nnz() + rhs.nnz());
-    let mut indptr = Vec::with_capacity(shape.rows + 1);
-    let mut canonical = CanonicalMeta {
-        sorted_indices: true,
-        deduplicated: true,
+    let rows = shape.rows;
+    let li = lhs.indices();
+    let ld = lhs.data();
+    let lp = lhs.indptr();
+    let ri = rhs.indices();
+    let rd = rhs.data();
+    let rp = rhs.indptr();
+
+    // GraphBLAS-style symbolic/numeric split: each row pair is independent, so
+    // large merges are chunked into local buffers and then concatenated in row
+    // order. The row-local merge keeps the original scalar operation order.
+    let nthreads = parallel_chunk_count(rows, lhs.nnz() + rhs.nnz());
+    let (data, indices, indptr, canonical) = if nthreads <= 1 {
+        combine_rows_serial(li, ld, lp, ri, rd, rp, rhs_scale, rows)
+    } else {
+        combine_rows_parallel(li, ld, lp, ri, rd, rp, rhs_scale, rows, nthreads)
     };
-    indptr.push(0);
-
-    for row in 0..shape.rows {
-        let mut row_last_col = None;
-        let mut lhs_idx = lhs.indptr()[row];
-        let lhs_end = lhs.indptr()[row + 1];
-        let mut rhs_idx = rhs.indptr()[row];
-        let rhs_end = rhs.indptr()[row + 1];
-
-        while lhs_idx < lhs_end && rhs_idx < rhs_end {
-            let lhs_col = lhs.indices()[lhs_idx];
-            let rhs_col = rhs.indices()[rhs_idx];
-            if lhs_col < rhs_col {
-                let value = 0.0 + lhs.data()[lhs_idx];
-                push_nonzero_csr_entry(
-                    &mut data,
-                    &mut indices,
-                    &mut canonical,
-                    &mut row_last_col,
-                    lhs_col,
-                    value,
-                );
-                lhs_idx += 1;
-            } else if rhs_col < lhs_col {
-                let value = 0.0 + rhs_scale * rhs.data()[rhs_idx];
-                push_nonzero_csr_entry(
-                    &mut data,
-                    &mut indices,
-                    &mut canonical,
-                    &mut row_last_col,
-                    rhs_col,
-                    value,
-                );
-                rhs_idx += 1;
-            } else {
-                let mut value = 0.0;
-                value += lhs.data()[lhs_idx];
-                value += rhs_scale * rhs.data()[rhs_idx];
-                push_nonzero_csr_entry(
-                    &mut data,
-                    &mut indices,
-                    &mut canonical,
-                    &mut row_last_col,
-                    lhs_col,
-                    value,
-                );
-                lhs_idx += 1;
-                rhs_idx += 1;
-            }
-        }
-
-        while lhs_idx < lhs_end {
-            let value = 0.0 + lhs.data()[lhs_idx];
-            push_nonzero_csr_entry(
-                &mut data,
-                &mut indices,
-                &mut canonical,
-                &mut row_last_col,
-                lhs.indices()[lhs_idx],
-                value,
-            );
-            lhs_idx += 1;
-        }
-
-        while rhs_idx < rhs_end {
-            let value = 0.0 + rhs_scale * rhs.data()[rhs_idx];
-            push_nonzero_csr_entry(
-                &mut data,
-                &mut indices,
-                &mut canonical,
-                &mut row_last_col,
-                rhs.indices()[rhs_idx],
-                value,
-            );
-            rhs_idx += 1;
-        }
-
-        indptr.push(data.len());
-    }
 
     let mut result = CsrMatrix::from_components_unchecked(shape, data, indices, indptr);
     result.canonical = canonical;
     result
 }
 
-fn push_nonzero_csr_entry(
-    data: &mut Vec<f64>,
-    indices: &mut Vec<usize>,
-    canonical: &mut CanonicalMeta,
-    row_last_col: &mut Option<usize>,
-    col: usize,
-    value: f64,
+#[inline]
+#[allow(clippy::too_many_arguments)]
+fn merge_canonical_row(
+    li: &[usize],
+    ld: &[f64],
+    mut l: usize,
+    l1: usize,
+    ri: &[usize],
+    rd: &[f64],
+    mut r: usize,
+    r1: usize,
+    rhs_scale: f64,
+    out_idx: &mut Vec<usize>,
+    out_val: &mut Vec<f64>,
+    sorted: &mut bool,
+    dedup: &mut bool,
 ) {
-    if value != 0.0 {
-        if let Some(prev_col) = *row_last_col {
-            if col < prev_col {
-                canonical.sorted_indices = false;
+    let mut last: Option<usize> = None;
+    macro_rules! emit {
+        ($col:expr, $val:expr) => {{
+            let value = $val;
+            if value != 0.0 {
+                if let Some(prev) = last {
+                    if $col < prev {
+                        *sorted = false;
+                    }
+                    if $col == prev {
+                        *dedup = false;
+                    }
+                }
+                last = Some($col);
+                out_idx.push($col);
+                out_val.push(value);
             }
-            if col == prev_col {
-                canonical.deduplicated = false;
-            }
-        }
-        *row_last_col = Some(col);
-        indices.push(col);
-        data.push(value);
+        }};
     }
+
+    while l < l1 && r < r1 {
+        let lc = li[l];
+        let rc = ri[r];
+        if lc < rc {
+            emit!(lc, 0.0 + ld[l]);
+            l += 1;
+        } else if rc < lc {
+            emit!(rc, 0.0 + rhs_scale * rd[r]);
+            r += 1;
+        } else {
+            let mut value = 0.0;
+            value += ld[l];
+            value += rhs_scale * rd[r];
+            emit!(lc, value);
+            l += 1;
+            r += 1;
+        }
+    }
+    while l < l1 {
+        emit!(li[l], 0.0 + ld[l]);
+        l += 1;
+    }
+    while r < r1 {
+        emit!(ri[r], 0.0 + rhs_scale * rd[r]);
+        r += 1;
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn combine_rows_serial(
+    li: &[usize],
+    ld: &[f64],
+    lp: &[usize],
+    ri: &[usize],
+    rd: &[f64],
+    rp: &[usize],
+    rhs_scale: f64,
+    rows: usize,
+) -> (Vec<f64>, Vec<usize>, Vec<usize>, CanonicalMeta) {
+    let cap = ld.len() + rd.len();
+    let mut data = Vec::with_capacity(cap);
+    let mut indices = Vec::with_capacity(cap);
+    let mut indptr = Vec::with_capacity(rows + 1);
+    let mut sorted = true;
+    let mut dedup = true;
+    indptr.push(0);
+    for row in 0..rows {
+        merge_canonical_row(
+            li,
+            ld,
+            lp[row],
+            lp[row + 1],
+            ri,
+            rd,
+            rp[row],
+            rp[row + 1],
+            rhs_scale,
+            &mut indices,
+            &mut data,
+            &mut sorted,
+            &mut dedup,
+        );
+        indptr.push(data.len());
+    }
+    (
+        data,
+        indices,
+        indptr,
+        CanonicalMeta {
+            sorted_indices: sorted,
+            deduplicated: dedup,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn combine_rows_parallel(
+    li: &[usize],
+    ld: &[f64],
+    lp: &[usize],
+    ri: &[usize],
+    rd: &[f64],
+    rp: &[usize],
+    rhs_scale: f64,
+    rows: usize,
+    nthreads: usize,
+) -> (Vec<f64>, Vec<usize>, Vec<usize>, CanonicalMeta) {
+    let chunk = rows.div_ceil(nthreads);
+    let ranges: Vec<(usize, usize)> = (0..nthreads)
+        .map(|thread| (thread * chunk, ((thread + 1) * chunk).min(rows)))
+        .filter(|(start, end)| start < end)
+        .collect();
+    let per_chunk_cap = (ld.len() + rd.len()) / ranges.len().max(1) + 16;
+
+    type ChunkOut = (Vec<usize>, Vec<f64>, Vec<usize>, bool, bool);
+    let chunks: Vec<ChunkOut> = std::thread::scope(|scope| {
+        let handles: Vec<_> = ranges
+            .iter()
+            .map(|&(row_start, row_end)| {
+                scope.spawn(move || {
+                    let mut idx = Vec::with_capacity(per_chunk_cap);
+                    let mut val = Vec::with_capacity(per_chunk_cap);
+                    let mut counts = Vec::with_capacity(row_end - row_start);
+                    let mut sorted = true;
+                    let mut dedup = true;
+                    for row in row_start..row_end {
+                        let before = val.len();
+                        merge_canonical_row(
+                            li,
+                            ld,
+                            lp[row],
+                            lp[row + 1],
+                            ri,
+                            rd,
+                            rp[row],
+                            rp[row + 1],
+                            rhs_scale,
+                            &mut idx,
+                            &mut val,
+                            &mut sorted,
+                            &mut dedup,
+                        );
+                        counts.push(val.len() - before);
+                    }
+                    (idx, val, counts, sorted, dedup)
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().expect("csr add chunk panicked"))
+            .collect()
+    });
+
+    let total = chunks.iter().map(|(_, values, _, _, _)| values.len()).sum();
+    let mut data = Vec::with_capacity(total);
+    let mut indices = Vec::with_capacity(total);
+    let mut indptr = Vec::with_capacity(rows + 1);
+    let mut sorted = true;
+    let mut dedup = true;
+    indptr.push(0);
+    let mut acc = 0usize;
+    for (idx, val, counts, chunk_sorted, chunk_dedup) in &chunks {
+        for &count in counts {
+            acc += count;
+            indptr.push(acc);
+        }
+        indices.extend_from_slice(idx);
+        data.extend_from_slice(val);
+        sorted &= *chunk_sorted;
+        dedup &= *chunk_dedup;
+    }
+    (
+        data,
+        indices,
+        indptr,
+        CanonicalMeta {
+            sorted_indices: sorted,
+            deduplicated: dedup,
+        },
+    )
+}
+
+fn parallel_chunk_count(rows: usize, approx_nnz: usize) -> usize {
+    if approx_nnz < 64 * 1024 || rows < 1024 {
+        return 1;
+    }
+    let cores = std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(1);
+    cores.min(16).min(rows / 256).max(1)
 }
 
 fn ensure_same_shape(lhs: Shape2D, rhs: Shape2D) -> SparseResult<()> {
@@ -1152,6 +1270,62 @@ mod tests {
         assert_eq!(sum.data(), &[4.0, 1.0, 2.0]);
         assert!(!sum.canonical_meta().sorted_indices);
         assert!(sum.canonical_meta().deduplicated);
+    }
+
+    #[test]
+    fn combine_rows_parallel_matches_serial_byte_for_byte() {
+        let n = 768;
+        let lhs = crate::random(Shape2D::new(n, n), 0.004, 0x51A5_E01D)
+            .expect("lhs coo")
+            .to_csr()
+            .expect("lhs csr");
+        let rhs = crate::random(Shape2D::new(n, n), 0.004, 0x51A5_E01D ^ 0xABCD)
+            .expect("rhs coo")
+            .to_csr()
+            .expect("rhs csr");
+
+        for &scale in &[1.0_f64, -1.0] {
+            let (serial_data, serial_indices, serial_indptr, serial_meta) = combine_rows_serial(
+                lhs.indices(),
+                lhs.data(),
+                lhs.indptr(),
+                rhs.indices(),
+                rhs.data(),
+                rhs.indptr(),
+                scale,
+                n,
+            );
+            for &threads in &[2usize, 3, 7, 64] {
+                let (parallel_data, parallel_indices, parallel_indptr, parallel_meta) =
+                    combine_rows_parallel(
+                        lhs.indices(),
+                        lhs.data(),
+                        lhs.indptr(),
+                        rhs.indices(),
+                        rhs.data(),
+                        rhs.indptr(),
+                        scale,
+                        n,
+                        threads,
+                    );
+                assert_eq!(
+                    parallel_data, serial_data,
+                    "data mismatch scale={scale} threads={threads}"
+                );
+                assert_eq!(
+                    parallel_indices, serial_indices,
+                    "indices mismatch scale={scale} threads={threads}"
+                );
+                assert_eq!(
+                    parallel_indptr, serial_indptr,
+                    "indptr mismatch scale={scale} threads={threads}"
+                );
+                assert_eq!(
+                    parallel_meta, serial_meta,
+                    "canonical mismatch scale={scale} threads={threads}"
+                );
+            }
+        }
     }
 
     #[test]
