@@ -3586,6 +3586,30 @@ fn complex_kv_asymptotic(v: f64, z: Complex64) -> Complex64 {
     pref * Complex64::new(-z.re, -z.im).exp() * sum
 }
 
+/// K_v(z) for non-integer order in the turning band v < |z| ≤ v² (Re(z) ≥ 0):
+/// seed the K asymptotic at the small base orders frac and frac+1 (where it is
+/// machine-accurate since |z| ≫ frac²) and walk up by K_{ν+1}=K_{ν-1}+(2ν/z)K_ν.
+/// K grows monotonically with order, so the upward recurrence is stable through
+/// the turning point order = |z| (unlike the oscillatory Y). frankenscipy-d2s72.
+fn complex_kv_band(v: f64, z: Complex64) -> Complex64 {
+    let frac = v - v.floor();
+    let n = (v - frac).round() as usize;
+    let z_inv = z.recip();
+    let mut km1 = complex_kv_asymptotic(frac, z);
+    if n == 0 {
+        return km1;
+    }
+    let mut km = complex_kv_asymptotic(frac + 1.0, z);
+    let mut order = frac + 1.0;
+    for _ in 1..n {
+        let next = km1 + Complex64::new(2.0 * order, 0.0) * z_inv * km;
+        km1 = km;
+        km = next;
+        order += 1.0;
+    }
+    km
+}
+
 /// Y_v(z) large-|z| asymptotic √(2/πz)·[P·sin ω + Q·cos ω], ω=z−vπ/2−π/4
 /// (DLMF 10.17.4), with the same a_k as the J asymptotic.
 fn complex_yv_asymptotic(v: f64, z: Complex64) -> Complex64 {
@@ -3680,12 +3704,19 @@ fn complex_kv_scalar(v: f64, z: Complex64, _mode: RuntimeMode) -> Result<Complex
         return Ok(Complex64::new(f64::INFINITY, 0.0));
     }
 
-    // Large |z|: the non-integer K_v = π/2·(I_{-v}−I_v)/sin(vπ) form cancels
-    // catastrophically (both I's ~ e^z, their difference is the recessive
-    // ~e^{-z}); use the direct K asymptotic instead (valid for any v).
-    // frankenscipy-oisri.
-    if z.re >= 0.0 && z.abs() > 15.0_f64.max(v * v) {
-        return Ok(complex_kv_asymptotic(v, z));
+    // Large |z| (Re(z) ≥ 0): the non-integer K_v = π/2·(I_{-v}−I_v)/sin(vπ) form
+    // cancels catastrophically (both I's ~ e^z, their difference is the
+    // recessive ~e^{-z}). For |z| > v² the direct K asymptotic converges; in the
+    // turning band v < |z| ≤ v² it diverges, so seed the asymptotic at a small
+    // order and walk up by the recurrence K_{ν+1}=K_{ν-1}+(2ν/z)K_ν, which is
+    // stable since K grows monotonically with order (no oscillation/turning the
+    // way Y has). frankenscipy-oisri / frankenscipy-d2s72.
+    if z.re >= 0.0 && z.abs() >= 15.0 {
+        return Ok(if z.abs() > v * v {
+            complex_kv_asymptotic(v, z)
+        } else {
+            complex_kv_band(v, z)
+        });
     }
 
     // For non-integer v: K_v = π/2 * (I_{-v} - I_v) / sin(vπ)
@@ -4533,6 +4564,31 @@ pub fn jn_zeros(n: u32, k: usize) -> Vec<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
+    #[allow(clippy::type_complexity)] // flat (v,re,im,K.re,K.im) golden rows
+    fn complex_kv_turning_band_matches_scipy() {
+        // frankenscipy-d2s72: non-integer complex K_v in the turning band
+        // v < |z| ≤ v² (Re(z) ≥ 0) was computed by (I_{-v}−I_v)/sin(vπ), which
+        // cancels (both I ~ e^z). K grows monotonically with order, so seeding
+        // the K asymptotic at small order and walking up the recurrence is
+        // stable (unlike oscillatory Y). (v, re, im, K.re, K.im) — scipy 1.17.1.
+        let cases: [(f64, f64, f64, f64, f64); 6] = [
+            (10.5, 30.0, 9.3, -9.37954079129976e-14, 5.344341257316493e-14),
+            (20.5, 25.0, 9.0, 2.080674029070471e-09, 3.6929289885929565e-09),
+            (30.5, 45.0, 11.0, 4.9377593759569705e-17, -4.154102966627179e-17),
+            (50.5, 55.0, 18.0, 5.0678599670482056e-17, 9.429501885540872e-17),
+            (5.5, 15.0, 5.0, 1.5307782517384106e-07, 1.7251233742654897e-07),
+            (20.5, 15.0, 12.0, 0.0003422838796743065, 0.00031697965000494787),
+        ];
+        for (v, re, im, kr, ki) in cases {
+            let z = Complex64::new(re, im);
+            let k = complex_kv_scalar(v, z, RuntimeMode::Strict).unwrap();
+            let err = (k.re - kr).hypot(k.im - ki) / kr.hypot(ki);
+            assert!(err <= 1e-7, "kv({v},{re}{im:+}i) = {k:?}, scipy ({kr},{ki}), rel {err:e}");
+        }
+    }
 
     #[test]
     #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
