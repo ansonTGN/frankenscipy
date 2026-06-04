@@ -1208,23 +1208,23 @@ fn jv_scalar(v: f64, z: f64) -> f64 {
     let az = z.abs();
     let av = v.abs();
 
-    // Power series: J_v(z) = (z/2)^v Σ (-z²/4)^k / (k! Γ(v+k+1)). The series'
-    // largest term is ~e^z while |J_v| ~ z^{-1/2}, so it loses ~0.43·z digits to
-    // cancellation in the oscillatory region z > v — catastrophic for large z
-    // (jv(30.5,50) via the old z < 20+|v| cutoff gave 1.48 vs scipy -0.0084).
-    // Restrict it to where cancellation is mild: z ≤ |v| (pre-turning-point,
-    // terms decay monotonically) or small z (< 20, ≲9 digits lost).
-    if az <= av || az < 20.0 {
+    // Power series: J_v(z) = (z/2)^v Σ (-z²/4)^k / (k! Γ(v+k+1)). Its largest
+    // term is ~e^z while |J_v| ~ z^{-1/2}, so it loses ~0.43·z digits to
+    // cancellation once z grows — catastrophic for large z (the old z < 20+|v|
+    // cutoff gave jv(30.5,50)=1.48 vs scipy -0.0084, and jv(200.5,198.5) ~1e29
+    // off). Keep it only for small argument (z < 20, ≲9 digits lost); larger z
+    // is covered by the recurrences/asymptotic below for any order.
+    if az < 20.0 {
         return jv_series(v, z);
     }
 
-    // Oscillatory region z > max(|v|, 20). The DLMF 10.17.3 asymptotic only
-    // converges for z > v² (its term ratio is ~v²/(2z)); in the transition band
-    // |v| < z ≤ v² it diverges and returned ~1-relative garbage (jv(10.5,50) was
-    // 0.0296 vs scipy -0.0848). There z > |v|, so J_v is reached by a stable
-    // Miller backward recurrence from a small base order; negative order is
-    // mapped via J_{-p} = cos(pπ)J_p − sin(pπ)Y_p with Y_p from the (stable)
-    // upward recurrence. frankenscipy-goaov.
+    // z ≥ 20. The DLMF 10.17.3 asymptotic only converges for z > v² (term ratio
+    // ~v²/(2z)); in the band z ≤ v² it diverges (jv(10.5,50) was 0.0296 vs
+    // -0.0848). There J_v is reached by a stable Miller backward recurrence from
+    // a small base order — valid for both the oscillatory z > |v| and the
+    // recessive z ≤ |v| regions (the latter via the rescaling in jv_miller).
+    // Negative order: J_{-p} = cos(pπ)J_p − sin(pπ)Y_p, Y_p from the (stable)
+    // upward recurrence. frankenscipy-goaov / frankenscipy-87poa.
     if av < 1.0 || az > av * av {
         return jv_asymptotic(v, az);
     }
@@ -1232,7 +1232,8 @@ fn jv_scalar(v: f64, z: f64) -> f64 {
     if v > 0.0 {
         jav
     } else {
-        (av * PI).cos() * jav - (av * PI).sin() * yv_upward(av, az)
+        let (cos_av, sin_av) = bessel_reflection_trig(av);
+        cos_av * jav - sin_av * yv_upward(av, az)
     }
 }
 
@@ -1378,7 +1379,11 @@ fn yv_asymptotic(v: f64, z: f64) -> f64 {
 fn jv_miller(av: f64, z: f64) -> f64 {
     let frac = av - av.floor();
     let n = (av - frac).round() as usize;
-    let m_start = n + z as usize + 50;
+    // Start well above both the target order n and the argument z. The extra
+    // 2·n margin (and the rescaling below) lets the recurrence also serve the
+    // recessive region av ≥ z, where J grows steeply going downward from the
+    // start order and would otherwise overflow before reaching the base.
+    let m_start = n + z as usize + 60.max(2 * n);
     let mut jp1 = 0.0_f64;
     let mut jc = 1e-300_f64;
     let mut order = frac + m_start as f64;
@@ -1402,9 +1407,20 @@ fn jv_miller(av: f64, z: f64) -> f64 {
         jc = jm1;
         order -= 1.0;
         m -= 1;
+        // Rescale the whole running state (including the captured values, so
+        // their ratios are preserved) when the recurrence grows too large.
+        if jc.abs() > 1e250 {
+            jc *= 1e-250;
+            jp1 *= 1e-250;
+            j_at_n *= 1e-250;
+            j_at_0 *= 1e-250;
+            j_at_1 *= 1e-250;
+        }
     }
     let t0 = jv_asymptotic(frac, z);
     let t1 = jv_asymptotic(frac + 1.0, z);
+    // Normalize against whichever base order has the larger magnitude, so we
+    // never divide through a near-zero of J.
     let scale = if j_at_0.abs() >= j_at_1.abs() {
         t0 / j_at_0
     } else {
@@ -1413,9 +1429,24 @@ fn jv_miller(av: f64, z: f64) -> f64 {
     j_at_n * scale
 }
 
-/// Y_v(z) by upward recurrence for non-integer order av ≥ 1 with av < z. Y is
-/// the dominant solution as order increases, so the upward recurrence
-/// Y_{ν+1} = (2ν/z)Y_ν − Y_{ν−1} is stable; the base orders use [`yv_asymptotic`].
+/// cos(avπ), sin(avπ) for the negative-order reflection, with cos forced to an
+/// exact zero at half-integer order. There cos(avπ) is mathematically 0 but
+/// rounds to ~1e-15; multiplied by a huge Y_av (order ≫ argument) that spurious
+/// term would otherwise swamp the true (tiny) value.
+fn bessel_reflection_trig(av: f64) -> (f64, f64) {
+    let frac = av - av.floor();
+    let cos_av = if (frac - 0.5).abs() < 1e-12 {
+        0.0
+    } else {
+        (av * PI).cos()
+    };
+    (cos_av, (av * PI).sin())
+}
+
+/// Y_v(z) by upward recurrence for non-integer order av ≥ 1. Y is the dominant
+/// solution as order increases, so the upward recurrence
+/// Y_{ν+1} = (2ν/z)Y_ν − Y_{ν−1} is stable for any av (including the recessive
+/// av ≥ z region, where Y grows large); the base orders use [`yv_asymptotic`].
 fn yv_upward(av: f64, z: f64) -> f64 {
     let frac = av - av.floor();
     let n = (av - frac).round() as usize;
@@ -1455,6 +1486,22 @@ pub(crate) fn yv_scalar(v: f64, z: f64, mode: RuntimeMode) -> Result<f64, Specia
     if v.fract() == 0.0 && v.abs() <= i32::MAX as f64 {
         let n = v as i32;
         return yn_scalar(n as f64, z, mode);
+    }
+
+    // Large order in the band z ≤ v²: the J_{±v} reflection below cancels
+    // catastrophically because for z ≤ |v| the J_{-v} term carries the huge
+    // dominant Y component (yv(100.5,95.5) was ~1000× off). Compute Y directly
+    // by its (stable) upward recurrence instead; negative order via
+    // Y_{-p} = cos(pπ)Y_p + sin(pπ)J_p, with cos forced to 0 at half-integers so
+    // a ~1e-15 rounding does not swamp a tiny true value. frankenscipy-87poa.
+    let av = v.abs();
+    if av >= 1.0 && z >= 20.0 && z <= av * av {
+        let yav = yv_upward(av, z);
+        if v > 0.0 {
+            return Ok(yav);
+        }
+        let (cos_av, sin_av) = bessel_reflection_trig(av);
+        return Ok(cos_av * yav + sin_av * jv_miller(av, z));
     }
 
     // Non-integer order: Y_v = (J_v cos(vπ) - J_{-v}) / sin(vπ)
@@ -4201,6 +4248,36 @@ pub fn jn_zeros(n: u32, k: usize) -> Vec<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
+    fn jv_yv_turning_point_and_recessive_matches_scipy() {
+        // frankenscipy-87poa: for z ≤ |v| the old power-series cutoff (z < 20+|v|)
+        // ran the ascending series deep into its cancellation region — jv(30.5,50)
+        // gave 1.48 vs -0.0084 and jv(200.5,198.5) was ~1e29 off — while the
+        // J_{±v} reflection made yv lose the dominant Y term (yv(100.5,95.5) ~1000×
+        // off). Miller backward recurrence (with rescaling) for J and the upward
+        // recurrence for the dominant Y now cover the turning-point and recessive
+        // regions. (v, z, jv, yv) from scipy.special 1.17.1.
+        let cases: [(f64, f64, f64, f64); 10] = [
+            (100.5, 90.5, 0.0026209176462256884, -2.803268172454871),
+            (100.5, 99.5, 0.07758801076002489, -0.2006774017433331),
+            (200.5, 198.5, 0.05333846277237729, -0.17645897377188122),
+            (100.5, 50.3, 9.689355774601216e-22, -3.775863610873226e18),
+            (200.5, 140.4, 5.556422162397472e-18, -400245671792266.44),
+            (50.5, 48.0, 0.054388185233499184, -0.3759710492003596),
+            (30.5, 29.0, 0.08422010831116396, -0.37454996333301277),
+            (-100.5, 90.5, 2.803268172454871, 0.0026209176462256884),
+            (-30.5, 29.0, 0.37454996333301277, 0.08422010831116396),
+            (100.5, 80.4, 4.3861274964605445e-06, -1204.4817952546605),
+        ];
+        for (v, z, jref, yref) in cases {
+            let j = jv_scalar(v, z);
+            let y = yv_scalar(v, z, RuntimeMode::Strict).unwrap();
+            assert!((j - jref).abs() <= 1e-9 * jref.abs().max(1e-12), "jv({v},{z}) = {j:e}, scipy {jref:e}");
+            assert!((y - yref).abs() <= 1e-9 * yref.abs().max(1e-12), "yv({v},{z}) = {y:e}, scipy {yref:e}");
+        }
+    }
 
     #[test]
     #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
