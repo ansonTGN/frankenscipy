@@ -171,10 +171,14 @@ pub fn erf_scalar(x: f64) -> f64 {
     if x < 0.0 {
         return -erf_scalar(-x);
     }
-    if x.abs() <= 4.0 || x < 1.0 {
+    if x < 1.0 {
         return erf_series_real(x);
     }
-    1.0 - erfc_asymptotic_real(x)
+    // For x ≥ 1 the erf series itself loses ~4 digits to cancellation (its
+    // alternating intermediate terms reach ~e^{x²}); since erfc is now machine-
+    // accurate via the continued fraction and is small here, erf = 1 - erfc is
+    // both machine-accurate and consistent with erfc. frankenscipy-8nkg4.
+    1.0 - erfc_cf_real(x)
 }
 
 fn erf_complex_scalar(z: Complex64) -> Complex64 {
@@ -205,10 +209,44 @@ pub fn erfc_scalar(x: f64) -> f64 {
     if x < 0.0 {
         return 2.0 - erfc_scalar(-x);
     }
-    if x.abs() <= 4.0 || x < 1.0 {
+    if x < 1.0 {
+        // erfc = 1 - erf; below 1 the subtraction is well-conditioned
+        // (erf < 0.85) and the erf series is accurate.
         return 1.0 - erf_series_real(x);
     }
-    erfc_asymptotic_real(x)
+    // For x ≥ 1 the 1 - erf form catastrophically cancels (erf → 1, the
+    // alternating erf series has intermediate terms ~e^{x²}), leaving erfc only
+    // ~1e-6 accurate near x ≈ 3.5. Use the Lentz continued fraction instead,
+    // which has no cancellation and is machine-accurate. frankenscipy-8nkg4.
+    erfc_cf_real(x)
+}
+
+/// erfc(x) for x ≥ 1 via the Lentz continued fraction (no 1-erf cancellation):
+///   erfc(x) = e^{-x²}/√π · 1/(x + ½/(x + 1/(x + 3/2/(x + 2/(x + …))))).
+fn erfc_cf_real(x: f64) -> f64 {
+    const FPMIN: f64 = 1e-300;
+    const EPS: f64 = 1e-16;
+    let mut c = 1.0 / FPMIN;
+    let mut d = 1.0 / x;
+    let mut h = d;
+    for i in 1..400 {
+        let a = i as f64 / 2.0;
+        d = x + a * d;
+        if d == 0.0 {
+            d = FPMIN;
+        }
+        d = 1.0 / d;
+        c = x + a / c;
+        if c == 0.0 {
+            c = FPMIN;
+        }
+        let del = c * d;
+        h *= del;
+        if (del - 1.0).abs() <= EPS {
+            break;
+        }
+    }
+    (-x * x).exp() * h / PI.sqrt()
 }
 
 fn erfc_complex_scalar(z: Complex64) -> Complex64 {
@@ -290,38 +328,6 @@ fn erfc_complex_asymptotic(z: Complex64) -> Complex64 {
     }
 
     ((-z2).exp() * sum / z) / PI.sqrt()
-}
-
-fn erfc_asymptotic_real(x: f64) -> f64 {
-    let x2 = x * x;
-    let mut term = 1.0_f64;
-    let mut sum = term;
-
-    let mut last_term_abs = term.abs();
-    for n in 0..60 {
-        let factor = -((2 * n + 1) as f64);
-        let denom = x2 * 2.0;
-        let next_term = complex_real_div(term * factor, denom);
-        let next_term_abs = next_term.abs();
-
-        if next_term_abs > last_term_abs {
-            break;
-        }
-
-        term = next_term;
-        last_term_abs = next_term_abs;
-        sum += term;
-
-        if n >= 4 && term.abs() <= 1.0e-16 * sum.abs().max(1.0) {
-            break;
-        }
-    }
-
-    complex_real_div((-x2).exp() * sum, x) / PI.sqrt()
-}
-
-fn complex_real_div(lhs: f64, rhs: f64) -> f64 {
-    (lhs * rhs) / (rhs * rhs)
 }
 
 pub fn erfinv_scalar(y: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
@@ -610,6 +616,26 @@ fn inv_norm_cdf_scalar(p: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
+    fn erfc_continued_fraction_matches_scipy() {
+        // frankenscipy-8nkg4: erfc via Lentz CF for x≥1 (the 1-erf series was
+        // ~1e-6 off near x≈3.5 from cancellation). scipy.special.erfc 1.17.1.
+        let cases = [
+            (1.5, 0.03389485352468927),
+            (2.0, 0.004677734981047266),
+            (3.0, 2.2090496998585445e-05),
+            (3.5355, 5.734457379363329e-07),
+            (4.0, 1.541725790028002e-08),
+            (5.0, 1.5374597944280347e-12),
+            (-3.5, 1.9999992569016276),
+        ];
+        for (x, expected) in cases {
+            let got = erfc_scalar(x);
+            assert!(((got - expected) / expected).abs() < 1e-13, "erfc({x}) = {got:e}, scipy {expected:e}");
+        }
+    }
 
     fn tensor_result(result: SpecialResult) -> Result<SpecialTensor, String> {
         result.map_err(|err| format!("{err:?}"))
