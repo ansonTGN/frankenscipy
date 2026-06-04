@@ -386,11 +386,8 @@ pub fn spmv_coo(matrix: &CooMatrix, vector: &[f64]) -> SparseResult<Vec<f64>> {
 pub fn add_csr(lhs: &CsrMatrix, rhs: &CsrMatrix) -> SparseResult<CsrMatrix> {
     ensure_same_shape(lhs.shape(), rhs.shape())?;
     match csr_row_combine_mode(lhs, rhs) {
-        CsrRowCombineMode::VerifiedCanonical => {
-            return combine_csr_rows_directly(lhs, rhs, 1.0, true);
-        }
         CsrRowCombineMode::MetadataCanonical => {
-            return combine_csr_rows_directly(lhs, rhs, 1.0, false);
+            return Ok(combine_csr_rows_directly(lhs, rhs, 1.0));
         }
         CsrRowCombineMode::Fallback => {}
     }
@@ -400,11 +397,8 @@ pub fn add_csr(lhs: &CsrMatrix, rhs: &CsrMatrix) -> SparseResult<CsrMatrix> {
 pub fn sub_csr(lhs: &CsrMatrix, rhs: &CsrMatrix) -> SparseResult<CsrMatrix> {
     ensure_same_shape(lhs.shape(), rhs.shape())?;
     match csr_row_combine_mode(lhs, rhs) {
-        CsrRowCombineMode::VerifiedCanonical => {
-            return combine_csr_rows_directly(lhs, rhs, -1.0, true);
-        }
         CsrRowCombineMode::MetadataCanonical => {
-            return combine_csr_rows_directly(lhs, rhs, -1.0, false);
+            return Ok(combine_csr_rows_directly(lhs, rhs, -1.0));
         }
         CsrRowCombineMode::Fallback => {}
     }
@@ -553,7 +547,6 @@ fn combine_coo(lhs: CooMatrix, rhs: CooMatrix, rhs_scale: f64) -> SparseResult<C
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CsrRowCombineMode {
-    VerifiedCanonical,
     MetadataCanonical,
     Fallback,
 }
@@ -569,44 +562,22 @@ fn csr_row_combine_mode(lhs: &CsrMatrix, rhs: &CsrMatrix) -> CsrRowCombineMode {
         return CsrRowCombineMode::Fallback;
     }
 
-    if csr_input_segments_are_strictly_canonical(lhs)
-        && csr_input_segments_are_strictly_canonical(rhs)
-    {
-        CsrRowCombineMode::VerifiedCanonical
-    } else {
-        CsrRowCombineMode::MetadataCanonical
-    }
+    CsrRowCombineMode::MetadataCanonical
 }
 
-fn csr_input_segments_are_strictly_canonical(matrix: &CsrMatrix) -> bool {
-    matrix.indptr().len() == matrix.shape().rows + 1
-        && matrix.indices().len() == matrix.nnz()
-        && matrix.indptr().first() == Some(&0)
-        && matrix.indptr().last() == Some(&matrix.nnz())
-        && matrix
-            .indptr()
-            .windows(2)
-            .all(|window| window[0] <= window[1])
-        && compressed_segments_are_strictly_sorted(
-            matrix.shape().cols,
-            matrix.indptr(),
-            matrix.indices(),
-        )
-}
-
-fn combine_csr_rows_directly(
-    lhs: &CsrMatrix,
-    rhs: &CsrMatrix,
-    rhs_scale: f64,
-    skip_output_validation: bool,
-) -> SparseResult<CsrMatrix> {
+fn combine_csr_rows_directly(lhs: &CsrMatrix, rhs: &CsrMatrix, rhs_scale: f64) -> CsrMatrix {
     let shape = lhs.shape();
     let mut data = Vec::with_capacity(lhs.nnz() + rhs.nnz());
     let mut indices = Vec::with_capacity(lhs.nnz() + rhs.nnz());
     let mut indptr = Vec::with_capacity(shape.rows + 1);
+    let mut canonical = CanonicalMeta {
+        sorted_indices: true,
+        deduplicated: true,
+    };
     indptr.push(0);
 
     for row in 0..shape.rows {
+        let mut row_last_col = None;
         let mut lhs_idx = lhs.indptr()[row];
         let lhs_end = lhs.indptr()[row + 1];
         let mut rhs_idx = rhs.indptr()[row];
@@ -617,17 +588,38 @@ fn combine_csr_rows_directly(
             let rhs_col = rhs.indices()[rhs_idx];
             if lhs_col < rhs_col {
                 let value = 0.0 + lhs.data()[lhs_idx];
-                push_nonzero_csr_entry(&mut data, &mut indices, lhs_col, value);
+                push_nonzero_csr_entry(
+                    &mut data,
+                    &mut indices,
+                    &mut canonical,
+                    &mut row_last_col,
+                    lhs_col,
+                    value,
+                );
                 lhs_idx += 1;
             } else if rhs_col < lhs_col {
                 let value = 0.0 + rhs_scale * rhs.data()[rhs_idx];
-                push_nonzero_csr_entry(&mut data, &mut indices, rhs_col, value);
+                push_nonzero_csr_entry(
+                    &mut data,
+                    &mut indices,
+                    &mut canonical,
+                    &mut row_last_col,
+                    rhs_col,
+                    value,
+                );
                 rhs_idx += 1;
             } else {
                 let mut value = 0.0;
                 value += lhs.data()[lhs_idx];
                 value += rhs_scale * rhs.data()[rhs_idx];
-                push_nonzero_csr_entry(&mut data, &mut indices, lhs_col, value);
+                push_nonzero_csr_entry(
+                    &mut data,
+                    &mut indices,
+                    &mut canonical,
+                    &mut row_last_col,
+                    lhs_col,
+                    value,
+                );
                 lhs_idx += 1;
                 rhs_idx += 1;
             }
@@ -635,33 +627,56 @@ fn combine_csr_rows_directly(
 
         while lhs_idx < lhs_end {
             let value = 0.0 + lhs.data()[lhs_idx];
-            push_nonzero_csr_entry(&mut data, &mut indices, lhs.indices()[lhs_idx], value);
+            push_nonzero_csr_entry(
+                &mut data,
+                &mut indices,
+                &mut canonical,
+                &mut row_last_col,
+                lhs.indices()[lhs_idx],
+                value,
+            );
             lhs_idx += 1;
         }
 
         while rhs_idx < rhs_end {
             let value = 0.0 + rhs_scale * rhs.data()[rhs_idx];
-            push_nonzero_csr_entry(&mut data, &mut indices, rhs.indices()[rhs_idx], value);
+            push_nonzero_csr_entry(
+                &mut data,
+                &mut indices,
+                &mut canonical,
+                &mut row_last_col,
+                rhs.indices()[rhs_idx],
+                value,
+            );
             rhs_idx += 1;
         }
 
         indptr.push(data.len());
     }
 
-    if skip_output_validation {
-        let mut result = CsrMatrix::from_components_unchecked(shape, data, indices, indptr);
-        result.canonical = CanonicalMeta {
-            sorted_indices: true,
-            deduplicated: true,
-        };
-        Ok(result)
-    } else {
-        CsrMatrix::from_components(shape, data, indices, indptr, false)
-    }
+    let mut result = CsrMatrix::from_components_unchecked(shape, data, indices, indptr);
+    result.canonical = canonical;
+    result
 }
 
-fn push_nonzero_csr_entry(data: &mut Vec<f64>, indices: &mut Vec<usize>, col: usize, value: f64) {
+fn push_nonzero_csr_entry(
+    data: &mut Vec<f64>,
+    indices: &mut Vec<usize>,
+    canonical: &mut CanonicalMeta,
+    row_last_col: &mut Option<usize>,
+    col: usize,
+    value: f64,
+) {
     if value != 0.0 {
+        if let Some(prev_col) = *row_last_col {
+            if col < prev_col {
+                canonical.sorted_indices = false;
+            }
+            if col == prev_col {
+                canonical.deduplicated = false;
+            }
+        }
+        *row_last_col = Some(col);
         indices.push(col);
         data.push(value);
     }
