@@ -265,6 +265,30 @@ fn find_interval_helper(array: &[f64], x_new: f64) -> usize {
     lo
 }
 
+/// Classify an axis as uniform (evenly spaced) and return `(x0, inv_dx)` for
+/// O(1) direct-address interval lookup. The axis is assumed strictly increasing
+/// with `len() >= 2` (guaranteed by `RegularGridInterpolator::new`). An axis
+/// counts as uniform when every coordinate lies within `1e-9 * span` of its
+/// ideal linspace position, which covers grids built by `linspace`/`arange`
+/// while excluding genuinely irregular axes. Returns `None` when not uniform or
+/// when `dx` is not finite/positive.
+fn detect_uniform_axis(axis: &[f64]) -> Option<(f64, f64)> {
+    let n = axis.len();
+    let x0 = axis[0];
+    let span = axis[n - 1] - x0;
+    let dx = span / (n - 1) as f64;
+    if !dx.is_finite() || dx <= 0.0 {
+        return None;
+    }
+    let tol = 1e-9 * span;
+    for (i, &v) in axis.iter().enumerate() {
+        if (v - (x0 + i as f64 * dx)).abs() > tol {
+            return None;
+        }
+    }
+    Some((x0, 1.0 / dx))
+}
+
 /// Compute cubic spline coefficients with configurable boundary conditions.
 fn compute_cubic_spline(x: &[f64], y: &[f64], bc: SplineBc) -> Result<Vec<[f64; 4]>, InterpError> {
     let n = x.len();
@@ -1725,6 +1749,11 @@ pub struct RegularGridInterpolator {
     method: RegularGridMethod,
     bounds_error: bool,
     fill_value: Option<f64>,
+    /// Per-axis uniform-grid metadata: `Some((x0, inv_dx))` when the axis is an
+    /// evenly-spaced grid (within a tight relative tolerance), enabling O(1)
+    /// direct-address interval lookup instead of binary search. `None` for
+    /// irregular axes (which keep the binary-search path).
+    uniform_axes: Vec<Option<(f64, f64)>>,
     /// Per-axis spline coefficients for Cubic/Quintic methods.
     /// Each inner Vec contains spline coefficients for that axis.
     /// Reserved for future precomputation optimization.
@@ -1788,6 +1817,14 @@ impl RegularGridInterpolator {
             });
         }
 
+        // Detect evenly-spaced axes once at construction so the hot eval paths
+        // can replace per-query binary search with O(1) direct addressing. An
+        // axis is treated as uniform when every coordinate sits within a tight
+        // relative tolerance of the ideal linspace position; the eval-time
+        // correction loop still reads the stored coordinates, so this only
+        // affects speed, never which interval is selected.
+        let uniform_axes = points.iter().map(|axis| detect_uniform_axis(axis)).collect();
+
         // For spline methods, we don't precompute coefficients since that would be
         // expensive and may not be needed. Coefficients are computed on-the-fly
         // during interpolation using 1D cubic spline along each axis.
@@ -1798,6 +1835,7 @@ impl RegularGridInterpolator {
             method,
             bounds_error,
             fill_value,
+            uniform_axes,
             _spline_coeffs_per_axis: None,
         })
     }
@@ -1866,6 +1904,53 @@ impl RegularGridInterpolator {
         }
     }
 
+    /// O(1) equivalent of [`find_interval`] for an evenly-spaced axis. Computes
+    /// the interval by direct arithmetic, then corrects against the *stored*
+    /// coordinates so the returned index is bit-identical to the binary-search
+    /// path (largest `i` with `axis[i] <= x`, clamped to `[0, n-2]`, with the
+    /// boundary clamps). `meta = (x0, inv_dx)` comes from `uniform_axes`.
+    #[inline]
+    fn find_interval_uniform(meta: (f64, f64), axis: &[f64], x: f64) -> usize {
+        let n = axis.len();
+        let (x0, inv_dx) = meta;
+        // Direct-address estimate of the interval. A negative estimate (x below
+        // the grid) saturates to 0 on the `as usize` cast and a too-large one is
+        // clamped to n-2, so the correction loops below reproduce the boundary
+        // clamps of `find_interval` without needing explicit endpoint branches.
+        let est = (x - x0) * inv_dx;
+        let mut i = est as usize; // negative -> 0, oversized -> clamped next
+        if i > n - 2 {
+            i = n - 2;
+        }
+        // Correct to the exact interval using stored coordinates. For a genuinely
+        // uniform axis these loops run at most once or twice; correctness does
+        // not depend on the estimate, only speed.
+        while i + 1 < n - 1 && axis[i + 1] <= x {
+            i += 1;
+        }
+        while i > 0 && axis[i] > x {
+            i -= 1;
+        }
+        i
+    }
+
+    /// Nearest grid index along one axis: locate the bracketing interval (via the
+    /// uniform fast path when available, else binary search) and pick the closer
+    /// endpoint, ties to the lower index. Identical result for both interval
+    /// paths since `find_interval_uniform` is bit-equivalent to `find_interval`.
+    #[inline]
+    fn nearest_index(uniform: Option<(f64, f64)>, axis: &[f64], x: f64) -> usize {
+        let i = match uniform {
+            Some(meta) => Self::find_interval_uniform(meta, axis, x),
+            None => Self::find_interval(axis, x),
+        };
+        if i + 1 < axis.len() && (x - axis[i]).abs() > (axis[i + 1] - x).abs() {
+            i + 1
+        } else {
+            i
+        }
+    }
+
     fn eval_nearest(&self, xi: &[f64]) -> f64 {
         if self.ndim() == 3 {
             return self.eval_nearest_3d(xi);
@@ -1885,6 +1970,23 @@ impl RegularGridInterpolator {
     }
 
     fn eval_many_nearest_3d(&self, xi: &[Vec<f64>]) -> Result<Vec<f64>, InterpError> {
+        // Hoist per-axis state out of the query loop so the inner pass touches
+        // only locals. Folding the NaN check, bounds check, and nearest lookup
+        // into a single pass (instead of three separate iterations over each
+        // 3-vector) removes the dominant per-query overhead once interval lookup
+        // is O(1). Behaviour is identical to the prior three-pass form.
+        let ax = [
+            self.points[0].as_slice(),
+            self.points[1].as_slice(),
+            self.points[2].as_slice(),
+        ];
+        let st = [self.strides[0], self.strides[1], self.strides[2]];
+        let un = [
+            self.uniform_axes[0],
+            self.uniform_axes[1],
+            self.uniform_axes[2],
+        ];
+
         let mut results = Vec::with_capacity(xi.len());
         for point in xi {
             if point.len() != 3 {
@@ -1892,19 +1994,21 @@ impl RegularGridInterpolator {
                     detail: format!("expected 3D, got {}D", point.len()),
                 });
             }
-            if point.iter().any(|x| x.is_nan()) {
+            let p = [point[0], point[1], point[2]];
+            if p[0].is_nan() || p[1].is_nan() || p[2].is_nan() {
                 results.push(f64::NAN);
                 continue;
             }
 
             let mut out_of_bounds = false;
-            for (dim, &x) in point.iter().enumerate() {
-                let axis = &self.points[dim];
-                if x < axis[0] || x > axis[axis.len() - 1] {
+            for dim in 0..3 {
+                let axis = ax[dim];
+                if p[dim] < axis[0] || p[dim] > axis[axis.len() - 1] {
                     if self.bounds_error {
                         return Err(InterpError::OutOfBounds {
                             value: format!(
-                                "dim {dim}: {x} outside [{}, {}]",
+                                "dim {dim}: {} outside [{}, {}]",
+                                p[dim],
                                 axis[0],
                                 axis[axis.len() - 1]
                             ),
@@ -1918,7 +2022,10 @@ impl RegularGridInterpolator {
                 continue;
             }
 
-            results.push(self.eval_nearest_3d(point));
+            let flat_idx = Self::nearest_index(un[0], ax[0], p[0]) * st[0]
+                + Self::nearest_index(un[1], ax[1], p[1]) * st[1]
+                + Self::nearest_index(un[2], ax[2], p[2]) * st[2];
+            results.push(self.values[flat_idx]);
         }
         Ok(results)
     }
@@ -1928,14 +2035,8 @@ impl RegularGridInterpolator {
 
         let mut flat_idx = 0;
         for (dim, &x) in xi.iter().enumerate().take(3) {
-            let axis = &self.points[dim];
-            let i = Self::find_interval(axis, x);
-            let nearest = if i + 1 < axis.len() && (x - axis[i]).abs() > (axis[i + 1] - x).abs() {
-                i + 1
-            } else {
-                i
-            };
-            flat_idx += nearest * self.strides[dim];
+            flat_idx += Self::nearest_index(self.uniform_axes[dim], &self.points[dim], x)
+                * self.strides[dim];
         }
         self.values[flat_idx]
     }
@@ -5804,6 +5905,104 @@ mod tests {
         let err = RbfInterpolator::new(&points, &values, RbfKernel::Gaussian, 1.0)
             .expect_err("safety bound");
         assert!(matches!(err, InterpError::InvalidArgument { .. }));
+    }
+
+    /// Deterministic dump of the 3D-nearest eval payload for golden-SHA proof.
+    /// Run with `--ignored --nocapture` and pipe to `sha256sum`.
+    #[test]
+    #[ignore]
+    fn dump_nearest_payload_for_golden_sha() {
+        let points = vec![
+            (0..32).map(|i| i as f64 / 31.0).collect::<Vec<_>>(),
+            (0..32).map(|i| i as f64 / 31.0).collect::<Vec<_>>(),
+            (0..16).map(|i| i as f64 / 15.0).collect::<Vec<_>>(),
+        ];
+        let nx = points[0].len();
+        let ny = points[1].len();
+        let nz = points[2].len();
+        let mut values = Vec::with_capacity(nx * ny * nz);
+        for ix in 0..nx {
+            for iy in 0..ny {
+                for iz in 0..nz {
+                    values.push((ix as f64 * 1.1 + iy as f64 * 2.3 + iz as f64 * 0.7).sin());
+                }
+            }
+        }
+        let grid = RegularGridInterpolator::new(
+            points,
+            values,
+            RegularGridMethod::Nearest,
+            false,
+            Some(-999.0),
+        )
+        .expect("grid");
+        // Edge-heavy query set: interior, exact coords, midpoints, OOB both sides, NaN.
+        let mut queries: Vec<Vec<f64>> = Vec::new();
+        for i in 0..6000 {
+            let a = ((i * 37) % 997) as f64 / 997.0;
+            let b = ((i * 53 + 17) % 991) as f64 / 991.0;
+            let c = (a * 0.7 + b * 0.3).fract();
+            queries.push(vec![a, b, c]);
+        }
+        queries.push(vec![0.0, 0.0, 0.0]);
+        queries.push(vec![1.0, 1.0, 1.0]);
+        queries.push(vec![-0.5, 0.5, 1.5]); // OOB -> fill
+        queries.push(vec![0.5, f64::NAN, 0.5]); // NaN -> NaN
+        queries.push(vec![1.0 / 62.0, 1.0 / 30.0, 1.0 / 15.0]); // exact midpoints / coords
+        let out = grid.eval_many(&queries).expect("eval");
+        let mut s = String::new();
+        for v in out {
+            s.push_str(&format!("{:0>16x}\n", v.to_bits()));
+        }
+        print!("{s}");
+    }
+
+    #[test]
+    fn find_interval_uniform_matches_binary_search() {
+        // Isomorphism proof for the uniform-axis fast path: for every axis the
+        // O(1) direct-address lookup must return the *exact* same interval index
+        // as the binary-search reference, across interior points, exact axis
+        // coordinates, midpoints, and out-of-range values on both sides.
+        let axes: Vec<Vec<f64>> = vec![
+            (0..32).map(|i| i as f64 / 31.0).collect(), // linspace [0,1], n=32 (bench axis0/1)
+            (0..16).map(|i| i as f64 / 15.0).collect(), // linspace [0,1], n=16 (bench axis2)
+            (0..10).map(|i| -5.0 + i as f64 * 1.25).collect(), // negative start, dx=1.25
+            (0..7).map(|i| 3.0 + i as f64 * 1e6).collect(), // large span
+        ];
+        for axis in &axes {
+            let meta = detect_uniform_axis(axis).expect("axis is uniform");
+            let n = axis.len();
+            let lo = axis[0];
+            let hi = axis[n - 1];
+            let span = hi - lo;
+            // Build a dense, edge-heavy set of probe points.
+            let mut probes: Vec<f64> = Vec::new();
+            probes.push(lo - span); // far below
+            probes.push(hi + span); // far above
+            for i in 0..n {
+                probes.push(axis[i]); // exact coordinate
+                if i + 1 < n {
+                    probes.push(0.5 * (axis[i] + axis[i + 1])); // midpoint
+                    probes.push(axis[i] + 0.25 * (axis[i + 1] - axis[i]));
+                    probes.push(axis[i + 1] - 1e-12 * span.max(1.0)); // just below next
+                }
+            }
+            for k in 0..=2000 {
+                probes.push(lo - 0.1 * span + (k as f64 / 2000.0) * 1.2 * span);
+            }
+            for &x in &probes {
+                let fast = RegularGridInterpolator::find_interval_uniform(meta, axis, x);
+                let slow = RegularGridInterpolator::find_interval(axis, x);
+                assert_eq!(
+                    fast, slow,
+                    "axis n={n} x={x}: fast={fast} slow={slow}"
+                );
+            }
+        }
+
+        // Irregular axes must NOT be classified as uniform.
+        assert!(detect_uniform_axis(&[0.0, 1.0, 3.0, 6.0]).is_none());
+        assert!(detect_uniform_axis(&[0.0, 0.1, 0.2, 0.4, 0.8]).is_none());
     }
 
     #[test]
