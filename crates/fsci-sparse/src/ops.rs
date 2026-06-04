@@ -41,6 +41,10 @@ impl ConversionLogEntry {
 
 impl FormatConvertible for CooMatrix {
     fn to_csr(&self) -> SparseResult<CsrMatrix> {
+        if let Some(csr) = sorted_unique_coo_to_csr(self)? {
+            return Ok(csr);
+        }
+
         let triplets = canonical_triplets(self);
         let (data, indices, indptr) = compress_triplets(self.shape(), &triplets, false);
         CsrMatrix::from_components(self.shape(), data, indices, indptr, true)
@@ -795,6 +799,30 @@ fn canonical_triplets(coo: &CooMatrix) -> Vec<(usize, usize, f64)> {
     }
 
     dedup
+}
+
+fn sorted_unique_coo_to_csr(coo: &CooMatrix) -> SparseResult<Option<CsrMatrix>> {
+    let rows = coo.row_indices();
+    let cols = coo.col_indices();
+    let shape = coo.shape();
+
+    for idx in 1..coo.nnz() {
+        let prev = (rows[idx - 1], cols[idx - 1]);
+        let current = (rows[idx], cols[idx]);
+        if prev >= current {
+            return Ok(None);
+        }
+    }
+
+    let mut indptr = vec![0usize; shape.rows + 1];
+    for &row in rows {
+        indptr[row + 1] += 1;
+    }
+    for row in 0..shape.rows {
+        indptr[row + 1] += indptr[row];
+    }
+
+    CsrMatrix::from_components(shape, coo.data().to_vec(), cols.to_vec(), indptr, true).map(Some)
 }
 
 fn compress_triplets(
