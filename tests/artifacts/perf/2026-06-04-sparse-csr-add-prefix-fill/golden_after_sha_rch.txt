@@ -46,3 +46,6 @@
    Compiling fsci-fft v0.1.0 (/data/projects/frankenscipy/crates/fsci-fft)
    Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
    Compiling fsci-sparse v0.1.0 (/data/projects/frankenscipy/crates/fsci-sparse)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.71s
+     Running `/data/tmp/cargo-target/debug/perf_sparse add-csr-golden`
+a3a9d49d373b8d28f1aca881ab2b2322229b8befc0cb91c1e85a0820bc318da8  -
