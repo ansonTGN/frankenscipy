@@ -3517,7 +3517,19 @@ fn complex_yv_scalar(v: f64, z: Complex64, _mode: RuntimeMode) -> Result<Complex
         };
     }
 
-    // Non-integer order: Y_v = (J_v cos(vπ) - J_{-v}) / sin(vπ)
+    // For |z| ≥ 20 the (J_v cos(vπ) − J_{-v})/sin(vπ) form needs J_{-v}, which in
+    // the turning band v < |z| ≤ v² goes through the negative-order Miller
+    // recurrence (only ~1e-3, since it descends past order 0 into the growing-Y
+    // regime). Instead compute Y_v from the Hankel relation
+    //   H₁_v(z) = (2/π) i^{-(v+1)} K_v(z e^{-iπ/2}),  Y_v = (H₁_v − J_v)/i,
+    // using the now-accurate complex J_v and K_v (K is exact across the whole
+    // plane). Im(z) < 0 uses Schwarz reflection Y_v(z̄) = conj(Y_v(z)).
+    // frankenscipy-d2s72.
+    if z.abs() >= 20.0 {
+        return Ok(complex_yv_hankel(v, z, _mode));
+    }
+
+    // Non-integer order, moderate |z|: Y_v = (J_v cos(vπ) - J_{-v}) / sin(vπ)
     let sin_vpi = (v * PI).sin();
     if sin_vpi.abs() < 1e-15 {
         return Ok(Complex64::new(f64::NAN, f64::NAN));
@@ -3529,6 +3541,26 @@ fn complex_yv_scalar(v: f64, z: Complex64, _mode: RuntimeMode) -> Result<Complex
     let sin_vpi_c = Complex64::new(sin_vpi, 0.0);
 
     Ok((jv_pos * cos_vpi - jv_neg) / sin_vpi_c)
+}
+
+/// Y_v(z) for real order v at large |z| via the Hankel/K relation (DLMF 10.27.8):
+///   H₁_v(z) = (2/π) i^{-(v+1)} K_v(z e^{-iπ/2}),  Y_v(z) = (H₁_v(z) − J_v(z))/i.
+/// Valid for Im(z) ≥ 0; the lower half plane uses Y_v(z̄) = conj(Y_v(z)).
+fn complex_yv_hankel(v: f64, z: Complex64, mode: RuntimeMode) -> Complex64 {
+    if z.im < 0.0 {
+        let yc = complex_yv_hankel(v, Complex64::new(z.re, -z.im), mode);
+        return Complex64::new(yc.re, -yc.im);
+    }
+    // z·e^{-iπ/2} = -i·z = (Im(z), -Re(z)).
+    let rot = Complex64::new(z.im, -z.re);
+    let kv = complex_kv_scalar(v, rot, mode).unwrap_or(Complex64::new(f64::NAN, f64::NAN));
+    let ang = -(v + 1.0) * PI / 2.0;
+    let ifac = Complex64::new(ang.cos(), ang.sin()); // i^{-(v+1)} = e^{-i(v+1)π/2}
+    let h1 = Complex64::new(2.0 / PI, 0.0) * ifac * kv;
+    let jv = complex_jv_scalar(v, z);
+    let d = h1 - jv;
+    // (H₁ − J_v)/i = -i·(H₁ − J_v): (a+bi)·(-i) = b − a i.
+    Complex64::new(d.im, -d.re)
 }
 
 /// Complex Y_n(z) for integer order via recurrence.
@@ -4583,6 +4615,34 @@ pub fn jn_zeros(n: u32, k: usize) -> Vec<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
+    #[allow(clippy::type_complexity)] // flat (v,re,im,Y.re,Y.im) golden rows
+    fn complex_yv_turning_band_matches_scipy() {
+        // frankenscipy-d2s72: non-integer complex Y_v in the turning band
+        // v < |z| ≤ v² was wrong (the (J cos − J_{-v})/sin form needs J_{-v},
+        // whose negative-order Miller is only ~1e-3; Y's own recurrence is
+        // unstable through the turning point). Computed instead from the Hankel
+        // relation H₁_v(z)=(2/π)i^{-(v+1)}K_v(ze^{-iπ/2}), Y_v=(H₁_v−J_v)/i,
+        // using the now-exact complex J_v and K_v; Im(z)<0 via Y_v(z̄)=conj.
+        // (v, re, im, Y.re, Y.im) — scipy 1.17.1.
+        let cases: [(f64, f64, f64, f64, f64); 7] = [
+            (10.5, 30.0, 9.3, 425.31459982514065, -197.0281497959184),
+            (20.5, 25.0, 9.0, -1.7446466112634633, 31.83128401682869),
+            (50.5, 33.0, 11.0, -405.9697322325668, -182.52477151349686),
+            (5.5, 15.0, 5.0, 4.13393906623684, 10.44359307054551),
+            (2.5, -30.0, 10.0, -1394.4536042627415, -600.5226490392904),
+            (20.5, -25.0, -12.0, -247.5694151344469, -235.6656094173197),
+            (0.5, -8.0, 3.0, -2.5906873013164318, -0.8761557188492526),
+        ];
+        for (v, re, im, yr, yi) in cases {
+            let z = Complex64::new(re, im);
+            let y = complex_yv_scalar(v, z, RuntimeMode::Strict).unwrap();
+            let err = (y.re - yr).hypot(y.im - yi) / yr.hypot(yi);
+            assert!(err <= 1e-7, "yv({v},{re}{im:+}i) = {y:?}, scipy ({yr},{yi}), rel {err:e}");
+        }
+    }
 
     #[test]
     #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
