@@ -416,7 +416,13 @@ pub fn ndtri_scalar(y: f64) -> f64 {
     if y == 1.0 {
         return f64::INFINITY;
     }
-    SQRT_2 * crate::error::erfinv_scalar(2.0 * y - 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN)
+    // Route through erfcinv on the small complementary argument so the deep tail
+    // stays finite (2y-1 rounds to ±1 for |y-½| → ½, killing the old form).
+    if y <= 0.5 {
+        -SQRT_2 * erfcinv_conv(2.0 * y)
+    } else {
+        SQRT_2 * erfcinv_conv(2.0 * (1.0 - y))
+    }
 }
 
 /// Inverse of `log_ndtr`.
@@ -3126,7 +3132,40 @@ pub fn erfc_conv(x: f64) -> f64 {
 /// Finds x such that erfc(x) = y.
 /// Matches `scipy.special.erfcinv`.
 pub fn erfcinv_conv(y: f64) -> f64 {
-    crate::erfinv_scalar(1.0 - y, fsci_runtime::RuntimeMode::Strict).unwrap_or(f64::NAN)
+    if y.is_nan() {
+        return f64::NAN;
+    }
+    if y <= 0.0 {
+        return f64::INFINITY;
+    }
+    if y >= 2.0 {
+        return f64::NEG_INFINITY;
+    }
+    if y > 1.0 {
+        return -erfcinv_conv(2.0 - y);
+    }
+    if y > 0.0625 {
+        // 1 - y is well-conditioned here; erfinv handles the central region.
+        return crate::erfinv_scalar(1.0 - y, fsci_runtime::RuntimeMode::Strict)
+            .unwrap_or(f64::NAN);
+    }
+    // Deep tail (x > ~1.3): the 1 - y form rounds to 1 for tiny y (erfcinv(1e-100)
+    // was inf). Seed from the asymptotic and refine with log-space Newton on
+    //   F(x) = -x² + ln(erfcx(x)) - ln(y),   F'(x) = -2/(√π·erfcx(x)),
+    // using erfcx from the continued fraction so nothing under/overflows.
+    // frankenscipy-l1jgv.
+    let mut x = (-(y * 0.5).ln()).sqrt();
+    let ln_y = y.ln();
+    let sqrt_pi = std::f64::consts::PI.sqrt();
+    for _ in 0..16 {
+        let ex = crate::error::erfcx_cf_real(x);
+        let f = -x * x + ex.ln() - ln_y;
+        x += f * sqrt_pi * ex / 2.0;
+        if f.abs() < 1e-16 {
+            break;
+        }
+    }
+    x
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -5933,6 +5972,38 @@ pub fn binary_cross_entropy_scalar(p: f64, q: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
+    fn ndtri_erfcinv_deep_tail_match_scipy() {
+        // frankenscipy-l1jgv: ndtri/erfcinv now route the small complementary
+        // argument through erfcinv's log-Newton, so the deep tail stays finite
+        // (was -inf/inf for p<1e-16). scipy.special 1.17.1.
+        let ndtri_cases = [
+            (1e-10, -6.361340902404056),
+            (1e-50, -14.933337534788487),
+            (1e-200, -30.20559417957964),
+            (0.5, 0.0),
+            (0.99, 2.3263478740408408),
+            (0.999999999, 5.997807019601637),
+        ];
+        for (p, expected) in ndtri_cases {
+            let got = ndtri_scalar(p);
+            assert!((got - expected).abs() <= 1e-12 * expected.abs().max(1e-9), "ndtri({p}) = {got}, scipy {expected}");
+        }
+        let erfcinv_cases = [
+            (1e-3, 2.3267537655135246),
+            (1e-10, 4.572824967389486),
+            (1e-100, 15.065574702592647),
+            (1e-300, 26.209469960516124),
+            (0.5, 0.4769362762044699),
+            (1.5, -0.4769362762044699),
+        ];
+        for (y, expected) in erfcinv_cases {
+            let got = erfcinv_conv(y);
+            assert!(((got - expected) / expected).abs() < 1e-12, "erfcinv({y}) = {got}, scipy {expected}");
+        }
+    }
 
     #[test]
     #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy

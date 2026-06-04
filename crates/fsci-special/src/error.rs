@@ -221,9 +221,10 @@ pub fn erfc_scalar(x: f64) -> f64 {
     erfc_cf_real(x)
 }
 
-/// erfc(x) for x ≥ 1 via the Lentz continued fraction (no 1-erf cancellation):
-///   erfc(x) = e^{-x²}/√π · 1/(x + ½/(x + 1/(x + 3/2/(x + 2/(x + …))))).
-fn erfc_cf_real(x: f64) -> f64 {
+/// Lentz continued fraction kernel for erfc/erfcx (x ≥ ~1):
+///   1/(x + ½/(x + 1/(x + 3/2/(x + 2/(x + …))))).
+/// erfc(x) = e^{-x²}/√π · h,  erfcx(x) = e^{x²}erfc(x) = h/√π.
+fn erfc_cf_h(x: f64) -> f64 {
     const FPMIN: f64 = 1e-300;
     const EPS: f64 = 1e-16;
     let mut c = 1.0 / FPMIN;
@@ -246,7 +247,19 @@ fn erfc_cf_real(x: f64) -> f64 {
             break;
         }
     }
-    (-x * x).exp() * h / PI.sqrt()
+    h
+}
+
+/// erfc(x) for x ≥ 1 via the continued fraction (no 1-erf cancellation).
+fn erfc_cf_real(x: f64) -> f64 {
+    (-x * x).exp() * erfc_cf_h(x) / PI.sqrt()
+}
+
+/// Scaled complementary error function erfcx(x) = e^{x²}·erfc(x) for x ≥ ~1,
+/// from the continued fraction (no overflow of the intermediate e^{x²}). Used by
+/// erfcinv's deep-tail Newton iteration.
+pub(crate) fn erfcx_cf_real(x: f64) -> f64 {
+    erfc_cf_h(x) / PI.sqrt()
 }
 
 fn erfc_complex_scalar(z: Complex64) -> Complex64 {
