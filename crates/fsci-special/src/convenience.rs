@@ -1916,7 +1916,13 @@ where
 ///
 /// Matches `scipy.special.ber`.
 pub fn ber(x: f64) -> f64 {
-    // ber(x) = Re[J_0(x * e^{jπ/4})] = Σ (-1)^k (x/2)^{4k} / ((2k)!)^2
+    // ber(x) = Re[J_0(x · e^{3πi/4})]. The ascending series Σ(-1)^k(x/2)^{4k}/((2k)!)²
+    // has intermediate terms ~e^{x/√2} while |ber| ~ e^{x/√2}/√(2πx); for |x| ≳ 130
+    // that loses >16 digits to cancellation (ber(150) was ~1e14× too large). The
+    // exact complex Bessel J_0 has no such cancellation. frankenscipy-hsjhp.
+    if x.abs() >= 80.0 {
+        return kelvin_ber_bei_complex(x).re;
+    }
     let x2 = x * x / 4.0;
     let mut term = 1.0;
     let mut sum = 1.0;
@@ -1928,6 +1934,15 @@ pub fn ber(x: f64) -> f64 {
         }
     }
     sum
+}
+
+/// ber(x) + i·bei(x) = J_0(x · e^{3πi/4}), via the exact complex Bessel J_0
+/// (cancellation-free at large x where the ascending Kelvin series fails).
+fn kelvin_ber_bei_complex(x: f64) -> Complex64 {
+    let ax = x.abs();
+    let arg = 3.0 * PI / 4.0;
+    let z = Complex64::new(ax * arg.cos(), ax * arg.sin());
+    crate::bessel::complex_jv_scalar(0.0, z)
 }
 
 /// Kelvin function derivative ber'(x).
@@ -1969,6 +1984,12 @@ pub fn bei(x: f64) -> f64 {
     // scipy.special.bei uses the positive-leading Kelvin convention:
     // bei(x) = (x/2)^2 - (x/2)^6/(3!)^2 + (x/2)^10/(5!)^2 - ...
     //        = Σ (-1)^k (x/2)^{4k+2} / ((2k+1)!)^2
+
+    // Large |x|: the ascending series cancels catastrophically; use the exact
+    // complex Bessel J_0 (bei = Im). frankenscipy-hsjhp.
+    if x.abs() >= 80.0 {
+        return kelvin_ber_bei_complex(x).im;
+    }
 
     let x2 = x * x / 4.0; // (x/2)^2
     let mut term = x2;
@@ -6136,6 +6157,30 @@ pub fn binary_cross_entropy_scalar(p: f64, q: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
+    fn ber_bei_large_x_matches_scipy() {
+        // frankenscipy-hsjhp: the ascending Kelvin series has intermediate terms
+        // ~e^{x/√2} while |ber| ~ e^{x/√2}/√(2πx); for |x| ≳ 130 it loses >16
+        // digits to cancellation (ber(150) was ~1e14× too large). The exact
+        // complex Bessel identity ber+i·bei = J_0(x·e^{3πi/4}) is cancellation
+        // free. (x, ber, bei) from scipy.special 1.17.1.
+        let cases: [(f64, f64, f64); 5] = [
+            (80.0, 1.5351532598029438e23, -6.023968476830469e22),
+            (120.0, -2.417573872140967e35, 9.200088423774093e34),
+            (150.0, 1.571856012161004e44, -3.4330393890016124e44),
+            (200.0, -6.965727972432077e59, 2.4911521632799942e59),
+            (300.0, -9.681529229336163e89, -2.9365929560916326e90),
+        ];
+        for (x, br, bi) in cases {
+            assert!((ber(x) - br).abs() <= 1e-10 * br.abs(), "ber({x}) = {}, scipy {br}", ber(x));
+            assert!((bei(x) - bi).abs() <= 1e-10 * bi.abs(), "bei({x}) = {}, scipy {bi}", bei(x));
+            // even symmetry
+            assert!((ber(-x) - ber(x)).abs() <= 1e-10 * br.abs());
+            assert!((bei(-x) - bei(x)).abs() <= 1e-10 * bi.abs());
+        }
+    }
 
     #[test]
     #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
