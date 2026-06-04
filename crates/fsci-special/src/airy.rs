@@ -653,8 +653,12 @@ fn airy_asymptotic(x: f64, _mode: RuntimeMode) -> Result<AiryResult, SpecialErro
 
         // Ai(-x) ~ pi^-1/2 x^-1/4 [ L sin(zeta+pi/4) - M cos(zeta+pi/4) ]
         let ai = prefactor * (l * sin_phase - m * cos_phase);
-        // Ai'(-x) ~ -pi^-1/2 x^1/4 [ N cos(zeta+pi/4) + O sin(zeta+pi/4) ]
-        let aip = -prefactor * abs_x.sqrt() * (n * cos_phase + o * sin_phase);
+        // Ai'(-x) ~ x^1/4/√π [ N sin(ζ-π/4) + O cos(ζ-π/4) ] (A&S 10.4.62). In
+        // the φ = ζ+π/4 basis sin(ζ-π/4) = -cos φ and cos(ζ-π/4) = sin φ, so this
+        // is -prefactor·√x·(N cos φ - O sin φ). The previous code had +O sin φ —
+        // a sign error that left Ai'(-x) ~7e-4 off scipy (the O(1/ζ) term flipped),
+        // while Ai/Bi/Bi' were correct. frankenscipy-gby5z.
+        let aip = -prefactor * abs_x.sqrt() * (n * cos_phase - o * sin_phase);
         // Bi(-x) ~ pi^-1/2 x^-1/4 [ L cos(zeta+pi/4) + M sin(zeta+pi/4) ]
         let bi = prefactor * (l * cos_phase + m * sin_phase);
         // Bi'(-x) ~ pi^-1/2 x^1/4 [ N sin(zeta+pi/4) + O cos(zeta+pi/4) ]
@@ -780,6 +784,26 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
+    fn airy_negative_x_derivatives_match_scipy() {
+        // frankenscipy-gby5z: Ai'(-x) had a sign error (~7e-4 off); Bi' was fine.
+        // (x, Ai'_scipy, Bi'_scipy) from scipy.special.airy 1.17.1.
+        let cases = [
+            (-10.0, 0.9962650441327905, 0.11941411339990535),
+            (-30.0, 1.2286206026374895, -0.4836947258276702),
+            (-100.0, -0.24229703166065122, 1.7675948932340515),
+            (-300.0, 2.250225513837954, 0.6706520228542355),
+        ];
+        for (x, aip_ref, bip_ref) in cases {
+            let r = airy_scalar(x, RuntimeMode::Strict).unwrap();
+            // 4-term oscillatory truncation floor (~1e-5 near x=-30, tighter for
+            // larger |x|); the prior Ai' sign bug was ~7e-4.
+            assert!((r.aip - aip_ref).abs() < 1e-4, "Ai'({x}) = {}, scipy {aip_ref}", r.aip);
+            assert!((r.bip - bip_ref).abs() < 1e-4, "Bi'({x}) = {}, scipy {bip_ref}", r.bip);
+        }
+    }
 
     fn assert_close(actual: f64, expected: f64, tol: f64, msg: &str) {
         assert!(
