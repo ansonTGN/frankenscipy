@@ -2365,7 +2365,29 @@ pub fn expi_scalar(x: f64) -> f64 {
     if x < 0.0 {
         return -expn(1, -x);
     }
-    // For x > 0, use series
+    // The convergent series Ei(x) = γ + ln x + Σ_{k≥1} x^k/(k·k!) has its
+    // largest term near k≈x, so a fixed 200-term cap truncates mid-ascent and
+    // returns garbage once x≳200 (expi(500) was ~0 vs 2.8e214). For large x use
+    // the divergent asymptotic Ei(x) ~ (e^x/x) Σ_{k≥0} k!/x^k with optimal
+    // truncation (stop before the terms start growing); it is machine-accurate
+    // for x ≥ 40 (smallest term ~ e^{-x}). e^x overflows to +inf past x≈709.78,
+    // matching scipy's overflow→+inf.
+    if x >= 40.0 {
+        let inv_x = 1.0 / x;
+        let mut term = 1.0_f64;
+        let mut sum = 1.0_f64;
+        let mut prev = f64::INFINITY;
+        for k in 1..1000 {
+            term *= k as f64 * inv_x;
+            if term > prev {
+                break; // asymptotic series is divergent: truncate at the smallest term
+            }
+            sum += term;
+            prev = term;
+        }
+        return sum * x.exp() / x;
+    }
+    // For 0 < x < 40, the convergent series reaches its tail well within 200 terms.
     let gamma_em = 0.577_215_664_901_532_9;
     let mut sum = gamma_em + x.ln();
     let mut term = x;
@@ -6437,6 +6459,18 @@ mod tests {
         assert!((expi_scalar(1.0) - 1.895_117_816_355_937).abs() < 1e-9);
         assert!((expi_scalar(2.0) - 4.954_234_356_001_891).abs() < 1e-9);
         assert!((expi_scalar(-1.0) - (-0.219_383_934_395_520)).abs() < 1e-6);
+        // Large x: the convergent series truncated at 200 terms returned ~0 for
+        // x≳200 (expi(500) was 0 vs 2.8e214); the divergent asymptotic branch
+        // (x≥40) now tracks scipy 1.17.1 to ~1e-15. frankenscipy.
+        for (x, want) in [
+            (50.0_f64, 1.058563689713169e20),
+            (100.0, 2.71555274485388e41),
+            (500.0, 2.8128213978862945e214),
+            (700.0, 1.4509787360525605e301),
+        ] {
+            let got = expi_scalar(x);
+            assert!(((got - want) / want).abs() < 1e-13, "expi({x}) = {got}, scipy {want}");
+        }
     }
 
     #[test]
