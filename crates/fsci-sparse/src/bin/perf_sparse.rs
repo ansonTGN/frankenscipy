@@ -12,7 +12,9 @@ use std::hint::black_box;
 use std::path::Path;
 use std::time::Instant;
 
-use fsci_sparse::{CooMatrix, CsrMatrix, FormatConvertible, Shape2D, add_csr, diags, random};
+use fsci_sparse::{
+    CooMatrix, CsrMatrix, FormatConvertible, Shape2D, add_csr, diags, random, scale_csr,
+};
 
 const SEED: u64 = 0xBEEF_CAFE;
 
@@ -168,6 +170,61 @@ fn coo_csr_golden_text() -> String {
     output
 }
 
+fn scale_csr_golden_text() -> String {
+    let mut output = String::new();
+
+    let canonical = CooMatrix::from_triplets(
+        Shape2D::new(4, 5),
+        vec![1.0, -2.0, -0.0, 3.5, 0.0, 9.25],
+        vec![0, 1, 1, 2, 3, 3],
+        vec![4, 0, 3, 2, 1, 4],
+        false,
+    )
+    .expect("canonical scale coo")
+    .to_csr()
+    .expect("canonical scale csr");
+    write_csr(
+        &mut output,
+        "scale-csr-canonical-neg",
+        &scale_csr(&canonical, -2.5).expect("scale canonical"),
+    );
+    write_csr(
+        &mut output,
+        "scale-csr-canonical-zero-alpha",
+        &scale_csr(&canonical, 0.0).expect("scale canonical zero"),
+    );
+
+    let unsorted = CsrMatrix::from_components(
+        Shape2D::new(3, 4),
+        vec![1.0, -0.0, 4.5, -3.0, 2.0],
+        vec![3, 1, 1, 0, 0],
+        vec![0, 2, 4, 5],
+        false,
+    )
+    .expect("valid unsorted csr");
+    write_csr(
+        &mut output,
+        "scale-csr-unsorted-preserve-meta",
+        &scale_csr(&unsorted, -1.5).expect("scale unsorted"),
+    );
+
+    let duplicate = CsrMatrix::from_components(
+        Shape2D::new(2, 3),
+        vec![2.0, -2.0, 5.0],
+        vec![1, 1, 2],
+        vec![0, 2, 3],
+        false,
+    )
+    .expect("valid duplicate csr");
+    write_csr(
+        &mut output,
+        "scale-csr-duplicates-preserve-meta",
+        &scale_csr(&duplicate, 3.0).expect("scale duplicate"),
+    );
+
+    output
+}
+
 fn write_or_print_golden(output: String, path: Option<&str>) {
     if let Some(path) = path {
         let path = Path::new(path);
@@ -193,6 +250,10 @@ fn main() {
     }
     if mode == "coo-csr-golden" {
         write_or_print_golden(coo_csr_golden_text(), args.get(2).map(String::as_str));
+        return;
+    }
+    if mode == "scale-csr-golden" {
+        write_or_print_golden(scale_csr_golden_text(), args.get(2).map(String::as_str));
         return;
     }
     if mode != "add-csr" {

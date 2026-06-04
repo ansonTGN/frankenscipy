@@ -407,13 +407,12 @@ pub fn sub_csr(lhs: &CsrMatrix, rhs: &CsrMatrix) -> SparseResult<CsrMatrix> {
 
 pub fn scale_csr(matrix: &CsrMatrix, alpha: f64) -> SparseResult<CsrMatrix> {
     let data: Vec<f64> = matrix.data().iter().map(|v| v * alpha).collect();
-    let mut scaled = CsrMatrix::from_components(
+    let mut scaled = CsrMatrix::from_components_unchecked(
         matrix.shape(),
         data,
         matrix.indices().to_vec(),
         matrix.indptr().to_vec(),
-        false,
-    )?;
+    );
     scaled.canonical = matrix.canonical;
     Ok(scaled)
 }

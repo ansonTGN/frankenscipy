@@ -1,0 +1,22 @@
+Normalized baseline transcript.
+
+The first baseline command used `rch exec --json ... | tee`, while RCH emitted
+the useful worker and Criterion output on stderr. This file records the terminal
+output from that completed pre-optimization run.
+
+Command:
+rch exec --json -- cargo bench -p fsci-sparse --bench sparse_bench --locked sparse_arithmetic/10000x10000_d0_scale/10000 -- --warm-up-time 1 --measurement-time 3 --sample-size 20 --noplot
+
+Selected worker:
+ts2 at ubuntu@192.168.1.124
+
+Criterion row:
+sparse_arithmetic/10000x10000_d0_scale/10000
+time: [278.68 us 280.77 us 284.01 us]
+
+Samples:
+20 samples in estimated 3.0152 s (11k iterations)
+4 outliers among 20 measurements: 2 high mild, 2 high severe
+
+RCH:
+remote ts2 (44.7s), exit 0
