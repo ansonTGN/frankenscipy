@@ -3704,6 +3704,25 @@ fn complex_kv_scalar(v: f64, z: Complex64, _mode: RuntimeMode) -> Result<Complex
         return Ok(Complex64::new(f64::INFINITY, 0.0));
     }
 
+    // Re(z) < 0 is across the K_v branch cut, where every Re(z) ≥ 0 method here
+    // (asymptotic / band recurrence / I_{-v}−I_v) is on the wrong sheet. Reflect
+    // onto Re(w) > 0 via the connection K_v(w e^{±iπ}) = e^{∓ivπ}K_v(w) ∓ iπI_v(w)
+    // (w = −z; upper sign for Im(z) ≥ 0), using the now-accurate Re≥0 K_v and
+    // I_v. frankenscipy-d2s72.
+    if z.re < 0.0 {
+        let w = Complex64::new(-z.re, -z.im);
+        let kw = complex_kv_scalar(v, w, _mode)?;
+        let iw = complex_iv_scalar(v, w);
+        let s = (v * PI).sin();
+        let c = (v * PI).cos();
+        let (phase, i_pi) = if z.im >= 0.0 {
+            (Complex64::new(c, -s), Complex64::new(0.0, -PI))
+        } else {
+            (Complex64::new(c, s), Complex64::new(0.0, PI))
+        };
+        return Ok(phase * kw + i_pi * iw);
+    }
+
     // Large |z| (Re(z) ≥ 0): the non-integer K_v = π/2·(I_{-v}−I_v)/sin(vπ) form
     // cancels catastrophically (both I's ~ e^z, their difference is the
     // recessive ~e^{-z}). For |z| > v² the direct K asymptotic converges; in the
@@ -4573,14 +4592,22 @@ mod tests {
         // v < |z| ≤ v² (Re(z) ≥ 0) was computed by (I_{-v}−I_v)/sin(vπ), which
         // cancels (both I ~ e^z). K grows monotonically with order, so seeding
         // the K asymptotic at small order and walking up the recurrence is
-        // stable (unlike oscillatory Y). (v, re, im, K.re, K.im) — scipy 1.17.1.
-        let cases: [(f64, f64, f64, f64, f64); 6] = [
+        // stable (unlike oscillatory Y). Re(z) < 0 (across the branch cut) is
+        // reflected via K_v(we^{±iπ})=e^{∓ivπ}K_v(w)∓iπI_v(w).
+        // (v, re, im, K.re, K.im) — scipy 1.17.1.
+        let cases: [(f64, f64, f64, f64, f64); 11] = [
             (10.5, 30.0, 9.3, -9.37954079129976e-14, 5.344341257316493e-14),
             (20.5, 25.0, 9.0, 2.080674029070471e-09, 3.6929289885929565e-09),
             (30.5, 45.0, 11.0, 4.9377593759569705e-17, -4.154102966627179e-17),
             (50.5, 55.0, 18.0, 5.0678599670482056e-17, 9.429501885540872e-17),
             (5.5, 15.0, 5.0, 1.5307782517384106e-07, 1.7251233742654897e-07),
             (20.5, 15.0, 12.0, 0.0003422838796743065, 0.00031697965000494787),
+            // Re(z) < 0 (branch-cut reflection):
+            (0.5, -3.0, 2.0, -13.136389329139432, 1.7869727121447632),
+            (5.5, -20.0, 8.0, -66248408.63984236, 14978308.422065388),
+            (10.5, -25.0, 15.0, 1037005.5000110489, 3260618052.855438),
+            (2.5, -50.0, -10.0, 4.0274493691085514e20, -7.581988572080506e20),
+            (20.5, -30.0, -12.0, -5781507165.759946, 200323296.50961077),
         ];
         for (v, re, im, kr, ki) in cases {
             let z = Complex64::new(re, im);
