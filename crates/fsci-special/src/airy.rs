@@ -432,15 +432,63 @@ fn airy_complex_scalar(z: Complex64, mode: RuntimeMode) -> Result<ComplexAiryRes
         return Ok(ComplexAiryResult::nan());
     }
 
-    // Central sector |arg z| < π/3 at large |z|: Ai decays like e^{-(2/3)z^{3/2}}
-    // and the Taylor series cancels catastrophically (Ai(12+0.5i) was ~1e8 off).
-    // The modified-Bessel forms (DLMF 9.6.1/9.6.4) have no cancellation, using
-    // the now-exact complex K_{1/3}/I_{1/3}. frankenscipy-a33tq.
-    if z.re > 0.0 && z.im.abs() < z.re * 3.0_f64.sqrt() && z.abs() > 6.0 {
-        return Ok(airy_central_via_bessel(z, mode));
+    // Large |z|: the Taylor series cancels catastrophically (Ai decays like
+    // e^{-(2/3)z^{3/2}} where it is recessive — Ai(12+0.5i) was ~1e8 off — and
+    // oscillates with growing amplitude near the negative real axis). Use the
+    // Bessel representations, which have no cancellation, on the whole plane.
+    // frankenscipy-a33tq / frankenscipy-i0fyd.
+    if z.abs() > 6.0 {
+        return Ok(airy_large_z(z, mode));
     }
 
     airy_series_complex(z, mode)
+}
+
+/// Airy functions at large |z| via Bessel representations (DLMF 9.6), valid on
+/// the whole plane using the now-exact complex Bessel functions:
+///   |arg z| < 2π/3 (Ai recessive): modified-Bessel K_{±1/3}, I_{±1/3} of
+///     ζ = (2/3)z^{3/2}  (no cancellation — K gives the recessive Ai directly);
+///   |arg z| ≥ 2π/3 (Ai oscillatory near the negative real axis): ordinary
+///     Bessel J_{±1/3} of ξ = (2/3)(−z)^{3/2}.
+/// Im(z) < 0 uses Schwarz reflection: Airy(z̄) = conj(Airy(z)).
+fn airy_large_z(z: Complex64, mode: RuntimeMode) -> ComplexAiryResult {
+    if z.im < 0.0 {
+        let r = airy_large_z(Complex64::new(z.re, -z.im), mode);
+        return ComplexAiryResult {
+            ai: r.ai.conj(),
+            aip: r.aip.conj(),
+            bi: r.bi.conj(),
+            bip: r.bip.conj(),
+        };
+    }
+    if z.arg() < 2.0 * PI / 3.0 {
+        airy_central_via_bessel(z, mode)
+    } else {
+        airy_negative_axis_via_bessel(z)
+    }
+}
+
+/// Airy functions for |arg z| ≥ 2π/3 (Im(z) ≥ 0) via ordinary Bessel J of order
+/// ±1/3, ±2/3 (DLMF 9.6.6–9.6.9) at w = −z (which lies near the central sector):
+///   Ai(z)=Ai(−w)=(√w/3)(J_{1/3}+J_{-1/3})(ξ)  Ai'(z)=(w/3)(J_{2/3}−J_{-2/3})(ξ)
+///   Bi(z)=(√w/√3)(J_{-1/3}−J_{1/3})(ξ)         Bi'(z)=(w/√3)(J_{-2/3}+J_{2/3})(ξ)
+/// with ξ = (2/3)w^{3/2}.
+fn airy_negative_axis_via_bessel(z: Complex64) -> ComplexAiryResult {
+    use crate::bessel::complex_jv_scalar;
+    let w = Complex64::new(-z.re, -z.im);
+    let xi = w * w.powf(0.5) * (2.0 / 3.0);
+    let sqrt_w = w.powf(0.5);
+    let sqrt3 = 3.0_f64.sqrt();
+    let j13 = complex_jv_scalar(1.0 / 3.0, xi);
+    let j_m13 = complex_jv_scalar(-1.0 / 3.0, xi);
+    let j23 = complex_jv_scalar(2.0 / 3.0, xi);
+    let j_m23 = complex_jv_scalar(-2.0 / 3.0, xi);
+    ComplexAiryResult {
+        ai: Complex64::new(1.0 / 3.0, 0.0) * sqrt_w * (j13 + j_m13),
+        aip: Complex64::new(1.0 / 3.0, 0.0) * w * (j23 - j_m23),
+        bi: Complex64::new(1.0 / sqrt3, 0.0) * sqrt_w * (j_m13 - j13),
+        bip: Complex64::new(1.0 / sqrt3, 0.0) * w * (j_m23 + j23),
+    }
 }
 
 /// Airy functions in the central sector |arg z| < π/3 via modified Bessel
@@ -829,18 +877,26 @@ mod tests {
     #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
     #[allow(clippy::type_complexity)] // flat (re,im,Ai,Aip,Bi,Bip) golden rows
     fn airy_complex_central_sector_matches_scipy() {
-        // frankenscipy-a33tq: in the central sector |arg z| < π/3 Ai decays like
-        // e^{-(2/3)z^{3/2}} and the Taylor series cancels catastrophically for
-        // large |z| (Ai(12+0.5i) was ~1e8 off). The modified-Bessel forms
-        // (DLMF 9.6.1/9.6.4) using the now-exact complex K_{1/3}/I_{1/3} have no
-        // cancellation. (re, im, Ai, Aip, Bi, Bip) — scipy.special.airy 1.17.1.
-        let cases: [(f64, f64, f64, f64, f64, f64, f64, f64, f64, f64); 6] = [
+        // frankenscipy-a33tq / i0fyd: the Taylor series cancels for large |z|
+        // (Ai(12+0.5i) was ~1e8 off where Ai is recessive; near the negative
+        // real axis Ai oscillates with growing amplitude). Bessel forms (DLMF
+        // 9.6) on the whole plane: K_{±1/3}/I_{±1/3} for |arg z| < 2π/3, J_{±1/3}
+        // (at −z) for ≥ 2π/3, using the now-exact complex Bessel functions.
+        // (re, im, Ai, Aip, Bi, Bip) — scipy.special.airy 1.17.1.
+        let cases: [(f64, f64, f64, f64, f64, f64, f64, f64, f64, f64); 12] = [
             (12.0, 0.5, -2.4223414693430455e-14, -1.3974098701294474e-13, 7.446112193272591e-14, 4.887737803938679e-13, -48652067274.85256, 320162243852.3775, -190933928219.77063, 1098999083686.9447),
             (8.0, 3.0, -7.058972727591042e-08, -7.317318108006393e-08, 1.6747620674528355e-07, 2.4855341234540196e-07, -297016.0531185522, 445697.65842547565, -1083279.7789608021, 1111317.9040240769),
             (30.0, 10.0, 3.618458953201419e-48, 2.9257065097289863e-47, 6.168937330418648e-48, -1.658694314234755e-46, -3.630631225831182e43, -9.593640196678464e44, 6.653289658499513e44, -5.3508198540913276e45),
             (50.0, -20.0, -2.660839071359235e-98, -4.7566497749799595e-98, 2.577817445862617e-97, 3.060871618150333e-97, -2.5643518267413724e95, 3.042772476044945e95, -1.423970279550298e96, 2.54760527821912e96),
             (15.0, 15.0, -1.5242800743788593e-12, 1.2389854126760803e-12, 8.6723805670531e-12, -2.6084397373508288e-12, -16857882233.977169, -5027056464.473259, -62690727994.078316, -51203923689.169716),
             (100.0, 5.0, 4.7695734721577605e-291, 1.206674397092088e-291, -4.7421090640946345e-290, -1.326494655264371e-290, 3.113408464869102e288, -8.709662650827697e287, 3.135381989425959e289, -7.931711005106893e288),
+            // Non-central sectors (|arg z| >= 2pi/3 via J-Bessel; Im<0 via conj):
+            (-10.606602, 10.606602, -46879231183002.34, 495403153328640.5, 1835684896053014.0, -561141179099829.9, -495403153328640.44, -46879231183002.28, 561141179099830.25, 1835684896053013.8),
+            (-39.975633, 1.39598, -317.66602400694507, -695.1898208941936, -4362.877114819029, 2081.1168597958035, 695.1898505962521, -317.66600980289684, -2081.116946155771, -4362.876925331869),
+            (-5.209445, 29.544233, 4.3729991233689414e39, 1.8642994451756372e40, 6.267897923566469e40, -8.39216874836103e40, -1.8642994451756374e40, 4.3729991233689475e39, 8.392168748361032e40, 6.267897923566468e40),
+            (-17.320508, -10.0, -2.147716187256085e17, 1.6933911234095622e17, -4.841992732506972e17, -1.1205809126338249e18, 1.693391123409563e17, 2.147716187256086e17, -1.120580912633825e18, 4.841992732506968e17),
+            (-48.296291, 12.940952, -1.5230310279685878e38, -4.221312927245886e37, -1.560507108026517e38, 1.1062930340529214e39, 4.2213129272458804e37, -1.5230310279685882e38, -1.1062930340529215e39, -1.5605071080265167e38),
+            (0.0, 12.0, 20659441.479505055, -44627666.757474236, -158985314.73690382, 59155301.22464036, 44627666.75747423, 20659441.47950505, -59155301.22464036, -158985314.73690382),
         ];
         for (re, im, ar, ai, apr, api, br, bi, bpr, bpi) in cases {
             let r = airy_complex_scalar(Complex64::new(re, im), RuntimeMode::Strict).unwrap();

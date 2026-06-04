@@ -3382,7 +3382,7 @@ fn complex_iv_asymptotic(v: f64, z: Complex64) -> Complex64 {
     }
 }
 
-fn complex_jv_scalar(v: f64, z: Complex64) -> Complex64 {
+pub(crate) fn complex_jv_scalar(v: f64, z: Complex64) -> Complex64 {
     if !z.is_finite() || v.is_nan() {
         return Complex64::new(f64::NAN, f64::NAN);
     }
