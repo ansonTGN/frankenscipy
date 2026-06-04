@@ -3391,6 +3391,60 @@ fn spmm_row_chunk(
     (cols, vals, counts, sorted_indices)
 }
 
+fn spmm_row_counts_chunk(
+    a: &CsrMatrix,
+    b: &CsrMatrix,
+    n: usize,
+    b_rows: usize,
+    row_start: usize,
+    row_end: usize,
+) -> Vec<usize> {
+    let mut acc = vec![0.0f64; n];
+    let mut seen = vec![false; n];
+    let mut column_order: Vec<usize> = Vec::new();
+    let mut counts = Vec::with_capacity(row_end - row_start);
+
+    for i in row_start..row_end {
+        column_order.clear();
+        let a_start = a.indptr()[i];
+        let a_end = a.indptr()[i + 1];
+
+        for a_idx in a_start..a_end {
+            let k = a.indices()[a_idx];
+            let a_ik = a.data()[a_idx];
+
+            if k < b_rows {
+                let b_start = b.indptr()[k];
+                let b_end = b.indptr()[k + 1];
+                for b_idx in b_start..b_end {
+                    let j = b.indices()[b_idx];
+                    let b_kj = b.data()[b_idx];
+                    if seen[j] {
+                        acc[j] += a_ik * b_kj;
+                    } else {
+                        seen[j] = true;
+                        acc[j] = a_ik * b_kj;
+                        column_order.push(j);
+                    }
+                }
+            }
+        }
+
+        let mut count = 0usize;
+        for &j in column_order.iter().rev() {
+            let v = acc[j];
+            seen[j] = false;
+            acc[j] = 0.0;
+            if v.abs() > 0.0 {
+                count += 1;
+            }
+        }
+        counts.push(count);
+    }
+
+    counts
+}
+
 fn spmm_rows_parallel(
     a: &CsrMatrix,
     b: &CsrMatrix,
@@ -3404,13 +3458,39 @@ fn spmm_rows_parallel(
         .map(|thread| (thread * chunk, ((thread + 1) * chunk).min(m)))
         .filter(|(start, end)| start < end)
         .collect();
-    let cap_hint = a.nnz() / ranges.len().max(1) + 16;
+
+    let count_chunks: Vec<Vec<usize>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = ranges
+            .iter()
+            .map(|&(row_start, row_end)| {
+                scope.spawn(move || spmm_row_counts_chunk(a, b, n, b_rows, row_start, row_end))
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().expect("spmm symbolic chunk panicked"))
+            .collect()
+    });
+
+    let mut indptr = Vec::with_capacity(m + 1);
+    let mut chunk_caps = Vec::with_capacity(count_chunks.len());
+    indptr.push(0);
+    let mut acc = 0usize;
+    for counts in &count_chunks {
+        let before = acc;
+        for &count in counts {
+            acc += count;
+            indptr.push(acc);
+        }
+        chunk_caps.push(acc - before);
+    }
 
     type ChunkOut = (Vec<usize>, Vec<f64>, Vec<usize>, bool);
     let chunks: Vec<ChunkOut> = std::thread::scope(|scope| {
         let handles: Vec<_> = ranges
             .iter()
-            .map(|&(row_start, row_end)| {
+            .zip(&chunk_caps)
+            .map(|(&(row_start, row_end), &cap_hint)| {
                 scope.spawn(move || spmm_row_chunk(a, b, n, b_rows, row_start, row_end, cap_hint))
             })
             .collect();
@@ -3420,18 +3500,14 @@ fn spmm_rows_parallel(
             .collect()
     });
 
-    let total = chunks.iter().map(|(c, _, _, _)| c.len()).sum();
+    let total = indptr[m];
     let mut cols = Vec::with_capacity(total);
     let mut vals = Vec::with_capacity(total);
-    let mut indptr = Vec::with_capacity(m + 1);
-    indptr.push(0);
     let mut sorted_indices = true;
-    let mut acc = 0usize;
-    for (chunk_cols, chunk_vals, counts, chunk_sorted) in &chunks {
-        for &count in counts {
-            acc += count;
-            indptr.push(acc);
-        }
+    for ((chunk_cols, chunk_vals, counts, chunk_sorted), expected_counts) in
+        chunks.iter().zip(&count_chunks)
+    {
+        debug_assert_eq!(counts, expected_counts);
         cols.extend_from_slice(chunk_cols);
         vals.extend_from_slice(chunk_vals);
         sorted_indices &= *chunk_sorted;
