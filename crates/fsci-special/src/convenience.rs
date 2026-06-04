@@ -2177,42 +2177,57 @@ pub fn expn(n: usize, x: f64) -> f64 {
     if n == 0 {
         return (-x).exp() / x;
     }
-    if n == 1 {
-        // E_1(x) = -Ei(-x) for x > 0
-        // Use series for small x, continued fraction for large x
-        if x < 1.0 {
-            let gamma_em = 0.577_215_664_901_532_9;
-            let mut sum = -gamma_em - x.ln();
-            // Series: E_1(x) = -γ - ln(x) - Σ_{k=1}^∞ (-x)^k / (k·k!)
-            //       = -γ - ln(x) + x - x²/4 + x³/18 - ...
-            let mut term = x; // first term: +x (from -(-x)^1/(1·1!))
-            sum += term;
-            for k in 2..100 {
-                term *= -x / k as f64;
-                let contrib = term / k as f64;
-                sum += contrib;
-                if contrib.abs() < sum.abs() * 1e-16 {
-                    break;
-                }
-            }
-            return sum;
-        }
-        // Continued fraction for E_1(x) when x >= 1
-        let mut result = 0.0;
-        for k in (1..=20).rev() {
-            result = k as f64 / (1.0 + k as f64 / (x + result));
-        }
-        return (-x).exp() / (x + result);
-    }
 
-    // General n > 1: use recurrence E_{n+1}(x) = (e^{-x} - x E_n(x)) / n
-    // Start from E_1 and recur upward
-    let mut e_prev = expn(1, x);
-    for j in 1..n {
-        let e_next = ((-x).exp() - x * e_prev) / j as f64;
-        e_prev = e_next;
+    // E_n(x) via Numerical Recipes §6.3 `expint`: modified-Lentz continued
+    // fraction for x > 1, power series for x ≤ 1, each with a real convergence
+    // test. The previous E_1 path used a fixed 20-level recurrence with no
+    // convergence check — ~7e-8 off at x≈1, which propagated to expi(-x) and
+    // the upward E_n recurrence. frankenscipy-inkqr.
+    const EULER: f64 = 0.577_215_664_901_532_9;
+    const EPS: f64 = 1e-15;
+    const FPMIN: f64 = 1e-300;
+    const MAXIT: usize = 200;
+    let nm1 = n as f64 - 1.0;
+
+    if x > 1.0 {
+        let mut b = x + n as f64;
+        let mut c = 1.0 / FPMIN;
+        let mut d = 1.0 / b;
+        let mut h = d;
+        for i in 1..=MAXIT {
+            let a = -(i as f64) * (nm1 + i as f64);
+            b += 2.0;
+            d = 1.0 / (a * d + b);
+            c = b + a / c;
+            let del = c * d;
+            h *= del;
+            if (del - 1.0).abs() <= EPS {
+                break;
+            }
+        }
+        h * (-x).exp()
+    } else {
+        let mut ans = if nm1 != 0.0 { 1.0 / nm1 } else { -x.ln() - EULER };
+        let mut fact = 1.0;
+        for i in 1..=MAXIT {
+            fact *= -x / i as f64;
+            let del = if (i as f64 - nm1).abs() > 0.5 {
+                -fact / (i as f64 - nm1)
+            } else {
+                // i == n-1: the logarithmic term.
+                let mut psi = -EULER;
+                for ii in 1..=(nm1 as usize) {
+                    psi += 1.0 / ii as f64;
+                }
+                fact * (-x.ln() + psi)
+            };
+            ans += del;
+            if del.abs() < ans.abs() * EPS {
+                break;
+            }
+        }
+        ans
     }
-    e_prev
 }
 
 /// Exponential integral Ei(x) = PV ∫_{-∞}^{x} e^t/t dt (scalar version).
@@ -5782,6 +5797,39 @@ pub fn binary_cross_entropy_scalar(p: f64, q: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
+    fn expn_expi_match_scipy() {
+        // frankenscipy-inkqr: E_n via NR modified-Lentz CF / series replaces the
+        // fixed 20-level recurrence (E_1(1) was ~7e-8 off). scipy 1.17.1.
+        let expn_cases = [
+            (1usize, 0.3, 0.9056766516758468),
+            (1, 1.0, 0.2193839343955205),
+            (1, 2.0, 0.048900510708061146),
+            (1, 5.0, 0.0011482955912753255),
+            (1, 20.0, 9.835525290649882e-11),
+            (2, 0.5, 0.3266438623245532),
+            (2, 2.0, 0.03753426182049047),
+            (2, 10.0, 3.8302404656316095e-06),
+            (5, 1.0, 0.07045423746172041),
+            (5, 3.0, 0.006697984917017044),
+        ];
+        for (n, x, expected) in expn_cases {
+            let got = expn(n, x);
+            assert!(((got - expected) / expected).abs() < 1e-12, "expn({n},{x})={got}, scipy {expected}");
+        }
+        let expi_neg = [
+            (-0.5, -0.5597735947761608),
+            (-1.0, -0.2193839343955205),
+            (-3.0, -0.013048381094197039),
+            (-10.0, -4.156968929685325e-06),
+        ];
+        for (x, expected) in expi_neg {
+            let got = expi_scalar(x);
+            assert!(((got - expected) / expected).abs() < 1e-12, "expi({x})={got}, scipy {expected}");
+        }
+    }
 
     #[test]
     #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
