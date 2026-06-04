@@ -2145,52 +2145,106 @@ fn bron_kerbosch(
 pub fn silhouette_samples(data: &[Vec<f64>], labels: &[usize]) -> Result<Vec<f64>, ClusterError> {
     let n = data.len();
     let (labels, k) = validate_cluster_metric_data(data, labels, "silhouette_samples")?;
+    const PAIRWISE_BUCKET_LIMIT: usize = 8_000_000;
+    const PAIRWISE_MIN_SAMPLES: usize = 256;
 
-    Ok((0..n)
-        .map(|i| {
-            let li = labels[i];
+    let Some(bucket_len) = n.checked_mul(k) else {
+        return Ok(silhouette_samples_bucket_pass(data, &labels, k));
+    };
+    if n < PAIRWISE_MIN_SAMPLES || bucket_len > PAIRWISE_BUCKET_LIMIT {
+        return Ok(silhouette_samples_bucket_pass(data, &labels, k));
+    }
 
-            // a(i) = mean distance to same-cluster points
-            let mut a_sum = 0.0;
-            let mut a_count = 0;
-            for j in 0..n {
-                if i != j && labels[j] == li {
-                    a_sum += sq_dist(&data[i], &data[j]).sqrt();
-                    a_count += 1;
-                }
+    let mut cluster_sizes = vec![0usize; k];
+    for &label in &labels {
+        cluster_sizes[label] += 1;
+    }
+
+    let mut cluster_sum = vec![0.0_f64; bucket_len];
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let d = sq_dist(&data[i], &data[j]).sqrt();
+            cluster_sum[i * k + labels[j]] += d;
+            cluster_sum[j * k + labels[i]] += d;
+        }
+    }
+
+    let mut samples = Vec::with_capacity(n);
+    for i in 0..n {
+        let li = labels[i];
+        let row = &cluster_sum[i * k..i * k + k];
+        let own_count = cluster_sizes[li] - 1;
+        let a = if own_count > 0 {
+            row[li] / own_count as f64
+        } else {
+            0.0
+        };
+
+        let mut b = f64::INFINITY;
+        for c in 0..k {
+            if c == li || cluster_sizes[c] == 0 {
+                continue;
             }
-            let a = if a_count > 0 {
-                a_sum / a_count as f64
-            } else {
-                0.0
-            };
-
-            // b(i) = min over other clusters of mean distance
-            let mut b = f64::INFINITY;
-            for c in 0..k {
-                if c == li {
-                    continue;
-                }
-                let mut c_sum = 0.0;
-                let mut c_count = 0;
-                for j in 0..n {
-                    if labels[j] == c {
-                        c_sum += sq_dist(&data[i], &data[j]).sqrt();
-                        c_count += 1;
-                    }
-                }
-                if c_count > 0 {
-                    b = b.min(c_sum / c_count as f64);
-                }
+            let mean_c = row[c] / cluster_sizes[c] as f64;
+            if mean_c < b {
+                b = mean_c;
             }
+        }
 
-            if a.max(b) > 0.0 {
-                (b - a) / a.max(b)
-            } else {
-                0.0
+        samples.push(if a.max(b) > 0.0 {
+            (b - a) / a.max(b)
+        } else {
+            0.0
+        });
+    }
+
+    Ok(samples)
+}
+
+fn silhouette_samples_bucket_pass(data: &[Vec<f64>], labels: &[usize], k: usize) -> Vec<f64> {
+    let n = data.len();
+    let mut samples = Vec::with_capacity(n);
+    let mut cluster_sum = vec![0.0_f64; k];
+    let mut cluster_count = vec![0usize; k];
+    for i in 0..n {
+        let li = labels[i];
+
+        cluster_sum.fill(0.0);
+        cluster_count.fill(0);
+        for j in 0..n {
+            if i == j {
+                continue;
             }
-        })
-        .collect())
+            let lj = labels[j];
+            cluster_sum[lj] += sq_dist(&data[i], &data[j]).sqrt();
+            cluster_count[lj] += 1;
+        }
+
+        let a = if cluster_count[li] > 0 {
+            cluster_sum[li] / cluster_count[li] as f64
+        } else {
+            0.0
+        };
+
+        let mut b = f64::INFINITY;
+        for c in 0..k {
+            if c == li || cluster_count[c] == 0 {
+                continue;
+            }
+            let mean_c = cluster_sum[c] / cluster_count[c] as f64;
+            if mean_c < b {
+                b = mean_c;
+            }
+        }
+
+        samples.push(if a.max(b) > 0.0 {
+            (b - a) / a.max(b)
+        } else {
+            0.0
+        });
+    }
+
+    samples
 }
 
 /// Gap statistic: compare within-cluster dispersion to reference.
@@ -2332,8 +2386,7 @@ pub fn kmedoids(
         // bit-identical replacement for the strict-`<` argmin: same lowest-index
         // tie-break, same fully-summed minimum (the winner is never abandoned).
         for i in 0..n {
-            let (best_c, _) =
-                nearest_centroid(&flat[i * d..i * d + d], &medoids_flat, k, d);
+            let (best_c, _) = nearest_centroid(&flat[i * d..i * d + d], &medoids_flat, k, d);
             labels[i] = best_c;
         }
 
@@ -2613,7 +2666,11 @@ mod tests {
                 );
                 // Every merge must produce a positive cluster size.
                 for row in &z {
-                    assert!(row[3] >= 2.0, "merge cluster count {} should be ≥ 2", row[3]);
+                    assert!(
+                        row[3] >= 2.0,
+                        "merge cluster count {} should be ≥ 2",
+                        row[3]
+                    );
                 }
             }
         }
@@ -3069,13 +3126,7 @@ mod tests {
         // distances |0-5| + |1-5| + |6-5| + |100-5| = 5+4+1+95 = 105
         // vs. medoid=6: |0-6| + |1-6| + |5-6| + |100-6| = 6+5+1+94 = 106
         // vs. medoid=1: 1+4+5+99 = 109).
-        let data = vec![
-            vec![0.0_f64],
-            vec![1.0],
-            vec![5.0],
-            vec![6.0],
-            vec![100.0],
-        ];
+        let data = vec![vec![0.0_f64], vec![1.0], vec![5.0], vec![6.0], vec![100.0]];
         let result = kmedoids(&data, 1, 100, 42).expect("kmedoids");
         assert_eq!(result.labels.len(), 5);
         // All points belong to the single cluster.
@@ -3408,8 +3459,8 @@ mod tests {
         // -> 1.0 (perfect agreement)
         let true_labels = [0, 0, 1, 1];
         let pred_labels = [0, 0, 1, 1];
-        let score =
-            adjusted_rand_score(&true_labels, &pred_labels).expect("adjusted_rand_score should succeed");
+        let score = adjusted_rand_score(&true_labels, &pred_labels)
+            .expect("adjusted_rand_score should succeed");
         assert!(
             (score - 1.0).abs() < 1e-10,
             "adjusted_rand_score got {score}, expected 1.0"
@@ -3422,8 +3473,8 @@ mod tests {
         // -> 0.5714285714285714
         let true_labels = [0, 0, 1, 2];
         let pred_labels = [0, 0, 1, 1];
-        let score =
-            adjusted_rand_score(&true_labels, &pred_labels).expect("adjusted_rand_score should succeed");
+        let score = adjusted_rand_score(&true_labels, &pred_labels)
+            .expect("adjusted_rand_score should succeed");
         assert!(
             (score - 0.5714285714285714).abs() < 1e-10,
             "adjusted_rand_score got {score}, expected 0.5714285714285714"
@@ -3436,7 +3487,11 @@ mod tests {
         // scipy uses: obs / obs.std(axis=0) where std uses ddof=0 (population std)
         // whiten([1,4,7]) with std = sqrt(((1-4)^2 + (4-4)^2 + (7-4)^2)/3) = sqrt(6)
         // -> [1/sqrt(6), 4/sqrt(6), 7/sqrt(6)] ≈ [0.408, 1.633, 2.858]
-        let data = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0], vec![7.0, 8.0, 9.0]];
+        let data = vec![
+            vec![1.0, 2.0, 3.0],
+            vec![4.0, 5.0, 6.0],
+            vec![7.0, 8.0, 9.0],
+        ];
         let result = whiten(&data).expect("whiten should succeed");
         // Check that all columns are scaled by same factor (uniformly scaled)
         // scipy.cluster.vq.whiten uses population std (ddof=0)
@@ -3506,7 +3561,8 @@ mod tests {
             vec![11.0, 11.0],
         ];
         let labels = vec![0, 0, 1, 1];
-        let score = davies_bouldin_score(&data, &labels).expect("davies_bouldin_score should succeed");
+        let score =
+            davies_bouldin_score(&data, &labels).expect("davies_bouldin_score should succeed");
         // sklearn gives approximately 0.1 for this well-separated case
         assert!(
             score < 0.3,
@@ -3536,8 +3592,7 @@ mod tests {
         // Check centroids are reasonable (close to cluster means)
         for centroid in &result.centroids {
             let dist_to_low = ((centroid[0] - 0.5).powi(2) + (centroid[1] - 0.5).powi(2)).sqrt();
-            let dist_to_high =
-                ((centroid[0] - 10.5).powi(2) + (centroid[1] - 10.5).powi(2)).sqrt();
+            let dist_to_high = ((centroid[0] - 10.5).powi(2) + (centroid[1] - 10.5).powi(2)).sqrt();
             assert!(
                 dist_to_low < 0.5 || dist_to_high < 0.5,
                 "centroid {:?} should be near [0.5,0.5] or [10.5,10.5]",
@@ -3572,24 +3627,43 @@ mod tests {
     fn fclusterdata_matches_scipy_reference_values() {
         // scipy.cluster.hierarchy.fclusterdata([[0,0], [0,1], [4,4], [4,5]], t=2, criterion='maxclust')
         // -> [1, 1, 2, 2]
-        let data = vec![vec![0.0, 0.0], vec![0.0, 1.0], vec![4.0, 4.0], vec![4.0, 5.0]];
+        let data = vec![
+            vec![0.0, 0.0],
+            vec![0.0, 1.0],
+            vec![4.0, 4.0],
+            vec![4.0, 5.0],
+        ];
         let result = fclusterdata(&data, 2, LinkageMethod::Single).expect("fclusterdata");
         // First two points should be in same cluster, last two in another
         assert_eq!(result[0], result[1], "points 0,1 should be in same cluster");
         assert_eq!(result[2], result[3], "points 2,3 should be in same cluster");
-        assert_ne!(result[0], result[2], "cluster 1 should differ from cluster 2");
+        assert_ne!(
+            result[0], result[2],
+            "cluster 1 should differ from cluster 2"
+        );
     }
 
     #[test]
     fn inconsistent_matches_scipy_reference_values() {
         // scipy.cluster.hierarchy.inconsistent(z, d=2) for z from linkage of [[0,0], [0,1], [4,4], [4,5]]
-        let data = vec![vec![0.0, 0.0], vec![0.0, 1.0], vec![4.0, 4.0], vec![4.0, 5.0]];
+        let data = vec![
+            vec![0.0, 0.0],
+            vec![0.0, 1.0],
+            vec![4.0, 4.0],
+            vec![4.0, 5.0],
+        ];
         let z = linkage(&data, LinkageMethod::Single).expect("linkage");
         let incon = inconsistent(&z, 2);
         assert_eq!(incon.len(), 3, "inconsistent should have 3 rows");
         // First two rows have 1 element each so std=0, R=0
-        assert!((incon[0][1] - 0.0).abs() < 1e-10, "std of row 0 should be 0");
-        assert!((incon[1][1] - 0.0).abs() < 1e-10, "std of row 1 should be 0");
+        assert!(
+            (incon[0][1] - 0.0).abs() < 1e-10,
+            "std of row 0 should be 0"
+        );
+        assert!(
+            (incon[1][1] - 0.0).abs() < 1e-10,
+            "std of row 1 should be 0"
+        );
         // Third row has multiple elements so std > 0
         assert!(incon[2][1] > 0.0, "std of row 2 should be > 0");
     }
@@ -3597,9 +3671,17 @@ mod tests {
     #[test]
     fn is_monotonic_matches_scipy_reference_values() {
         // scipy.cluster.hierarchy.is_monotonic(z) for properly formed linkage
-        let data = vec![vec![0.0, 0.0], vec![0.0, 1.0], vec![4.0, 4.0], vec![4.0, 5.0]];
+        let data = vec![
+            vec![0.0, 0.0],
+            vec![0.0, 1.0],
+            vec![4.0, 4.0],
+            vec![4.0, 5.0],
+        ];
         let z = linkage(&data, LinkageMethod::Single).expect("linkage");
-        let z_arr: Vec<[f64; 4]> = z.iter().map(|row| [row[0], row[1], row[2], row[3]]).collect();
+        let z_arr: Vec<[f64; 4]> = z
+            .iter()
+            .map(|row| [row[0], row[1], row[2], row[3]])
+            .collect();
         assert!(is_monotonic(&z_arr), "valid linkage should be monotonic");
     }
 
@@ -3616,7 +3698,11 @@ mod tests {
         let labels = vec![0, 0, 1, 1];
         let score = calinski_harabasz_score(&data, &labels).expect("calinski_harabasz");
         // For well-separated clusters, score should be high (> 100)
-        assert!(score > 100.0, "calinski_harabasz got {}, expected > 100", score);
+        assert!(
+            score > 100.0,
+            "calinski_harabasz got {}, expected > 100",
+            score
+        );
     }
 
     #[test]
@@ -3650,7 +3736,11 @@ mod tests {
         let labels_true = vec![0, 0, 1, 1];
         let labels_pred = vec![0, 0, 1, 1];
         let score = homogeneity_score(&labels_true, &labels_pred).expect("homogeneity");
-        assert!((score - 1.0).abs() < 1e-10, "homogeneity perfect got {}, expected 1.0", score);
+        assert!(
+            (score - 1.0).abs() < 1e-10,
+            "homogeneity perfect got {}, expected 1.0",
+            score
+        );
     }
 
     #[test]
@@ -3659,7 +3749,11 @@ mod tests {
         let labels_true = vec![0, 0, 1, 1];
         let labels_pred = vec![0, 0, 1, 1];
         let score = completeness_score(&labels_true, &labels_pred).expect("completeness");
-        assert!((score - 1.0).abs() < 1e-10, "completeness perfect got {}, expected 1.0", score);
+        assert!(
+            (score - 1.0).abs() < 1e-10,
+            "completeness perfect got {}, expected 1.0",
+            score
+        );
     }
 
     #[test]
@@ -3668,7 +3762,11 @@ mod tests {
         let labels_true = vec![0, 0, 1, 1];
         let labels_pred = vec![0, 0, 1, 1];
         let score = v_measure_score(&labels_true, &labels_pred).expect("v_measure");
-        assert!((score - 1.0).abs() < 1e-10, "v_measure perfect got {}, expected 1.0", score);
+        assert!(
+            (score - 1.0).abs() < 1e-10,
+            "v_measure perfect got {}, expected 1.0",
+            score
+        );
     }
 
     #[test]
@@ -3677,6 +3775,10 @@ mod tests {
         let labels_true = vec![0, 0, 1, 1];
         let labels_pred = vec![0, 0, 1, 1];
         let score = normalized_mutual_info(&labels_true, &labels_pred).expect("nmi");
-        assert!((score - 1.0).abs() < 1e-10, "nmi perfect got {}, expected 1.0", score);
+        assert!(
+            (score - 1.0).abs() < 1e-10,
+            "nmi perfect got {}, expected 1.0",
+            score
+        );
     }
 }

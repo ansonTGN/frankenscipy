@@ -1,0 +1,230 @@
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:2386:
+         // bit-identical replacement for the strict-`<` argmin: same lowest-index
+         // tie-break, same fully-summed minimum (the winner is never abandoned).
+         for i in 0..n {
+[31m-            let (best_c, _) =
+[m[31m-                nearest_centroid(&flat[i * d..i * d + d], &medoids_flat, k, d);
+[m[32m+            let (best_c, _) = nearest_centroid(&flat[i * d..i * d + d], &medoids_flat, k, d);
+[m             labels[i] = best_c;
+         }
+ 
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:2667:
+                 );
+                 // Every merge must produce a positive cluster size.
+                 for row in &z {
+[31m-                    assert!(row[3] >= 2.0, "merge cluster count {} should be ≥ 2", row[3]);
+[m[32m+                    assert!(
+[m[32m+                        row[3] >= 2.0,
+[m[32m+                        "merge cluster count {} should be ≥ 2",
+[m[32m+                        row[3]
+[m[32m+                    );
+[m                 }
+             }
+         }
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:3123:
+         // distances |0-5| + |1-5| + |6-5| + |100-5| = 5+4+1+95 = 105
+         // vs. medoid=6: |0-6| + |1-6| + |5-6| + |100-6| = 6+5+1+94 = 106
+         // vs. medoid=1: 1+4+5+99 = 109).
+[31m-        let data = vec![
+[m[31m-            vec![0.0_f64],
+[m[31m-            vec![1.0],
+[m[31m-            vec![5.0],
+[m[31m-            vec![6.0],
+[m[31m-            vec![100.0],
+[m[31m-        ];
+[m[32m+        let data = vec![vec![0.0_f64], vec![1.0], vec![5.0], vec![6.0], vec![100.0]];
+[m         let result = kmedoids(&data, 1, 100, 42).expect("kmedoids");
+         assert_eq!(result.labels.len(), 5);
+         // All points belong to the single cluster.
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:3462:
+         // -> 1.0 (perfect agreement)
+         let true_labels = [0, 0, 1, 1];
+         let pred_labels = [0, 0, 1, 1];
+[31m-        let score =
+[m[31m-            adjusted_rand_score(&true_labels, &pred_labels).expect("adjusted_rand_score should succeed");
+[m[32m+        let score = adjusted_rand_score(&true_labels, &pred_labels)
+[m[32m+            .expect("adjusted_rand_score should succeed");
+[m         assert!(
+             (score - 1.0).abs() < 1e-10,
+             "adjusted_rand_score got {score}, expected 1.0"
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:3476:
+         // -> 0.5714285714285714
+         let true_labels = [0, 0, 1, 2];
+         let pred_labels = [0, 0, 1, 1];
+[31m-        let score =
+[m[31m-            adjusted_rand_score(&true_labels, &pred_labels).expect("adjusted_rand_score should succeed");
+[m[32m+        let score = adjusted_rand_score(&true_labels, &pred_labels)
+[m[32m+            .expect("adjusted_rand_score should succeed");
+[m         assert!(
+             (score - 0.5714285714285714).abs() < 1e-10,
+             "adjusted_rand_score got {score}, expected 0.5714285714285714"
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:3490:
+         // scipy uses: obs / obs.std(axis=0) where std uses ddof=0 (population std)
+         // whiten([1,4,7]) with std = sqrt(((1-4)^2 + (4-4)^2 + (7-4)^2)/3) = sqrt(6)
+         // -> [1/sqrt(6), 4/sqrt(6), 7/sqrt(6)] ≈ [0.408, 1.633, 2.858]
+[31m-        let data = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0], vec![7.0, 8.0, 9.0]];
+[m[32m+        let data = vec![
+[m[32m+            vec![1.0, 2.0, 3.0],
+[m[32m+            vec![4.0, 5.0, 6.0],
+[m[32m+            vec![7.0, 8.0, 9.0],
+[m[32m+        ];
+[m         let result = whiten(&data).expect("whiten should succeed");
+         // Check that all columns are scaled by same factor (uniformly scaled)
+         // scipy.cluster.vq.whiten uses population std (ddof=0)
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:3560:
+             vec![11.0, 11.0],
+         ];
+         let labels = vec![0, 0, 1, 1];
+[31m-        let score = davies_bouldin_score(&data, &labels).expect("davies_bouldin_score should succeed");
+[m[32m+        let score =
+[m[32m+            davies_bouldin_score(&data, &labels).expect("davies_bouldin_score should succeed");
+[m         // sklearn gives approximately 0.1 for this well-separated case
+         assert!(
+             score < 0.3,
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:3590:
+         // Check centroids are reasonable (close to cluster means)
+         for centroid in &result.centroids {
+             let dist_to_low = ((centroid[0] - 0.5).powi(2) + (centroid[1] - 0.5).powi(2)).sqrt();
+[31m-            let dist_to_high =
+[m[31m-                ((centroid[0] - 10.5).powi(2) + (centroid[1] - 10.5).powi(2)).sqrt();
+[m[32m+            let dist_to_high = ((centroid[0] - 10.5).powi(2) + (centroid[1] - 10.5).powi(2)).sqrt();
+[m             assert!(
+                 dist_to_low < 0.5 || dist_to_high < 0.5,
+                 "centroid {:?} should be near [0.5,0.5] or [10.5,10.5]",
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:3626:
+     fn fclusterdata_matches_scipy_reference_values() {
+         // scipy.cluster.hierarchy.fclusterdata([[0,0], [0,1], [4,4], [4,5]], t=2, criterion='maxclust')
+         // -> [1, 1, 2, 2]
+[31m-        let data = vec![vec![0.0, 0.0], vec![0.0, 1.0], vec![4.0, 4.0], vec![4.0, 5.0]];
+[m[32m+        let data = vec![
+[m[32m+            vec![0.0, 0.0],
+[m[32m+            vec![0.0, 1.0],
+[m[32m+            vec![4.0, 4.0],
+[m[32m+            vec![4.0, 5.0],
+[m[32m+        ];
+[m         let result = fclusterdata(&data, 2, LinkageMethod::Single).expect("fclusterdata");
+         // First two points should be in same cluster, last two in another
+         assert_eq!(result[0], result[1], "points 0,1 should be in same cluster");
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:3633:
+         assert_eq!(result[2], result[3], "points 2,3 should be in same cluster");
+[31m-        assert_ne!(result[0], result[2], "cluster 1 should differ from cluster 2");
+[m[32m+        assert_ne!(
+[m[32m+            result[0], result[2],
+[m[32m+            "cluster 1 should differ from cluster 2"
+[m[32m+        );
+[m     }
+ 
+     #[test]
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:3638:
+     fn inconsistent_matches_scipy_reference_values() {
+         // scipy.cluster.hierarchy.inconsistent(z, d=2) for z from linkage of [[0,0], [0,1], [4,4], [4,5]]
+[31m-        let data = vec![vec![0.0, 0.0], vec![0.0, 1.0], vec![4.0, 4.0], vec![4.0, 5.0]];
+[m[32m+        let data = vec![
+[m[32m+            vec![0.0, 0.0],
+[m[32m+            vec![0.0, 1.0],
+[m[32m+            vec![4.0, 4.0],
+[m[32m+            vec![4.0, 5.0],
+[m[32m+        ];
+[m         let z = linkage(&data, LinkageMethod::Single).expect("linkage");
+         let incon = inconsistent(&z, 2);
+         assert_eq!(incon.len(), 3, "inconsistent should have 3 rows");
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:3644:
+         // First two rows have 1 element each so std=0, R=0
+[31m-        assert!((incon[0][1] - 0.0).abs() < 1e-10, "std of row 0 should be 0");
+[m[31m-        assert!((incon[1][1] - 0.0).abs() < 1e-10, "std of row 1 should be 0");
+[m[32m+        assert!(
+[m[32m+            (incon[0][1] - 0.0).abs() < 1e-10,
+[m[32m+            "std of row 0 should be 0"
+[m[32m+        );
+[m[32m+        assert!(
+[m[32m+            (incon[1][1] - 0.0).abs() < 1e-10,
+[m[32m+            "std of row 1 should be 0"
+[m[32m+        );
+[m         // Third row has multiple elements so std > 0
+         assert!(incon[2][1] > 0.0, "std of row 2 should be > 0");
+     }
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:3651:
+     #[test]
+     fn is_monotonic_matches_scipy_reference_values() {
+         // scipy.cluster.hierarchy.is_monotonic(z) for properly formed linkage
+[31m-        let data = vec![vec![0.0, 0.0], vec![0.0, 1.0], vec![4.0, 4.0], vec![4.0, 5.0]];
+[m[32m+        let data = vec![
+[m[32m+            vec![0.0, 0.0],
+[m[32m+            vec![0.0, 1.0],
+[m[32m+            vec![4.0, 4.0],
+[m[32m+            vec![4.0, 5.0],
+[m[32m+        ];
+[m         let z = linkage(&data, LinkageMethod::Single).expect("linkage");
+[31m-        let z_arr: Vec<[f64; 4]> = z.iter().map(|row| [row[0], row[1], row[2], row[3]]).collect();
+[m[32m+        let z_arr: Vec<[f64; 4]> = z
+[m[32m+            .iter()
+[m[32m+            .map(|row| [row[0], row[1], row[2], row[3]])
+[m[32m+            .collect();
+[m         assert!(is_monotonic(&z_arr), "valid linkage should be monotonic");
+     }
+ 
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:3670:
+         let labels = vec![0, 0, 1, 1];
+         let score = calinski_harabasz_score(&data, &labels).expect("calinski_harabasz");
+         // For well-separated clusters, score should be high (> 100)
+[31m-        assert!(score > 100.0, "calinski_harabasz got {}, expected > 100", score);
+[m[32m+        assert!(
+[m[32m+            score > 100.0,
+[m[32m+            "calinski_harabasz got {}, expected > 100",
+[m[32m+            score
+[m[32m+        );
+[m     }
+ 
+     #[test]
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:3704:
+         let labels_true = vec![0, 0, 1, 1];
+         let labels_pred = vec![0, 0, 1, 1];
+         let score = homogeneity_score(&labels_true, &labels_pred).expect("homogeneity");
+[31m-        assert!((score - 1.0).abs() < 1e-10, "homogeneity perfect got {}, expected 1.0", score);
+[m[32m+        assert!(
+[m[32m+            (score - 1.0).abs() < 1e-10,
+[m[32m+            "homogeneity perfect got {}, expected 1.0",
+[m[32m+            score
+[m[32m+        );
+[m     }
+ 
+     #[test]
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:3713:
+         let labels_true = vec![0, 0, 1, 1];
+         let labels_pred = vec![0, 0, 1, 1];
+         let score = completeness_score(&labels_true, &labels_pred).expect("completeness");
+[31m-        assert!((score - 1.0).abs() < 1e-10, "completeness perfect got {}, expected 1.0", score);
+[m[32m+        assert!(
+[m[32m+            (score - 1.0).abs() < 1e-10,
+[m[32m+            "completeness perfect got {}, expected 1.0",
+[m[32m+            score
+[m[32m+        );
+[m     }
+ 
+     #[test]
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:3722:
+         let labels_true = vec![0, 0, 1, 1];
+         let labels_pred = vec![0, 0, 1, 1];
+         let score = v_measure_score(&labels_true, &labels_pred).expect("v_measure");
+[31m-        assert!((score - 1.0).abs() < 1e-10, "v_measure perfect got {}, expected 1.0", score);
+[m[32m+        assert!(
+[m[32m+            (score - 1.0).abs() < 1e-10,
+[m[32m+            "v_measure perfect got {}, expected 1.0",
+[m[32m+            score
+[m[32m+        );
+[m     }
+ 
+     #[test]
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/lib.rs:3731:
+         let labels_true = vec![0, 0, 1, 1];
+         let labels_pred = vec![0, 0, 1, 1];
+         let score = normalized_mutual_info(&labels_true, &labels_pred).expect("nmi");
+[31m-        assert!((score - 1.0).abs() < 1e-10, "nmi perfect got {}, expected 1.0", score);
+[m[32m+        assert!(
+[m[32m+            (score - 1.0).abs() < 1e-10,
+[m[32m+            "nmi perfect got {}, expected 1.0",
+[m[32m+            score
+[m[32m+        );
+[m     }
+ }
+ 

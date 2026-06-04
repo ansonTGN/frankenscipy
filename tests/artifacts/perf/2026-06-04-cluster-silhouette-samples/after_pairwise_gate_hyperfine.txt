@@ -1,0 +1,21 @@
+Benchmark 1: /data/tmp/cargo-target-frankenscipy-codexopt-cluster/release-perf/perf_cluster silhouette-samples-bucket-base 2600 64 64 1
+  Time (mean ± σ):     258.6 ms ±  10.4 ms    [User: 255.3 ms, System: 2.1 ms]
+  Range (min … max):   245.0 ms … 274.1 ms    8 runs
+ 
+Benchmark 2: /data/tmp/cargo-target-frankenscipy-codexopt-cluster/release-perf/perf_cluster silhouette-samples 2600 64 64 1
+  Time (mean ± σ):     126.5 ms ±   2.5 ms    [User: 122.4 ms, System: 3.5 ms]
+  Range (min … max):   121.1 ms … 128.7 ms    8 runs
+ 
+Benchmark 3: /data/tmp/cargo-target-frankenscipy-codexopt-cluster/release-perf/perf_cluster silhouette-samples-bucket-base 3200 32 64 1
+  Time (mean ± σ):     196.0 ms ±   7.5 ms    [User: 193.7 ms, System: 1.2 ms]
+  Range (min … max):   187.4 ms … 208.3 ms    8 runs
+ 
+Benchmark 4: /data/tmp/cargo-target-frankenscipy-codexopt-cluster/release-perf/perf_cluster silhouette-samples 3200 32 64 1
+  Time (mean ± σ):     102.7 ms ±   4.4 ms    [User: 98.7 ms, System: 3.1 ms]
+  Range (min … max):    98.7 ms … 113.1 ms    8 runs
+ 
+Summary
+  /data/tmp/cargo-target-frankenscipy-codexopt-cluster/release-perf/perf_cluster silhouette-samples 3200 32 64 1 ran
+    1.23 ± 0.06 times faster than /data/tmp/cargo-target-frankenscipy-codexopt-cluster/release-perf/perf_cluster silhouette-samples 2600 64 64 1
+    1.91 ± 0.11 times faster than /data/tmp/cargo-target-frankenscipy-codexopt-cluster/release-perf/perf_cluster silhouette-samples-bucket-base 3200 32 64 1
+    2.52 ± 0.15 times faster than /data/tmp/cargo-target-frankenscipy-codexopt-cluster/release-perf/perf_cluster silhouette-samples-bucket-base 2600 64 64 1

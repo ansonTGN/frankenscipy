@@ -9,7 +9,7 @@
 //! ```
 //!
 //! Usage: `perf_cluster <mode> <n> <d> <k> <repeats>`
-//!   mode    = vq | kmeans | golden
+//!   mode    = vq | kmeans | dbscan | kmedoids | silhouette-samples | golden
 //!   n       = number of observations
 //!   d       = feature dimension
 //!   k       = number of centroids / clusters
@@ -23,7 +23,7 @@ use std::hint::black_box;
 use std::path::Path;
 use std::time::Instant;
 
-use fsci_cluster::{dbscan, kmeans, kmedoids, vq};
+use fsci_cluster::{dbscan, kmeans, kmedoids, silhouette_samples, vq};
 
 /// Reference k-medoids mirroring the pre-optimization library algorithm: nearest
 /// medoid assignment and the M×M intra-cluster distance matrix both index
@@ -192,13 +192,116 @@ fn vq_baseline(data: &[Vec<f64>], centroids: &[Vec<f64>]) -> (Vec<usize>, Vec<f6
     (labels, dists)
 }
 
+/// Reference silhouette-samples implementation mirroring the current library
+/// algorithm before the bucket-pass lever. Used by `silhouette-samples-base` so
+/// the post-optimization benchmark can compare old vs new in one binary.
+fn silhouette_samples_baseline(data: &[Vec<f64>], labels: &[usize]) -> Vec<f64> {
+    let n = data.len();
+    let k = labels.iter().copied().max().unwrap_or(0) + 1;
+    (0..n)
+        .map(|i| {
+            let li = labels[i];
+
+            let mut a_sum = 0.0;
+            let mut a_count = 0usize;
+            for j in 0..n {
+                if i != j && labels[j] == li {
+                    a_sum += sq_dist_ref(&data[i], &data[j]).sqrt();
+                    a_count += 1;
+                }
+            }
+            let a = if a_count > 0 {
+                a_sum / a_count as f64
+            } else {
+                0.0
+            };
+
+            let mut b = f64::INFINITY;
+            for c in 0..k {
+                if c == li {
+                    continue;
+                }
+                let mut c_sum = 0.0;
+                let mut c_count = 0usize;
+                for j in 0..n {
+                    if labels[j] == c {
+                        c_sum += sq_dist_ref(&data[i], &data[j]).sqrt();
+                        c_count += 1;
+                    }
+                }
+                if c_count > 0 {
+                    b = b.min(c_sum / c_count as f64);
+                }
+            }
+
+            if a.max(b) > 0.0 {
+                (b - a) / a.max(b)
+            } else {
+                0.0
+            }
+        })
+        .collect()
+}
+
+/// Reference bucket-pass implementation matching the immediate pre-symmetric
+/// library path: one `j = 0..n` scan per anchor, routed into cluster buckets.
+fn silhouette_samples_bucket_baseline(data: &[Vec<f64>], labels: &[usize]) -> Vec<f64> {
+    let n = data.len();
+    let k = labels.iter().copied().max().unwrap_or(0) + 1;
+    let mut samples = Vec::with_capacity(n);
+    let mut cluster_sum = vec![0.0_f64; k];
+    let mut cluster_count = vec![0usize; k];
+
+    for i in 0..n {
+        let li = labels[i];
+
+        cluster_sum.fill(0.0);
+        cluster_count.fill(0);
+        for j in 0..n {
+            if i == j {
+                continue;
+            }
+            let lj = labels[j];
+            cluster_sum[lj] += sq_dist_ref(&data[i], &data[j]).sqrt();
+            cluster_count[lj] += 1;
+        }
+
+        let a = if cluster_count[li] > 0 {
+            cluster_sum[li] / cluster_count[li] as f64
+        } else {
+            0.0
+        };
+
+        let mut b = f64::INFINITY;
+        for c in 0..k {
+            if c == li || cluster_count[c] == 0 {
+                continue;
+            }
+            let mean_c = cluster_sum[c] / cluster_count[c] as f64;
+            if mean_c < b {
+                b = mean_c;
+            }
+        }
+
+        samples.push(if a.max(b) > 0.0 {
+            (b - a) / a.max(b)
+        } else {
+            0.0
+        });
+    }
+
+    samples
+}
+
 /// Deterministic clustered data: `k` latent centers on a lattice, each point
 /// drawn near one center with a reproducible LCG jitter. No external RNG so the
 /// golden output is stable across machines.
 fn make_clustered_data(n: usize, d: usize, k: usize) -> Vec<Vec<f64>> {
     let mut state = 0x2545_f491_4f6c_dd1d_u64;
     let next = |s: &mut u64| -> f64 {
-        *s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        *s = s
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((*s >> 11) as f64) / ((1u64 << 53) as f64)
     };
     (0..n)
@@ -225,14 +328,27 @@ fn make_centroids(d: usize, k: usize) -> Vec<Vec<f64>> {
         .collect()
 }
 
+fn make_labels(n: usize, k: usize) -> Vec<usize> {
+    (0..n).map(|i| i % k).collect()
+}
+
 fn golden_text() -> String {
     let mut output = String::new();
-    for &(n, d, k) in &[(64usize, 8usize, 4usize), (128, 16, 8), (200, 32, 12), (300, 64, 16)] {
+    for &(n, d, k) in &[
+        (64usize, 8usize, 4usize),
+        (128, 16, 8),
+        (200, 32, 12),
+        (300, 64, 16),
+    ] {
         let data = make_clustered_data(n, d, k);
         let centroids = make_centroids(d, k);
         let (labels, dists) = vq(&data, &centroids).expect("vq");
-        write!(&mut output, "mode=vq n={n} d={d} k={k} len={} ", labels.len())
-            .expect("write vq header");
+        write!(
+            &mut output,
+            "mode=vq n={n} d={d} k={k} len={} ",
+            labels.len()
+        )
+        .expect("write vq header");
         for (&label, &dist) in labels.iter().zip(dists.iter()) {
             write!(&mut output, "{label}:{:016x} ", dist.to_bits()).expect("write vq bits");
         }
@@ -282,6 +398,19 @@ fn golden_text() -> String {
         .expect("write kmedoids header");
         for &label in &result.labels {
             write!(&mut output, "{label} ").expect("write kmedoids labels");
+        }
+        output.push('\n');
+
+        let labels = make_labels(n, k);
+        let samples = silhouette_samples(&data, &labels).expect("silhouette_samples");
+        write!(
+            &mut output,
+            "mode=silhouette-samples n={n} d={d} k={k} len={} ",
+            samples.len()
+        )
+        .expect("write silhouette header");
+        for &sample in &samples {
+            write!(&mut output, "{:016x} ", sample.to_bits()).expect("write silhouette bits");
         }
         output.push('\n');
     }
@@ -361,10 +490,31 @@ fn main() {
         }
     } else if mode == "kmedoids-base" {
         for _ in 0..repeats {
-            let (labels, inertia, n_iter) =
-                kmedoids_baseline(black_box(&data), k, 50, 0x1234_5678);
+            let (labels, inertia, n_iter) = kmedoids_baseline(black_box(&data), k, 50, 0x1234_5678);
             checksum += inertia + labels.iter().sum::<usize>() as f64 + n_iter as f64;
             black_box(&labels);
+        }
+    } else if mode == "silhouette-samples" {
+        let labels = make_labels(n, k);
+        for _ in 0..repeats {
+            let samples =
+                silhouette_samples(black_box(&data), black_box(&labels)).expect("silhouette");
+            checksum += samples.iter().sum::<f64>();
+            black_box(&samples);
+        }
+    } else if mode == "silhouette-samples-base" {
+        let labels = make_labels(n, k);
+        for _ in 0..repeats {
+            let samples = silhouette_samples_baseline(black_box(&data), black_box(&labels));
+            checksum += samples.iter().sum::<f64>();
+            black_box(&samples);
+        }
+    } else if mode == "silhouette-samples-bucket-base" {
+        let labels = make_labels(n, k);
+        for _ in 0..repeats {
+            let samples = silhouette_samples_bucket_baseline(black_box(&data), black_box(&labels));
+            checksum += samples.iter().sum::<f64>();
+            black_box(&samples);
         }
     } else {
         eprintln!("unknown mode: {mode}");

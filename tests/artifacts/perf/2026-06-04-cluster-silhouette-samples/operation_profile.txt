@@ -1,0 +1,13 @@
+shape n=1600 k=32
+old_label_scans=81920000
+new_label_scans=2560000
+scan_reduction=32x
+distance_evals_unchanged=2558400
+
+shape n=1200 k=24
+old_label_scans=34560000
+new_label_scans=1440000
+scan_reduction=24x
+distance_evals_unchanged=1438800
+
+Interpretation: current silhouette_samples computes each pair distance once, but it repeats the cheap label scan once for the same-cluster pass and once per other cluster. The one-pass bucket lever removes repeated label scans while preserving distance evaluation count and per-cluster distance summation order.
