@@ -3392,19 +3392,36 @@ pub fn log_ndtr(x_tensor: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
 
 /// Scalar helper for `log_ndtr`.
 pub fn log_ndtr_scalar(x: f64) -> f64 {
-    // log(Φ(x)) where Φ is the standard normal CDF
-    // For large negative x, use asymptotic to avoid log(tiny)
-    if x > 6.0 {
-        // Φ(x) ≈ 1, log(1) ≈ 0 with correction
+    // log(Φ(x)) where Φ is the standard normal CDF.
+    if x >= -1.0 {
+        // Φ ∈ [~0.16, 1]: log is well-conditioned directly.
         let t = ndtr_scalar(x);
-        if t > 0.0 { t.ln() } else { 0.0 }
-    } else if x > -20.0 {
-        let t = ndtr_scalar(x);
-        if t > 0.0 { t.ln() } else { f64::NEG_INFINITY }
-    } else {
-        // Asymptotic: log Φ(x) ≈ -x²/2 - log(-x√(2π)) for x << 0
-        -0.5 * x * x - (-x * (2.0 * std::f64::consts::PI).sqrt()).ln()
+        return if t > 0.0 { t.ln() } else { 0.0 };
     }
+    if x > -8.0 {
+        // Moderate left tail: log(½·erfc(-x/√2)) — accurate via erfc, avoiding
+        // the rounding of the tiny ndtr value.
+        return (0.5 * crate::erfc_scalar(-x * std::f64::consts::FRAC_1_SQRT_2)).ln();
+    }
+    // Deep left tail (DLMF 7.x Mills-ratio asymptotic):
+    //   log Φ(x) = -x²/2 - ½ln(2π) - ln(-x) + ln(Σ_k (-1)^k (2k-1)!!/x^{2k}).
+    // The previous form dropped that final correction series (≈ -1/x²), leaving
+    // log_ndtr(-30) ~1e-3 off. frankenscipy-ar82j.
+    let mut s = 1.0;
+    let mut term = 1.0;
+    let mut prev_abs = 1.0;
+    for k in 1..60 {
+        term *= -((2 * k - 1) as f64) / (x * x);
+        if term.abs() > prev_abs {
+            break; // asymptotic series past its smallest term
+        }
+        s += term;
+        prev_abs = term.abs();
+        if term.abs() < 1e-18 {
+            break;
+        }
+    }
+    -0.5 * x * x - 0.5 * (2.0 * std::f64::consts::PI).ln() - (-x).ln() + s.ln()
 }
 
 /// Compute the Dawson integral approximation for large arguments.
@@ -5916,6 +5933,27 @@ pub fn binary_cross_entropy_scalar(p: f64, q: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
+    fn log_ndtr_matches_scipy() {
+        // frankenscipy-ar82j: deep-left-tail Mills-ratio asymptotic + erfc form.
+        // The prior asymptotic dropped the log(1-1/x²+…) correction (~1e-3 at -30).
+        let cases = [
+            (-30.0, -454.32124395634327),
+            (-20.0, -203.9171553710973),
+            (-10.0, -53.23128515051248),
+            (-8.0, -35.01343715991456),
+            (-5.0, -15.064998393988727),
+            (-2.0, -3.7831843336820317),
+            (-1.0, -1.8410216450092634),
+            (3.0, -0.0013508099647481925),
+        ];
+        for (x, expected) in cases {
+            let got = log_ndtr_scalar(x);
+            assert!((got - expected).abs() <= 1e-12 * expected.abs().max(1e-6), "log_ndtr({x}) = {got}, scipy {expected}");
+        }
+    }
 
     #[test]
     #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
