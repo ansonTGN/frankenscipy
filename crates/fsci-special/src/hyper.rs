@@ -1589,6 +1589,43 @@ fn hyp1f1_unconverged(mode: RuntimeMode, detail: &'static str) -> Result<f64, Sp
     Ok(f64::NAN)
 }
 
+/// DLMF 13.7.3 large-x asymptotic for U(a, b, x):
+///
+///   U(a,b,x) ~ x^{-a} Σ_{k≥0} (a)_k (a-b+1)_k / k! · (-1/x)^k.
+///
+/// The series is divergent, so we sum to its smallest term (optimal
+/// truncation). Unlike the Γ-weighted connection formula — whose two 1F1 terms
+/// each grow like e^x while U is recessive (~x^{-a}), so they cancel
+/// catastrophically for large x — this expansion is cancellation-free. Returns
+/// `Some(value)` only when the optimal-truncation floor is below ~1e-7 relative
+/// to the partial sum (the asymptotic has resolved), otherwise `None` so the
+/// caller falls back to the small-x-accurate connection formula.
+fn hyperu_large_x_asymptotic(a: f64, b: f64, x: f64) -> Option<f64> {
+    let mut term = 1.0_f64;
+    let mut sum = 1.0_f64;
+    let mut prev_abs = 1.0_f64;
+    let mut min_abs = 1.0_f64;
+    for k in 1..400 {
+        let kf = k as f64;
+        term *= (a + kf - 1.0) * (a - b + kf) / (kf * (-x));
+        let abs_term = term.abs();
+        if abs_term > prev_abs {
+            break; // divergence onset: the smallest term was the previous one
+        }
+        sum += term;
+        prev_abs = abs_term;
+        min_abs = abs_term;
+        if abs_term <= f64::EPSILON * sum.abs() {
+            break;
+        }
+    }
+    if min_abs <= 1e-7 * sum.abs() {
+        Some(x.powf(-a) * sum)
+    } else {
+        None
+    }
+}
+
 /// Scalar implementation of Tricomi's confluent hypergeometric U(a, b, x).
 pub fn hyperu_scalar(a: f64, b: f64, x: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
     if a.is_nan() || b.is_nan() || x.is_nan() {
@@ -1641,6 +1678,12 @@ pub fn hyperu_scalar(a: f64, b: f64, x: f64, mode: RuntimeMode) -> Result<f64, S
     }
 
     if !is_near_integer(b) {
+        // For large x the connection formula's two 1F1 terms cancel
+        // catastrophically (U(-0.5,-1.5,50) was -3e8 vs scipy 7.21); prefer the
+        // cancellation-free DLMF 13.7.3 asymptotic whenever it resolves.
+        if let Some(v) = hyperu_large_x_asymptotic(a, b, x) {
+            return Ok(v);
+        }
         return hyperu_connection_formula(a, b, x, mode);
     }
 
@@ -2500,6 +2543,33 @@ mod tests {
         for (a, b, z) in poles {
             let got = hyp1f1_scalar(a, b, z, RuntimeMode::Strict).unwrap();
             assert!(got == f64::INFINITY, "hyp1f1({a},{b},{z}) = {got}, expected +inf");
+        }
+    }
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
+    fn hyperu_large_x_noninteger_b_asymptotic_matches_scipy() {
+        // frankenscipy-w10iq: for a<0 non-integer and b non-integer, the
+        // Γ-weighted connection formula sums two 1F1 terms that each grow like
+        // e^x while U is recessive (~x^{-a}); they cancel catastrophically for
+        // large x (U(-0.5,-1.5,50) was -3.16e8 vs scipy 7.21, and -5.3e74 at
+        // x=200). The DLMF 13.7.3 asymptotic is cancellation-free.
+        // (a, b, x, scipy hyperu) from scipy.special 1.17.1.
+        let cases: [(f64, f64, f64, f64); 7] = [
+            (-0.5, -1.5, 50.0, 7.210447801115636),
+            (-0.5, -1.5, 200.0, 14.212583747872978),
+            (-0.5, -0.5, 30.0, 5.567061595067197),
+            (-1.5, -1.5, 40.0, 262.5862012751575),
+            (-2.5, -2.5, 40.0, 10775.75401572671),
+            (-0.5, -2.5, 20.0, 4.792553644800431),
+            (-0.5, -1.5, 12.0, 3.7371524496535997), // connection-formula side of the crossover
+        ];
+        for (a, b, x, want) in cases {
+            let got = hyperu_scalar(a, b, x, RuntimeMode::Strict).unwrap();
+            assert!(
+                (got - want).abs() <= 1e-7 * want.abs(),
+                "hyperu({a},{b},{x}) = {got}, scipy {want}"
+            );
         }
     }
 
