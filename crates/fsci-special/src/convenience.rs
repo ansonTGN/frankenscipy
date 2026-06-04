@@ -6039,7 +6039,10 @@ mod tests {
         ];
         for (a, b, y, expected) in cases {
             let got = betaincinv_scalar(a, b, y);
-            assert!(((got - expected) / expected).abs() < 1e-11, "betaincinv({a},{b},{y}) = {got}, scipy {expected}");
+            assert!(
+                ((got - expected) / expected).abs() < 1e-11,
+                "betaincinv({a},{b},{y}) = {got}, scipy {expected}"
+            );
         }
     }
 

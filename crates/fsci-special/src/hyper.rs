@@ -3647,6 +3647,8 @@ mod tests {
         );
     }
 
+    type Hyp2f1ComplexCase = (f64, f64, f64, (f64, f64), (f64, f64));
+
     // Complex 2F1 analytic continuation to |z| >= 1 for Re(z) < 1/2 via the
     // Pfaff transform — frankenscipy-f69ch (the Re(z) >= 1/2 half is a separate
     // gap). scipy has no complex hyp2f1 ufunc; golden values are mpmath 1.4.1
@@ -3655,7 +3657,7 @@ mod tests {
     #[allow(clippy::excessive_precision)] // golden constants verbatim from mpmath
     fn hyp2f1_complex_pfaff_continuation_matches_mpmath() {
         // (a, b, c, (z_re, z_im), (val_re, val_im))
-        let cases: [(f64, f64, f64, (f64, f64), (f64, f64)); 6] = [
+        let cases: [Hyp2f1ComplexCase; 6] = [
             (0.5, 0.5, 1.5, (-1.0, 1.0), (0.862231298085739, 0.08130072049794629)),
             (0.5, 1.0, 2.0, (-2.0, 0.5), (0.7284461294343433, 0.038269144396779094)),
             (0.3, 0.7, 1.2, (-1.0, -1.0), (0.8593620385670224, -0.07934104644643247)),
@@ -3706,7 +3708,7 @@ mod tests {
         // a-b integer AND c-a integer (c != a, c != b) outside the unit disk:
         // the fully-logarithmic DLMF 15.8.9/15.8.11 corner (frankenscipy-wwi45).
         // Golden values from mpmath 1.4.1 (mp.dps=30).
-        let cases: [(f64, f64, f64, (f64, f64), (f64, f64)); 4] = [
+        let cases: [Hyp2f1ComplexCase; 4] = [
             (0.5, 0.5, 2.5, (2.0, 1.0), (1.0764492159986923, 0.28361960044123111)),
             (0.3, 1.3, 2.3, (1.6, 0.7), (1.0667148233989199, 0.42844504985442885)),
             (1.5, 0.5, 2.5, (1.4, -0.9), (0.95593059253373275, -0.65513882101253395)),
@@ -3732,7 +3734,7 @@ mod tests {
     #[test]
     #[allow(clippy::excessive_precision)] // golden constants verbatim from mpmath
     fn hyp2f1_complex_inv_z_continuation_matches_mpmath() {
-        let cases: [(f64, f64, f64, (f64, f64), (f64, f64)); 6] = [
+        let cases: [Hyp2f1ComplexCase; 6] = [
             (0.5, 0.3, 1.2, (2.0, 1.0), (0.9903704668763302, 0.32750091263584863)),
             (1.0, 0.4, 1.5, (2.5, 2.0), (0.6561515879441171, 0.5286478314518919)),
             (0.7, 0.2, 1.1, (5.0, -3.0), (0.7697473975684688, -0.32616546130854634)),
