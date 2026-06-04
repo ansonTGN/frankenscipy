@@ -1603,6 +1603,40 @@ fn separable_minmax_filter(
 }
 
 /// One axis of a sliding-window min/max via a monotonic deque of (coord, value).
+/// Map a single-axis coordinate `i` (possibly out of `[0, n)`) to an in-bounds
+/// index under `mode`, or `None` for the constant-boundary out-of-range case.
+/// Mirrors the per-axis arithmetic of `NdArray::get_boundary` exactly, so the
+/// separable filter stays bit-identical while avoiding its per-element vec
+/// allocation.
+#[inline]
+fn boundary_index_1d(mut i: i64, n: i64, mode: BoundaryMode) -> Option<i64> {
+    match mode {
+        BoundaryMode::Reflect => {
+            if i < 0 {
+                i = -i - 1;
+            }
+            if i >= n {
+                i = 2 * n - i - 1;
+            }
+            let period = 2 * n;
+            i = i.rem_euclid(period);
+            if i >= n {
+                i = period - i - 1;
+            }
+            Some(i)
+        }
+        BoundaryMode::Constant => {
+            if i < 0 || i >= n {
+                None
+            } else {
+                Some(i)
+            }
+        }
+        BoundaryMode::Nearest => Some(i.clamp(0, n - 1)),
+        BoundaryMode::Wrap => Some(i.rem_euclid(n)),
+    }
+}
+
 fn minmax_filter_along_axis(
     arr: &NdArray,
     axis: usize,
@@ -1617,26 +1651,31 @@ fn minmax_filter_along_axis(
 
     let n = arr.shape[axis] as i64;
     let stride = arr.strides[axis];
+    let shape_axis = arr.shape[axis];
     let size_i = size as i64;
     let lo = size_i / 2 + origin; // window left extent relative to the output
     let mut out = NdArray::zeros(arr.shape.clone());
     let total = arr.size();
+    let mut deque: VecDeque<(i64, f64)> = VecDeque::new();
 
     for flat in 0..total {
-        let idx = arr.unravel(flat);
-        if idx[axis] != 0 {
-            continue; // visit each line along `axis` exactly once, from its head
+        // Process each line along `axis` once, from its head (axis-coord 0).
+        // coord[axis] == (flat / stride) % shape[axis]; the O(1) test avoids the
+        // per-element unravel allocation.
+        if !(flat / stride).is_multiple_of(shape_axis) {
+            continue;
         }
         let base = flat;
-        let mut full: Vec<i64> = idx.iter().map(|&x| x as i64).collect();
 
-        let mut deque: VecDeque<(i64, f64)> = VecDeque::new();
+        deque.clear();
         let mut next_p = -lo; // smallest neighbourhood coordinate needed
         for i in 0..n {
             let right = i - lo + size_i - 1; // window right edge (input coord)
             while next_p <= right {
-                full[axis] = next_p;
-                let val = arr.get_boundary(&full, mode, cval);
+                let val = match boundary_index_1d(next_p, n, mode) {
+                    Some(m) => arr.data[base + (m as usize) * stride],
+                    None => cval,
+                };
                 while let Some(&(_, back)) = deque.back() {
                     let ord = back.total_cmp(&val);
                     let evict = if is_max {
