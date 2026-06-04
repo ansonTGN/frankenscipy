@@ -3257,6 +3257,72 @@ fn negative_integer_order(v: f64) -> Option<u32> {
     Some((-v) as u32)
 }
 
+/// J_v(z) by Miller's backward recurrence for the turning band v < |z| ≤ v²
+/// (where the power series cancels and the asymptotic diverges). J is recessive
+/// as order grows, so the downward recurrence J_{ν−1}=(2ν/z)J_ν−J_{ν+1} is
+/// stable; the unnormalized run is rescaled to a small base order whose value
+/// comes from the (convergent) jv asymptotic. frankenscipy-8eiog.
+fn complex_jv_miller(v: f64, z: Complex64) -> Complex64 {
+    let frac = v - v.floor();
+    // Target order is frac + off; off (= round(v − frac)) is negative for the
+    // J_{-v}/I_{-v} terms that yv/kv need, so keep it signed and let the loop
+    // descend through 0 to it. Base orders frac (m=0) and frac+1 (m=1) supply
+    // the normalization.
+    let off = (v - frac).round() as isize;
+    let lo = off.min(0);
+    let m_start = z.abs() as isize + off.max(0) + 60 + 2 * off.unsigned_abs() as isize;
+    let z_inv = z.recip();
+    let mut jp1 = Complex64::new(0.0, 0.0);
+    let mut jc = Complex64::new(1e-300, 0.0);
+    let mut order = frac + m_start as f64;
+    let mut j_at_n = Complex64::new(0.0, 0.0);
+    let mut j_at_0 = Complex64::new(0.0, 0.0);
+    let mut j_at_1 = Complex64::new(0.0, 0.0);
+    let mut m = m_start;
+    while m >= lo {
+        if m == off {
+            j_at_n = jc;
+        }
+        if m == 0 {
+            j_at_0 = jc;
+        }
+        if m == 1 {
+            j_at_1 = jc;
+        }
+        let jm1 = Complex64::new(2.0 * order, 0.0) * z_inv * jc - jp1;
+        jp1 = jc;
+        jc = jm1;
+        order -= 1.0;
+        m -= 1;
+        if jc.abs() > 1e250 {
+            let s = Complex64::new(1e-250, 0.0);
+            jc = jc * s;
+            jp1 = jp1 * s;
+            j_at_n = j_at_n * s;
+            j_at_0 = j_at_0 * s;
+            j_at_1 = j_at_1 * s;
+        }
+    }
+    // The unnormalized run can leave the captured values at ~1e-257, where the
+    // naive complex division below would form |j|² ≈ 1e-514 and underflow to 0
+    // (→ inf/NaN). Rescale all three by the robust hypot magnitude first so the
+    // division operates on O(1) values; the common factor cancels in the ratio.
+    let mref = j_at_0.abs().max(j_at_1.abs()).max(j_at_n.abs());
+    if mref > 0.0 && mref.is_finite() {
+        j_at_0 = j_at_0 / mref;
+        j_at_1 = j_at_1 / mref;
+        j_at_n = j_at_n / mref;
+    }
+    let t0 = complex_jv_asymptotic(frac, z);
+    let t1 = complex_jv_asymptotic(frac + 1.0, z);
+    let scale = if j_at_0.abs() >= j_at_1.abs() {
+        t0 / j_at_0
+    } else {
+        t1 / j_at_1
+    };
+    j_at_n * scale
+}
+
 /// J_v(z) large-|z| Hankel asymptotic (DLMF 10.17.3): √(2/πz)[cos ω·P − sin ω·Q],
 /// ω = z − vπ/2 − π/4. The plain form is on its branch cut at the negative real
 /// axis, so reflect Re(z) < 0 via the connection J_v(z) = e^{±ivπ}J_v(−z) (upper
@@ -3303,7 +3369,12 @@ fn complex_jv_asymptotic(v: f64, z: Complex64) -> Complex64 {
 /// Stokes line on the imaginary axis is dodged (iz rotates it to the real axis).
 fn complex_iv_asymptotic(v: f64, z: Complex64) -> Complex64 {
     let iz = Complex64::new(-z.im, z.re);
-    let jiz = complex_jv_asymptotic(v, iz);
+    // Full jv router (asymptotic for |iz| > v², Miller for the turning band).
+    let jiz = if iz.abs() > v * v {
+        complex_jv_asymptotic(v, iz)
+    } else {
+        complex_jv_miller(v, iz)
+    };
     if z.arg() <= PI / 2.0 {
         Complex64::new((v * PI / 2.0).cos(), -(v * PI / 2.0).sin()) * jiz
     } else {
@@ -3332,10 +3403,18 @@ fn complex_jv_scalar(v: f64, z: Complex64) -> Complex64 {
     }
 
     // Large |z|: the 200-term power series truncates and cancels (max term
-    // ~e^{|z|}); use the asymptotic where it converges (|z| > v²). The power
-    // series covers the rest. frankenscipy-oisri.
-    if z.abs() > 15.0_f64.max(v * v) {
-        return complex_jv_asymptotic(v, z);
+    // ~e^{|z|}). The Hankel asymptotic converges only for |z| > v²; in the
+    // turning band v < |z| ≤ v² it diverges, so use Miller's backward recurrence
+    // there — but ONLY for v ≥ 0: J is recessive going up in order, so the
+    // downward recurrence is stable, whereas for J_{-v} (used by yv/kv) the run
+    // descends past order 0 into the growing-Y regime and loses accuracy
+    // (~1e-3). frankenscipy-8eiog. frankenscipy-oisri.
+    if z.abs() >= 20.0 && (z.abs() > v * v || v >= 0.0) {
+        return if z.abs() > v * v {
+            complex_jv_asymptotic(v, z)
+        } else {
+            complex_jv_miller(v, z)
+        };
     }
 
     let half_z = z / 2.0;
@@ -3383,9 +3462,12 @@ fn complex_iv_scalar(v: f64, z: Complex64) -> Complex64 {
         };
     }
 
-    // Large |z|: power series cancels; route through the jv asymptotic.
-    // frankenscipy-oisri.
-    if z.abs() > 15.0_f64.max(v * v) {
+    // Large |z|: power series cancels; route through the jv relation, which
+    // itself picks the asymptotic (|z| > v²) or Miller's recurrence (the
+    // turning band). Restricted to v ≥ 0 in the band (the negative-order Miller
+    // that I_{-v} would need loses accuracy); larger |z| handles any sign.
+    // frankenscipy-oisri / frankenscipy-8eiog.
+    if z.abs() >= 20.0 && (z.abs() > v * v || v >= 0.0) {
         return complex_iv_asymptotic(v, z);
     }
 
@@ -4451,6 +4533,33 @@ pub fn jn_zeros(n: u32, k: usize) -> Vec<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
+    #[allow(clippy::type_complexity)] // flat (v,re,im,J,I) golden rows
+    fn complex_jv_iv_turning_band_matches_scipy() {
+        // frankenscipy-8eiog: for large order in the turning band v < |z| ≤ v²
+        // the power series cancels and the Hankel/I asymptotics diverge. J is
+        // recessive as order grows, so Miller's backward recurrence (normalized
+        // by a small-order asymptotic) is stable; I follows via I_v(z)=
+        // e^{-iπv/2}J_v(iz). (v, re, im, J.re,J.im, I.re,I.im) from scipy 1.17.1.
+        let cases: [(f64, f64, f64, f64, f64, f64, f64); 5] = [
+            (10.5, 30.0, 9.3, -197.02815202783466, -425.31457727367575, -136745728601.30203, -34365056209.05175),
+            (20.5, 25.0, 9.0, 31.831636545639334, 1.7443462385888058, 1050761.4293616053, -3459922.56166499),
+            (30.5, 38.0, 11.0, 28.8899240212221, -89.82134451310553, 9940418282.002474, 30996195925.81287),
+            (50.5, 55.0, 18.0, -900.4238940608079, 26.820654557258933, 19190288570304.97, -59319339392746.0),
+            (20.5, -50.0, 35.0, -10625161413727.812, 2880710047906.2197, -1.3356153802331707e19, 7.901885428551122e18),
+        ];
+        for (v, re, im, jr, ji, ir, ii) in cases {
+            let z = Complex64::new(re, im);
+            let j = complex_jv_scalar(v, z);
+            let i = complex_iv_scalar(v, z);
+            let je = (j.re - jr).hypot(j.im - ji) / jr.hypot(ji);
+            let ie = (i.re - ir).hypot(i.im - ii) / ir.hypot(ii);
+            assert!(je <= 1e-7, "jv({v},{re}{im:+}i) = {j:?}, scipy ({jr},{ji}), rel {je:e}");
+            assert!(ie <= 1e-7, "iv({v},{re}{im:+}i) = {i:?}, scipy ({ir},{ii}), rel {ie:e}");
+        }
+    }
 
     #[test]
     #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
