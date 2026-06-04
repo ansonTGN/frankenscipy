@@ -1337,7 +1337,30 @@ fn hyp2f1_dispatch(
 /// 1F1(a; b; z) = Σ_{n=0}^∞ (a)_n z^n / ((b)_n n!)
 /// where (a)_n = a(a+1)...(a+n-1) is the Pochhammer symbol.
 fn hyp1f1_scalar(a: f64, b: f64, z: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
-    // b must not be zero or a negative integer
+    // A nonpositive-integer a terminates 1F1 into a degree-|a| polynomial that
+    // is EXACT for every z. This must be decided before the b-pole guard and
+    // before the large-|z| asymptotic, both of which mishandle it:
+    //   * the z > 200 asymptotic carries a 1/Γ(a) factor that is 0 for a
+    //     nonpositive integer, so it returned ~0 (hyp1f1(-1,0.5,300) gave 0 vs
+    //     scipy -599);
+    //   * the b-guard rejects negative-integer b outright, but the polynomial
+    //     is well defined when b is a negative integer too — provided the
+    //     (b)_k denominator does not vanish before the a-series terminates.
+    // The a-series runs k = 0..|a|; for b = -|b| the denominator (b)_k first
+    // hits 0 at k = |b|+1. Hence |a| <= |b| → finite polynomial, while
+    // |a| > |b| → a genuine pole, where scipy returns +inf (even at z = 0).
+    if is_nonpositive_integer(a) {
+        if b <= 0.0 && b == b.floor() && b > a {
+            return Ok(f64::INFINITY);
+        }
+        return hyp1f1_series(a, b, z, mode);
+    }
+
+    // b a nonpositive integer is a pole of 1/Γ(b): the series hits a zero
+    // denominator (b)_k with a nonzero numerator (the terminating-a cases that
+    // would survive it are already handled above), so the function diverges.
+    // scipy.special.hyp1f1 returns +inf here for every z; reproduce that in the
+    // permissive modes. Hardened keeps the fail-closed domain error.
     if b == 0.0 || (b < 0.0 && b == b.floor()) {
         if mode == RuntimeMode::Hardened {
             return Err(SpecialError {
@@ -1347,7 +1370,7 @@ fn hyp1f1_scalar(a: f64, b: f64, z: f64, mode: RuntimeMode) -> Result<f64, Speci
                 detail: "b must not be zero or a negative integer",
             });
         }
-        return Ok(f64::NAN);
+        return Ok(f64::INFINITY);
     }
 
     // Special cases
@@ -1400,6 +1423,13 @@ fn hyp1f1_series(a: f64, b: f64, z: f64, mode: RuntimeMode) -> Result<f64, Speci
 
     for n in 0..max_terms {
         let nf = n as f64;
+        // A nonpositive-integer a terminates the series at k = n: the (a + nf)
+        // numerator factor is exactly zero, so this and every later term vanish.
+        // Return before the multiply to avoid a 0/0 when b is also a negative
+        // integer of the same magnitude (e.g. hyp1f1(-2,-2,z): (a+2)=(b+2)=0).
+        if a + nf == 0.0 {
+            return Ok(sum);
+        }
         term *= (a + nf) * z / ((b + nf) * (nf + 1.0));
 
         if !term.is_finite() {
@@ -2432,6 +2462,47 @@ fn ln_gamma_with_sign(x: f64) -> (f64, f64) {
 mod tests {
     use super::*;
 
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
+    fn hyp1f1_nonpositive_integer_a_and_b_pole_match_scipy() {
+        // frankenscipy-ztn7f: a nonpositive integer terminates 1F1 into an exact
+        // degree-|a| polynomial. Previously the z>200 asymptotic (carrying a
+        // 1/Γ(a)=0 factor) returned ~0, and a negative-integer b was rejected to
+        // NaN even when a terminated the series first.
+        // (a, b, z, scipy hyp1f1) from scipy.special 1.17.1.
+        let poly: [(f64, f64, f64, f64); 7] = [
+            // nonpos-int a, large z: the polynomial, not the ~0 asymptotic.
+            (-1.0, 0.5, 300.0, -599.0),
+            (-1.0, 1.0, 300.0, -299.0),
+            (-1.0, 3.0, 300.0, -99.0),
+            (-5.0, 1.0, 300.0, -18607051499.0),
+            // nonpos-int a AND negative-integer b, |a|<=|b|: terminates before pole.
+            (-1.0, -2.0, 5.0, 3.5),
+            (-2.0, -2.0, 5.0, 18.5),
+            (-2.0, -3.0, 5.0, 8.5),
+        ];
+        for (a, b, z, want) in poly {
+            let got = hyp1f1_scalar(a, b, z, RuntimeMode::Strict).unwrap();
+            assert!(
+                (got - want).abs() <= 1e-9 * want.abs().max(1.0),
+                "hyp1f1({a},{b},{z}) = {got}, scipy {want}"
+            );
+        }
+        // Genuine poles → +inf (matching scipy): non-terminating a with
+        // negative-integer b, and nonpos-int a with |a|>|b|.
+        let poles: [(f64, f64, f64); 5] = [
+            (0.5, -2.0, 5.0),   // non-integer a, b=-2
+            (2.0, -2.0, 0.5),   // positive-int a, b=-2 (no termination)
+            (-2.5, 0.0, 2.0),   // b=0
+            (-3.0, -2.0, 0.5),  // |a|>|b|
+            (-2.0, -1.0, 0.0),  // |a|>|b|, even at z=0
+        ];
+        for (a, b, z) in poles {
+            let got = hyp1f1_scalar(a, b, z, RuntimeMode::Strict).unwrap();
+            assert!(got == f64::INFINITY, "hyp1f1({a},{b},{z}) = {got}, expected +inf");
+        }
+    }
+
     fn scalar(v: f64) -> SpecialTensor {
         SpecialTensor::RealScalar(v)
     }
@@ -2845,7 +2916,9 @@ mod tests {
     }
 
     #[test]
-    fn hyp1f1_b_zero_returns_nan_strict() {
+    fn hyp1f1_b_zero_returns_inf_strict() {
+        // b=0 is a pole of 1/Γ(b); scipy.special.hyp1f1 returns +inf there.
+        // (Previously this returned NaN — a non-parity behavior. frankenscipy-ztn7f.)
         let r = hyp1f1(
             &scalar(1.0),
             &scalar(0.0),
@@ -2853,7 +2926,7 @@ mod tests {
             RuntimeMode::Strict,
         );
         let val = get_scalar(&r).unwrap_or(f64::NAN);
-        assert!(val.is_nan(), "b=0 should return NaN in strict mode");
+        assert!(val == f64::INFINITY, "b=0 should return +inf in strict mode, got {val}");
     }
 
     #[test]
