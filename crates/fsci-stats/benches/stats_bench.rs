@@ -1,6 +1,6 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use fsci_stats::{
-    HaltonSampler, SobolSampler, acf, argsort, centered_discrepancy, ecdf, histogram,
+    HaltonSampler, SobolSampler, acf, argsort, centered_discrepancy, ecdf, histogram, kendalltau,
     l2_star_discrepancy, mixture_discrepancy, pacf, psd_welch, wraparound_discrepancy,
 };
 
@@ -75,11 +75,27 @@ fn bench_time_series(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_rank_correlation(c: &mut Criterion) {
+    let mut group = c.benchmark_group("rank_correlation");
+    for &n in &[2048usize, 4096] {
+        // x roughly monotone, y a noisy/tied transform — exercises ties.
+        let x = deterministic_data(n);
+        let y: Vec<f64> = (0..n)
+            .map(|i| ((i as f64 * 0.013).cos() + (i % 11) as f64 * 0.1).round())
+            .collect();
+        group.bench_function(BenchmarkId::new("kendalltau", n), |b| {
+            b.iter(|| kendalltau(&x, &y))
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_qmc_discrepancy,
     bench_qmc_sampling,
     bench_ordering_and_bins,
-    bench_time_series
+    bench_time_series,
+    bench_rank_correlation
 );
 criterion_main!(benches);

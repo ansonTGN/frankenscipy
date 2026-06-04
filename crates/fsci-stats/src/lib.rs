@@ -27334,26 +27334,29 @@ pub fn boxcox_llf(lmb: f64, data: &[f64]) -> f64 {
 /// Matches `scipy.stats.kendalltau(x, y)`.
 ///
 /// Returns (tau, p_value). The p-value is approximate for large n.
-pub fn kendalltau(x: &[f64], y: &[f64]) -> CorrelationResult {
+/// Concordant, discordant, x-tie, and y-tie pair counts for Kendall's tau.
+///
+/// `x_ties`/`y_ties` count every pair equal in x / in y (joint ties included in
+/// both); concordant/discordant count pairs untied in *both* coordinates whose
+/// orders agree/disagree. Dispatches to an O(n log n) Knight (1966) merge-sort
+/// count for large NaN-free inputs and the original O(n²) double loop otherwise.
+/// Both paths return identical integer counts, so the downstream tau/p-value
+/// arithmetic is bit-for-bit unchanged.
+fn kendall_pair_counts(x: &[f64], y: &[f64]) -> (i64, i64, i64, i64) {
     let n = x.len();
-    if n < 2 || x.len() != y.len() {
-        return CorrelationResult {
-            statistic: f64::NAN,
-            pvalue: f64::NAN,
-        };
+    if n >= 256 && !x.iter().any(|v| v.is_nan()) && !y.iter().any(|v| v.is_nan()) {
+        kendall_pair_counts_knight(x, y)
+    } else {
+        kendall_pair_counts_naive(x, y)
     }
+}
 
-    // Count concordant and discordant pairs.
+fn kendall_pair_counts_naive(x: &[f64], y: &[f64]) -> (i64, i64, i64, i64) {
+    let n = x.len();
     let mut concordant: i64 = 0;
     let mut discordant: i64 = 0;
     let mut x_ties: i64 = 0;
     let mut y_ties: i64 = 0;
-
-    // Resolves [frankenscipy-q4s5e]: hoist x[i]/y[i] out of inner loop,
-    // use dx == 0.0 / dy == 0.0 in place of the redundant equality
-    // check (mathematically identical for finite inputs), and only
-    // compute dx*dy when at least one side is untied. Saves ~3 indexed
-    // accesses + 1 mul per inner iter on a hot O(N²) loop.
     for i in 0..n {
         let xi = x[i];
         let yi = y[i];
@@ -27378,6 +27381,122 @@ pub fn kendalltau(x: &[f64], y: &[f64]) -> CorrelationResult {
             }
         }
     }
+    (concordant, discordant, x_ties, y_ties)
+}
+
+/// Knight (1966) O(n log n) Kendall pair counts. Assumes no NaN inputs (the
+/// caller gates on that). discordant = strictly-inverted y pairs after a
+/// lexicographic (x, y) sort; concordant is recovered from the pair-count
+/// identity `con = tot - x_ties - y_ties + joint_ties - dis`.
+fn kendall_pair_counts_knight(x: &[f64], y: &[f64]) -> (i64, i64, i64, i64) {
+    let n = x.len();
+    let tot = (n * (n - 1) / 2) as i64;
+    let x_ties = kendall_tie_pairs(x);
+    let y_ties = kendall_tie_pairs(y);
+
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&a, &b| x[a].total_cmp(&x[b]).then_with(|| y[a].total_cmp(&y[b])));
+
+    // Pairs equal in both x and y are adjacent in the lexicographic order.
+    let mut joint_ties = 0i64;
+    let mut run = 1i64;
+    for w in 1..n {
+        let prev = order[w - 1];
+        let cur = order[w];
+        if x[prev] == x[cur] && y[prev] == y[cur] {
+            run += 1;
+        } else {
+            joint_ties += run * (run - 1) / 2;
+            run = 1;
+        }
+    }
+    joint_ties += run * (run - 1) / 2;
+
+    let y_in_x_order: Vec<f64> = order.iter().map(|&i| y[i]).collect();
+    let discordant = kendall_strict_inversions(&y_in_x_order);
+    let concordant = tot - x_ties - y_ties + joint_ties - discordant;
+    (concordant, discordant, x_ties, y_ties)
+}
+
+/// Number of pairs equal in `v` (sum t(t-1)/2 over equal-value runs).
+fn kendall_tie_pairs(v: &[f64]) -> i64 {
+    let mut s: Vec<f64> = v.to_vec();
+    s.sort_by(|a, b| a.total_cmp(b));
+    let mut ties = 0i64;
+    let mut run = 1i64;
+    for w in 1..s.len() {
+        if s[w] == s[w - 1] {
+            run += 1;
+        } else {
+            ties += run * (run - 1) / 2;
+            run = 1;
+        }
+    }
+    if !s.is_empty() {
+        ties += run * (run - 1) / 2;
+    }
+    ties
+}
+
+/// Count strictly-inverted pairs (i < j with a[i] > a[j]) via merge sort.
+fn kendall_strict_inversions(a: &[f64]) -> i64 {
+    let mut buf = a.to_vec();
+    let mut tmp = vec![0.0f64; a.len()];
+    kendall_inv_sort(&mut buf, &mut tmp)
+}
+
+fn kendall_inv_sort(a: &mut [f64], tmp: &mut [f64]) -> i64 {
+    let n = a.len();
+    if n <= 1 {
+        return 0;
+    }
+    let mid = n / 2;
+    let mut inv;
+    {
+        let (left, right) = a.split_at_mut(mid);
+        let (tl, tr) = tmp.split_at_mut(mid);
+        inv = kendall_inv_sort(left, tl) + kendall_inv_sort(right, tr);
+    }
+    let mut i = 0;
+    let mut j = mid;
+    let mut k = 0;
+    while i < mid && j < n {
+        if a[i] <= a[j] {
+            tmp[k] = a[i];
+            i += 1;
+        } else {
+            // a[j] precedes the (mid - i) remaining left elements, all > a[j].
+            inv += (mid - i) as i64;
+            tmp[k] = a[j];
+            j += 1;
+        }
+        k += 1;
+    }
+    while i < mid {
+        tmp[k] = a[i];
+        i += 1;
+        k += 1;
+    }
+    while j < n {
+        tmp[k] = a[j];
+        j += 1;
+        k += 1;
+    }
+    a.copy_from_slice(&tmp[..n]);
+    inv
+}
+
+pub fn kendalltau(x: &[f64], y: &[f64]) -> CorrelationResult {
+    let n = x.len();
+    if n < 2 || x.len() != y.len() {
+        return CorrelationResult {
+            statistic: f64::NAN,
+            pvalue: f64::NAN,
+        };
+    }
+
+    // Count concordant and discordant pairs.
+    let (concordant, discordant, x_ties, y_ties) = kendall_pair_counts(x, y);
 
     let n_pairs = (n * (n - 1) / 2) as f64;
     let denom = ((n_pairs - x_ties as f64) * (n_pairs - y_ties as f64)).sqrt();
@@ -27464,40 +27583,7 @@ pub fn kendalltau_alternative(x: &[f64], y: &[f64], alternative: &str) -> Correl
         };
     }
 
-    let mut concordant: i64 = 0;
-    let mut discordant: i64 = 0;
-    let mut x_ties: i64 = 0;
-    let mut y_ties: i64 = 0;
-
-    // Resolves [frankenscipy-q4s5e]: hoist x[i]/y[i] out of inner loop,
-    // use dx == 0.0 / dy == 0.0 in place of the redundant equality
-    // check (mathematically identical for finite inputs), and only
-    // compute dx*dy when at least one side is untied. Saves ~3 indexed
-    // accesses + 1 mul per inner iter on a hot O(N²) loop.
-    for i in 0..n {
-        let xi = x[i];
-        let yi = y[i];
-        for j in (i + 1)..n {
-            let dx = xi - x[j];
-            let dy = yi - y[j];
-            let x_tied = dx == 0.0;
-            let y_tied = dy == 0.0;
-            if x_tied {
-                x_ties += 1;
-            }
-            if y_tied {
-                y_ties += 1;
-            }
-            if !x_tied && !y_tied {
-                let product = dx * dy;
-                if product > 0.0 {
-                    concordant += 1;
-                } else if product < 0.0 {
-                    discordant += 1;
-                }
-            }
-        }
-    }
+    let (concordant, discordant, x_ties, y_ties) = kendall_pair_counts(x, y);
 
     let n_pairs = (n * (n - 1) / 2) as f64;
     let denom = ((n_pairs - x_ties as f64) * (n_pairs - y_ties as f64)).sqrt();
@@ -53728,6 +53814,40 @@ mod tests {
             (res3.statistic - (-1.0)).abs() < 1e-10,
             "anti-monotonic spearmanr correlation"
         );
+    }
+
+    #[test]
+    fn kendall_knight_matches_naive_on_large_inputs() {
+        // Isomorphism proof for the O(n log n) Knight path: it must return the
+        // exact same (concordant, discordant, x_ties, y_ties) integer counts as
+        // the O(n^2) double loop across sizes that trip the dispatch threshold
+        // and across a range of tie densities (continuous through heavily tied).
+        // Identical counts => identical downstream tau and p-value.
+        let mut state: u64 = 0x1234_5678_9abc_def0;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (state >> 11) as f64 / (1u64 << 53) as f64
+        };
+        for &n in &[256usize, 257, 512, 1000, 2048] {
+            for &tie_mod in &[0u64, 2, 3, 7, 50] {
+                let mut x = Vec::with_capacity(n);
+                let mut y = Vec::with_capacity(n);
+                for _ in 0..n {
+                    if tie_mod == 0 {
+                        x.push(next());
+                        y.push(next());
+                    } else {
+                        x.push((next() * tie_mod as f64).floor());
+                        y.push((next() * tie_mod as f64).floor());
+                    }
+                }
+                let knight = kendall_pair_counts_knight(&x, &y);
+                let naive = kendall_pair_counts_naive(&x, &y);
+                assert_eq!(knight, naive, "counts mismatch n={n} tie_mod={tie_mod}");
+            }
+        }
     }
 
     #[test]
