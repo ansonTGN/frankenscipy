@@ -1,0 +1,13 @@
+{"mode":"silhouette-samples","n":256,"d":2,"k":64,"repeats":1,"total_ms":3.718,"per_call_ms":3.717690,"checksum":2.366775423494e2}
+{"mode":"silhouette-samples-base","n":256,"d":2,"k":64,"repeats":1,"total_ms":2.611,"per_call_ms":2.611308,"checksum":2.366775423494e2}
+Benchmark 1: /data/tmp/cargo-target/release-perf/perf_cluster silhouette-samples-base 2000 2 256 1
+  Time (mean ± σ):     614.2 ms ±  51.2 ms    [User: 605.9 ms, System: 1.9 ms]
+  Range (min … max):   532.5 ms … 675.2 ms    10 runs
+ 
+Benchmark 2: /data/tmp/cargo-target/release-perf/perf_cluster silhouette-samples 2000 2 256 1
+  Time (mean ± σ):     656.1 ms ±  25.6 ms    [User: 646.1 ms, System: 1.9 ms]
+  Range (min … max):   614.0 ms … 694.0 ms    10 runs
+ 
+Summary
+  /data/tmp/cargo-target/release-perf/perf_cluster silhouette-samples-base 2000 2 256 1 ran
+    1.07 ± 0.10 times faster than /data/tmp/cargo-target/release-perf/perf_cluster silhouette-samples 2000 2 256 1

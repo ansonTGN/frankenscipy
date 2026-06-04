@@ -1,0 +1,6 @@
+tests/artifacts/perf/2026-06-03-linalg-matmul-a-panel/README.md: OK
+tests/artifacts/perf/2026-06-03-linalg-matmul-a-panel/capture_started_at.txt: OK
+tests/artifacts/perf/2026-06-03-linalg-matmul-a-panel/criterion_matmul_rch_raw.txt: OK
+tests/artifacts/perf/2026-06-03-linalg-matmul-a-panel/head.txt: OK
+tests/artifacts/perf/2026-06-03-linalg-matmul-a-panel/profile_perf_stat_1024_rch_raw.txt: OK
+tests/artifacts/perf/2026-06-03-linalg-matmul-a-panel/rch_status.txt: OK

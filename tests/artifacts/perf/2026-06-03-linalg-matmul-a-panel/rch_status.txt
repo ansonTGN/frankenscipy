@@ -1,0 +1,80 @@
+
+RCH Status
+----------
+
+  Daemon : Running (PID 3751)
+  Uptime : 33h 16m
+  Version : 1.0.35
+  Posture : degraded (Some workers unhealthy, partial remote capability)
+  Workers : 7/10 healthy, 20/134 slots available
+  Builds : 100 total, 91% success rate
+  Tests : 42158 total, 75% pass rate, avg 34s
+  Hook : Installed
+  Saved : 3h 14m saved (2.0x speedup, 89 builds)
+           3h 14m today, 3h 14m this week
+
+
+Alerts
+------
+  ● [error] Worker 'ts1' is offline: Command failed: Command timed out after 10s (ts1)
+  ● [warning] Circuit opened for worker 'ts1' (ts1)
+  ● [warning] Worker 'ts2' is degraded (ts2)
+  ● [warning (cleared)] Worker 'ts1' is degraded (ts1)
+  ● [warning (cleared)] Worker 'vmi1264463' is degraded (vmi1264463)
+
+
+Issues
+------
+  ● [warning] Worker 'vmi1152480' has stale/missing pressure telemetry (telemetry_unavailable)
+    Fix: telemetry ingest is daemon-driven; wait for next poll (~poll-interval) or run `rch daemon restart` to force a fresh poll cycle
+  ● [warning] Worker 'vmi1153651' has stale/missing pressure telemetry (telemetry_unavailable)
+    Fix: telemetry ingest is daemon-driven; wait for next poll (~poll-interval) or run `rch daemon restart` to force a fresh poll cycle
+  ● [warning] Worker 'vmi1156319' has stale/missing pressure telemetry (telemetry_unavailable)
+    Fix: telemetry ingest is daemon-driven; wait for next poll (~poll-interval) or run `rch daemon restart` to force a fresh poll cycle
+  ● [warning] Worker 'vmi1293453' has stale/missing pressure telemetry (telemetry_unavailable)
+    Fix: telemetry ingest is daemon-driven; wait for next poll (~poll-interval) or run `rch daemon restart` to force a fresh poll cycle
+  ● [warning] Worker 'ts2' has stale/missing pressure telemetry (telemetry_unavailable)
+    Fix: telemetry ingest is daemon-driven; wait for next poll (~poll-interval) or run `rch daemon restart` to force a fresh poll cycle
+  ● [warning] Worker 'ts1' has stale/missing pressure telemetry (telemetry_unavailable)
+    Fix: telemetry ingest is daemon-driven; wait for next poll (~poll-interval) or run `rch daemon restart` to force a fresh poll cycle
+  ● [warning] Worker 'vmi1227854' has stale/missing pressure telemetry (telemetry_unavailable)
+    Fix: telemetry ingest is daemon-driven; wait for next poll (~poll-interval) or run `rch daemon restart` to force a fresh poll cycle
+  ● [warning] Worker 'vmi1264463' has stale/missing pressure telemetry (telemetry_unavailable)
+    Fix: telemetry ingest is daemon-driven; wait for next poll (~poll-interval) or run `rch daemon restart` to force a fresh poll cycle
+  ● [warning] Worker 'vmi1167313' has stale/missing pressure telemetry (telemetry_unavailable)
+    Fix: telemetry ingest is daemon-driven; wait for next poll (~poll-interval) or run `rch daemon restart` to force a fresh poll cycle
+  ● [warning] Worker 'vmi1149989' has stale/missing pressure telemetry (telemetry_unavailable)
+    Fix: telemetry ingest is daemon-driven; wait for next poll (~poll-interval) or run `rch daemon restart` to force a fresh poll cycle
+
+
+Repo Convergence
+----------------
+  State : ready (0 ready, 0 drifting, 0 failed, 0 stale)
+
+
+Remediation
+-----------
+  ! Worker vmi1152480 storage telemetry stale or missing [vmi1152480]
+    Fix: wait for next telemetry poll, or run `rch daemon restart` to force a fresh poll cycle
+  ! Worker vmi1153651 storage telemetry stale or missing [vmi1153651]
+    Fix: wait for next telemetry poll, or run `rch daemon restart` to force a fresh poll cycle
+  ! Worker vmi1156319 storage telemetry stale or missing [vmi1156319]
+    Fix: wait for next telemetry poll, or run `rch daemon restart` to force a fresh poll cycle
+  ! Worker vmi1293453 storage telemetry stale or missing [vmi1293453]
+    Fix: wait for next telemetry poll, or run `rch daemon restart` to force a fresh poll cycle
+  ! Worker ts2 storage telemetry stale or missing [ts2]
+    Fix: wait for next telemetry poll, or run `rch daemon restart` to force a fresh poll cycle
+  ! Worker ts1 storage telemetry stale or missing [ts1]
+    Fix: wait for next telemetry poll, or run `rch daemon restart` to force a fresh poll cycle
+  !! Worker ts1 is unreachable: build cancelled by stuck_detector [ts1]
+    Fix: ssh ubuntu@192.168.1.107 'echo ok' to verify connectivity
+  ! Worker vmi1227854 storage telemetry stale or missing [vmi1227854]
+    Fix: wait for next telemetry poll, or run `rch daemon restart` to force a fresh poll cycle
+  ! Worker vmi1264463 storage telemetry stale or missing [vmi1264463]
+    Fix: wait for next telemetry poll, or run `rch daemon restart` to force a fresh poll cycle
+  ! Worker vmi1167313 storage telemetry stale or missing [vmi1167313]
+    Fix: wait for next telemetry poll, or run `rch daemon restart` to force a fresh poll cycle
+  ! Worker vmi1149989 storage telemetry stale or missing [vmi1149989]
+    Fix: wait for next telemetry poll, or run `rch daemon restart` to force a fresh poll cycle
+  ! Operating at reduced capacity: 7/10 workers healthy
+    Fix: rch workers probe --all

@@ -1,0 +1,19 @@
+{"mode":"silhouette-samples","n":256,"d":2,"k":64,"repeats":1,"total_ms":0.356,"per_call_ms":0.355733,"checksum":2.366775423494e2}
+{"mode":"silhouette-samples-base","n":256,"d":2,"k":64,"repeats":1,"total_ms":3.185,"per_call_ms":3.185300,"checksum":2.366775423494e2}
+{"mode":"silhouette-samples-bucket-base","n":256,"d":2,"k":64,"repeats":1,"total_ms":0.246,"per_call_ms":0.246286,"checksum":2.366775423494e2}
+Benchmark 1: /data/tmp/cargo-target/release-perf/perf_cluster silhouette-samples-base 2000 2 256 1
+  Time (mean ± σ):     523.3 ms ±  40.4 ms    [User: 519.3 ms, System: 1.8 ms]
+  Range (min … max):   481.9 ms … 599.4 ms    10 runs
+ 
+Benchmark 2: /data/tmp/cargo-target/release-perf/perf_cluster silhouette-samples-bucket-base 2000 2 256 1
+  Time (mean ± σ):      14.5 ms ±   0.7 ms    [User: 13.2 ms, System: 1.0 ms]
+  Range (min … max):    13.4 ms …  15.8 ms    10 runs
+ 
+Benchmark 3: /data/tmp/cargo-target/release-perf/perf_cluster silhouette-samples 2000 2 256 1
+  Time (mean ± σ):      14.6 ms ±   1.4 ms    [User: 10.1 ms, System: 4.2 ms]
+  Range (min … max):    12.9 ms …  17.3 ms    10 runs
+ 
+Summary
+  /data/tmp/cargo-target/release-perf/perf_cluster silhouette-samples-bucket-base 2000 2 256 1 ran
+    1.01 ± 0.11 times faster than /data/tmp/cargo-target/release-perf/perf_cluster silhouette-samples 2000 2 256 1
+   36.18 ± 3.32 times faster than /data/tmp/cargo-target/release-perf/perf_cluster silhouette-samples-base 2000 2 256 1

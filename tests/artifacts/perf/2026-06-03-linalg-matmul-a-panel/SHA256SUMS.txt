@@ -1,0 +1,6 @@
+2212a730d52c2a90e6f7c0dbf23a0926c99fc653b7fb610244643664b1a7f036  tests/artifacts/perf/2026-06-03-linalg-matmul-a-panel/README.md
+ed5decd45cfee43aa0cb9d373cedfbda08fc7715a8a57e7f621b9fa4c407d7d7  tests/artifacts/perf/2026-06-03-linalg-matmul-a-panel/capture_started_at.txt
+a2520b707beb2d9cda42d500dd97d546870c4e23367ab6def54d9861300edd7e  tests/artifacts/perf/2026-06-03-linalg-matmul-a-panel/criterion_matmul_rch_raw.txt
+5b0b410d10241118ee2e1ee66d734c6bb00ece9b8c4ee41279e641c5954ae9e5  tests/artifacts/perf/2026-06-03-linalg-matmul-a-panel/head.txt
+e05dfc8cbb6a26f7272bb10aa7f39a0f90325f604307c61fa178a21ba5aa86d9  tests/artifacts/perf/2026-06-03-linalg-matmul-a-panel/profile_perf_stat_1024_rch_raw.txt
+bdc6b2c0e7a3b135dcd8c175fa16c99135ab43216b0a6e16dd70a25126d9f5bf  tests/artifacts/perf/2026-06-03-linalg-matmul-a-panel/rch_status.txt

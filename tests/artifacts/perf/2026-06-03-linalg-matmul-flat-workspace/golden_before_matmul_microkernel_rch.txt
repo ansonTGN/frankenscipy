@@ -1,0 +1,48 @@
+[RCH] local (no admissible workers: insufficient_slots=6,active_project_exclusion=1)
+   Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
+    Finished `release` profile [optimized] target(s) in 8.01s
+     Running unittests src/lib.rs (/data/tmp/cargo-target/release/deps/fsci_linalg-c77e6f7433863ced)
+
+running 3 tests
+test tests::matmul_microkernel_perf_vs_flat_ikj ... ignored, perf measurement; run explicitly in --release
+test tests::matmul_microkernel_is_bit_identical_to_flat_ikj ... ok
+test tests::matmul_microkernel_golden_digest ... ok
+
+test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 346 filtered out; finished in 0.00s
+
+     Running unittests src/bin/perf_solve.rs (/data/tmp/cargo-target/release/deps/perf_solve-7cc4c00076885377)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/differential_linalg.rs (/data/tmp/cargo-target/release/deps/differential_linalg-736ffcb3070acbd8)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 34 filtered out; finished in 0.00s
+
+     Running tests/metamorphic_tests.rs (/data/tmp/cargo-target/release/deps/metamorphic_tests-cea4b76fc180ab58)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 59 filtered out; finished in 0.00s
+
+     Running tests/repro_tri_be.rs (/data/tmp/cargo-target/release/deps/repro_tri_be-afca536b6527b460)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/test_nan_eig.rs (/data/tmp/cargo-target/release/deps/test_nan_eig-e3961c31a5986d2f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/test_nan_svd.rs (/data/tmp/cargo-target/release/deps/test_nan_svd-3a9f0695978c5485)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+

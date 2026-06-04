@@ -1,0 +1,493 @@
+[RCH] local (no admissible workers: insufficient_slots=7,hard_preflight=1)
+    Finished `release` profile [optimized] target(s) in 0.16s
+     Running unittests src/lib.rs (/data/tmp/cargo-target/release/deps/fsci_linalg-c77e6f7433863ced)
+
+running 347 tests
+test proptest_tests::cho_solve_matches_scipy_reference_values ... ok
+test proptest_tests::cholesky_matches_scipy_reference_values ... ok
+test proptest_tests::eig_banded_diagonal ... ok
+test proptest_tests::cosm_diagonal_matrix_matches_scipy_reference ... ok
+test proptest_tests::eig_banded_empty ... ok
+test proptest_tests::eig_banded_eigvals_only ... ok
+test proptest_tests::det_matches_scipy_reference_values ... ok
+test proptest_tests::eig_banded_tridiagonal ... ok
+test proptest_tests::eigh_matches_scipy_reference_values ... ok
+test proptest_tests::eigh_tridiagonal_2x2 ... ok
+test proptest_tests::eigh_tridiagonal_diagonal_matrix ... ok
+test proptest_tests::det_inverse_consistency ... ok
+test proptest_tests::eigh_tridiagonal_eigenvalues_only ... ok
+test proptest_tests::eigh_tridiagonal_empty ... ok
+test proptest_tests::det_product_property ... ok
+test proptest_tests::eigh_tridiagonal_invalid_e_length ... ok
+test proptest_tests::eigvals_matches_scipy_reference_values ... ok
+test proptest_tests::eigvalsh_symmetric_matrix_matches_scipy_reference ... ok
+test proptest_tests::expm_matches_scipy_reference_values ... ok
+test proptest_tests::fractional_matrix_power_integer ... ok
+test proptest_tests::fractional_matrix_power_sqrt ... ok
+test proptest_tests::funm_exp_matches_expm ... ok
+test proptest_tests::funm_rejects_non_square ... ok
+test proptest_tests::hessenberg_matches_scipy_reference_values ... ok
+test proptest_tests::hyperbolic_matrix_functions_match_scalar_diagonal ... ok
+test proptest_tests::inv_matches_scipy_reference_values ... ok
+test proptest_tests::is_orthogonal_rejects_ragged_or_non_finite ... ok
+test proptest_tests::is_positive_definite_rejects_non_finite_entries ... ok
+test proptest_tests::ishermitian_false_for_real_asymmetric_matrix ... ok
+test proptest_tests::ishermitian_matches_symmetric_for_real_matrix ... ok
+test proptest_tests::inverse_roundtrip ... ok
+test proptest_tests::issymmetric_false_for_asymmetric ... ok
+test proptest_tests::issymmetric_non_square ... ok
+test proptest_tests::issymmetric_rejects_non_finite_entries ... ok
+test proptest_tests::issymmetric_true_for_symmetric ... ok
+test proptest_tests::issymmetric_with_tolerance ... ok
+test proptest_tests::khatri_rao_basic ... ok
+test proptest_tests::khatri_rao_mismatched_cols ... ok
+test proptest_tests::ldl_1x1 ... ok
+test proptest_tests::ldl_3x3 ... ok
+test proptest_tests::ldl_empty_matrix ... ok
+test proptest_tests::ldl_hardened_rejects_asymmetric ... ok
+test proptest_tests::ldl_identity ... ok
+test proptest_tests::ldl_matches_scipy_reference_values ... ok
+test proptest_tests::ldl_non_square_rejected ... ok
+test proptest_tests::ldl_positive_definite ... ok
+test proptest_tests::ldl_symmetric_indefinite ... ok
+test proptest_tests::lstsq_matches_scipy_reference_values ... ok
+test proptest_tests::logm_matches_scipy_reference_values ... ok
+test proptest_tests::lu_matches_scipy_reference_values ... ok
+test proptest_tests::lu_solve_matches_scipy_reference_values ... ok
+test proptest_tests::lu_triangular_factors_match_scipy_convention ... ok
+test proptest_tests::mat_allclose_handles_nan_and_infinity_explicitly ... ok
+test proptest_tests::mat_norm_1_rejects_ragged_or_non_finite ... ok
+test proptest_tests::matrix_power_negative_one_is_inverse ... ok
+test proptest_tests::matrix_power_negative_two ... ok
+test proptest_tests::matrix_power_one_returns_original ... ok
+test proptest_tests::matrix_power_rejects_non_square ... ok
+test proptest_tests::matrix_power_two_matches_multiply ... ok
+test proptest_tests::matrix_power_zero_returns_identity ... ok
+test proptest_tests::lstsq_residual_minimality ... ok
+test proptest_tests::matrix_rank_explicit_tolerance_changes_result ... ok
+test proptest_tests::norm_1_matches_scipy_reference_values ... ok
+test proptest_tests::norm_frobenius_matches_scipy_reference_values ... ok
+test proptest_tests::norm_inf_matches_scipy_reference_values ... ok
+test proptest_tests::pinv_matches_scipy_reference_values ... ok
+test proptest_tests::qr_matches_scipy_reference_values ... ok
+test proptest_tests::polar_matches_scipy_reference_values ... ok
+test proptest_tests::signm_negative_identity ... ok
+test proptest_tests::sinm_diagonal_matrix_matches_scipy_reference ... ok
+test proptest_tests::solve_circulant_accepts_singular_with_compatible_rhs ... ok
+test proptest_tests::solve_circulant_rejects_singular_with_nonzero_rhs ... ok
+test proptest_tests::solve_circulant_identity ... ok
+test proptest_tests::solve_circulant_shift ... ok
+test proptest_tests::schur_matches_scipy_reference_values ... ok
+test proptest_tests::solve_continuous_are_3x3_residual ... ok
+test proptest_tests::signm_identity ... ok
+test proptest_tests::rcond_is_bounded ... ok
+test proptest_tests::pinv_rank_bounded ... ok
+test proptest_tests::signm_matches_scipy_reference_values ... ok
+test proptest_tests::solve_continuous_are_carex_1x1 ... ok
+test proptest_tests::solve_discrete_are_darex_2x2_residual ... ok
+test proptest_tests::roundtrip_solve ... ok
+test proptest_tests::solve_discrete_are_rejects_dimension_mismatch ... ok
+test proptest_tests::solve_discrete_lyapunov_perf_vs_kronecker ... ignored, perf measurement; run explicitly in --release
+test proptest_tests::solve_discrete_lyapunov_complex_eigenvalues_2x2_block ... ok
+test proptest_tests::solve_discrete_lyapunov_diagonal ... ok
+test proptest_tests::solve_discrete_lyapunov_rejects_non_square ... ok
+test proptest_tests::solve_discrete_lyapunov_stable ... ok
+test proptest_tests::solve_discrete_lyapunov_unit_eigenvalue_errors ... ok
+test proptest_tests::solve_continuous_are_carex_2x2_residual ... ok
+test proptest_tests::solve_sylvester_complex_eigenvalues_2x2_block ... ok
+test proptest_tests::solve_continuous_are_rejects_non_square_a ... ok
+test proptest_tests::solve_sylvester_diagonal ... ok
+test proptest_tests::solve_sylvester_general ... ok
+test proptest_tests::solve_continuous_lyapunov_basic ... ok
+test proptest_tests::solve_sylvester_perf_vs_kronecker ... ignored, perf measurement; run explicitly in --release
+test proptest_tests::solve_continuous_lyapunov_matches_scipy_reference ... ok
+test proptest_tests::solve_sylvester_matches_scipy_reference ... ok
+test proptest_tests::solve_sylvester_rejects_non_square ... ok
+test proptest_tests::solve_toeplitz_ignores_row_zero_entry ... ok
+test proptest_tests::solve_matches_scipy_reference_values ... ok
+test proptest_tests::solve_discrete_are_darex_1x1 ... ok
+test proptest_tests::solve_toeplitz_rejects_shape_mismatch ... ok
+test proptest_tests::solve_toeplitz_matches_scipy_doc_example ... ok
+test proptest_tests::solve_toeplitz_symmetric_identity ... ok
+test proptest_tests::solve_sylvester_singular_system_errors ... ok
+test proptest_tests::sqrtm_3x3_spd ... ok
+test proptest_tests::solve_triangular_matches_scipy_reference_values ... ok
+test proptest_tests::sqrtm_diagonal ... ok
+test proptest_tests::solve_sylvester_3x3 ... ok
+test proptest_tests::sqrtm_matches_scipy_reference_values ... ok
+test proptest_tests::sqrtm_identity ... ok
+test proptest_tests::solve_continuous_lyapunov_non_symmetric_a ... ok
+test proptest_tests::sqrtm_negative_eigenvalue_returns_nan ... ok
+test proptest_tests::sqrtm_rejects_non_square ... ok
+test proptest_tests::sqrtm_squared_equals_original ... ok
+test proptest_tests::svd_matches_scipy_reference_values ... ok
+test proptest_tests::svdvals_diagonal_matrix_matches_scipy_reference ... ok
+test proptest_tests::svdvals_matches_scipy_reference_values ... ok
+test proptest_tests::test_solve_transposed_upper_triangular ... ok
+test proptest_tests::test_solve_with_casp_transposed_upper_triangular ... ok
+test proptest_tests::trig_matrix_functions_match_scalar_diagonal ... ok
+test proptest_tests::trig_matrix_functions_reject_non_square ... ok
+test proptest_tests::trig_matrix_functions_satisfy_commuting_identity ... ok
+test tests::backward_error_nonfinite_is_infinite ... ok
+test proptest_tests::solve_triangular_matches_solve_for_triangular_input ... ok
+test tests::bandwidth_diagonal ... ok
+test tests::block_diag_basic ... ok
+test tests::block_diag_empty ... ok
+test tests::audit_records_after_poisoned_ledger ... ok
+test tests::casp_selects_diagonal_fast_path ... ok
+test tests::casp_certificate_populated_for_core_entrypoints ... ok
+test tests::casp_selects_lu_for_well_conditioned ... ok
+test tests::casp_selects_qr_for_moderate_condition ... ok
+test tests::casp_selects_svd_for_ill_conditioned ... ok
+test tests::casp_selects_triangular_fast_path ... ok
+test tests::cho_factor_and_solve ... ok
+test tests::cho_solve_banded_diagonal ... ok
+test tests::cho_solve_banded_empty ... ok
+test tests::cho_solve_banded_tridiagonal ... ok
+test tests::cholesky_identity ... ok
+test tests::cholesky_lower_factor_reconstructs_a ... ok
+test tests::cholesky_not_positive_definite ... ok
+test tests::cholesky_upper_factor ... ok
+test tests::circulant_basic_matches_scipy_first_column_convention ... ok
+test tests::companion_polynomial ... ok
+test tests::companion_too_few_coeffs ... ok
+test tests::condition_diagnostics_general_matrix_has_no_special_structure ... ok
+test tests::condition_diagnostics_hilbert_reports_ill_conditioning ... ok
+test tests::condition_diagnostics_identity_reports_diagonal_spd ... ok
+test tests::condition_diagnostics_rectangular_matrix_is_conservative ... ok
+test tests::condition_diagnostics_triangular_reports_fast_path_shape ... ok
+test tests::convolution_matrix_full ... ok
+test tests::det_empty_matrix_is_one ... ok
+test tests::det_identity_is_one ... ok
+test tests::det_with_audit_records_fail_closed_on_non_finite_input ... ok
+test tests::det_singular_is_zero ... ok
+test tests::determinant_matches_known_result ... ok
+test tests::dft_matrix_unitary ... ok
+test tests::det_with_audit_records_mode_decision ... ok
+test tests::eig_eigenvectors_satisfy_av_eq_lambda_v ... ok
+test tests::eig_banded_qmul_ikj_is_bit_identical ... ok
+test tests::eig_real_eigenvalues_symmetric ... ok
+test tests::eigh_av_equals_v_lambda ... ok
+test tests::eig_empty_matrix ... ok
+test tests::eig_general_eigenvalues ... ok
+test tests::eigh_eigenvectors_orthogonal ... ok
+test tests::eigvals_matches_eig ... ok
+test tests::eigvalsh_matches_eigh ... ok
+test tests::error_condition_too_high_hardened ... ok
+test tests::error_convergence_failure_display ... ok
+test tests::eigh_symmetric_eigenvalues_ascending ... ok
+test tests::error_incompatible_shapes ... ok
+test tests::error_invalid_argument_display ... ok
+test tests::error_invalid_band_shape ... ok
+test tests::eigh_identity_eigenvalues ... ok
+test tests::error_not_supported_display ... ok
+test tests::error_singular_matrix ... ok
+test tests::expm_diagonal ... ok
+test tests::error_expected_square_matrix ... ok
+test tests::expm_empty ... ok
+test tests::expm_non_square_error ... ok
+test tests::error_ragged_matrix ... ok
+test tests::expm_rotation ... ok
+test tests::error_resource_exhausted_display ... ok
+test tests::expm_scalar ... ok
+test tests::fast_rcond_diagonal_nan_returns_zero ... ok
+test tests::expm_nilpotent ... ok
+test tests::fast_rcond_from_lu_ill_conditioned ... ok
+test tests::fast_rcond_from_lu_well_conditioned ... ok
+test tests::expm_identity ... ok
+test tests::fast_rcond_triangular_matches_exact_lower_2x2_inverse_norm ... ok
+test tests::fast_rcond_triangular_matches_exact_upper_2x2_inverse_norm ... ok
+test tests::fast_rcond_triangular_nan_returns_zero ... ok
+test tests::fiedler_companion_edge_cases ... ok
+test tests::fiedler_basic ... ok
+test tests::fiedler_companion_non_monic_rescales ... ok
+test tests::fiedler_companion_pentadiagonal ... ok
+test tests::hadamard_4 ... ok
+test tests::hadamard_non_power_of_2_rejected ... ok
+test tests::hankel_metamorphic_constant_on_antidiagonals ... ok
+test tests::hankel_single_arg_pads_with_zeros ... ok
+test tests::hankel_two_arg_matches_scipy_docs_example ... ok
+test tests::helmert_default_excludes_first_row_per_scipy ... ok
+test tests::hardened_mode_forces_finite_checks ... ok
+test tests::helmert_full_first_row_is_uniform ... ok
+test tests::helmert_full_rows_are_pairwise_orthogonal ... ok
+test tests::helmert_full_rows_have_unit_norm ... ok
+test tests::hessenberg_a_equals_qhqt ... ok
+test tests::hessenberg_empty_matrix ... ok
+test tests::hessenberg_h_is_upper_hessenberg ... ok
+test tests::hessenberg_q_is_orthogonal ... ok
+test tests::hilbert_3x3 ... ok
+test tests::inv_empty_matrix ... ok
+test tests::inv_general_single_lu_matches_column_by_column ... ok
+test tests::inv_identity_matrix ... ok
+test tests::inv_ill_conditioned_emits_warning ... ok
+test tests::inv_metamorphic_double_inverse_recovers_original ... ok
+test tests::inv_singular_matrix_error ... ok
+test tests::inverse_matches_known_result ... ok
+test tests::invhilbert_times_hilbert_is_identity ... ok
+test tests::is_diagonal_rejects_nan_off_diagonal ... ok
+test tests::is_lower_triangular_rejects_nan_above_diagonal ... ok
+test tests::is_upper_triangular_rejects_nan_below_diagonal ... ok
+test tests::kron_2x2 ... ok
+test tests::kron_metamorphic_2x2_full_matrix_pinned ... ok
+test tests::kron_metamorphic_shape_is_product_of_dims ... ok
+test tests::kron_metamorphic_identity_is_identity ... ok
+test tests::kron_metamorphic_trace_equals_product_of_traces ... ok
+test tests::leslie_matrix ... ok
+test tests::linalg_trace_serializes_to_json ... ok
+test tests::logm_3x3_spd ... ok
+test tests::logm_diagonal_is_log_of_diagonal ... ok
+test tests::logm_identity_is_zero ... ok
+test tests::logm_inverse_of_expm ... ok
+test tests::logm_rejects_non_square ... ok
+test tests::logm_upper_triangular_distinct_diagonal_matches_closed_form ... ok
+test tests::logm_upper_triangular_repeated_diagonal_uses_jordan_limit ... ok
+test tests::lstsq_exact_system ... ok
+test tests::lstsq_overdetermined_system ... ok
+test tests::lstsq_rank_deficient ... ok
+test tests::lstsq_underdetermined_system ... ok
+test tests::lu_decomposition_a_equals_plu ... ok
+test tests::lu_empty_matrix ... ok
+test tests::lu_factor_and_solve_roundtrip ... ok
+test tests::lu_factor_caches_rcond_without_debug_observability ... ok
+test tests::lu_l_is_unit_lower_triangular ... ok
+test tests::lu_solve_incompatible_shapes ... ok
+test tests::matmul_ikj_perf_vs_naive_ijk ... ignored, perf measurement; run explicitly in --release
+test tests::lu_u_is_upper_triangular ... ok
+test tests::matmul_ikj_is_bit_identical_to_naive_ijk ... ok
+test tests::matmul_microkernel_perf_vs_flat_ikj ... ignored, perf measurement; run explicitly in --release
+test tests::matrix_fingerprint_is_deterministic ... ok
+test tests::matmul_microkernel_is_bit_identical_to_flat_ikj ... ok
+test tests::matrix_rank_full_rank ... ok
+test tests::matrix_rank_rank_deficient ... ok
+test tests::matrix_fingerprint_truncates_large_input ... ok
+test tests::norm_frobenius_identity ... ok
+test tests::matrix_rank_zero_matrix ... ok
+test tests::norm_one_norm ... ok
+test tests::norm_spectral_diagonal ... ok
+test tests::null_space_full_rank ... ok
+test tests::norm_inf_norm ... ok
+test tests::matrix_rank_rectangular ... ok
+test tests::matmul_microkernel_golden_digest ... ok
+test tests::null_space_rank_deficient ... ok
+test tests::ordqz_empty_matrix ... ok
+test tests::ordqz_left_half_plane_moves_negative_ratio_first ... ok
+test tests::ordqz_shape_mismatch_rejected ... ok
+test tests::ordqz_inside_unit_circle_moves_stable_ratio_first ... ok
+test tests::orth_full_rank ... ok
+test tests::orth_rank_deficient ... ok
+test tests::pascal_lower_triangular ... ok
+test tests::pascal_symmetric ... ok
+test tests::pinv_involution_pinv_of_pinv_recovers_a ... ok
+test tests::pinv_moore_penrose_condition ... ok
+test tests::pinv_moore_penrose_conditions_2_3_4 ... ok
+test tests::pinv_negative_thresholds_are_rejected ... ok
+test tests::pinv_rank_deficient ... ok
+test tests::polar_identity ... ok
+test tests::polar_p_is_symmetric_positive ... ok
+test tests::pinv_rectangular_and_rank ... ok
+test tests::polar_reconstruction ... ok
+test tests::qr_delete_rejects_out_of_bounds_row ... ok
+test tests::qr_decomposition_a_equals_qr ... ok
+test tests::pinv_square_nonsingular_matches_inv ... ok
+test tests::qr_delete_removes_requested_row ... ok
+test tests::pinv_zero_matrix ... ok
+test tests::qr_update_applies_rank_one_update ... ok
+test tests::qr_empty_matrix ... ok
+test tests::qr_update_rejects_wrong_update_vector_width ... ok
+test tests::qz_empty_matrix ... ok
+test tests::qr_insert_inserts_requested_row ... ok
+test tests::qz_q_and_z_are_orthogonal ... ok
+test tests::qz_singular_b_rejected ... ok
+test tests::qr_insert_rejects_wrong_row_width ... ok
+test tests::qz_with_identity_b_matches_schur_contract ... ok
+test tests::qr_multiply_applies_q_factor ... ok
+test tests::randomized_rcond_estimate_well_conditioned ... ok
+test tests::qr_multiply_rejects_shape_mismatch ... ok
+test tests::rcond_threshold_boundary ... ok
+test tests::schur_a_equals_ztzt ... ok
+test tests::qz_generalized_relation_holds ... ok
+test tests::schur_empty_matrix ... ok
+test tests::solve_banded_matches_dense ... ok
+test tests::solve_banded_pentadiagonal ... ok
+test tests::solve_diagonal_fast_path ... ok
+test tests::solve_general_backward_error_is_small ... ok
+test tests::schur_t_is_quasi_upper_triangular ... ok
+test tests::qr_q_is_orthogonal ... ok
+test tests::solve_general_happy_path ... ok
+test tests::schur_z_is_orthogonal ... ok
+test tests::solve_policy_rejects_incompatible_assumption_before_casp ... ok
+test tests::solve_qr_matches_lu ... ok
+test tests::solve_svd_fallback_matches_lu ... ok
+test tests::solve_svd_fallback_warns_on_ill_conditioned_but_full_rank_systems ... ok
+test tests::solve_symmetric_positive_definite_assumption ... ok
+test tests::solve_triangular_lower_path ... ok
+test tests::solve_triangular_lower_transposed ... ok
+test tests::solve_triangular_unit_diagonal ... ok
+test tests::solve_triangular_upper_non_transposed ... ok
+test tests::solve_3x3_general_system ... ok
+test tests::solve_upper_triangular_fast_path ... ok
+test tests::solve_with_audit_records_casp_decision ... ok
+test tests::solve_svd_fallback_rejects_rank_deficient_square_systems ... ok
+test tests::solve_with_audit_records_fail_closed_on_incompatible_shapes ... ok
+test tests::solve_with_audit_records_fail_closed_on_non_finite_input ... ok
+test tests::solve_with_audit_records_policy_rejection ... ok
+test tests::solve_with_casp_well_conditioned_uses_lu ... ok
+test tests::solveh_banded_diagonal ... ok
+test tests::solveh_banded_empty ... ok
+test tests::solve_with_audit_records_fail_closed_on_non_square ... ok
+test tests::solve_with_audit_records_fail_closed_on_condition_too_high ... ok
+test tests::solveh_banded_tridiagonal ... ok
+test tests::subspace_angles_orthogonal ... ok
+test tests::svd_decomposition_a_equals_usv ... ok
+test tests::structural_checks_reject_ragged_input ... ok
+test tests::svd_empty_matrix ... ok
+test tests::svd_singular_values_non_negative_and_descending ... ok
+test tests::svdvals_matches_svd ... ok
+test tests::toeplitz_asymmetric ... ok
+test tests::solve_large_100x100_system ... ok
+test tests::subspace_angles_identical ... ok
+test tests::toeplitz_symmetric ... ok
+test tests::tri_basic ... ok
+test tests::tril_triu_roundtrip ... ok
+
+test result: ok. 343 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/bin/perf_solve.rs (/data/tmp/cargo-target/release/deps/perf_solve-7cc4c00076885377)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/differential_linalg.rs (/data/tmp/cargo-target/release/deps/differential_linalg-736ffcb3070acbd8)
+
+running 34 tests
+test adv_det_non_square ... ok
+test adv_dimension_mismatch ... ok
+test adv_empty_matrix ... ok
+test adv_hilbert_matrix ... ok
+test adv_inf_in_matrix ... ok
+test adv_inv_non_square ... ok
+test adv_large_entries ... ok
+test adv_nan_in_matrix ... ok
+test adv_non_square_solve ... ok
+test adv_singular_solve ... ok
+test adv_small_entries ... ok
+test diff_det_3x3 ... ok
+test diff_det_diagonal ... ok
+test diff_det_identity ... ok
+test diff_det_2x2 ... ok
+test diff_inv_2x2 ... ok
+test diff_lstsq_exact ... ok
+test diff_inv_3x3_diag ... ok
+test diff_lstsq_overdetermined ... ok
+test diff_pinv_identity ... ok
+test diff_pinv_wide ... ok
+test diff_solve_2x2 ... ok
+test diff_solve_3x3 ... ok
+test diff_solve_banded_tridiag ... ok
+test diff_solve_triangular_lower_3x3 ... ok
+test diff_solve_inv_consistency ... ok
+test diff_solve_triangular_upper_3x3 ... ok
+test meta_det_scaling ... ok
+test meta_det_transpose_invariance ... ok
+test meta_inv_identity ... ok
+test meta_lstsq_recovery ... ok
+test meta_pinv_moore_penrose ... ok
+test meta_solve_linearity ... ok
+test meta_solve_roundtrip ... ok
+
+test result: ok. 34 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/metamorphic_tests.rs (/data/tmp/cargo-target/release/deps/metamorphic_tests-cea4b76fc180ab58)
+
+running 59 tests
+test mr_bandwidth_of_diagonal ... ok
+test mr_cholesky_reconstructs_spd ... ok
+test mr_cho_factor_solve_small_residual ... ok
+test mr_circulant_first_column_matches_c ... ok
+test mr_convolution_matrix_full_shape ... ok
+test mr_det_multiplicativity ... ok
+test mr_det_of_identity_is_one ... ok
+test mr_dft_matrix_shape ... ok
+test mr_eigvalsh_ascending ... ok
+test mr_fiedler_matrix_symmetric ... ok
+test mr_companion_shape ... ok
+test mr_det_double_transpose ... ok
+test mr_eigh_satisfies_eigenequation ... ok
+test mr_diag_diagm_roundtrip ... ok
+test mr_frobenius_norm_transpose_invariant ... ok
+test mr_frobenius_norm_matches_singular_values ... ok
+test mr_expm_of_zero_is_identity ... ok
+test mr_hadamard_size_and_entries ... ok
+test mr_hadamard_with_zero_is_zero ... ok
+test mr_hessenberg_reconstructs_matrix ... ok
+test mr_inverse_identity ... ok
+test mr_hilbert_matrix_symmetric ... ok
+test mr_ishermitian_matches_issymmetric_real ... ok
+test mr_issymmetric_after_symmetrization ... ok
+test mr_leslie_matrix_shape ... ok
+test mr_logm_inverts_expm_symmetric ... ok
+test mr_lstsq_satisfies_normal_equations ... ok
+test mr_lu_factor_solve_matches_solve ... ok
+test mr_lu_factor_solve_roundtrip_residual ... ok
+test mr_lu_reconstructs_matrix ... ok
+test mr_matrix_power_of_identity_is_identity ... ok
+test mr_matrix_power_zero_is_identity ... ok
+test mr_matrix_rank_identity ... ok
+test mr_null_space_columns_orthonormal ... ok
+test mr_orth_columns_orthonormal ... ok
+test mr_outer_product_shape ... ok
+test mr_pascal_lower_diagonal_and_first_column ... ok
+test mr_polar_decomposition_reconstructs_a ... ok
+test mr_pinv_satisfies_penrose_one ... ok
+test mr_qr_reconstruct_and_orthogonal ... ok
+test mr_schur_reconstructs_matrix ... ok
+test mr_signm_of_spd_is_identity ... ok
+test mr_sinhm_coshm_at_zero ... ok
+test mr_sinm_cosm_at_zero ... ok
+test mr_solve_continuous_lyapunov_shape_and_finite ... ok
+test mr_solve_linearity ... ok
+test mr_solve_residual_check_on_random_spd ... ok
+test mr_solve_residual_ill_conditioned ... ok
+test mr_solve_residual_small_dense ... ok
+test mr_solve_with_identity_returns_rhs ... ok
+test mr_solve_triangular_identity_returns_rhs ... ok
+test mr_sqrtm_squared_equals_input_spd ... ok
+test mr_svd_reconstruct ... ok
+test mr_tanm_at_zero ... ok
+test mr_toeplitz_diagonal_matches_c0 ... ok
+test mr_trace_of_identity_is_n ... ok
+test mr_trace_equals_sum_of_diagonal ... ok
+test mr_tri_lower_triangular_indicator ... ok
+test mr_vnorm_matches_sqrt_vdot ... ok
+
+test result: ok. 59 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/repro_tri_be.rs (/data/tmp/cargo-target/release/deps/repro_tri_be-afca536b6527b460)
+
+running 1 test
+test test_solve_triangular_transpose_backward_error ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_nan_eig.rs (/data/tmp/cargo-target/release/deps/test_nan_eig-e3961c31a5986d2f)
+
+running 1 test
+test test_nan_eig_hang_or_panic ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_nan_svd.rs (/data/tmp/cargo-target/release/deps/test_nan_svd-3a9f0695978c5485)
+
+running 1 test
+test test_nan_svd_hang_or_panic ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests fsci_linalg
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
