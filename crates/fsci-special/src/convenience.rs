@@ -3064,7 +3064,9 @@ pub fn gammaincinv_scalar(a: f64, y: f64) -> f64 {
     for _ in 0..100 {
         let p = gammainc_conv(a, x);
         let err = p - y;
-        if err.abs() < 1e-14 {
+        // Relative tolerance: an absolute 1e-14 stops far too early when y (and
+        // hence P) is tiny (~1e-4 relative at y=1e-10). frankenscipy-lj6b2.
+        if err.abs() <= 1e-15 * y.max(1e-300) {
             break;
         }
 
@@ -3117,7 +3119,40 @@ pub fn gammainccinv_scalar(a: f64, y: f64) -> f64 {
         return f64::INFINITY;
     }
 
-    gammaincinv_scalar(a, 1.0 - y)
+    // Q(a,x) = y. Routing through gammaincinv(a, 1-y) computes P = 1-Q near 1,
+    // so the small Q resolves to only ~1e-6 (and 1-y rounds to 1 for tiny y).
+    // Instead refine on Q directly with Newton. frankenscipy-lj6b2.
+    let ln_gamma_a = crate::gammaln_scalar(a, fsci_runtime::RuntimeMode::Strict).unwrap_or(f64::NAN);
+    let mut x = if 1.0 - y < 1.0 {
+        gammaincinv_scalar(a, 1.0 - y)
+    } else {
+        // Deep tail: Q(a,x) ~ x^{a-1} e^{-x}/Γ(a) ⟹ x ≈ -ln(y·Γ(a)) + (a-1)ln(x).
+        let t = -y.ln() - ln_gamma_a;
+        let mut s = t.max(1.0);
+        for _ in 0..60 {
+            s = t + (a - 1.0) * s.ln();
+            if !s.is_finite() || s <= 0.0 {
+                s = t;
+                break;
+            }
+        }
+        s
+    };
+    let gamma_a = ln_gamma_a.exp();
+    for _ in 0..30 {
+        let q = gammaincc_conv(a, x);
+        let err = q - y;
+        if err.abs() <= 1e-16 * y.max(1e-300) {
+            break;
+        }
+        let dqx = -x.powf(a - 1.0) * (-x).exp() / gamma_a;
+        if dqx == 0.0 || !dqx.is_finite() {
+            break;
+        }
+        let x_new = x - err / dqx;
+        x = if x_new > 0.0 { x_new } else { 0.5 * x };
+    }
+    x
 }
 
 /// Evaluate the complementary error function erfc(x) = 1 - erf(x).
@@ -5972,6 +6007,35 @@ pub fn binary_cross_entropy_scalar(p: f64, q: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
+    fn gammaincinv_inverses_match_scipy() {
+        // frankenscipy-lj6b2: relative-tolerance Newton (gammaincinv) and Q-Newton
+        // (gammainccinv) replace the absolute-tol / P-near-1 forms. scipy 1.17.1.
+        let p_cases = [
+            (2.0, 1e-10, 1.414220229082974e-05),
+            (100.0, 1e-8, 53.62144854308363),
+            (0.5, 1e-6, 7.853981633978593e-13),
+            (2.0, 0.5, 1.6783469900166612),
+            (2.0, 0.999999, 16.68842079082944),
+        ];
+        for (a, y, expected) in p_cases {
+            let got = gammaincinv_scalar(a, y);
+            assert!(((got - expected) / expected).abs() < 1e-11, "gammaincinv({a},{y}) = {got}, scipy {expected}");
+        }
+        let q_cases = [
+            (2.0, 1e-10, 26.33398160553087),
+            (5.0, 1e-8, 28.831980813099847),
+            (0.5, 0.5, 0.2274682115597862),
+            (2.0, 1e-200, 466.6647703353572),
+            (3.5, 1e-50, 126.03964554013531),
+        ];
+        for (a, y, expected) in q_cases {
+            let got = gammainccinv_scalar(a, y);
+            assert!(((got - expected) / expected).abs() < 1e-11, "gammainccinv({a},{y}) = {got}, scipy {expected}");
+        }
+    }
 
     #[test]
     #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
