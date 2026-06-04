@@ -1,5 +1,7 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use fsci_ndimage::{BoundaryMode, NdArray, maximum_filter, minimum_filter};
+use fsci_ndimage::{
+    BoundaryMode, NdArray, binary_dilation, binary_erosion, maximum_filter, minimum_filter,
+};
 use std::hint::black_box;
 
 fn image(side: usize) -> NdArray {
@@ -30,5 +32,27 @@ fn bench_minmax_filter(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_minmax_filter);
+fn binary_image(side: usize) -> NdArray {
+    // Mostly-set image (worst case for the footprint scan / scatter).
+    let data: Vec<f64> = (0..side * side)
+        .map(|i| if i % 13 == 0 { 0.0 } else { 1.0 })
+        .collect();
+    NdArray::new(data, vec![side, side]).expect("binary image")
+}
+
+fn bench_binary_morph(c: &mut Criterion) {
+    let mut group = c.benchmark_group("binary_morph");
+    let img = binary_image(256);
+    for &size in &[7usize, 15] {
+        group.bench_function(BenchmarkId::new("erosion_256x256", size), |b| {
+            b.iter(|| binary_erosion(black_box(&img), size, 1).expect("erosion"))
+        });
+        group.bench_function(BenchmarkId::new("dilation_256x256", size), |b| {
+            b.iter(|| binary_dilation(black_box(&img), size, 1).expect("dilation"))
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(benches, bench_minmax_filter, bench_binary_morph);
 criterion_main!(benches);

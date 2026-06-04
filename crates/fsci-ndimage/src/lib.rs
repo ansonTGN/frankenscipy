@@ -2850,7 +2850,32 @@ fn gaussian_laplace_usize_axes(
 /// element neighborhood are 1.
 ///
 /// Matches `scipy.ndimage.binary_erosion`.
+fn binary_morph_origins_all_zero(origins: &[i64]) -> bool {
+    origins.iter().all(|&o| o == 0)
+}
+
+/// Structuring-element reflection offset for binary dilation at origin 0: the
+/// scatter form writes `q + (k - size/2)`, whose equivalent gather window is the
+/// reflected box. For odd sizes the box is symmetric (offset 0); for even sizes
+/// it shifts by -1.
+fn binary_dilation_origin_reflection(size: usize) -> i64 {
+    (size as i64 - 1) - 2 * (size as i64 / 2)
+}
+
 fn binary_erosion_once_with_origins(current: &NdArray, size: usize, origins: &[i64]) -> NdArray {
+    // Binary erosion is a minimum filter over the booleanized image with a
+    // constant-0 border: O(N * ndim) separable sliding-window min instead of the
+    // O(N * size^ndim) per-pixel footprint scan. Gated to the default all-zero
+    // origin so the kernel window (and origin validation) match exactly.
+    if binary_morph_origins_all_zero(origins) {
+        let bin = booleanized_binary(current);
+        if let Ok(result) =
+            separable_minmax_filter(&bin, size, &[0], BoundaryMode::Constant, 0.0, false)
+        {
+            return result;
+        }
+    }
+
     let ndim = current.ndim();
     let mut output = NdArray::zeros(current.shape.clone());
     let offsets: Vec<i64> = vec![size as i64 / 2; ndim];
@@ -2889,6 +2914,19 @@ fn binary_erosion_once_with_origins(current: &NdArray, size: usize, origins: &[i
 }
 
 fn binary_dilation_once_with_origins(current: &NdArray, size: usize, origins: &[i64]) -> NdArray {
+    // Binary dilation is a maximum filter over the booleanized image with a
+    // constant-0 border, using the reflected structuring element. Gated to the
+    // default all-zero origin; the equivalence test pins the reflection offset.
+    if binary_morph_origins_all_zero(origins) {
+        let bin = booleanized_binary(current);
+        let refl = binary_dilation_origin_reflection(size);
+        if let Ok(result) =
+            separable_minmax_filter(&bin, size, &[refl], BoundaryMode::Constant, 0.0, true)
+        {
+            return result;
+        }
+    }
+
     let ndim = current.ndim();
     let mut output = NdArray::zeros(current.shape.clone());
     let offsets: Vec<i64> = vec![size as i64 / 2; ndim];
@@ -8255,6 +8293,116 @@ mod tests {
         assert!(rank_filter_axes(&input, 0, 2, &[2], BoundaryMode::Reflect, 0.0).is_err());
         assert!(rank_filter_axes(&input, 0, 2, &[-3], BoundaryMode::Reflect, 0.0).is_err());
         assert!(rank_filter_axes(&input, 0, 0, &[-1], BoundaryMode::Reflect, 0.0).is_err());
+    }
+
+    #[test]
+    fn binary_morph_separable_matches_naive_loop() {
+        // Reference implementations replicating the original footprint-scan
+        // once-functions (origin 0); the separable min/max routing must be
+        // bit-identical, including on non-binary inputs (booleanization) and
+        // even kernel sizes (the dilation reflection).
+        fn naive_erosion(current: &NdArray, size: usize) -> NdArray {
+            let ndim = current.ndim();
+            let mut output = NdArray::zeros(current.shape.clone());
+            let offsets: Vec<i64> = vec![size as i64 / 2; ndim];
+            let kernel_total = size.pow(ndim as u32);
+            let kernel_strides = compute_strides(&vec![size; ndim]);
+            for flat_out in 0..current.size() {
+                let out_idx = current.unravel(flat_out);
+                let mut all_set = true;
+                for flat_k in 0..kernel_total {
+                    let mut k_idx = vec![0usize; ndim];
+                    let mut rem = flat_k;
+                    for d in 0..ndim {
+                        k_idx[d] = rem / kernel_strides[d];
+                        rem %= kernel_strides[d];
+                    }
+                    let mut in_idx = vec![0i64; ndim];
+                    for d in 0..ndim {
+                        in_idx[d] = out_idx[d] as i64 + k_idx[d] as i64 - offsets[d];
+                    }
+                    if current.get_boundary(&in_idx, BoundaryMode::Constant, 0.0) == 0.0 {
+                        all_set = false;
+                        break;
+                    }
+                }
+                output.data[flat_out] = if all_set { 1.0 } else { 0.0 };
+            }
+            output
+        }
+        fn naive_dilation(current: &NdArray, size: usize) -> NdArray {
+            let ndim = current.ndim();
+            let mut output = NdArray::zeros(current.shape.clone());
+            let offsets: Vec<i64> = vec![size as i64 / 2; ndim];
+            let kernel_total = size.pow(ndim as u32);
+            let kernel_strides = compute_strides(&vec![size; ndim]);
+            for flat_in in 0..current.size() {
+                if current.data[flat_in] == 0.0 {
+                    continue;
+                }
+                let idx = current.unravel(flat_in);
+                for flat_k in 0..kernel_total {
+                    let mut k_idx = vec![0usize; ndim];
+                    let mut rem = flat_k;
+                    for d in 0..ndim {
+                        k_idx[d] = rem / kernel_strides[d];
+                        rem %= kernel_strides[d];
+                    }
+                    let mut out_idx = Vec::with_capacity(ndim);
+                    let mut in_bounds = true;
+                    for d in 0..ndim {
+                        let c = idx[d] as i64 + k_idx[d] as i64 - offsets[d];
+                        if c < 0 || c >= current.shape[d] as i64 {
+                            in_bounds = false;
+                            break;
+                        }
+                        out_idx.push(c as usize);
+                    }
+                    if in_bounds {
+                        output.set(&out_idx, 1.0);
+                    }
+                }
+            }
+            output
+        }
+
+        let mut state: u64 = 0x9e37_79b9_7f4a_7c15;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            state
+        };
+        for shape in [vec![20usize], vec![7, 9], vec![4, 5, 3]] {
+            let total: usize = shape.iter().product();
+            let data: Vec<f64> = (0..total)
+                .map(|_| {
+                    let r = next();
+                    if r % 3 == 0 { 0.0 } else { (r % 4) as f64 }
+                })
+                .collect();
+            let input = NdArray::new(data, shape.clone()).unwrap();
+            for size in [2usize, 3, 4, 5] {
+                let er = binary_erosion_once_with_origins(&input, size, &[0]);
+                let er_ref = naive_erosion(&input, size);
+                for (a, b) in er.data.iter().zip(er_ref.data.iter()) {
+                    assert_eq!(
+                        a.to_bits(),
+                        b.to_bits(),
+                        "erosion shape={shape:?} size={size}"
+                    );
+                }
+                let di = binary_dilation_once_with_origins(&input, size, &[0]);
+                let di_ref = naive_dilation(&input, size);
+                for (a, b) in di.data.iter().zip(di_ref.data.iter()) {
+                    assert_eq!(
+                        a.to_bits(),
+                        b.to_bits(),
+                        "dilation shape={shape:?} size={size}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
