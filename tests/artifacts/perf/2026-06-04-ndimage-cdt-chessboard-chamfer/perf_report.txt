@@ -1,0 +1,39 @@
+perf: fsci-ndimage chessboard distance transform — brute-force O(F·B) -> chamfer O(N·3^ndim)
+=============================================================================================
+
+Target : crates/fsci-ndimage/src/lib.rs :: distance_transform_by_metric (Chessboard metric),
+         shared by distance_transform_cdt(chessboard) AND distance_transform_bf(chessboard).
+Lever  : Chessboard (Chebyshev / L∞ = max_axis |Δ|) is not additively separable, but every
+         neighbour in the full 3^ndim Moore neighbourhood has weight 1, which IS the chessboard
+         metric. Replace the O(foreground·background) scan with a two-pass full-neighbourhood
+         chamfer (Rosenfeld-Pfaltz): forward raster sweep relaxing from already-visited
+         neighbours, then a backward sweep. New helper chessboard_distance_transform.
+         This completes the grid-metric family alongside cityblock (commit 52b2e74b).
+
+Scope / gating
+--------------
+Fast path only when metric == Chessboard && background nonempty. The no-background sentinel
+keeps the brute force. Euclidean (Felzenszwalb) and taxicab (separable) keep their own paths.
+
+Isomorphism proof (byte-identical f64)
+--------------------------------------
+- A two-pass sequential chamfer with the full unit-weight Moore neighbourhood computes the
+  exact L∞ distance for binary images (classic Rosenfeld-Pfaltz result); the chessboard metric
+  IS that chamfer, so the result equals min over background of max_axis |Δ|.
+- All values are exact integers, so the result is byte-identical to the brute-force max-then-min.
+- Empirically: 0 mismatches / 7464 cells across shapes {24},{10,10},{16,24},{5,7,9},{1,19},
+  {4,4,4},{3,3,3} × fg densities {20,40,60,80}%, comparing BOTH distance_transform_cdt and
+  distance_transform_bf vs a verbatim L∞ brute force via .to_bits().
+- Golden payload sha256 (per-case FNV digest of full library output):
+    f8c17f08ed4d51a66703d66e2cbf8e6a6f92767dca66498644c3b9e551d7c023  golden_payload.txt
+
+Timing (same-process A/B, release, mean of 3; square 2-D, 50% fg, via cdt)
+--------------------------------------------------------------------------
+  N= 4096 (64x64)    brute= 15.858 ms   chamfer=331.289 us   ratio=  47.9x
+  N=16384 (128x128)  brute=253.005 ms   chamfer=  1.363 ms   ratio= 185.6x
+  N=36864 (192x192)  brute=  1.284 s    chamfer=  3.152 ms   ratio= 407.5x
+
+Score: Impact 4 x Confidence 5 / Effort 2 = 10  (>> 2.0)
+
+Tests: cargo test -p fsci-ndimage --lib distance_transform => 18 passed (incl. cdt/bf scipy
+chessboard fixtures + sentinels). clippy + fmt clean.

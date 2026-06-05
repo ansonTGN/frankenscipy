@@ -4502,6 +4502,100 @@ fn cityblock_distance_transform(input: &NdArray) -> Vec<f64> {
     f
 }
 
+/// Exact chessboard (Chebyshev / L∞) distance transform via a two-pass
+/// full-neighbourhood chamfer (Rosenfeld–Pfaltz), O(N · 3^ndim). Returns a flat
+/// row-major buffer of L∞ distances to the nearest background pixel.
+///
+/// Every one of the `3^ndim − 1` neighbours has weight 1, which is exactly the
+/// chessboard metric, so a forward raster sweep (relaxing from already-visited
+/// neighbours) followed by a backward sweep yields the exact L∞ distance. All
+/// values are exact integers, so the result is byte-identical to the
+/// brute-force `min over background of max_axis |Δ|`.
+fn chessboard_distance_transform(input: &NdArray) -> Vec<f64> {
+    let ndim = input.ndim();
+    let n = input.data.len();
+    let mut d: Vec<f64> = input
+        .data
+        .iter()
+        .map(|&v| if v == 0.0 { 0.0 } else { f64::INFINITY })
+        .collect();
+
+    // All neighbour offsets in {-1,0,1}^ndim except the all-zero one, paired with
+    // their signed flat displacement (Σ off_k · stride_k).
+    let mut offsets: Vec<(Vec<i64>, i64)> = Vec::new();
+    let combos = 3usize.pow(ndim as u32);
+    for code in 0..combos {
+        let mut rem = code;
+        let mut off = vec![0i64; ndim];
+        let mut flat_delta = 0i64;
+        let mut all_zero = true;
+        // `axis` indexes off/strides in lockstep.
+        #[allow(clippy::needless_range_loop)]
+        for axis in 0..ndim {
+            let o = (rem % 3) as i64 - 1; // 0,1,2 -> -1,0,1
+            rem /= 3;
+            off[axis] = o;
+            flat_delta += o * input.strides[axis] as i64;
+            if o != 0 {
+                all_zero = false;
+            }
+        }
+        if !all_zero {
+            offsets.push((off, flat_delta));
+        }
+    }
+
+    let mut coords = vec![0usize; ndim];
+    let in_bounds = |coords: &[usize], off: &[i64]| -> bool {
+        for axis in 0..ndim {
+            let c = coords[axis] as i64 + off[axis];
+            if c < 0 || c >= input.shape[axis] as i64 {
+                return false;
+            }
+        }
+        true
+    };
+
+    // Forward raster sweep: relax from neighbours that precede the cell.
+    for flat in 0..n {
+        if d[flat] == 0.0 {
+            continue;
+        }
+        unravel_into(flat, &input.strides, &mut coords);
+        for (off, flat_delta) in &offsets {
+            if *flat_delta < 0 && in_bounds(&coords, off) {
+                let cand = d[(flat as i64 + flat_delta) as usize] + 1.0;
+                if cand < d[flat] {
+                    d[flat] = cand;
+                }
+            }
+        }
+    }
+    // Backward raster sweep: relax from neighbours that follow the cell.
+    for flat in (0..n).rev() {
+        if d[flat] == 0.0 {
+            continue;
+        }
+        unravel_into(flat, &input.strides, &mut coords);
+        for (off, flat_delta) in &offsets {
+            if *flat_delta > 0 && in_bounds(&coords, off) {
+                let cand = d[(flat as i64 + flat_delta) as usize] + 1.0;
+                if cand < d[flat] {
+                    d[flat] = cand;
+                }
+            }
+        }
+    }
+    d
+}
+
+fn unravel_into(mut flat: usize, strides: &[usize], out: &mut [usize]) {
+    for (slot, &stride) in out.iter_mut().zip(strides) {
+        *slot = flat / stride;
+        flat %= stride;
+    }
+}
+
 fn distance_transform_by_metric(
     input: &NdArray,
     metric: DistanceMetric,
@@ -4509,12 +4603,17 @@ fn distance_transform_by_metric(
     backgrounds: &[Vec<usize>],
     no_background: f64,
 ) -> NdArray {
-    // Fast path: city-block is exactly separable (see cityblock_distance_transform),
-    // replacing the O(foreground · background) scan with O(N · ndim). The
-    // no-background sentinel and the (max-coupled, non-separable) chessboard
-    // metric keep the brute-force path below.
-    if metric == DistanceMetric::Taxicab && !backgrounds.is_empty() {
-        let dt = cityblock_distance_transform(input);
+    // Fast paths: the grid metrics replace the O(foreground · background) scan
+    // with exact chamfer transforms — city-block separably (O(N · ndim)) and
+    // chessboard via a full-neighbourhood two-pass sweep (O(N · 3^ndim)). The
+    // no-background sentinel keeps the brute-force path below.
+    if !backgrounds.is_empty()
+        && matches!(metric, DistanceMetric::Taxicab | DistanceMetric::Chessboard)
+    {
+        let dt = match metric {
+            DistanceMetric::Taxicab => cityblock_distance_transform(input),
+            _ => chessboard_distance_transform(input),
+        };
         let mut output = NdArray::zeros(input.shape.clone());
         for (flat, &value) in input.data.iter().enumerate() {
             output.data[flat] = if value == 0.0 { 0.0 } else { dt[flat] };

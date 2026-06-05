@@ -1,0 +1,56 @@
+cdt shape=[24] fg=20 digest=45e8a7116c9479a3
+bf shape=[24] fg=20 digest=45e8a7116c9479a3
+cdt shape=[24] fg=40 digest=cc98a7116c9479a3
+bf shape=[24] fg=40 digest=cc98a7116c9479a3
+cdt shape=[24] fg=60 digest=e718a7116c9479a3
+bf shape=[24] fg=60 digest=e718a7116c9479a3
+cdt shape=[24] fg=80 digest=6028a7116c9479a3
+bf shape=[24] fg=80 digest=6028a7116c9479a3
+cdt shape=[10, 10] fg=20 digest=9237581a242be567
+bf shape=[10, 10] fg=20 digest=9237581a242be567
+cdt shape=[10, 10] fg=40 digest=3187581a242be567
+bf shape=[10, 10] fg=40 digest=3187581a242be567
+cdt shape=[10, 10] fg=60 digest=b6a7581a242be567
+bf shape=[10, 10] fg=60 digest=b6a7581a242be567
+cdt shape=[10, 10] fg=80 digest=7c67581a242be567
+bf shape=[10, 10] fg=80 digest=7c67581a242be567
+cdt shape=[16, 24] fg=20 digest=391e1b3c4f86c783
+bf shape=[16, 24] fg=20 digest=391e1b3c4f86c783
+cdt shape=[16, 24] fg=40 digest=de4e1b3c4f86c783
+bf shape=[16, 24] fg=40 digest=de4e1b3c4f86c783
+cdt shape=[16, 24] fg=60 digest=faee1b3c4f86c783
+bf shape=[16, 24] fg=60 digest=faee1b3c4f86c783
+cdt shape=[16, 24] fg=80 digest=41fe1b3c4f86c783
+bf shape=[16, 24] fg=80 digest=41fe1b3c4f86c783
+cdt shape=[5, 7, 9] fg=20 digest=9594da6d7a923d36
+bf shape=[5, 7, 9] fg=20 digest=9594da6d7a923d36
+cdt shape=[5, 7, 9] fg=40 digest=5654da6d7a923d36
+bf shape=[5, 7, 9] fg=40 digest=5654da6d7a923d36
+cdt shape=[5, 7, 9] fg=60 digest=f844da6d7a923d36
+bf shape=[5, 7, 9] fg=60 digest=f844da6d7a923d36
+cdt shape=[5, 7, 9] fg=80 digest=6b84da6d7a923d36
+bf shape=[5, 7, 9] fg=80 digest=6b84da6d7a923d36
+cdt shape=[1, 19] fg=20 digest=88c38403fdef906e
+bf shape=[1, 19] fg=20 digest=88c38403fdef906e
+cdt shape=[1, 19] fg=40 digest=e2b38403fdef906e
+bf shape=[1, 19] fg=40 digest=e2b38403fdef906e
+cdt shape=[1, 19] fg=60 digest=68ab8403fdef906e
+bf shape=[1, 19] fg=60 digest=68ab8403fdef906e
+cdt shape=[1, 19] fg=80 digest=5cab8403fdef906e
+bf shape=[1, 19] fg=80 digest=5cab8403fdef906e
+cdt shape=[4, 4, 4] fg=20 digest=352236ee29d93e83
+bf shape=[4, 4, 4] fg=20 digest=352236ee29d93e83
+cdt shape=[4, 4, 4] fg=40 digest=1e2236ee29d93e83
+bf shape=[4, 4, 4] fg=40 digest=1e2236ee29d93e83
+cdt shape=[4, 4, 4] fg=60 digest=947236ee29d93e83
+bf shape=[4, 4, 4] fg=60 digest=947236ee29d93e83
+cdt shape=[4, 4, 4] fg=80 digest=131236ee29d93e83
+bf shape=[4, 4, 4] fg=80 digest=131236ee29d93e83
+cdt shape=[3, 3, 3] fg=20 digest=50343b3f9bf45396
+bf shape=[3, 3, 3] fg=20 digest=50343b3f9bf45396
+cdt shape=[3, 3, 3] fg=40 digest=12c43b3f9bf45396
+bf shape=[3, 3, 3] fg=40 digest=12c43b3f9bf45396
+cdt shape=[3, 3, 3] fg=60 digest=01843b3f9bf45396
+bf shape=[3, 3, 3] fg=60 digest=01843b3f9bf45396
+cdt shape=[3, 3, 3] fg=80 digest=2d343b3f9bf45396
+bf shape=[3, 3, 3] fg=80 digest=2d343b3f9bf45396
