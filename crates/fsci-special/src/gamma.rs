@@ -1620,6 +1620,22 @@ pub fn binom(x: f64, y: f64) -> f64 {
     if x.is_nan() || y.is_nan() {
         return f64::NAN;
     }
+    if x < 0.0 && y >= 0.0 {
+        // Negative-integer x is a pole of Γ(x+1) => NaN (scipy.special.binom).
+        if x == x.floor() {
+            return f64::NAN;
+        }
+        // Negative non-integer x: binom = Γ(x+1)/(Γ(y+1)Γ(x-y+1)) is SIGNED.
+        // gammaln gives ln|·|, so restore the sign from gammasgn (an x-y+1 pole
+        // gives a vanishing 0, matching scipy, e.g. binom(-4.5,2)=12.375).
+        let l = gammaln_scalar(x + 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN)
+            - gammaln_scalar(y + 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN)
+            - gammaln_scalar(x - y + 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN);
+        let sign = gammasgn_scalar(x + 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN)
+            * gammasgn_scalar(y + 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN)
+            * gammasgn_scalar(x - y + 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN);
+        return sign * l.exp();
+    }
     if x < 0.0 || y < 0.0 {
         return f64::NAN;
     }
@@ -4048,6 +4064,30 @@ mod tests {
         // (y, x) where the difference is an exact integer ≥ 1 → 0.
         assert_eq!(binom(2.5, 3.5), 0.0);
         assert_eq!(binom(2.5, 4.5), 0.0);
+    }
+
+    #[test]
+    fn binom_negative_x_matches_scipy() {
+        // scipy.special.binom is finite (and signed) for negative NON-integer x;
+        // we previously fail-closed to NaN for any x<0.
+        let cases = [
+            (-4.5, 2.0, 12.375_f64),
+            (-2.5, 3.0, -6.5625),
+            (-0.5, 1.0, -0.5),
+            (-3.5, 2.0, 7.875),
+            (-4.5, 3.0, -26.8125),
+            (5.0, 2.0, 10.0), // positive args: unchanged
+        ];
+        for (x, y, want) in cases {
+            let got = binom(x, y);
+            assert!(
+                (got - want).abs() <= 1e-11 * want.abs().max(1.0),
+                "binom({x},{y}) got {got}, want {want}"
+            );
+        }
+        // Negative-integer x is a pole => NaN (scipy).
+        assert!(binom(-3.0, 2.0).is_nan());
+        assert!(binom(-2.0, 1.0).is_nan());
     }
 
     #[test]
