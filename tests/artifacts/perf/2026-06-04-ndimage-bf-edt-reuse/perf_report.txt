@@ -1,0 +1,38 @@
+perf: fsci-ndimage distance_transform_bf (Euclidean) — brute-force O(F·B) -> separable EDT O(N·ndim)
+====================================================================================================
+
+Target : crates/fsci-ndimage/src/lib.rs :: distance_transform_bf (Euclidean metric).
+Lever  : The Euclidean brute force computes, per foreground pixel, min over EVERY background of
+         sqrt(Σ_axis ((Δ·sampling)²)) — identical arithmetic to distance_transform_edt, which is
+         already the exact separable Felzenszwalb-Huttenlocher transform (commit 67ab2e96).
+         REUSE edt_squared_felzenszwalb for the Euclidean / nonempty-background case.
+
+Scope / gating
+--------------
+Fast path only when metric == Euclidean && background nonempty && all sampling finite/positive.
+The no-background sentinel (BF_NO_BACKGROUND_EUCLIDEAN) and the taxicab/chessboard metrics keep
+the original brute-force distance_transform_by_metric path.
+
+Isomorphism proof (byte-identical f64)
+--------------------------------------
+- Same arithmetic and same byte-identity argument as the EDT win: each emitted squared value is
+  recomputed as Δ² + f[source]; cross-axis accumulation is commutative IEEE-754 addition, equal
+  to the brute force's left-to-right .sum() bit-for-bit; sqrt of identical bits is identical.
+- Empirically: 0 mismatches / 10776 cells across shapes {24},{10,10},{16,24},{5,7,9},{1,19},
+  {4,4,4} × fg densities {30,50,70,90}% × sampling {None,[2,3],[1.5],[2,1,0.5]}, comparing the
+  real distance_transform_bf vs a verbatim Euclidean brute force via .to_bits().
+  (Harness note: the all-foreground/no-background case returns the SciPy sentinel
+  1.340780792994259600e154, not inf — replicated in the harness; the library was correct.)
+- Golden payload sha256 (per-case FNV digest of full library output):
+    b18f463bf29e1f8a786b5422c27740794b6dbcae777621b67949357ca6d7be37  golden_payload.txt
+
+Timing (same-process A/B, release, mean of 3; square 2-D, 50% fg)
+-----------------------------------------------------------------
+  N= 4096 (64x64)    brute= 30.267 ms   fh=407.052 us   ratio=  74.4x
+  N=16384 (128x128)  brute=473.445 ms   fh=  1.565 ms   ratio= 302.5x
+  N=36864 (192x192)  brute=  2.385 s    fh=  4.055 ms   ratio= 588.2x
+
+Score: Impact 4 x Confidence 5 / Effort 1 = 20  (>> 2.0)
+
+Tests: cargo test -p fsci-ndimage --lib distance_transform => 18 passed (incl. bf/cdt scipy
+fixtures + all-foreground sentinel). clippy + fmt clean.

@@ -4371,6 +4371,31 @@ pub fn distance_transform_bf(
         None
     };
     let backgrounds = background_coordinates(input);
+
+    // Fast path: the Euclidean brute force computes, per foreground pixel, the
+    // min over EVERY background of sqrt(Σ_axis ((Δ·sampling)²)) — identical
+    // arithmetic to distance_transform_edt, which is now the exact separable
+    // Felzenszwalb transform (O(N·ndim), byte-identical; see
+    // edt_squared_felzenszwalb). Reuse it when there is at least one background
+    // pixel and sampling is positive/finite. The no-background sentinel and the
+    // taxicab/chessboard metrics keep the brute-force path below.
+    if metric == DistanceMetric::Euclidean
+        && !backgrounds.is_empty()
+        && let Some(samp) = sampling.as_deref()
+        && samp.iter().all(|&s| s.is_finite() && s > 0.0)
+    {
+        let squared = edt_squared_felzenszwalb(input, samp);
+        let mut output = NdArray::zeros(input.shape.clone());
+        for (flat, &value) in input.data.iter().enumerate() {
+            output.data[flat] = if value == 0.0 {
+                0.0
+            } else {
+                squared[flat].sqrt()
+            };
+        }
+        return Ok(output);
+    }
+
     let no_background = match metric {
         DistanceMetric::Euclidean => BF_NO_BACKGROUND_EUCLIDEAN,
         DistanceMetric::Taxicab | DistanceMetric::Chessboard => BF_NO_BACKGROUND_GRID,
