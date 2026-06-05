@@ -1,0 +1,443 @@
+  [2m2026-06-05T05:15:11.755776Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSelected worker: ts1 at ubuntu@192.168.1.107 (22 slots remaining after reservation, speed 50.0)[0m
+    [2;3mat[0m rch/src/hook.rs:514 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:12.164723Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mStarting remote compilation pipeline for frankenscipy (hash: 9f4950d3d0f7c7b0)[0m
+    [2;3mat[0m rch/src/hook.rs:5987 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:12.164802Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mPrepared dependency sync manifest for 20 roots[0m
+    [2;3mat[0m rch/src/hook.rs:6009 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:12.834648Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSyncing project to worker ts1...[0m
+    [2;3mat[0m rch/src/hook.rs:6039 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:12.834765Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy -> /data/projects/frankenscipy on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:13.410439Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 575ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:13.410531Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-arrayapi -> /data/projects/frankenscipy/crates/fsci-arrayapi on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:13.643555Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 233ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:13.643642Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-cluster -> /data/projects/frankenscipy/crates/fsci-cluster on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:13.864826Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 221ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:13.864920Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-conformance -> /data/projects/frankenscipy/crates/fsci-conformance on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:14.363267Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 498ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:14.363346Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-constants -> /data/projects/frankenscipy/crates/fsci-constants on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:14.584894Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 221ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:14.584990Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-datasets -> /data/projects/frankenscipy/crates/fsci-datasets on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:14.814522Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 229ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:14.814609Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-fft -> /data/projects/frankenscipy/crates/fsci-fft on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:15.030363Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 215ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:15.030437Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-integrate -> /data/projects/frankenscipy/crates/fsci-integrate on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:15.255869Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 225ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:15.255936Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-interpolate -> /data/projects/frankenscipy/crates/fsci-interpolate on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:15.480870Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 224ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:15.480960Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-io -> /data/projects/frankenscipy/crates/fsci-io on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:15.698353Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 217ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:15.698423Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-linalg -> /data/projects/frankenscipy/crates/fsci-linalg on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:15.924476Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 226ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:15.924548Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-ndimage -> /data/projects/frankenscipy/crates/fsci-ndimage on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:16.155781Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 231ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:16.155967Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-odr -> /data/projects/frankenscipy/crates/fsci-odr on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:16.375151Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 219ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:16.375227Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-opt -> /data/projects/frankenscipy/crates/fsci-opt on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:16.592677Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 217ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:16.592743Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-runtime -> /data/projects/frankenscipy/crates/fsci-runtime on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:16.817852Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 225ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:16.817940Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-signal -> /data/projects/frankenscipy/crates/fsci-signal on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:17.025466Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 207ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:17.025528Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-sparse -> /data/projects/frankenscipy/crates/fsci-sparse on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:17.265936Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 240ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:17.266010Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-spatial -> /data/projects/frankenscipy/crates/fsci-spatial on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:17.495897Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 229ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:17.495985Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-special -> /data/projects/frankenscipy/crates/fsci-special on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:17.722878Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 226ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:17.722970Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-stats -> /data/projects/frankenscipy/crates/fsci-stats on ts1[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:17.950960Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 227ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:17.951007Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSync complete: 26076 files, 934048 bytes in 5105ms[0m
+    [2;3mat[0m rch/src/hook.rs:6202 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:21.410288Z[0m [33m WARN[0m [1;33mrch::hook[0m[33m: [33mRemote dependency preflight blocked remote execution on ts1 [RCH-E326] remediation='Dependency verification could not determine remote state; inspect sync/SSH logs and retry.'[0m
+    [2;3mat[0m rch/src/hook.rs:5402 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-05T05:15:21.464222Z[0m [33m WARN[0m [1;33mrch::hook[0m[33m: [33mDependency preflight blocked remote execution [RCH-E326]: Dependency verification could not determine remote state; inspect sync/SSH logs and retry.[0m
+    [2;3mat[0m rch/src/hook.rs:623 [2;3mon[0m ThreadId(1)
+
+[RCH] local (dependency preflight RCH-E326: Dependency verification could not determine remote state; inspect sync/SSH logs and retry.)
+   Compiling proc-macro2 v1.0.106
+   Compiling autocfg v1.5.0
+   Compiling serde_json v1.0.149
+   Compiling paste v1.0.15
+   Compiling bytemuck v1.25.0
+   Compiling rawpointer v0.2.1
+   Compiling thiserror v2.0.18
+   Compiling typenum v1.20.0
+   Compiling blake3 v1.8.4
+   Compiling alloca v0.4.0
+   Compiling getrandom v0.3.4
+   Compiling getrandom v0.4.2
+   Compiling tempfile v3.27.0
+   Compiling rand_core v0.9.5
+   Compiling safe_arch v0.7.4
+   Compiling num-traits v0.2.19
+   Compiling matrixmultiply v0.3.10
+   Compiling rand_xorshift v0.4.0
+   Compiling rand v0.9.4
+   Compiling rusty-fork v0.3.1
+   Compiling wide v0.7.33
+   Compiling quote v1.0.45
+   Compiling syn v2.0.117
+   Compiling approx v0.5.1
+   Compiling num-complex v0.4.6
+   Compiling num-integer v0.1.46
+   Compiling plotters v0.3.7
+   Compiling num-rational v0.4.2
+   Compiling simba v0.9.1
+   Compiling serde_derive v1.0.228
+   Compiling zerocopy-derive v0.8.48
+   Compiling nalgebra-macros v0.3.0
+   Compiling thiserror-impl v2.0.18
+   Compiling zerocopy v0.8.48
+   Compiling serde v1.0.228
+   Compiling fsci-runtime v0.1.0 (/data/projects/frankenscipy/crates/fsci-runtime)
+   Compiling tinytemplate v1.2.1
+   Compiling nalgebra v0.34.2
+   Compiling fsci-fft v0.1.0 (/data/projects/frankenscipy/crates/fsci-fft)
+   Compiling half v2.7.1
+   Compiling ppv-lite86 v0.2.21
+   Compiling ciborium-ll v0.2.2
+   Compiling rand_chacha v0.9.0
+   Compiling ciborium v0.2.2
+   Compiling proptest v1.11.0
+   Compiling criterion v0.8.2
+   Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
+   Compiling fsci-sparse v0.1.0 (/data/projects/frankenscipy/crates/fsci-sparse)
+    Finished `bench` profile [optimized] target(s) in 21.64s
+     Running benches/sparse_bench.rs (/data/tmp/cargo-target/release/deps/sparse_bench-09b34056ccd701b8)
+Gnuplot not found, using plotters backend
+Benchmarking sparse_csr_construction/100x100_d5/100
+Benchmarking sparse_csr_construction/100x100_d5/100: Warming up for 1.0000 s
+Benchmarking sparse_csr_construction/100x100_d5/100: Collecting 20 samples in estimated 3.0002 s (2.7M iterations)
+Benchmarking sparse_csr_construction/100x100_d5/100: Analyzing
+sparse_csr_construction/100x100_d5/100
+                        time:   [1.0602 µs 1.0728 µs 1.0876 µs]
+                        change: [−31.263% −29.870% −28.540%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 20 measurements (5.00%)
+  1 (5.00%) high mild
+Benchmarking sparse_csr_construction/1000x1000_d1/1000
+Benchmarking sparse_csr_construction/1000x1000_d1/1000: Warming up for 1.0000 s
+Benchmarking sparse_csr_construction/1000x1000_d1/1000: Collecting 20 samples in estimated 3.0019 s (124k iterations)
+Benchmarking sparse_csr_construction/1000x1000_d1/1000: Analyzing
+sparse_csr_construction/1000x1000_d1/1000
+                        time:   [24.075 µs 24.343 µs 24.654 µs]
+                        change: [−34.544% −33.362% −32.149%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 20 measurements (10.00%)
+  1 (5.00%) low mild
+  1 (5.00%) high severe
+Benchmarking sparse_csr_construction/10000x10000_d0/10000
+Benchmarking sparse_csr_construction/10000x10000_d0/10000: Warming up for 1.0000 s
+Benchmarking sparse_csr_construction/10000x10000_d0/10000: Collecting 20 samples in estimated 3.0580 s (11k iterations)
+Benchmarking sparse_csr_construction/10000x10000_d0/10000: Analyzing
+sparse_csr_construction/10000x10000_d0/10000
+                        time:   [257.21 µs 260.73 µs 266.17 µs]
+                        change: [−32.584% −30.897% −28.859%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 20 measurements (5.00%)
+  1 (5.00%) high mild
+
+Benchmarking sparse_spmv/100x100_d5_nnz500/100
+Benchmarking sparse_spmv/100x100_d5_nnz500/100: Warming up for 1.0000 s
+Benchmarking sparse_spmv/100x100_d5_nnz500/100: Collecting 20 samples in estimated 3.0001 s (4.7M iterations)
+Benchmarking sparse_spmv/100x100_d5_nnz500/100: Analyzing
+sparse_spmv/100x100_d5_nnz500/100
+                        time:   [631.55 ns 639.01 ns 646.63 ns]
+                        change: [−34.780% −34.093% −33.366%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking sparse_spmv/1000x1000_d1_nnz10000/1000
+Benchmarking sparse_spmv/1000x1000_d1_nnz10000/1000: Warming up for 1.0000 s
+Benchmarking sparse_spmv/1000x1000_d1_nnz10000/1000: Collecting 20 samples in estimated 3.0021 s (203k iterations)
+Benchmarking sparse_spmv/1000x1000_d1_nnz10000/1000: Analyzing
+sparse_spmv/1000x1000_d1_nnz10000/1000
+                        time:   [14.224 µs 14.491 µs 14.891 µs]
+                        change: [−31.542% −29.792% −27.998%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking sparse_spmv/10000x10000_d0_nnz100000/10000
+Benchmarking sparse_spmv/10000x10000_d0_nnz100000/10000: Warming up for 1.0000 s
+Benchmarking sparse_spmv/10000x10000_d0_nnz100000/10000: Collecting 20 samples in estimated 3.0166 s (20k iterations)
+Benchmarking sparse_spmv/10000x10000_d0_nnz100000/10000: Analyzing
+sparse_spmv/10000x10000_d0_nnz100000/10000
+                        time:   [146.97 µs 149.60 µs 153.47 µs]
+                        change: [−34.755% −32.753% −30.429%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 20 measurements (5.00%)
+  1 (5.00%) high mild
+
+Benchmarking sparse_format_conversion/100x100_d5_csr_to_csc/100
+Benchmarking sparse_format_conversion/100x100_d5_csr_to_csc/100: Warming up for 1.0000 s
+Benchmarking sparse_format_conversion/100x100_d5_csr_to_csc/100: Collecting 20 samples in estimated 3.0001 s (1.7M iterations)
+Benchmarking sparse_format_conversion/100x100_d5_csr_to_csc/100: Analyzing
+sparse_format_conversion/100x100_d5_csr_to_csc/100
+                        time:   [1.7619 µs 1.7846 µs 1.8096 µs]
+                        change: [−37.102% −36.219% −35.447%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 20 measurements (5.00%)
+  1 (5.00%) low mild
+Benchmarking sparse_format_conversion/100x100_d5_csc_to_csr/100
+Benchmarking sparse_format_conversion/100x100_d5_csc_to_csr/100: Warming up for 1.0000 s
+Benchmarking sparse_format_conversion/100x100_d5_csc_to_csr/100: Collecting 20 samples in estimated 3.0002 s (1.6M iterations)
+Benchmarking sparse_format_conversion/100x100_d5_csc_to_csr/100: Analyzing
+sparse_format_conversion/100x100_d5_csc_to_csr/100
+                        time:   [1.9123 µs 1.9486 µs 1.9790 µs]
+                        change: [−30.937% −29.993% −28.966%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking sparse_format_conversion/1000x1000_d1_csr_to_csc/1000
+Benchmarking sparse_format_conversion/1000x1000_d1_csr_to_csc/1000: Warming up for 1.0000 s
+Benchmarking sparse_format_conversion/1000x1000_d1_csr_to_csc/1000: Collecting 20 samples in estimated 3.0031 s (74k iterations)
+Benchmarking sparse_format_conversion/1000x1000_d1_csr_to_csc/1000: Analyzing
+sparse_format_conversion/1000x1000_d1_csr_to_csc/1000
+                        time:   [45.585 µs 47.754 µs 49.973 µs]
+                        change: [−28.103% −24.610% −20.369%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking sparse_format_conversion/1000x1000_d1_csc_to_csr/1000
+Benchmarking sparse_format_conversion/1000x1000_d1_csc_to_csr/1000: Warming up for 1.0000 s
+Benchmarking sparse_format_conversion/1000x1000_d1_csc_to_csr/1000: Collecting 20 samples in estimated 3.0077 s (72k iterations)
+Benchmarking sparse_format_conversion/1000x1000_d1_csc_to_csr/1000: Analyzing
+sparse_format_conversion/1000x1000_d1_csc_to_csr/1000
+                        time:   [41.925 µs 42.535 µs 43.569 µs]
+                        change: [−31.879% −30.477% −28.623%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 20 measurements (5.00%)
+  1 (5.00%) high severe
+Benchmarking sparse_format_conversion/10000x10000_d0_csr_to_csc/10000
+Benchmarking sparse_format_conversion/10000x10000_d0_csr_to_csc/10000: Warming up for 1.0000 s
+Benchmarking sparse_format_conversion/10000x10000_d0_csr_to_csc/10000: Collecting 20 samples in estimated 3.1159 s (5460 iterations)
+Benchmarking sparse_format_conversion/10000x10000_d0_csr_to_csc/10000: Analyzing
+sparse_format_conversion/10000x10000_d0_csr_to_csc/10000
+                        time:   [550.20 µs 564.17 µs 577.25 µs]
+                        change: [−33.161% −32.023% −30.762%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking sparse_format_conversion/10000x10000_d0_csc_to_csr/10000
+Benchmarking sparse_format_conversion/10000x10000_d0_csc_to_csr/10000: Warming up for 1.0000 s
+Benchmarking sparse_format_conversion/10000x10000_d0_csc_to_csr/10000: Collecting 20 samples in estimated 3.1055 s (5460 iterations)
+Benchmarking sparse_format_conversion/10000x10000_d0_csc_to_csr/10000: Analyzing
+sparse_format_conversion/10000x10000_d0_csc_to_csr/10000
+                        time:   [550.63 µs 563.01 µs 575.52 µs]
+                        change: [−32.776% −31.652% −30.692%] (p = 0.00 < 0.05)
+                        Performance has improved.
+
+Benchmarking sparse_arithmetic/100x100_d5_add/100
+Benchmarking sparse_arithmetic/100x100_d5_add/100: Warming up for 1.0000 s
+Benchmarking sparse_arithmetic/100x100_d5_add/100: Collecting 20 samples in estimated 3.0001 s (896k iterations)
+Benchmarking sparse_arithmetic/100x100_d5_add/100: Analyzing
+sparse_arithmetic/100x100_d5_add/100
+                        time:   [3.3508 µs 3.3908 µs 3.4447 µs]
+                        change: [−30.580% −28.973% −27.428%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking sparse_arithmetic/100x100_d5_scale/100
+Benchmarking sparse_arithmetic/100x100_d5_scale/100: Warming up for 1.0000 s
+Benchmarking sparse_arithmetic/100x100_d5_scale/100: Collecting 20 samples in estimated 3.0000 s (16M iterations)
+Benchmarking sparse_arithmetic/100x100_d5_scale/100: Analyzing
+sparse_arithmetic/100x100_d5_scale/100
+                        time:   [180.75 ns 182.97 ns 185.01 ns]
+                        change: [−32.477% −31.826% −31.006%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 20 measurements (5.00%)
+  1 (5.00%) high mild
+Benchmarking sparse_arithmetic/1000x1000_d1_add/1000
+Benchmarking sparse_arithmetic/1000x1000_d1_add/1000: Warming up for 1.0000 s
+Benchmarking sparse_arithmetic/1000x1000_d1_add/1000: Collecting 20 samples in estimated 3.0142 s (24k iterations)
+Benchmarking sparse_arithmetic/1000x1000_d1_add/1000: Analyzing
+sparse_arithmetic/1000x1000_d1_add/1000
+                        time:   [128.72 µs 130.62 µs 132.58 µs]
+                        change: [−34.893% −33.984% −32.962%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 20 measurements (5.00%)
+  1 (5.00%) high mild
+Benchmarking sparse_arithmetic/1000x1000_d1_scale/1000
+Benchmarking sparse_arithmetic/1000x1000_d1_scale/1000: Warming up for 1.0000 s
+Benchmarking sparse_arithmetic/1000x1000_d1_scale/1000: Collecting 20 samples in estimated 3.0003 s (1.0M iterations)
+Benchmarking sparse_arithmetic/1000x1000_d1_scale/1000: Analyzing
+sparse_arithmetic/1000x1000_d1_scale/1000
+                        time:   [2.8911 µs 2.9316 µs 2.9700 µs]
+                        change: [−37.337% −36.142% −35.071%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking sparse_arithmetic/10000x10000_d0_add/10000
+Benchmarking sparse_arithmetic/10000x10000_d0_add/10000: Warming up for 1.0000 s
+Benchmarking sparse_arithmetic/10000x10000_d0_add/10000: Collecting 20 samples in estimated 3.0054 s (1890 iterations)
+Benchmarking sparse_arithmetic/10000x10000_d0_add/10000: Analyzing
+sparse_arithmetic/10000x10000_d0_add/10000
+                        time:   [1.5762 ms 1.6808 ms 1.8290 ms]
+                        change: [+14.630% +19.367% +24.745%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 2 outliers among 20 measurements (10.00%)
+  1 (5.00%) high mild
+  1 (5.00%) high severe
+Benchmarking sparse_arithmetic/10000x10000_d0_scale/10000
+Benchmarking sparse_arithmetic/10000x10000_d0_scale/10000: Warming up for 1.0000 s
+Benchmarking sparse_arithmetic/10000x10000_d0_scale/10000: Collecting 20 samples in estimated 3.0013 s (84k iterations)
+Benchmarking sparse_arithmetic/10000x10000_d0_scale/10000: Analyzing
+sparse_arithmetic/10000x10000_d0_scale/10000
+                        time:   [32.880 µs 33.347 µs 33.904 µs]
+                        change: [−33.625% −32.423% −31.171%] (p = 0.00 < 0.05)
+                        Performance has improved.
+
+Benchmarking sparse_eye/eye/100
+Benchmarking sparse_eye/eye/100: Warming up for 1.0000 s
+Benchmarking sparse_eye/eye/100: Collecting 20 samples in estimated 3.0000 s (6.9M iterations)
+Benchmarking sparse_eye/eye/100: Analyzing
+sparse_eye/eye/100      time:   [437.74 ns 446.53 ns 455.32 ns]
+                        change: [−33.761% −32.456% −31.155%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking sparse_eye/eye/1000
+Benchmarking sparse_eye/eye/1000: Warming up for 1.0000 s
+Benchmarking sparse_eye/eye/1000: Collecting 20 samples in estimated 3.0001 s (852k iterations)
+Benchmarking sparse_eye/eye/1000: Analyzing
+sparse_eye/eye/1000     time:   [3.5968 µs 3.7287 µs 3.9482 µs]
+                        change: [−32.048% −27.387% −21.217%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 3 outliers among 20 measurements (15.00%)
+  2 (10.00%) high mild
+  1 (5.00%) high severe
+Benchmarking sparse_eye/eye/10000
+Benchmarking sparse_eye/eye/10000: Warming up for 1.0000 s
+Benchmarking sparse_eye/eye/10000: Collecting 20 samples in estimated 3.0002 s (88k iterations)
+Benchmarking sparse_eye/eye/10000: Analyzing
+sparse_eye/eye/10000    time:   [33.668 µs 34.127 µs 34.660 µs]
+                        change: [−34.927% −33.998% −33.058%] (p = 0.00 < 0.05)
+                        Performance has improved.
+
+Benchmarking sparse_diags/tridiag/100
+Benchmarking sparse_diags/tridiag/100: Warming up for 1.0000 s
+Benchmarking sparse_diags/tridiag/100: Collecting 20 samples in estimated 3.0000 s (2.4M iterations)
+Benchmarking sparse_diags/tridiag/100: Analyzing
+sparse_diags/tridiag/100
+                        time:   [1.1555 µs 1.1752 µs 1.1929 µs]
+                        change: [−33.468% −32.529% −31.461%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 20 measurements (10.00%)
+  1 (5.00%) high mild
+  1 (5.00%) high severe
+Benchmarking sparse_diags/tridiag/1000
+Benchmarking sparse_diags/tridiag/1000: Warming up for 1.0000 s
+Benchmarking sparse_diags/tridiag/1000: Collecting 20 samples in estimated 3.0018 s (298k iterations)
+Benchmarking sparse_diags/tridiag/1000: Analyzing
+sparse_diags/tridiag/1000
+                        time:   [9.8126 µs 9.8927 µs 9.9845 µs]
+                        change: [−35.202% −34.174% −33.098%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 3 outliers among 20 measurements (15.00%)
+  3 (15.00%) high mild
+Benchmarking sparse_diags/tridiag/10000
+Benchmarking sparse_diags/tridiag/10000: Warming up for 1.0000 s
+Benchmarking sparse_diags/tridiag/10000: Collecting 20 samples in estimated 3.0088 s (30k iterations)
+Benchmarking sparse_diags/tridiag/10000: Analyzing
+sparse_diags/tridiag/10000
+                        time:   [100.82 µs 102.17 µs 104.33 µs]
+                        change: [−32.488% −31.345% −29.734%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 20 measurements (10.00%)
+  1 (5.00%) high mild
+  1 (5.00%) high severe
+
+Benchmarking sparse_spmm/500x500_d2/500
+Benchmarking sparse_spmm/500x500_d2/500: Warming up for 1.0000 s
+Benchmarking sparse_spmm/500x500_d2/500: Collecting 20 samples in estimated 3.0462 s (8820 iterations)
+Benchmarking sparse_spmm/500x500_d2/500: Analyzing
+sparse_spmm/500x500_d2/500
+                        time:   [340.08 µs 344.80 µs 350.40 µs]
+                        change: [−35.886% −35.026% −34.084%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking sparse_spmm/1000x1000_d1/1000
+Benchmarking sparse_spmm/1000x1000_d1/1000: Warming up for 1.0000 s
+Benchmarking sparse_spmm/1000x1000_d1/1000: Collecting 20 samples in estimated 3.0910 s (4200 iterations)
+Benchmarking sparse_spmm/1000x1000_d1/1000: Analyzing
+sparse_spmm/1000x1000_d1/1000
+                        time:   [717.22 µs 731.51 µs 748.47 µs]
+                        change: [−33.197% −31.492% −29.690%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking sparse_spmm/2000x2000_d1/2000
+Benchmarking sparse_spmm/2000x2000_d1/2000: Warming up for 1.0000 s
+Benchmarking sparse_spmm/2000x2000_d1/2000: Collecting 20 samples in estimated 4.1899 s (420 iterations)
+Benchmarking sparse_spmm/2000x2000_d1/2000: Analyzing
+sparse_spmm/2000x2000_d1/2000
+                        time:   [9.8328 ms 10.060 ms 10.234 ms]
+                        change: [−21.621% −19.866% −18.182%] (p = 0.00 < 0.05)
+                        Performance has improved.
