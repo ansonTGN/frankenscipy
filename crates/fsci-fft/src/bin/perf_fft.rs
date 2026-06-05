@@ -9,7 +9,8 @@
 //! ```
 //!
 //! Usage: `perf_fft <mode> <n> <repeats>`
-//!   mode    = polymul | rfft | irfft | golden | rfft-golden | irfft-golden | fft2-golden
+//!   mode    = polymul | rfft | irfft | golden | rfft-golden | irfft-golden |
+//!             fft2-golden | nd-golden | fft2t | fftnt
 //!   n       = input length for timed modes
 //!   repeats = timed iterations
 
@@ -18,7 +19,7 @@ use std::hint::black_box;
 use std::path::Path;
 use std::time::Instant;
 
-use fsci_fft::{FftOptions, fft, fft2, ifft, irfft, polynomial_multiply_fft, rfft};
+use fsci_fft::{FftOptions, fft, fft2, fftn, ifft, ifftn, irfft, polynomial_multiply_fft, rfft};
 
 fn make_polynomial_input(n: usize) -> Vec<f64> {
     (0..n)
@@ -143,6 +144,53 @@ fn write_or_print_golden(output: String, path: Option<&str>) {
     }
 }
 
+fn nd_golden_text() -> String {
+    let opts = FftOptions::default();
+    let mut output = String::new();
+    let shapes: &[&[usize]] = &[
+        &[8, 8],
+        &[6, 10],
+        &[16, 16],
+        &[4, 4, 4],
+        &[3, 5, 7],
+        &[8, 4, 2],
+        // Larger ND regression fixtures covering 2D and 3D axis layouts.
+        &[128, 128],
+        &[32, 32, 32],
+        &[64, 4, 64],
+    ];
+    for shape in shapes {
+        let len: usize = shape.iter().product();
+        let input = make_complex_input(len);
+        let fwd = fftn(&input, shape, &opts).expect("fftn");
+        let inv = ifftn(&fwd, shape, &opts).expect("ifftn");
+        let dims: Vec<String> = shape.iter().map(|d| d.to_string()).collect();
+        write!(&mut output, "mode=fftn shape={} ", dims.join("x")).expect("write fftn header");
+        for &(real, imag) in &fwd {
+            write!(
+                &mut output,
+                "{:016x}:{:016x} ",
+                real.to_bits(),
+                imag.to_bits()
+            )
+            .expect("write fftn bits");
+        }
+        output.push('\n');
+        write!(&mut output, "mode=ifftn shape={} ", dims.join("x")).expect("write ifftn header");
+        for &(real, imag) in &inv {
+            write!(
+                &mut output,
+                "{:016x}:{:016x} ",
+                real.to_bits(),
+                imag.to_bits()
+            )
+            .expect("write ifftn bits");
+        }
+        output.push('\n');
+    }
+    output
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mode = args.get(1).map(String::as_str).unwrap_or("polymul");
@@ -163,6 +211,37 @@ fn main() {
     }
     if mode == "fft2-golden" {
         write_or_print_golden(fft2_golden_text(), args.get(2).map(String::as_str));
+        return;
+    }
+    if mode == "nd-golden" {
+        write_or_print_golden(nd_golden_text(), args.get(2).map(String::as_str));
+        return;
+    }
+
+    if mode == "fft2t" || mode == "fftnt" {
+        // Timed nd transforms. `n` is the per-axis length. fft2t -> n x n,
+        // fftnt -> n x n x n. Same-process median-free total over `repeats`.
+        let opts = FftOptions::default();
+        let shape: Vec<usize> = if mode == "fft2t" {
+            vec![n, n]
+        } else {
+            vec![n, n, n]
+        };
+        let len: usize = shape.iter().product();
+        let input = make_complex_input(len);
+        let t0 = Instant::now();
+        let mut checksum = 0.0_f64;
+        for _ in 0..repeats {
+            let out = fftn(black_box(&input), black_box(&shape), black_box(&opts)).expect("fftn");
+            checksum += out.first().map(|&(re, _)| re).unwrap_or(0.0);
+            black_box(&out);
+        }
+        let elapsed = t0.elapsed();
+        let total_ms = elapsed.as_secs_f64() * 1e3;
+        let per_call_ms = total_ms / repeats as f64;
+        println!(
+            "{{\"mode\":\"{mode}\",\"n\":{n},\"len\":{len},\"repeats\":{repeats},\"total_ms\":{total_ms:.3},\"per_call_ms\":{per_call_ms:.6},\"checksum\":{checksum:.12e}}}",
+        );
         return;
     }
 

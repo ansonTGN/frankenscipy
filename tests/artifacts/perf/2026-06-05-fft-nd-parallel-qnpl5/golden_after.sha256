@@ -1,0 +1,2 @@
+79b17591371e8b8472ce6e9a89264628b960ae9fcde9f0e5c6b0c6de57bba5d8  tests/artifacts/perf/2026-06-05-fft-nd-parallel-qnpl5/golden_fft2_after.txt
+1e1cab2a6d719cb752e4776a840c48d848acfdb0df3bccb4a21e415a59d345a5  tests/artifacts/perf/2026-06-05-fft-nd-parallel-qnpl5/golden_nd_after.txt
