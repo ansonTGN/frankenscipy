@@ -1,0 +1,40 @@
+perf: fsci-stats quantile (multi-q) — full sort O(n log n) -> gated per-quantile select O(n)
+=============================================================================================
+
+Target : crates/fsci-stats/src/lib.rs :: quantile (the general multi-quantile entry point).
+Lever  : Each requested quantile reads only the one or two ranks sorted[lo]/sorted[hi] (numpy
+         linear interpolation). When the quantile count is small relative to log2(n), partition
+         per quantile with select_ranks (O(n) each) instead of one full sort (O(n log n)). Reuses
+         the select_ranks helper added for median/percentile.
+
+Gating
+------
+Select path when q.len() < log2(n) (so p*n < n*log n); otherwise the original single full sort.
+Both paths are byte-identical, so the gate only affects speed. A single buffer copy is
+re-partitioned per quantile (select_nth re-selects from any arrangement).
+
+Isomorphism proof (byte-identical result vector)
+------------------------------------------------
+- select_nth_unstable_by(hi, total_cmp) places rank hi at index hi with every total_cmp-smaller
+  element before it, so select_ranks recovers sorted[lo] (= total_cmp-max of the lower partition)
+  and sorted[hi] bit-for-bit; the interpolation arithmetic is unchanged and total_cmp is the same
+  total order the old sort used (NaN/±0 ordering preserved).
+- Empirically: 0 mismatches / 15000 results across 3000 datasets x 5 quantile-sets (1..10
+  quantiles, hitting BOTH gate paths), with value alphabets for heavy ties, fine continuous, and
+  signed zeros. Every result vector compared via .to_bits() vs a verbatim full-sort reference.
+- Golden payload sha256 (per-trial digest of quantile(data,[0.25,0.5,0.75])):
+    dd8304db400b27cbd6cb35f389224cf07d0e149e151a926de5e778aa5eb13ea6  golden_payload.txt
+
+Timing (same-process A/B, release, mean of 5; uniform f64)
+----------------------------------------------------------
+  n=2000000 nq= 3  sort= 62.021 ms   new= 15.208 ms   ratio= 4.1x   (select path)
+  n= 500000 nq= 3  sort= 11.377 ms   new=  3.319 ms   ratio= 3.4x   (select path)
+  n= 500000 nq=40  sort= 11.139 ms   new= 11.133 ms   ratio= 1.0x   (sort path — gate avoids regression)
+
+Score: Impact 3 x Confidence 5 / Effort 1 = 15  (>> 2.0)
+
+Tests: cargo test -p fsci-stats --lib quantile => 28 passed. clippy + fmt clean.
+
+This completes the quantile/percentile partial-select vein (median/percentile/iqr/mad ea41ce8d,
+winsorize 5ed2748f, scoreatpercentile bcce1856, quantile here). The vein is now HARVESTED; the
+next swing must be a fundamentally different primitive (alien-graveyard / numerical core).

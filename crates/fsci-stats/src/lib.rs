@@ -17513,9 +17513,34 @@ pub fn quantile(data: &[f64], q: &[f64]) -> Vec<f64> {
     if data.is_empty() || data.iter().any(|v| v.is_nan()) {
         return vec![f64::NAN; q.len()];
     }
+    let n = data.len();
+
+    // Each requested quantile reads only the one or two ranks sorted[lo]/sorted[hi].
+    // When there are few of them relative to log2(n), partition per quantile in
+    // O(n) (select_ranks) rather than fully sorting once (O(n log n)). Both paths
+    // are byte-identical, so the gate only affects speed.
+    if (q.len() as f64) < (n as f64).log2().max(1.0) {
+        let mut buf = data.to_vec();
+        return q
+            .iter()
+            .map(|&qi| {
+                let qi = qi.clamp(0.0, 1.0);
+                let idx = qi * (n - 1) as f64;
+                let lo = idx.floor() as usize;
+                let hi = idx.ceil() as usize;
+                let frac = idx - lo as f64;
+                let (v_lo, v_hi) = select_ranks(&mut buf, lo, hi);
+                if lo == hi {
+                    v_lo
+                } else {
+                    v_lo * (1.0 - frac) + v_hi * frac
+                }
+            })
+            .collect();
+    }
+
     let mut sorted = data.to_vec();
     sorted.sort_by(|a, b| a.total_cmp(b));
-    let n = sorted.len();
 
     q.iter()
         .map(|&qi| {
