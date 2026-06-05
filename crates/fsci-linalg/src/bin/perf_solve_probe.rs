@@ -6,7 +6,7 @@ fn mk(n: usize, s: f64) -> Vec<Vec<f64>> {
         .map(|i| {
             (0..n)
                 .map(|j| {
-                    let v = ((i as f64 * 0.013 + j as f64 * 0.007 + s).sin());
+                    let v = (i as f64 * 0.013 + j as f64 * 0.007 + s).sin();
                     if i == j { v + n as f64 } else { v * 0.1 } // diagonally dominant
                 })
                 .collect()

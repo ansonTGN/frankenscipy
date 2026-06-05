@@ -61,3 +61,23 @@ blocked panel/trailing updates.
 Target for the follow-up primitive: `>=8x` on the measured `m=3000 n=1500`
 `lstsq`/`pinv` rows while preserving output tolerances, rank, singular value
 ordering, error classes, certificate semantics, and golden payload hashes.
+
+## Rejected Implementation Trials
+
+Two non-ship implementation trials were checked before committing any production
+fast path:
+
+| trial | worker | `lstsq 2000x1000` | `pinv 2000x1000` | `lstsq 3000x1500` | `pinv 3000x1500` | decision |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| baseline | `vmi1227854` | `3388.7 ms` | `3350.2 ms` | `20309.9 ms` | `20739.8 ms` | current |
+| TSQR composition (`frankenscipy-275gu`) | `vmi1227854` | `4180.8 ms` | `2906.8 ms` | `26739.0 ms` | `19349.7 ms` | reject, `lstsq` regression |
+| Gram/eigen SVD (`frankenscipy-jvcdf`) | `vmi1227854` | `5343.9 ms` | `5163.8 ms` | `20454.1 ms` | `20696.4 ms` | reject, no real win |
+
+The Gram/eigen path also had a cross-worker raw capture on `ts2` that regressed
+to `24657.3 ms` for `lstsq 3000x1500` and `24948.1 ms` for `pinv 3000x1500`.
+
+Rejected source for both trials was removed. `frankenscipy-jvcdf` remains open
+for the deeper primitive: in-house blocked Householder bidiagonalization with
+compact block reflectors and GEMM-backed trailing updates, followed by a
+bidiagonal SVD solver/reconstruction path. The next attempt should not form dense
+Gram products and should not compose large nalgebra QR calls.
