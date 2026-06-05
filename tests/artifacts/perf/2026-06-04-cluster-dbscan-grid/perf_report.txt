@@ -1,0 +1,41 @@
+perf: fsci-cluster dbscan — naive O(n^2) all-pairs region queries -> uniform spatial grid
+==========================================================================================
+
+Target : crates/fsci-cluster/src/lib.rs :: dbscan (neighbour query).
+Lever  : DBSCAN called neighbors(idx) = {j : sq_dist(p_idx, p_j) <= eps^2} by scanning all n
+         points, once per visited point -> O(n^2) distance evaluations. Bucket points into a
+         uniform grid of cell side `eps`. A neighbour has full distance <= eps, so each
+         coordinate differs by <= eps and the two points fall in cells differing by <= 1 per
+         axis -> only the 3^d cells around a point can contain a neighbour. For bounded density
+         this is ~O(n). New: grid HashMap<cell, Vec<idx>> + 3^d-cell candidate gather.
+
+Scope / gating
+--------------
+Grid used only when d <= 6 && n >= 256 (3^d stays small and the bucket build amortizes); higher
+dimensions / tiny inputs keep the linear scan. Both paths are exact, so dispatch never changes
+results.
+
+Isomorphism proof (identical labels / cores / cluster count)
+------------------------------------------------------------
+- Completeness: a true neighbour (sq_dist <= eps^2) has |Δ_k| <= eps for every axis, so its cell
+  differs by at most 1 per axis from the query's cell -> it is in one of the enumerated 3^d cells.
+  The grid therefore yields a SUPERSET of candidates.
+- Exactness: each candidate is filtered with the SAME `sq_dist_within(pi, pj, eps2) <= eps2` test
+  the linear scan used (bit-identical membership), and the result is sorted ascending -> the same
+  set in the same 0..n index order the `(0..n).filter` produced. Identical neighbour lists ->
+  identical BFS expansion -> identical labels, core_sample_indices, and n_clusters.
+- Empirically: 0 mismatches / 1600 dbscan runs across 400 datasets (blobs + uniform noise),
+  d in [2,5], n in [256, 955], eps/min_samples in {(0.5,3),(1.0,4),(1.5,5),(2.5,8)}. Labels,
+  core indices, and cluster count all compared exactly vs a verbatim O(n^2) copy.
+- Golden payload sha256 (per-run FNV digest of the label vector):
+    7128c071841d3c557d9d985a7cd5f932a6c4f90dda79c670d1a679028aaa62e8  golden_payload.txt
+
+Timing (same-process A/B, release, mean of 3; clustered 2-D data, eps=1.0, min_samples=5)
+-----------------------------------------------------------------------------------------
+  n= 2000  naive= 16.952 ms   grid=  6.547 ms   ratio= 2.6x
+  n= 8000  naive=282.964 ms   grid=106.542 ms   ratio= 2.7x
+  n=20000  naive=  1.678 s    grid=554.610 ms   ratio= 3.0x
+
+Score: Impact 4 x Confidence 5 / Effort 2 = 10  (>> 2.0)
+
+Tests: cargo test -p fsci-cluster => 99 passed. clippy + fmt clean.

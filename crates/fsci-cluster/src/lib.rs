@@ -1163,11 +1163,52 @@ pub fn dbscan(
     // clustering most pairs are non-neighbors and abandon after a few dimensions.
     let flat = flatten_points(data, d);
     let row = |idx: usize| -> &[f64] { &flat[idx * d..idx * d + d] };
+
+    // Spatial-grid acceleration (low dimensions): bucket points into cells of
+    // side `eps`. Any neighbour (full distance ≤ eps) differs by ≤ 1 cell per
+    // axis, so only the 3^d cells around a point can hold one. This turns the
+    // O(n²) all-pairs scan into roughly O(n) for bounded density while staying
+    // BYTE-IDENTICAL to the scan: the candidate set is filtered with the same
+    // `sq_dist_within ≤ eps2` test and sorted ascending, reproducing the exact
+    // membership and the 0..n index order the linear filter produced. In high
+    // dimensions (3^d blows up and offers no pruning) keep the linear scan.
+    let use_grid = d <= 6 && n >= 256;
+    let cell_of = |p: &[f64]| -> Vec<i64> { (0..d).map(|k| (p[k] / eps).floor() as i64).collect() };
+    let grid: Option<std::collections::HashMap<Vec<i64>, Vec<usize>>> = use_grid.then(|| {
+        let mut g: std::collections::HashMap<Vec<i64>, Vec<usize>> =
+            std::collections::HashMap::with_capacity(n);
+        for idx in 0..n {
+            g.entry(cell_of(row(idx))).or_default().push(idx);
+        }
+        g
+    });
+
     let neighbors = |idx: usize| -> Vec<usize> {
         let pi = row(idx);
-        (0..n)
-            .filter(|&j| sq_dist_within(pi, row(j), eps2) <= eps2)
-            .collect()
+        let Some(g) = &grid else {
+            return (0..n)
+                .filter(|&j| sq_dist_within(pi, row(j), eps2) <= eps2)
+                .collect();
+        };
+        let base = cell_of(pi);
+        let mut cell = base.clone();
+        let mut out = Vec::new();
+        for code in 0..3usize.pow(d as u32) {
+            let mut c = code;
+            for k in 0..d {
+                cell[k] = base[k] + (c % 3) as i64 - 1;
+                c /= 3;
+            }
+            if let Some(idxs) = g.get(&cell) {
+                for &j in idxs {
+                    if sq_dist_within(pi, row(j), eps2) <= eps2 {
+                        out.push(j);
+                    }
+                }
+            }
+        }
+        out.sort_unstable();
+        out
     };
 
     for i in 0..n {
