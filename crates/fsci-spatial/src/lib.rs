@@ -2934,24 +2934,55 @@ pub fn directed_hausdorff(xa: &[Vec<f64>], xb: &[Vec<f64>]) -> Result<f64, Spati
         ));
     }
 
-    // Resolves [frankenscipy-ws4co]: compare squared distances in
-    // the inner loop and sqrt only the winning min once per a∈xa.
-    // For |xa|=|xb|=N this drops sqrt calls from N² to N. Monotone
-    // equivalence preserves the min/max semantics exactly.
-    let mut max_dist_sq = 0.0_f64;
-    for a in xa {
-        let mut min_dist_sq = f64::INFINITY;
-        for b in xb {
-            let d_sq = sqeuclidean(a, b);
-            if d_sq < min_dist_sq {
-                min_dist_sq = d_sq;
+    // Taha & Hanbury (2015) early-break: directed Hausdorff is
+    //   max_{a∈xa} min_{b∈xb} d(a,b).
+    // Once an inner distance drops below the running max `cmax`, that `a`'s
+    // minimum is already < cmax and so cannot raise the max — abandon its scan.
+    // The returned scalar is byte-identical to the full O(N·M) double loop: the
+    // achieving pair's squared distance is computed by the same `sqeuclidean`,
+    // and `min`/`max` are value-only (order-independent), so pruning skipped
+    // pairs cannot change the result. Iterating in a fixed deterministic
+    // shuffled order makes the early break effective on adversarially-ordered
+    // input without affecting the result.
+    let order_a = hausdorff_scan_order(xa.len(), 0x9E37_79B9_7F4A_7C15);
+    let order_b = hausdorff_scan_order(xb.len(), 0xD1B5_4A32_D192_ED03);
+
+    let mut cmax = 0.0_f64;
+    for &ai in &order_a {
+        let a = &xa[ai];
+        let mut cmin = f64::INFINITY;
+        for &bi in &order_b {
+            let d_sq = sqeuclidean(a, &xb[bi]);
+            if d_sq < cmax {
+                cmin = d_sq;
+                break; // this a cannot beat the current max; stop scanning it
+            }
+            if d_sq < cmin {
+                cmin = d_sq;
             }
         }
-        if min_dist_sq > max_dist_sq {
-            max_dist_sq = min_dist_sq;
+        if cmin > cmax {
+            cmax = cmin;
         }
     }
-    Ok(max_dist_sq.sqrt())
+    Ok(cmax.sqrt())
+}
+
+/// Deterministic Fisher–Yates permutation of `0..n` from a fixed seed. Only the
+/// scan ORDER changes (not the set), so the Hausdorff result is unaffected; a
+/// pseudo-random order keeps the early break effective regardless of how the
+/// caller ordered the points.
+fn hausdorff_scan_order(n: usize, seed: u64) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..n).collect();
+    let mut state = seed | 1;
+    for i in (1..n).rev() {
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let j = (state >> 33) as usize % (i + 1);
+        order.swap(i, j);
+    }
+    order
 }
 
 /// Hausdorff distance between two point sets (symmetric).
