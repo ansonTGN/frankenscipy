@@ -1,0 +1,40 @@
+perf: fsci-ndimage distance_transform_edt — brute-force O(F·B) -> separable EDT O(N·ndim)
+==========================================================================================
+
+Target : crates/fsci-ndimage/src/lib.rs :: distance_transform_edt_full (distances-only path,
+         reached by the public distance_transform_edt).
+Lever  : Replace the brute-force scan (each foreground pixel minimised over EVERY background
+         pixel ~ O(N^2)) with the exact separable Felzenszwalb-Huttenlocher squared-EDT:
+         per axis, transform each 1-D line by the lower envelope of parabolas, O(N·ndim).
+         New helpers: edt_squared_felzenszwalb + edt_1d_squared.
+
+Scope / gating
+--------------
+Fast path only when return_distances && !return_indices && background nonempty && all
+sampling finite/positive. The all-foreground sentinel (edt_all_foreground_distance) and the
+feature-index / tie-break semantics stay on the original brute-force path — untouched.
+
+Isomorphism proof (byte-identical f64)
+--------------------------------------
+- Squared distance = Σ_axis ((Δ_axis · sampling)²), minimised over background. FH computes
+  the exact same minimum; each emitted line value is recomputed as Δ² + f[source], so the
+  envelope-intersection divisions only SELECT a parabola, never perturb the stored value.
+- Accumulation order: FH adds the current-axis term to the carried partial sum from prior
+  axes. IEEE-754 addition is COMMUTATIVE, so this equals the brute force's left-to-right
+  `.sum()` (axis 0 first) bit-for-bit, for any ndim. sqrt of identical bits is identical.
+- Empirically: 0 mismatches / 10876 cells across shapes {16},{64},{8,8},{16,24},{5,7,9},
+  {1,13},{13,1},{4,4,4} × fg densities {30,50,70,90}% × sampling {None,[2,3],[2],[2,1,0.5]},
+  comparing the real library fn vs a verbatim brute force via .to_bits().
+- Golden payload sha256 (per-case FNV digest of full library output):
+    d2026e0368c0a5b50fd5a67b025bf61be0fbd1c83fc9bd777e99436aca654977  golden_payload.txt
+
+Timing (same-process A/B, release, mean of 3; square 2-D, 50% fg)
+-----------------------------------------------------------------
+  N= 4096 (64x64)    brute= 29.285 ms   fh=371.045 us   ratio=  78.9x
+  N=16384 (128x128)  brute=467.973 ms   fh=  1.508 ms   ratio= 310.4x
+  N=36864 (192x192)  brute=  2.375 s    fh=  3.582 ms   ratio= 663.1x
+
+Score: Impact 5 x Confidence 5 / Effort 2 = 12.5  (>> 2.0)
+
+Tests: cargo test -p fsci-ndimage --lib distance_transform => 18 passed; edt => 15 passed
+(incl. scipy-reference 1-D/3-D fixtures, sampling, and the indices path). clippy + fmt clean.

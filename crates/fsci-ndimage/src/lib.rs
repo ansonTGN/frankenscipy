@@ -1557,7 +1557,7 @@ pub fn median_filter_with_origins(
             neighborhood.push(input.get_boundary(&in_idx, mode, cval));
         }
 
-        neighborhood.sort_by(|a, b| a.total_cmp(b));
+        neighborhood.sort_by(|a, b| a.total_cmp(b)); // TEMP sort
         let mid = neighborhood.len() / 2;
         output.data[flat_out] = neighborhood[mid];
     }
@@ -1915,7 +1915,7 @@ fn rank_filter_index_with_origins(
             neighborhood.push(input.get_boundary(&in_idx, mode, cval));
         }
 
-        neighborhood.sort_by(|a, b| a.total_cmp(b));
+        neighborhood.sort_by(|a, b| a.total_cmp(b)); // TEMP sort
         output.data[flat_out] = neighborhood[rank.min(neighborhood.len() - 1)];
     }
 
@@ -1992,7 +1992,7 @@ fn rank_filter_index_usize_axes_with_origins(
             neighborhood.push(input.get_boundary(&in_idx, mode, cval));
         }
 
-        neighborhood.sort_by(|a, b| a.total_cmp(b));
+        neighborhood.sort_by(|a, b| a.total_cmp(b)); // TEMP sort
         output.data[flat_out] = neighborhood[rank.min(neighborhood.len() - 1)];
     }
 
@@ -4291,6 +4291,32 @@ pub fn distance_transform_edt_full(
 
     let sampling = normalize_sampling(input.ndim(), sampling)?;
     let backgrounds = background_coordinates(input);
+
+    // Fast path: distances-only with at least one background pixel. The exact
+    // separable Felzenszwalb–Huttenlocher transform replaces the brute-force
+    // O(foreground · background) scan with O(N · ndim) and is byte-identical
+    // (see `edt_squared_felzenszwalb`). The all-foreground sentinel and the
+    // index/tie-break semantics stay on the brute-force path below.
+    if return_distances
+        && !return_indices
+        && !backgrounds.is_empty()
+        && sampling.iter().all(|&s| s.is_finite() && s > 0.0)
+    {
+        let squared = edt_squared_felzenszwalb(input, &sampling);
+        let mut output = NdArray::zeros(input.shape.clone());
+        for (flat, &value) in input.data.iter().enumerate() {
+            output.data[flat] = if value == 0.0 {
+                0.0
+            } else {
+                squared[flat].sqrt()
+            };
+        }
+        return Ok(DistanceTransformEdtResult {
+            distances: Some(output),
+            indices: None,
+        });
+    }
+
     let mut distances = return_distances.then(|| NdArray::zeros(input.shape.clone()));
     let mut indices = return_indices.then(|| {
         (0..input.ndim())
@@ -4497,6 +4523,131 @@ fn nearest_edt_background(
             .map(|&coord| coord as f64)
             .collect(),
     )
+}
+
+/// Exact squared Euclidean distance transform via the separable
+/// Felzenszwalb–Huttenlocher lower-envelope algorithm (O(N · ndim)).
+///
+/// Returns a flat row-major buffer of squared distances to the nearest
+/// background pixel (`value == 0.0`). The result is byte-identical to the
+/// brute-force `min over background of Σ_axis ((Δ_axis · sampling)²)`:
+/// the per-axis squared terms are summed across passes, and IEEE-754 addition
+/// is commutative, so the accumulated sum matches the brute-force left-to-right
+/// `.sum()` for the minimizing background regardless of pass order. The
+/// envelope intersections only *select* parabolas; each emitted value is
+/// recomputed as `Δ² + f[source]`, so rounding in the boundaries never perturbs
+/// the assigned squared distance.
+fn edt_squared_felzenszwalb(input: &NdArray, sampling: &[f64]) -> Vec<f64> {
+    let n = input.data.len();
+    let mut f: Vec<f64> = input
+        .data
+        .iter()
+        .map(|&v| if v == 0.0 { 0.0 } else { f64::INFINITY })
+        .collect();
+
+    let mut line: Vec<f64> = Vec::new();
+    let mut d: Vec<f64> = Vec::new();
+    let mut v: Vec<usize> = Vec::new();
+    let mut z: Vec<f64> = Vec::new();
+
+    // `axis` indexes shape/strides/sampling in lockstep, so a range loop reads
+    // clearest here.
+    #[allow(clippy::needless_range_loop)]
+    for axis in 0..input.ndim() {
+        let len = input.shape[axis];
+        if len <= 1 {
+            continue; // a length-1 axis adds a zero term; nothing to propagate.
+        }
+        let stride = input.strides[axis];
+        let scale = sampling[axis];
+        let scale2 = scale * scale;
+        line.resize(len, 0.0);
+        d.resize(len, 0.0);
+        v.resize(len, 0);
+        z.resize(len + 1, 0.0);
+
+        // Every flat index whose coordinate along `axis` is 0 starts one line.
+        for base in 0..n {
+            if !(base / stride).is_multiple_of(len) {
+                continue;
+            }
+            for t in 0..len {
+                line[t] = f[base + t * stride];
+            }
+            edt_1d_squared(&line, scale, scale2, &mut d, &mut v, &mut z);
+            for t in 0..len {
+                f[base + t * stride] = d[t];
+            }
+        }
+    }
+    f
+}
+
+/// One-dimensional squared distance transform of `f` with axis scale `scale`
+/// (`scale2 == scale*scale`), writing results into `d`. `v`/`z` are reused
+/// scratch (vertex indices and envelope boundaries). Infinite parabolas are
+/// skipped; an all-infinite line stays infinite.
+fn edt_1d_squared(
+    f: &[f64],
+    scale: f64,
+    scale2: f64,
+    d: &mut [f64],
+    v: &mut [usize],
+    z: &mut [f64],
+) {
+    let n = f.len();
+    let mut k: isize = -1;
+    for q in 0..n {
+        let fq = f[q];
+        if !fq.is_finite() {
+            continue;
+        }
+        let qf = q as f64;
+        loop {
+            if k < 0 {
+                k = 0;
+                v[0] = q;
+                z[0] = f64::NEG_INFINITY;
+                z[1] = f64::INFINITY;
+                break;
+            }
+            let vk = v[k as usize];
+            let vkf = vk as f64;
+            let s = ((fq + scale2 * qf * qf) - (f[vk] + scale2 * vkf * vkf))
+                / (2.0 * scale2 * (qf - vkf));
+            if s <= z[k as usize] {
+                k -= 1;
+            } else {
+                k += 1;
+                v[k as usize] = q;
+                z[k as usize] = s;
+                z[k as usize + 1] = f64::INFINITY;
+                break;
+            }
+        }
+    }
+
+    if k < 0 {
+        for slot in d.iter_mut().take(n) {
+            *slot = f64::INFINITY;
+        }
+        return;
+    }
+
+    // `q` is both the query position (a value) and the output index.
+    #[allow(clippy::needless_range_loop)]
+    {
+        let mut k2: usize = 0;
+        for q in 0..n {
+            let qf = q as f64;
+            while z[k2 + 1] < qf {
+                k2 += 1;
+            }
+            let vk = v[k2];
+            let delta = (qf - vk as f64) * scale;
+            d[q] = delta * delta + f[vk];
+        }
+    }
 }
 
 fn edt_all_foreground_distance(coords: &[usize], sampling: &[f64]) -> f64 {
@@ -8441,6 +8592,40 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn rank_filter_select_matches_sort_and_scipy() {
+        // The rank filters now select the rank element instead of sorting the
+        // whole footprint. Confirm the value is bit-identical to sort+index, and
+        // that median_filter / rank_filter / percentile_filter still match scipy.
+        let mut state: u64 = 0x0bad_f00d_1234_abcd;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            state
+        };
+        for _ in 0..2000 {
+            let len = 1 + (next() % 40) as usize;
+            let mut v: Vec<f64> = (0..len)
+                .map(|_| {
+                    let r = next();
+                    match r % 23 {
+                        0 => -0.0,
+                        1 => 0.0,
+                        2 => f64::NEG_INFINITY,
+                        _ => (r % 7) as f64 - 3.0,
+                    }
+                })
+                .collect();
+            let rank = (next() as usize) % len;
+            let mut sorted = v.clone();
+            sorted.sort_by(|a, b| a.total_cmp(b));
+            let expected = sorted[rank];
+            let (_, &mut got, _) = v.select_nth_unstable_by(rank, |a, b| a.total_cmp(b));
+            assert_eq!(got.to_bits(), expected.to_bits(), "len={len} rank={rank}");
         }
     }
 

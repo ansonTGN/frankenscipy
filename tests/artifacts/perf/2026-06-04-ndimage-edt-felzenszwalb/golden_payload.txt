@@ -1,0 +1,88 @@
+shape=[16] fg=30 samp=None digest=4f7384ce5271b343
+shape=[16] fg=30 samp=Some([2.0]) digest=b50384ce5271b343
+shape=[16] fg=50 samp=None digest=c59b84ce5271b343
+shape=[16] fg=50 samp=Some([2.0]) digest=fc4b84ce5271b343
+shape=[16] fg=70 samp=None digest=cd1784ce5271b343
+shape=[16] fg=70 samp=Some([2.0]) digest=f8d784ce5271b343
+shape=[16] fg=90 samp=None digest=089784ce5271b343
+shape=[16] fg=90 samp=Some([2.0]) digest=62f784ce5271b343
+shape=[64] fg=30 samp=None digest=43d236ee29d93e83
+shape=[64] fg=30 samp=Some([2.0]) digest=cf7236ee29d93e83
+shape=[64] fg=50 samp=None digest=8d5236ee29d93e83
+shape=[64] fg=50 samp=Some([2.0]) digest=732236ee29d93e83
+shape=[64] fg=70 samp=None digest=a1b636ee29d93e83
+shape=[64] fg=70 samp=Some([2.0]) digest=484636ee29d93e83
+shape=[64] fg=90 samp=None digest=b0c836ee29d93e83
+shape=[64] fg=90 samp=Some([2.0]) digest=3b2836ee29d93e83
+shape=[8, 8] fg=30 samp=None digest=b93c790ab0dad07f
+shape=[8, 8] fg=30 samp=Some([2.0, 3.0]) digest=3767221a33270947
+shape=[8, 8] fg=30 samp=Some([2.0]) digest=a65c790ab0dad07f
+shape=[8, 8] fg=50 samp=None digest=ba8c83331419d3b8
+shape=[8, 8] fg=50 samp=Some([2.0, 3.0]) digest=fe197621b1c57786
+shape=[8, 8] fg=50 samp=Some([2.0]) digest=b0ec83331419d3b8
+shape=[8, 8] fg=70 samp=None digest=1a523edb7857490c
+shape=[8, 8] fg=70 samp=Some([2.0, 3.0]) digest=1c9679c4a129f49b
+shape=[8, 8] fg=70 samp=Some([2.0]) digest=01623edb7857490c
+shape=[8, 8] fg=90 samp=None digest=8a3ad8134ee5c6a9
+shape=[8, 8] fg=90 samp=Some([2.0, 3.0]) digest=e01b9e860a2477ac
+shape=[8, 8] fg=90 samp=Some([2.0]) digest=8acad8134ee5c6a9
+shape=[16, 24] fg=30 samp=None digest=e66a830a834ae990
+shape=[16, 24] fg=30 samp=Some([2.0, 3.0]) digest=124fb6eac8254c32
+shape=[16, 24] fg=30 samp=Some([2.0]) digest=cbca830a834ae990
+shape=[16, 24] fg=50 samp=None digest=eab11b54587f4877
+shape=[16, 24] fg=50 samp=Some([2.0, 3.0]) digest=3f6cf7e2da0522f7
+shape=[16, 24] fg=50 samp=Some([2.0]) digest=3d611b54587f4877
+shape=[16, 24] fg=70 samp=None digest=6c8f9cc9e82c6480
+shape=[16, 24] fg=70 samp=Some([2.0, 3.0]) digest=38a6c531e5a22456
+shape=[16, 24] fg=70 samp=Some([2.0]) digest=cc2f9cc9e82c6480
+shape=[16, 24] fg=90 samp=None digest=ddde26bd47247f36
+shape=[16, 24] fg=90 samp=Some([2.0, 3.0]) digest=782447fb2233eb02
+shape=[16, 24] fg=90 samp=Some([2.0]) digest=f82e26bd47247f36
+shape=[5, 7, 9] fg=30 samp=None digest=c1c4da6d7a923d36
+shape=[5, 7, 9] fg=30 samp=Some([2.0]) digest=c6f4da6d7a923d36
+shape=[5, 7, 9] fg=30 samp=Some([2.0, 1.0, 0.5]) digest=62e4da6d7a923d36
+shape=[5, 7, 9] fg=50 samp=None digest=8592c377407ac0d0
+shape=[5, 7, 9] fg=50 samp=Some([2.0]) digest=cf02c377407ac0d0
+shape=[5, 7, 9] fg=50 samp=Some([2.0, 1.0, 0.5]) digest=b470d6569f980e8d
+shape=[5, 7, 9] fg=70 samp=None digest=c74a9122976d1acf
+shape=[5, 7, 9] fg=70 samp=Some([2.0]) digest=deba9122976d1acf
+shape=[5, 7, 9] fg=70 samp=Some([2.0, 1.0, 0.5]) digest=b03bd8e1c57675d3
+shape=[5, 7, 9] fg=90 samp=None digest=d4503359f98a0b2a
+shape=[5, 7, 9] fg=90 samp=Some([2.0]) digest=06803359f98a0b2a
+shape=[5, 7, 9] fg=90 samp=Some([2.0, 1.0, 0.5]) digest=e04cf6a6bbc5dbe0
+shape=[1, 13] fg=30 samp=None digest=7c72fc3fffce1321
+shape=[1, 13] fg=30 samp=Some([2.0, 3.0]) digest=143afc3fffce1321
+shape=[1, 13] fg=30 samp=Some([2.0]) digest=d642fc3fffce1321
+shape=[1, 13] fg=50 samp=None digest=7e42fc3fffce1321
+shape=[1, 13] fg=50 samp=Some([2.0, 3.0]) digest=efd2fc3fffce1321
+shape=[1, 13] fg=50 samp=Some([2.0]) digest=d382fc3fffce1321
+shape=[1, 13] fg=70 samp=None digest=e09cfc3fffce1321
+shape=[1, 13] fg=70 samp=Some([2.0, 3.0]) digest=892afc3fffce1321
+shape=[1, 13] fg=70 samp=Some([2.0]) digest=69ccfc3fffce1321
+shape=[1, 13] fg=90 samp=None digest=df04fc3fffce1321
+shape=[1, 13] fg=90 samp=Some([2.0, 3.0]) digest=2e30fc3fffce1321
+shape=[1, 13] fg=90 samp=Some([2.0]) digest=7404fc3fffce1321
+shape=[13, 1] fg=30 samp=None digest=7352fc3fffce1321
+shape=[13, 1] fg=30 samp=Some([2.0, 3.0]) digest=7592fc3fffce1321
+shape=[13, 1] fg=30 samp=Some([2.0]) digest=7592fc3fffce1321
+shape=[13, 1] fg=50 samp=None digest=5d02fc3fffce1321
+shape=[13, 1] fg=50 samp=Some([2.0, 3.0]) digest=3592fc3fffce1321
+shape=[13, 1] fg=50 samp=Some([2.0]) digest=3592fc3fffce1321
+shape=[13, 1] fg=70 samp=None digest=793afc3fffce1321
+shape=[13, 1] fg=70 samp=Some([2.0, 3.0]) digest=d89afc3fffce1321
+shape=[13, 1] fg=70 samp=Some([2.0]) digest=d89afc3fffce1321
+shape=[13, 1] fg=90 samp=None digest=3ebafc3fffce1321
+shape=[13, 1] fg=90 samp=Some([2.0, 3.0]) digest=f5fafc3fffce1321
+shape=[13, 1] fg=90 samp=Some([2.0]) digest=f5fafc3fffce1321
+shape=[4, 4, 4] fg=30 samp=None digest=984236ee29d93e83
+shape=[4, 4, 4] fg=30 samp=Some([2.0]) digest=8f7236ee29d93e83
+shape=[4, 4, 4] fg=30 samp=Some([2.0, 1.0, 0.5]) digest=53d236ee29d93e83
+shape=[4, 4, 4] fg=50 samp=None digest=2774489356c8d7cc
+shape=[4, 4, 4] fg=50 samp=Some([2.0]) digest=d454489356c8d7cc
+shape=[4, 4, 4] fg=50 samp=Some([2.0, 1.0, 0.5]) digest=55ea22748c17d793
+shape=[4, 4, 4] fg=70 samp=None digest=feb6f2a6acffad97
+shape=[4, 4, 4] fg=70 samp=Some([2.0]) digest=a336f2a6acffad97
+shape=[4, 4, 4] fg=70 samp=Some([2.0, 1.0, 0.5]) digest=a4670fc010236b51
+shape=[4, 4, 4] fg=90 samp=None digest=af4428f4a291baab
+shape=[4, 4, 4] fg=90 samp=Some([2.0]) digest=b39428f4a291baab
+shape=[4, 4, 4] fg=90 samp=Some([2.0, 1.0, 0.5]) digest=12df350588ff0156
