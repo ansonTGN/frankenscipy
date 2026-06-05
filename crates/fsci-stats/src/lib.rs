@@ -35265,14 +35265,27 @@ pub fn ridge_regression(x: &[Vec<f64>], y: &[f64], alpha: f64) -> Vec<f64> {
     let mut xtx = vec![vec![0.0; p1]; p1];
     let mut xty = vec![0.0; p1];
 
+    // XtX is symmetric, so accumulate only the upper triangle (halving the
+    // O(n·p²) work) and mirror once afterwards; reuse one row buffer instead of
+    // allocating per sample. Byte-identical: the previous full loop computed the
+    // lower entry as xtx[k][j] += row[k]*row[j], and IEEE-754 multiplication is
+    // commutative (row[j]*row[k] == row[k]*row[j] bit-for-bit) accumulated over
+    // the same samples in the same order — so the mirrored value equals it
+    // exactly, and the reused buffer yields identical row[j].
+    let mut row = vec![1.0; p1]; // row[0] is the intercept, stays 1.0
     for i in 0..n {
-        let mut row = vec![1.0];
-        row.extend_from_slice(&x[i]);
+        row[1..].copy_from_slice(&x[i][..p]);
         for j in 0..p1 {
             xty[j] += row[j] * y[i];
-            for k in 0..p1 {
+            for k in j..p1 {
                 xtx[j][k] += row[j] * row[k];
             }
+        }
+    }
+    #[allow(clippy::needless_range_loop)]
+    for j in 0..p1 {
+        for k in (j + 1)..p1 {
+            xtx[k][j] = xtx[j][k];
         }
     }
 

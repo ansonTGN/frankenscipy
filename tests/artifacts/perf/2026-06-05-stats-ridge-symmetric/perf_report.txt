@@ -1,0 +1,35 @@
+perf: fsci-stats ridge_regression — full XtX build O(n·p²) -> symmetric upper-triangle O(n·p²/2)
+================================================================================================
+
+Target : crates/fsci-stats/src/lib.rs :: ridge_regression (the (XtX + alpha*I) / Xty build).
+Lever  : ridge built the WHOLE XtX with `for k in 0..p1` — computing both xtx[j][k] and xtx[k][j]
+         independently, i.e. every symmetric pair twice. XtX is symmetric, so accumulate only the
+         upper triangle (`for k in j..p1`, halving the O(n·p²) work) and mirror once afterwards;
+         also reuse one row buffer instead of allocating a Vec per sample. Same family as the
+         multiple_regression hoist, but here it is a genuine FLOP halving (the old code did the
+         full matrix), not just a mirror move.
+
+Isomorphism proof (byte-identical XtX/Xty -> byte-identical beta)
+----------------------------------------------------------------
+- The old lower entry was xtx[k][j] += row[k]*row[j] accumulated over samples i=0..n; the new code
+  produces xtx[k][j] by mirroring xtx[j][k] = Σ_i row[j]*row[k]. IEEE-754 multiplication is
+  COMMUTATIVE (row[j]*row[k] == row[k]*row[j] bit-for-bit), summed over the same samples in the
+  same order, so the mirrored value equals the old directly-computed lower entry exactly. The
+  upper triangle and Xty are unchanged; the reused buffer yields identical row[j]; the alpha*I
+  regularization step is untouched. So XtX, Xty, and hence beta are bit-for-bit identical.
+- Empirically: 0 mismatches / 2000 random problems (n in [2,81], p in [1,12], random alpha); the
+  full XtX and Xty compared via .to_bits() between a verbatim original build and the new build.
+- Golden payload sha256 (per-trial digest of the ridge coefficient vector):
+    9286ec8d0e03247142823dd4c2ca3c8f0c74cd647a3b368e15321e5de670e2ea  golden_payload.txt
+
+Timing (same-process A/B, release, mean of 3; XtX build, all-ones design)
+-------------------------------------------------------------------------
+  n=200000 p=24  old=103.631 ms  new= 37.630 ms  ratio= 2.8x
+  n=100000 p=48  old=171.322 ms  new= 68.406 ms  ratio= 2.5x
+  n= 50000 p=80  old=230.614 ms  new=105.519 ms  ratio= 2.2x
+
+Score: Impact 3 x Confidence 5 / Effort 1 = 15  (>> 2.0)
+
+clippy + fmt clean. (No ridge_regression-specific unit tests exist; the build byte-identity vs a
+verbatim original is the proof.) Sibling: multiple_regression mirror-hoist (894dad37).
+polyfit (fsci-interpolate) has the same in-loop-mirror antipattern and is the next site.
