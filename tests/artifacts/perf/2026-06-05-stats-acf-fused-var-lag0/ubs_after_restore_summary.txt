@@ -1,0 +1,21 @@
+UBS summary for frankenscipy-ejt7c restore
+
+Command:
+ubs crates/fsci-stats/src/lib.rs crates/fsci-stats/src/bin/perf_stats.rs
+
+Result:
+- Exit code: 0
+- Files scanned: 2
+- Critical issues: 0
+- Warning issues: 4139
+- Info items: 3400
+- Formatter check inside UBS: clean
+- Clippy check inside UBS: clean
+- cargo check inside UBS: clean
+- cargo test --no-run inside UBS: clean
+- cargo audit: no known advisories
+- cargo deny: clean
+
+Notes:
+- Warning and info counts are pre-existing file-wide inventories for the large fsci-stats module, including unwrap/expect, float equality, direct indexing, assertion, cast, and loop-allocation heuristics.
+- No critical issue was reported for the restored ACF source shape.

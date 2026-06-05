@@ -35088,27 +35088,19 @@ pub fn acf(data: &[f64], max_lag: usize) -> Vec<f64> {
     // re-subtracting mean inside every lag's inner sum. Drops
     // ~N·(max_lag+1) redundant subtractions (the autocorrelation pass
     // in fsci-signal got this fix already; mirroring the pattern here).
-    let mut centered = Vec::with_capacity(n);
-    let mut var = 0.0_f64;
-    for &value in data {
-        let centered_value = value - mean;
-        var += centered_value * centered_value;
-        centered.push(centered_value);
-    }
+    let centered: Vec<f64> = data.iter().map(|&v| v - mean).collect();
+    let var: f64 = centered.iter().map(|&v| v * v).sum();
 
     if var == 0.0 {
         return vec![1.0; max_lag + 1];
     }
 
-    let max_lag = max_lag.min(n - 1);
-    let mut result = Vec::with_capacity(max_lag + 1);
-    let lag0_numerator = var;
-    result.push(lag0_numerator / var);
-    for lag in 1..=max_lag {
-        let sum: f64 = (0..n - lag).map(|i| centered[i] * centered[i + lag]).sum();
-        result.push(sum / var);
-    }
-    result
+    (0..=max_lag.min(n - 1))
+        .map(|lag| {
+            let sum: f64 = (0..n - lag).map(|i| centered[i] * centered[i + lag]).sum();
+            sum / var
+        })
+        .collect()
 }
 
 /// Compute the partial autocorrelation function.

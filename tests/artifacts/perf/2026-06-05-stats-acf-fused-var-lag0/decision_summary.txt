@@ -1,0 +1,33 @@
+frankenscipy-ejt7c ACF/PACF fused variance lever closeout
+
+Decision: REJECTED fused centered-vector/variance plus lag0 var/var lever; restored the prior two-pass centered-vector plus lag0 dot-product shape.
+
+Profile-backed baseline from tests/artifacts/perf/2026-06-05-stats-reprofile-after-rand-index-proof/baseline_stats_rch.txt:
+- worker: ts2
+- time_series/acf/4096x64 median: 317.37 us
+- time_series/pacf/4096x64 median: 326.72 us
+
+Fused-source RCH rebench observed before restore:
+- ts2 time_series/acf/4096x64 median: 1.2206 ms
+- ts2 time_series/pacf/4096x64 median: 1.2337 ms
+- ts2 time_series/psd_welch/4096_w128_o64 median: 576.39 us
+- ts1 time_series/acf/4096x64 median: 767.07 us
+- ts1 time_series/pacf/4096x64 median: 778.43 us
+
+Restore confirmation:
+- golden SHA-256 before/after restore: e7a568969861a6bd9c0789f4c71295f66ea6402483e0346bb5ea615c6d8e54ac
+- cmp_exit: 0
+- ts1 restored confirmation: acf 208.36 us, pacf 214.91 us
+- ts1 restored repeat: acf 209.02 us, pacf 217.27 us
+- captured current restore benchmark on vmi1149989: acf 133.58 us, pacf 212.07 us, psd_welch 394.52 us
+
+Validation:
+- RCH cargo check -p fsci-stats --all-targets --locked: pass
+- RCH cargo test -p fsci-stats --lib acf --locked -- --nocapture: pass, 2 focused tests
+- RCH cargo clippy -p fsci-stats --lib --bin perf_stats --bench stats_bench --no-deps --locked -- -D warnings: pass
+- cargo fmt -p fsci-stats --check: pass
+- ubs crates/fsci-stats/src/lib.rs crates/fsci-stats/src/bin/perf_stats.rs: exit 0; no critical findings, pre-existing file-wide warnings inventoried
+
+Score:
+- fused lever: 0.0, below Score>=2.0 keep gate
+- restore action: kept to remove a measured regression and reestablish the previous behavior/perf surface
