@@ -1,6 +1,7 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use fsci_ndimage::{
-    BoundaryMode, NdArray, binary_dilation, binary_erosion, maximum_filter, minimum_filter,
+    BoundaryMode, NdArray, binary_dilation, binary_erosion, maximum_filter, median_filter,
+    minimum_filter, rank_filter,
 };
 use std::hint::black_box;
 
@@ -54,5 +55,36 @@ fn bench_binary_morph(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_minmax_filter, bench_binary_morph);
+fn bench_rank_filter(c: &mut Criterion) {
+    let img = image(160);
+    let mut group = c.benchmark_group("rank_filter");
+    for &size in &[7usize, 15] {
+        group.bench_function(BenchmarkId::new("median_160x160", size), |b| {
+            b.iter(|| {
+                median_filter(black_box(&img), size, BoundaryMode::Reflect, 0.0).expect("med")
+            })
+        });
+        let kt = size * size;
+        group.bench_function(BenchmarkId::new("rank_q25_160x160", size), |b| {
+            b.iter(|| {
+                rank_filter(
+                    black_box(&img),
+                    (kt / 4) as isize,
+                    size,
+                    BoundaryMode::Reflect,
+                    0.0,
+                )
+                .expect("rank")
+            })
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_minmax_filter,
+    bench_binary_morph,
+    bench_rank_filter
+);
 criterion_main!(benches);
