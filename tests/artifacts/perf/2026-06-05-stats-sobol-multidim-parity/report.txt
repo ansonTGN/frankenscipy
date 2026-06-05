@@ -1,0 +1,36 @@
+parity: fsci-stats SobolSampler — lift dimension cap 2 -> 32 (match scipy multi-dim)
+====================================================================================
+
+Bead   : frankenscipy-rpxeh.
+Target : crates/fsci-stats/src/qmc.rs :: SobolSampler.
+Gap    : scipy.stats.qmc.Sobol supports thousands of dimensions; ours rejected dimension > 2
+         ("Sobol supports dimensions 1..=2"). Worse, `sobol_direction(dim>=1, bit)` IGNORED the
+         dimension, so every dimension >= 1 shared the dimension-1 direction numbers — dims 3+
+         would have been DEGENERATE (identical coordinate sequences), which is why the cap existed.
+
+Fix    : embed scipy's Joe-Kuo direction numbers (`scipy.stats.qmc.Sobol._sv`, shape (d,30), 30-bit,
+         MSB at 2^29) for dimensions 2..=31 as a const table, mapped onto our 64-bit convention
+         (MSB at 2^63) by `_sv[dim][bit] << 34`. Dimensions 0,1 keep their existing locally-generated
+         tables (verified `sobol_direction_const(dim,bit) == _sv[dim][bit] << 34` for bits 0..29, so
+         they are already scipy-identical and additionally extend cleanly past 2^30). A new
+         `direction_table(dim)` routes 0,1 -> local tables, 2..=31 -> the scipy table; `sobol_bits`
+         and the incremental Gray-code recurrence in `sample()` both use it. Cap lifted 2 -> 32.
+         Bits 30..63 of the new dimensions are zero, capping them at 2^30 samples — scipy's own limit.
+
+Byte-identity proof (vs scipy, unscrambled)
+-------------------------------------------
+- `SobolSampler::new(d)` uses a zero digital shift, i.e. the unscrambled sequence, matching
+  `scipy.stats.qmc.Sobol(d, scramble=False)`.
+- Dumped `SobolSampler::new(d).sample(64)` f64 bits for d = 1..=32 (bin: sobol_dump) and compared
+  bit-for-bit (`f64::to_bits`) against scipy:
+      compared d=1..32 x N=64: 33792 values, 0 mismatches  ->  BYTE-IDENTICAL across all 32 dims.
+- Golden sha256 of the dumped bits (one line per dimension, point-major/dim-minor hex):
+      717fc7ad0e5dfb131ce7f04bea80eb334a5ab79ccfc6baf4f1dca3fb170a7017  golden_sobol_bits.txt
+- Existing dims 1,2 behaviour is UNCHANGED (additive: their tables are untouched); the d=2 path
+  (sample_2d) is byte-identical as before.
+- In-tree test `sobol_multidim_matches_scipy_unscrambled_reference` locks d=3 and d=5 prefixes to
+  scipy values (exact dyadics, to_bits equality). `sobol_construct_rejects_unsupported_dimensions`
+  updated: 1..=32 accepted, 33 rejected. Full qmc suite: 58 passed.
+
+Tests: cargo test -p fsci-stats --lib qmc => 58 passed. fmt + clippy clean.
+Reproduce: cargo run --release -p fsci-stats --bin sobol_dump  (then diff vs scipy Sobol bits).
