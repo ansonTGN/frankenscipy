@@ -779,14 +779,17 @@ pub fn solve_banded(
     hardened_dimension_check(options.mode, cols, cols)?;
     validate_finite_matrix_and_vector(ab, b, options.mode, options.check_finite)?;
 
-    let dense = dense_from_banded(nlower, nupper, ab, cols);
-    // Fast path: banded Gaussian elimination with partial pivoting that only
-    // touches the band + fill region (O(n·kl·(kl+ku)) vs O(n^3) dense LU). For a
-    // zero/NaN pivot (structurally singular within the band) we fall back to the
-    // robust dense solver below so singular-case behavior is preserved exactly.
-    let mut work = dense.clone();
-    if let Some(x) = banded_gepp_solve(&mut work, b, nlower, nupper) {
-        let backward_error = compute_backward_error_dense(&dense, &x, b);
+    // Fast path: banded Gaussian elimination with partial pivoting on LAPACK-style
+    // packed band storage — O(n·kl·(kl+ku)) time and O(n·(kl+ku)) memory, never
+    // materializing the dense matrix. On a zero/NaN pivot (structurally singular
+    // within the band) we fall back to the robust dense solver below so
+    // singular-case behavior is preserved exactly. The packed factorization runs
+    // the identical floating-point operations as a dense banded GEPP (out-of-band
+    // entries are structural zeros), so the solution is bit-identical to the dense
+    // path; the backward error is likewise summed only over band nonzeros, whose
+    // omitted dense terms are `+0.0` no-ops, so it too matches bit-for-bit.
+    if let Some(x) = banded_lu_solve_packed(ab, nlower, nupper, b) {
+        let backward_error = compute_backward_error_banded(ab, nlower, nupper, &x, b);
         return Ok(SolveResult {
             x,
             warning: None,
@@ -794,6 +797,7 @@ pub fn solve_banded(
             certificate: None,
         });
     }
+    let dense = dense_from_banded(nlower, nupper, ab, cols);
     solve(
         &dense,
         b,
@@ -5508,6 +5512,169 @@ fn compute_backward_error_dense(a: &[Vec<f64>], x: &[f64], b: &[f64]) -> f64 {
 /// `work` is consumed as scratch (overwritten with the LU factors). Returns
 /// `None` when a zero or non-finite pivot is encountered so the caller can fall
 /// back to the robust dense solver and preserve singular-case behavior.
+/// Solve `A x = b` for a banded `A` directly on LAPACK-style packed band storage,
+/// without ever materializing the dense matrix.
+///
+/// `ab` is the scipy `solve_banded` layout (`(kl+ku+1) × n`, `ab[ku+i-j][j] =
+/// A[i][j]`). The factor band is held in an expanded `(2·kl+ku+1) × n` packed
+/// buffer `w`, indexed by `w[kl+ku + i - j][j] = A(i,j)`; the top `kl` rows are
+/// fill workspace exposed by partial pivoting (which grows U's upper bandwidth to
+/// at most `kl+ku`). Pivot search, the row interchange, elimination, and back
+/// substitution are all bounded to the band, giving `O(n·kl·(kl+ku))` time and
+/// `O(n·(kl+ku))` memory.
+///
+/// This performs the same Gaussian elimination as a dense banded GEPP — the
+/// operations it skips act on structurally-zero entries (`x - m·0`) — so the
+/// returned `x` is bit-identical to the dense banded path. L multipliers are
+/// folded into the RHS in place during factorization (and the RHS interchange is
+/// applied inline), so the column positions of the discarded sub-diagonal entries
+/// never affect the result. Returns `None` on a zero/non-finite pivot so the
+/// caller can fall back to the robust dense solver.
+#[allow(clippy::needless_range_loop)] // explicit band indices drive pivot search / interchange
+fn banded_lu_solve_packed(ab: &[Vec<f64>], kl: usize, ku: usize, b: &[f64]) -> Option<Vec<f64>> {
+    let n = b.len();
+    if n == 0 {
+        return Some(Vec::new());
+    }
+    let kuf = kl + ku; // fill-extended upper bandwidth of U
+    let diag = kuf; // band-row of the main diagonal: w[kuf + i - j][j]
+    let wrows = 2 * kl + ku + 1;
+    // Place A into the expanded packed buffer; top `kl` rows stay zero for fill.
+    let mut w = vec![vec![0.0_f64; n]; wrows];
+    for i in 0..n {
+        let j_start = i.saturating_sub(kl);
+        let j_end = (i + ku).min(n - 1);
+        for j in j_start..=j_end {
+            w[diag + i - j][j] = ab[ku + i - j][j];
+        }
+    }
+    let mut rhs = b.to_vec();
+    let mut urow = vec![0.0_f64; kuf + 1]; // reusable snapshot of pivot row k
+
+    for k in 0..n {
+        let row_end = (k + kl).min(n - 1);
+        let col_end = (k + kuf).min(n - 1);
+
+        // Partial pivot: largest magnitude in column k among rows k..=row_end.
+        let mut piv = k;
+        let mut maxv = w[diag][k].abs();
+        for i in (k + 1)..=row_end {
+            let v = w[diag + i - k][k].abs();
+            if v > maxv {
+                maxv = v;
+                piv = i;
+            }
+        }
+        if maxv == 0.0 || maxv.is_nan() {
+            return None; // zero/NaN pivot column -> defer to dense solver
+        }
+
+        // Row interchange across the band columns k..=col_end (same column, the two
+        // rows live in different band-rows of the packed buffer).
+        if piv != k {
+            for j in k..=col_end {
+                let a = diag + k - j;
+                let c = diag + piv - j;
+                let (lo, hi) = if a < c { (a, c) } else { (c, a) };
+                let (left, right) = w.split_at_mut(hi);
+                std::mem::swap(&mut left[lo][j], &mut right[0][j]);
+            }
+            rhs.swap(k, piv);
+        }
+
+        let pivot = w[diag][k];
+        // Snapshot pivot row k over columns k..=col_end (urow[t] = A(k, k+t)).
+        for (t, j) in (k..=col_end).enumerate() {
+            urow[t] = w[diag + k - j][j];
+        }
+
+        for i in (k + 1)..=row_end {
+            let factor = w[diag + i - k][k] / pivot;
+            if factor != 0.0 {
+                for j in (k + 1)..=col_end {
+                    w[diag + i - j][j] -= factor * urow[j - k];
+                }
+            }
+            rhs[i] -= factor * rhs[k];
+        }
+    }
+
+    // Back substitution against the fill-extended upper-triangular factor.
+    let mut x = vec![0.0_f64; n];
+    for i in (0..n).rev() {
+        let col_end = (i + kuf).min(n - 1);
+        let mut sum = rhs[i];
+        for j in (i + 1)..=col_end {
+            sum -= w[diag + i - j][j] * x[j];
+        }
+        let d = w[diag][i];
+        if d == 0.0 {
+            return None;
+        }
+        x[i] = sum / d;
+    }
+    Some(x)
+}
+
+/// Backward error `||Ax - b|| / (||A||_F · ||x|| + ||b||)` for a banded `A` in
+/// packed storage, summed only over band nonzeros. The dense terms this omits are
+/// `A(i,j)·x_j = 0·x_j = 0` and `+0.0` is a no-op for finite `x`, so the result is
+/// bit-identical to [`compute_backward_error_dense`] on the equivalent dense matrix.
+#[allow(clippy::needless_range_loop)] // band indices map (i,j) -> packed row ku+i-j
+fn compute_backward_error_banded(
+    ab: &[Vec<f64>],
+    kl: usize,
+    ku: usize,
+    x: &[f64],
+    b: &[f64],
+) -> f64 {
+    let n = b.len();
+    if n == 0 {
+        return 0.0;
+    }
+    let mut residual_sum_sq = 0.0;
+    let mut a_sum_sq = 0.0;
+    for i in 0..n {
+        let j_start = i.saturating_sub(kl);
+        let j_end = (i + ku).min(n - 1);
+        let mut ax_i = 0.0;
+        for j in j_start..=j_end {
+            let val = ab[ku + i - j][j];
+            ax_i += val * x[j];
+            a_sum_sq += val * val;
+        }
+        let res_i = ax_i - b[i];
+        residual_sum_sq += res_i * res_i;
+    }
+    let residual_norm = residual_sum_sq.sqrt();
+    let a_norm = a_sum_sq.sqrt();
+
+    let mut x_sum_sq = 0.0;
+    for &val in x {
+        x_sum_sq += val * val;
+    }
+    let x_norm = x_sum_sq.sqrt();
+
+    let mut b_sum_sq = 0.0;
+    for &val in b {
+        b_sum_sq += val * val;
+    }
+    let b_norm = b_sum_sq.sqrt();
+
+    let denom = a_norm * x_norm + b_norm;
+    if !residual_norm.is_finite() || !denom.is_finite() {
+        return f64::INFINITY;
+    }
+    if denom > 0.0 {
+        residual_norm / denom
+    } else {
+        0.0
+    }
+}
+
+// Dense-buffer banded GEPP: superseded by `banded_lu_solve_packed` (same arithmetic,
+// O(n·bw) memory instead of O(n^2)); retained as a reference implementation.
+#[allow(dead_code)]
 #[allow(clippy::needless_range_loop)] // explicit band indices drive pivot search and split_at_mut
 fn banded_gepp_solve(work: &mut [Vec<f64>], b: &[f64], kl: usize, ku: usize) -> Option<Vec<f64>> {
     let n = work.len();
