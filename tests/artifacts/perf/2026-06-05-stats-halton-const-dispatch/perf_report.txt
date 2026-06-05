@@ -1,0 +1,37 @@
+perf: fsci-stats HaltonSampler::sample — runtime-prime radical inverse -> const-generic dispatch
+=================================================================================================
+
+Target : crates/fsci-stats/src/qmc.rs :: HaltonSampler::sample (the general path).
+Lever  : The radical inverse computes, per digit, `index % prime` and `index / prime`. With a
+         RUNTIME `prime` (u64) LLVM must emit full `div` instructions (~20-40 cycles each). The
+         sample_4d special case ([2,3,5,7]) already used `radical_inverse_const::<P>`, where the
+         compile-time prime lets LLVM strength-reduce division to a multiply-by-magic (~5 cycles).
+         New `radical_inverse_fast` dispatches each of the 32 bundled HALTON_PRIMES to its
+         const-generic specialisation; the wildcard keeps the runtime path as a safety net.
+         Different lever from the recent ones — compile-time division strength-reduction via a
+         match on the (small, fixed) prime set.
+
+Isomorphism proof (byte-identical points)
+-----------------------------------------
+- `radical_inverse_const::<P>(index)` is the EXACT same float computation as
+  `radical_inverse(index, P)` — identical loop, identical operations and order; only the divisor's
+  compile-time-ness differs (which changes the emitted integer division, not the f64 digits/result).
+  So dispatching produces bit-for-bit identical points.
+- Empirically: 0 mismatches / 90 sample blocks across d in {1,2,3,4,5,8,12,20,32} (covering the
+  general path AND the d=4 sample_4d special case) x several start/continuation sequences (incl. a
+  5000-point block), comparing the library output to a verbatim copy of the original runtime-prime
+  path via .to_bits().
+- Golden payload sha256 (per-config digest of the emitted points):
+    347b6d5be63ddee72098ec33cf358b10c231d92cb26ff6101f8a254006497a29  golden_payload.txt
+
+Timing (same-process A/B, release, mean of 3; general path)
+-----------------------------------------------------------
+  d= 8 n=200000  old=44.665 ms  new=19.143 ms  ratio= 2.3x
+  d=16 n=120000  old=38.065 ms  new=18.108 ms  ratio= 2.1x
+  d=32 n= 60000  old=22.655 ms  new=15.682 ms  ratio= 1.4x  (high dims add large primes with few
+                                                              digits each, so the div win shrinks;
+                                                              still strictly faster, no regression)
+
+Score: Impact 3 x Confidence 5 / Effort 1 = 15  (>> 2.0 for low/moderate dimensions, the common case)
+
+Tests: cargo test -p fsci-stats --lib halton => 16 passed. clippy + fmt clean.
