@@ -1,0 +1,9 @@
+# perf_correlate2d same-process A/B (full mode), correlate2d shipped (FFT path) vs verbatim direct
+img=  64 ker=  8: direct=     0.217ms  fft=    0.282ms  speedup=  0.77x  max_abs=0e0          (direct path)
+img= 128 ker= 16: direct=     2.711ms  fft=    2.314ms  speedup=  1.17x  max_abs=0e0          (direct path)
+img= 256 ker= 16: direct=     9.310ms  fft=    8.628ms  speedup=  1.08x  max_abs=0e0          (direct path)
+img= 512 ker= 32: direct=    83.852ms  fft=   83.427ms  speedup=  1.01x  max_abs=0e0          (direct path)
+img= 256 ker= 64: direct=    72.615ms  fft=   27.769ms  speedup=  2.61x  max_rel=7.2e-11      (FFT path)
+img= 256 ker=128: direct=   286.520ms  fft=   30.882ms  speedup=  9.28x  max_rel=4.9e-10      (FFT path)
+img= 384 ker= 96: direct=   334.840ms  fft=   31.065ms  speedup= 10.78x  max_rel=1.9e-10      (FFT path)
+img= 200 ker=200: direct=   485.418ms  fft=   28.648ms  speedup= 16.94x  max_rel=1.5e-10      (FFT path)
