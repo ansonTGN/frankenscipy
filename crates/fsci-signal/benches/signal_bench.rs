@@ -1,7 +1,7 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use fsci_signal::{
     ConvolveMode, FirWindow, SosSection, cwt, fftconvolve, filtfilt, firls, firwin, lfilter,
-    medfilt, remez, ricker, sosfilt, welch,
+    medfilt, order_filter, remez, ricker, sosfilt, welch,
 };
 use std::hint::black_box;
 
@@ -154,6 +154,17 @@ fn bench_medfilt(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_order_filter(c: &mut Criterion) {
+    let signal = deterministic_signal(8192);
+    let mut group = c.benchmark_group("order_filter");
+    for &ws in &[65usize, 257] {
+        group.bench_function(format!("8192_w{ws}_q25"), |b| {
+            b.iter(|| order_filter(black_box(&signal), ws, ws / 4))
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_convolution,
@@ -161,6 +172,7 @@ criterion_group!(
     bench_spectral,
     bench_wavelets,
     bench_design,
-    bench_medfilt
+    bench_medfilt,
+    bench_order_filter
 );
 criterion_main!(benches);

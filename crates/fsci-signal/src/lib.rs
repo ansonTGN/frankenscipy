@@ -2210,6 +2210,12 @@ pub fn order_filter(x: &[f64], window_size: usize, rank: usize) -> Vec<f64> {
     if x.is_empty() || window_size == 0 {
         return vec![];
     }
+    // For large windows the per-window sort (O(n*k*log k)) is replaced by a
+    // sliding ordered-multiset rank query (O(n*log k)); both return the same
+    // rank element of each window, so the output is bit-identical.
+    if window_size >= ORDER_FILTER_SLIDING_THRESHOLD {
+        return order_filter_sliding(x, window_size, rank);
+    }
     let half = window_size / 2;
     let mut result = Vec::with_capacity(x.len());
 
@@ -7818,20 +7824,25 @@ impl Ord for OrderedF64 {
 /// `upper` the rest, with `max(lower) <= min(upper)` maintained. Insert/remove
 /// are O(log k). The median equals the rank-`k/2` element (odd `k`), identical to
 /// `select_nth_unstable_by(k/2)`.
-struct SlidingMedian {
+struct SlidingRankWindow {
     lower: std::collections::BTreeMap<OrderedF64, usize>,
     upper: std::collections::BTreeMap<OrderedF64, usize>,
     lower_size: usize,
     upper_size: usize,
+    /// Desired 0-indexed rank; `lower` is kept at `min(rank + 1, total)` elements
+    /// so `lower.max()` is the element at sorted index `min(rank, total - 1)` —
+    /// exactly what a per-window `sort` + index would return.
+    rank: usize,
 }
 
-impl SlidingMedian {
-    fn new() -> Self {
+impl SlidingRankWindow {
+    fn new(rank: usize) -> Self {
         Self {
             lower: std::collections::BTreeMap::new(),
             upper: std::collections::BTreeMap::new(),
             lower_size: 0,
             upper_size: 0,
+            rank,
         }
     }
 
@@ -7883,7 +7894,8 @@ impl SlidingMedian {
     }
 
     fn rebalance(&mut self) {
-        let target = (self.lower_size + self.upper_size).div_ceil(2);
+        let total = self.lower_size + self.upper_size;
+        let target = (self.rank + 1).min(total);
         while self.lower_size > target {
             let m = self.lower_max();
             Self::bag_remove(&mut self.lower, m);
@@ -7900,7 +7912,7 @@ impl SlidingMedian {
         }
     }
 
-    fn median(&self) -> f64 {
+    fn value(&self) -> f64 {
         self.lower_max().0
     }
 }
@@ -7916,16 +7928,46 @@ fn medfilt_sliding(data: &[f64], kernel_size: usize) -> Vec<f64> {
         }
     };
 
-    let mut window = SlidingMedian::new();
+    let mut window = SlidingRankWindow::new(kernel_size / 2);
     for p in -half..=half {
         window.insert(at(p));
     }
     let mut result = Vec::with_capacity(n);
-    result.push(window.median());
+    result.push(window.value());
     for i in 1..n as i64 {
         window.remove(at(i - 1 - half));
         window.insert(at(i + half));
-        result.push(window.median());
+        result.push(window.value());
+    }
+    result
+}
+
+const ORDER_FILTER_SLIDING_THRESHOLD: usize = 32;
+
+/// Sliding `order_filter` for large windows. The 1-D window is clipped (not
+/// zero-padded) at the borders, so it grows from the left edge, stays full, then
+/// shrinks at the right edge; the multiset tracks exactly those contents as the
+/// monotone `[start, end)` bounds advance. `value()` returns the rank element of
+/// the current window — bit-identical to sorting the window and indexing.
+fn order_filter_sliding(x: &[f64], window_size: usize, rank: usize) -> Vec<f64> {
+    let n = x.len();
+    let half = window_size / 2;
+    let mut window = SlidingRankWindow::new(rank);
+    let mut cur_start = 0usize;
+    let mut cur_end = 0usize;
+    let mut result = Vec::with_capacity(n);
+    for i in 0..n {
+        let start = i.saturating_sub(half);
+        let end = (i + half + 1).min(n);
+        while cur_start < start {
+            window.remove(x[cur_start]);
+            cur_start += 1;
+        }
+        while cur_end < end {
+            window.insert(x[cur_end]);
+            cur_end += 1;
+        }
+        result.push(window.value());
     }
     result
 }
@@ -14220,6 +14262,64 @@ mod tests {
     }
 
     // ── Medfilt tests ──────────────────────────────────────────────
+
+    #[test]
+    fn order_filter_sliding_matches_naive_sort() {
+        // Isomorphism proof for the sliding order_filter: bit-identical to the
+        // per-window sort+index over window sizes (incl. the threshold), ranks
+        // (low/mid/high and out-of-range, which clamp), lengths, tie densities,
+        // and the clipped (variable-size) boundary windows.
+        fn naive(x: &[f64], window_size: usize, rank: usize) -> Vec<f64> {
+            let half = window_size / 2;
+            let mut out = Vec::with_capacity(x.len());
+            let mut w: Vec<f64> = Vec::new();
+            for i in 0..x.len() {
+                let start = i.saturating_sub(half);
+                let end = (i + half + 1).min(x.len());
+                w.clear();
+                w.extend_from_slice(&x[start..end]);
+                w.sort_by(|a, b| a.total_cmp(b));
+                out.push(w[rank.min(w.len() - 1)]);
+            }
+            out
+        }
+        let mut state: u64 = 0x2468_ace0_1357_9bdf;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            state
+        };
+        for &n in &[1usize, 20, 200, 777] {
+            for &tie_mod in &[0u64, 2, 5, 40] {
+                let data: Vec<f64> = (0..n)
+                    .map(|_| {
+                        let r = next();
+                        match r % 37 {
+                            0 => -0.0,
+                            1 => 0.0,
+                            _ if tie_mod == 0 => (r >> 20) as f64 / (1u64 << 30) as f64,
+                            _ => (r % tie_mod) as f64,
+                        }
+                    })
+                    .collect();
+                for &ws in &[31usize, 32, 65, 200] {
+                    for &rank in &[0usize, ws / 3, ws / 2, ws - 1, ws + 5] {
+                        let fast = order_filter_sliding(&data, ws, rank);
+                        let slow = naive(&data, ws, rank);
+                        assert_eq!(fast.len(), slow.len());
+                        for (a, b) in fast.iter().zip(slow.iter()) {
+                            assert_eq!(
+                                a.to_bits(),
+                                b.to_bits(),
+                                "n={n} ws={ws} rank={rank} tie_mod={tie_mod}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn medfilt_sliding_matches_naive_loop() {
