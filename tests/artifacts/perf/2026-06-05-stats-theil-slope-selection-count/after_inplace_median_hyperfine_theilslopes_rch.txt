@@ -1,0 +1,8 @@
+  [2m2026-06-05T16:01:28.570216Z[0m [33m WARN[0m [1;33mrch::hook[0m[33m: [33mexec called with non-compilation command: bash -lc 'command -v hyperfine && hyperfine --warmup 1 --runs 3 "cargo run --release -p fsci-stats --bin perf_theilslopes --locked"'[0m
+    [2;3mat[0m rch/src/hook.rs:402 [2;3mon[0m ThreadId(1)
+
+/usr/bin/hyperfine
+Benchmark 1: cargo run --release -p fsci-stats --bin perf_theilslopes --locked
+  Time (mean ± σ):      1.306 s ±  0.107 s    [User: 0.964 s, System: 0.317 s]
+  Range (min … max):    1.223 s …  1.427 s    3 runs
+ 
