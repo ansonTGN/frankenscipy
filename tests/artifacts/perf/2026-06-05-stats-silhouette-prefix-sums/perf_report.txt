@@ -1,0 +1,46 @@
+perf: fsci-stats silhouette_score_1d — O(n^2) all-pairs loop -> per-cluster sorted prefix sums
+==============================================================================================
+
+Target : crates/fsci-stats/src/lib.rs :: silhouette_score_1d.
+Lever  : The silhouette of a point needs (a) the mean distance to other members of its own
+         cluster and (b) the min over other clusters of the mean distance to that cluster. The
+         original computed these by an O(n^2) all-pairs double loop, additionally churning a
+         HashMap<i64, Vec<f64>> plus a Vec PER POINT.
+         For 1D data the mean distance from a point x to a cluster is a PREFIX-SUM identity: with
+         the cluster's values sorted and `left` of them <= x,
+            sum_y |x - y| = x*left - prefix[left] + (prefix[m] - prefix[left]) - x*(m - left).
+         So after a one-time O(n log n) sort + prefix-sum build, each a(i) and each candidate
+         b(i) cluster-mean is an O(log m) partition_point + two array reads. Total work drops to
+         O(n log n + n * num_clusters * log m) — a complexity-class change, dominant when the
+         cluster count is small relative to n (the common case). This is a fundamentally
+         different primitive than the all-pairs loop, not a micro-tune of it.
+
+Parity (tolerance, NOT bit-identical — and that is expected/correct here)
+-------------------------------------------------------------------------
+- The metric value is mathematically unchanged; only the ORDER of the distance summation
+  changes (sorted prefix sums vs original array order), so results differ by at most f64 sum
+  reassociation. Ties (y == x) contribute 0 on either side of the partition point, so the
+  split is exact.
+- Empirically: 132 cases across n in {2,3,7,16,64,257,1000} x k in {2,3,5,9} x 6 seeds,
+  comparing the library to a VERBATIM copy of the original O(n^2) code:
+      max_abs_diff = 6.661e-16   (~1 ULP)
+      max_rel_diff = 6.893e-16
+  This is ~14 orders of magnitude inside the existing unit tests' tolerance (1e-10), and the
+  function is a float clustering metric (sklearn itself is not bit-reproducible across BLAS),
+  so tolerance-parity is the right correctness bar. Outer sum over i is kept in i-order to
+  minimise divergence.
+- Golden payload sha256 (per-config silhouette values):
+    e2b1b101fcc31418161ae601832fdd28ad4045ac4c4d7386c8c0cb3293cb8681  golden_payload.txt
+
+Timing (same-process A/B, release, mean of 3)
+---------------------------------------------
+  n= 4000 k= 8   old=237.170 ms  new=924.005 us  ratio= 256.7x
+  n= 8000 k=12   old=941.307 ms  new=  2.009 ms  ratio= 468.5x
+  n=16000 k=20   old=  3.699 s   new=  6.478 ms  ratio= 571.1x
+  (ratio grows with n, as expected for an O(n^2) -> O(n log n)-class change.)
+
+Score: Impact 5 x Confidence 5 / Effort 2 = 12.5  (>> 2.0)
+
+Tests: cargo test -p fsci-stats --lib silhouette => 3 passed. fmt clean, clippy clean.
+
+Reproduce: cargo run --release -p fsci-stats --bin perf_silhouette

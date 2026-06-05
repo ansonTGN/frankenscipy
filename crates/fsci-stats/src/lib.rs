@@ -32701,6 +32701,8 @@ pub fn adjusted_rand_index(labels_true: &[f64], labels_pred: &[f64]) -> f64 {
 
 /// Rand Index for comparing cluster assignments.
 const RAND_INDEX_CONTINGENCY_THRESHOLD: usize = 64;
+const RAND_INDEX_DENSE_MAX_CELLS: usize = 16_384;
+const RAND_INDEX_DENSE_MAX_CELLS_PER_SAMPLE: usize = 8;
 
 pub fn rand_index(labels_true: &[f64], labels_pred: &[f64]) -> f64 {
     if labels_true.len() != labels_pred.len() || labels_true.is_empty() {
@@ -32719,6 +32721,9 @@ pub fn rand_index(labels_true: &[f64], labels_pred: &[f64]) -> f64 {
     //   b = total - C(same-true) - C(same-pred) + a   (inclusion-exclusion).
     // The integer counts — hence the Rand index — are identical to the pair loop.
     if n >= RAND_INDEX_CONTINGENCY_THRESHOLD {
+        if let Some(index) = rand_index_dense_compact(labels_true, labels_pred, total_pairs) {
+            return index;
+        }
         use std::collections::HashMap;
         let mut table: HashMap<(i64, i64), usize> = HashMap::new();
         let mut row: HashMap<i64, usize> = HashMap::new();
@@ -32756,6 +32761,59 @@ pub fn rand_index(labels_true: &[f64], labels_pred: &[f64]) -> f64 {
     (a + b) as f64 / total_pairs as f64
 }
 
+fn rand_index_dense_compact(
+    labels_true: &[f64],
+    labels_pred: &[f64],
+    total_pairs: usize,
+) -> Option<f64> {
+    let n = labels_true.len();
+    let mut rounded_true = Vec::with_capacity(n);
+    let mut rounded_pred = Vec::with_capacity(n);
+    let mut max_true = 0usize;
+    let mut max_pred = 0usize;
+
+    for i in 0..n {
+        let tr = labels_true[i].round();
+        let pr = labels_pred[i].round();
+        if !tr.is_finite() || !pr.is_finite() {
+            return None;
+        }
+        let t = tr as i64;
+        let p = pr as i64;
+        let t = usize::try_from(t).ok()?;
+        let p = usize::try_from(p).ok()?;
+        max_true = max_true.max(t);
+        max_pred = max_pred.max(p);
+        rounded_true.push(t);
+        rounded_pred.push(p);
+    }
+
+    let rows = max_true.checked_add(1)?;
+    let cols = max_pred.checked_add(1)?;
+    let cells = rows.checked_mul(cols)?;
+    if cells > RAND_INDEX_DENSE_MAX_CELLS
+        || cells > n.saturating_mul(RAND_INDEX_DENSE_MAX_CELLS_PER_SAMPLE)
+    {
+        return None;
+    }
+
+    let mut table = vec![0usize; cells];
+    let mut row = vec![0usize; rows];
+    let mut col = vec![0usize; cols];
+    for (&t, &p) in rounded_true.iter().zip(&rounded_pred) {
+        table[t * cols + p] += 1;
+        row[t] += 1;
+        col[p] += 1;
+    }
+
+    let choose2 = |m: usize| if m >= 2 { m * (m - 1) / 2 } else { 0 };
+    let a: usize = table.into_iter().map(choose2).sum();
+    let same_true: usize = row.into_iter().map(choose2).sum();
+    let same_pred: usize = col.into_iter().map(choose2).sum();
+    let b = total_pairs + a - same_true - same_pred;
+    Some((a + b) as f64 / total_pairs as f64)
+}
+
 /// Silhouette coefficient for a single 1D sample.
 /// data: array of feature values, labels: cluster assignments (encoded as f64).
 /// Returns the mean silhouette coefficient across all samples.
@@ -32765,55 +32823,84 @@ pub fn silhouette_score_1d(data: &[f64], labels: &[f64]) -> f64 {
     }
     let n = data.len();
 
-    let unique_labels: std::collections::HashSet<i64> =
-        labels.iter().map(|&l| l.round() as i64).collect();
-    if unique_labels.len() < 2 {
+    // For 1D data the mean distance from a point x to every member of a cluster
+    // is a prefix-sum identity: with the cluster's values sorted and `left` of
+    // them <= x, sum_{y}|x - y| = x*left - prefix[left] + (prefix[m] - prefix[left])
+    //                              - x*(m - left).
+    // So a(i) and each candidate b(i) cluster-mean are O(log m) lookups after a
+    // one-time O(n log n) sort, replacing the original O(n^2) all-pairs loop (which
+    // also churned a HashMap + Vec per point). Ties (y == x) contribute 0 on either
+    // side, so the partition point is exact. Outer sum order over i is preserved.
+    let mut cluster_of: std::collections::HashMap<i64, usize> = std::collections::HashMap::new();
+    let mut point_cluster: Vec<usize> = Vec::with_capacity(n);
+    let mut cluster_values: Vec<Vec<f64>> = Vec::new();
+    for &l in labels {
+        let li = l.round() as i64;
+        let next = cluster_values.len();
+        let c = *cluster_of.entry(li).or_insert(next);
+        if c == next {
+            cluster_values.push(Vec::new());
+        }
+        point_cluster.push(c);
+    }
+    let num_clusters = cluster_values.len();
+    if num_clusters < 2 {
         return 0.0;
     }
-
-    let mut silhouettes = Vec::with_capacity(n);
-
     for i in 0..n {
-        let li = labels[i].round() as i64;
+        cluster_values[point_cluster[i]].push(data[i]);
+    }
 
-        let mut same_cluster_dists = vec![];
-        let mut other_cluster_dists: std::collections::HashMap<i64, Vec<f64>> =
-            std::collections::HashMap::new();
+    // Sort each cluster and build prefix sums (prefix[c][k] = sum of first k values).
+    let mut prefix: Vec<Vec<f64>> = Vec::with_capacity(num_clusters);
+    for vals in &mut cluster_values {
+        vals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let mut pre = Vec::with_capacity(vals.len() + 1);
+        let mut acc = 0.0;
+        pre.push(0.0);
+        for &v in vals.iter() {
+            acc += v;
+            pre.push(acc);
+        }
+        prefix.push(pre);
+    }
 
-        for j in 0..n {
-            if i == j {
-                continue;
-            }
-            let lj = labels[j].round() as i64;
-            let dist = (data[i] - data[j]).abs();
+    let mut sum_s = 0.0;
+    for i in 0..n {
+        let x = data[i];
+        let ci = point_cluster[i];
 
-            if lj == li {
-                same_cluster_dists.push(dist);
+        let mut a = 0.0;
+        let mut b = f64::INFINITY;
+        for c in 0..num_clusters {
+            let vals = &cluster_values[c];
+            let pre = &prefix[c];
+            let m = vals.len();
+            let left = vals.partition_point(|&y| y <= x);
+            let sum_left = pre[left];
+            let sum_right = pre[m] - sum_left;
+            let dist_sum = x * left as f64 - sum_left + (sum_right - x * (m - left) as f64);
+            if c == ci {
+                a = if m > 1 {
+                    dist_sum / (m as f64 - 1.0)
+                } else {
+                    0.0
+                };
             } else {
-                other_cluster_dists.entry(lj).or_default().push(dist);
+                let mean = dist_sum / m as f64;
+                b = b.min(mean);
             }
         }
-
-        let a = if same_cluster_dists.is_empty() {
-            0.0
-        } else {
-            same_cluster_dists.iter().sum::<f64>() / same_cluster_dists.len() as f64
-        };
-
-        let b = other_cluster_dists
-            .values()
-            .map(|dists| dists.iter().sum::<f64>() / dists.len() as f64)
-            .fold(f64::INFINITY, f64::min);
 
         let s = if a.max(b) == 0.0 {
             0.0
         } else {
             (b - a) / a.max(b)
         };
-        silhouettes.push(s);
+        sum_s += s;
     }
 
-    silhouettes.iter().sum::<f64>() / silhouettes.len() as f64
+    sum_s / n as f64
 }
 
 /// Compute the log-likelihood for a normal distribution.
@@ -54151,6 +54238,69 @@ mod tests {
                 assert_eq!(rand_index(&lt, &lt).to_bits(), naive(&lt, &lt).to_bits());
             }
         }
+    }
+
+    #[test]
+    fn rand_index_dense_path_fallback_domains_match_pair_loop() {
+        fn naive(lt: &[f64], lp: &[f64]) -> f64 {
+            let n = lt.len();
+            if n < 2 {
+                return 1.0;
+            }
+            let mut a = 0usize;
+            let mut b = 0usize;
+            for i in 0..n {
+                for j in (i + 1)..n {
+                    let st = lt[i].round() as i64 == lt[j].round() as i64;
+                    let sp = lp[i].round() as i64 == lp[j].round() as i64;
+                    if st == sp {
+                        if st {
+                            a += 1;
+                        } else {
+                            b += 1;
+                        }
+                    }
+                }
+            }
+            (a + b) as f64 / (n * (n - 1) / 2) as f64
+        }
+
+        let n = 128usize;
+        let total_pairs = n * (n - 1) / 2;
+        let dense_true: Vec<f64> = (0..n).map(|i| (i % 10) as f64).collect();
+        let dense_pred: Vec<f64> = (0..n).map(|i| ((i * 7 + 3) % 11) as f64).collect();
+        assert!(rand_index_dense_compact(&dense_true, &dense_pred, total_pairs).is_some());
+        assert_eq!(
+            rand_index(&dense_true, &dense_pred).to_bits(),
+            naive(&dense_true, &dense_pred).to_bits()
+        );
+
+        let negative_true: Vec<f64> = (0..n).map(|i| (i as i64 % 7 - 3) as f64).collect();
+        let negative_pred: Vec<f64> = (0..n).map(|i| (i as i64 % 5 - 2) as f64).collect();
+        assert!(rand_index_dense_compact(&negative_true, &negative_pred, total_pairs).is_none());
+        assert_eq!(
+            rand_index(&negative_true, &negative_pred).to_bits(),
+            naive(&negative_true, &negative_pred).to_bits()
+        );
+
+        let sparse_true: Vec<f64> = (0..n).map(|i| (i * 1_000_003) as f64).collect();
+        let sparse_pred: Vec<f64> = (0..n).map(|i| ((i * 17 + 5) % 257) as f64).collect();
+        assert!(rand_index_dense_compact(&sparse_true, &sparse_pred, total_pairs).is_none());
+        assert_eq!(
+            rand_index(&sparse_true, &sparse_pred).to_bits(),
+            naive(&sparse_true, &sparse_pred).to_bits()
+        );
+
+        let mut nonfinite_true = dense_true;
+        let mut nonfinite_pred = dense_pred;
+        nonfinite_true[3] = f64::NAN;
+        nonfinite_true[17] = f64::INFINITY;
+        nonfinite_pred[9] = f64::NEG_INFINITY;
+        assert!(rand_index_dense_compact(&nonfinite_true, &nonfinite_pred, total_pairs).is_none());
+        assert_eq!(
+            rand_index(&nonfinite_true, &nonfinite_pred).to_bits(),
+            naive(&nonfinite_true, &nonfinite_pred).to_bits()
+        );
     }
 
     #[test]
