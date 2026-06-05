@@ -1,0 +1,36 @@
+perf: fsci-stats median / percentile / iqr / mad — full sort O(n log n) -> partial select O(n)
+==============================================================================================
+
+Target : crates/fsci-stats/src/lib.rs :: median, percentile, iqr, median_abs_deviation.
+Lever  : Each function sorted the whole array (O(n log n)) only to read the one or two central
+         / quantile ranks. A quantile touches sorted[lo] and sorted[hi] with hi-lo in {0,1}
+         (numpy linear interpolation). Partition with select_nth_unstable_by(total_cmp) in O(n)
+         and read just those ranks. New helpers: select_ranks + quantile_select.
+
+Isomorphism proof (byte-identical)
+----------------------------------
+- select_nth_unstable_by(hi, total_cmp) places rank hi at index hi with every total_cmp-smaller
+  element before it; the total_cmp-max of that lower partition is exactly rank hi-1 = lo. So
+  (sorted[lo], sorted[hi]) are recovered bit-for-bit, and the interpolation / averaging that
+  follows is unchanged. total_cmp is the SAME total order the original sort used, so NaN and
+  signed-zero ordering match too.
+- median keeps its own even/odd central-rank formula; percentile/iqr/mad route through
+  quantile_select, which mirrors quantile_sorted's index math (pos=q*(n-1), floor/ceil, frac)
+  exactly.
+- Empirically: 0 mismatches / 20000 results across 2000 datasets x {median, iqr, mad, and
+  percentile at q in {0,1,25,50,73.3,99.9,100}}, with value alphabets for heavy ties, fine
+  continuous, signed zeros, and ~10%-NaN injection. Every result compared via .to_bits() vs a
+  verbatim full-sort reference.
+- Golden payload sha256 (per-trial median/iqr digest, non-NaN trials):
+    af814912a0b9af41d1e1cdf0d59fbccedba3d65dcb791e7be9af70ea3b160e87  golden_payload.txt
+
+Timing (same-process A/B, release, mean of 5; uniform f64, median + p90 per call)
+---------------------------------------------------------------------------------
+  n=  100000  sort=  8.365 ms   select=833.421 us   ratio= 10.0x
+  n=  500000  sort= 47.673 ms   select=  4.432 ms   ratio= 10.8x
+  n= 2000000  sort=183.443 ms   select= 17.753 ms   ratio= 10.3x
+
+Score: Impact 4 x Confidence 5 / Effort 1 = 20  (>> 2.0)
+
+Tests: cargo test -p fsci-stats --lib {median,percentile,iqr} => 19 + 19 + 3 passed.
+clippy + fmt clean. (quantile_sorted is retained for the multi-quantile `quantile`/scoreatpercentile paths.)

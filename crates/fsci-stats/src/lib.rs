@@ -22483,13 +22483,9 @@ pub fn median_abs_deviation(data: &[f64], scale: f64) -> f64 {
     if data.is_empty() || scale == 0.0 {
         return f64::NAN;
     }
-    let mut sorted = data.to_vec();
-    sorted.sort_by(|a, b| a.total_cmp(b));
-    let med = quantile_sorted(&sorted, 0.5);
-
-    let mut diffs: Vec<f64> = data.iter().map(|&x| (x - med).abs()).collect();
-    diffs.sort_by(|a, b| a.total_cmp(b));
-    let mad = quantile_sorted(&diffs, 0.5);
+    let med = quantile_select(data, 0.5);
+    let diffs: Vec<f64> = data.iter().map(|&x| (x - med).abs()).collect();
+    let mad = quantile_select(&diffs, 0.5);
     mad / scale
 }
 
@@ -23031,9 +23027,7 @@ pub fn iqr(data: &[f64]) -> f64 {
     if data.is_empty() || data.iter().any(|v| v.is_nan()) {
         return f64::NAN;
     }
-    let mut sorted = data.to_vec();
-    sorted.sort_by(|a, b| a.total_cmp(b));
-    quantile_sorted(&sorted, 0.75) - quantile_sorted(&sorted, 0.25)
+    quantile_select(data, 0.75) - quantile_select(data, 0.25)
 }
 
 /// Weighted interquartile range (IQR = Q3 - Q1).
@@ -23604,9 +23598,7 @@ pub fn percentile(data: &[f64], q: f64) -> f64 {
         return f64::NAN;
     }
     let q_frac = (q / 100.0).clamp(0.0, 1.0);
-    let mut sorted = data.to_vec();
-    sorted.sort_by(|a, b| a.total_cmp(b));
-    quantile_sorted(&sorted, q_frac)
+    quantile_select(data, q_frac)
 }
 
 /// Compute the weighted percentile of data.
@@ -25203,6 +25195,54 @@ fn kurtosis_from_moments(n: f64, m2: f64, m4: f64) -> f64 {
     let m2_n = m2 / n;
     let m4_n = m4 / n;
     m4_n / (m2_n * m2_n) - 3.0
+}
+
+/// Return `(rank_lo, rank_hi)` — the `total_cmp`-ordered elements at ranks `lo`
+/// and `hi` of `buf` — using partial selection (O(n)) instead of a full
+/// O(n log n) sort. Requires `lo <= hi`, `hi - lo <= 1`, `hi < buf.len()`.
+///
+/// Byte-identical to indexing a fully `total_cmp`-sorted copy: `select_nth_unstable_by`
+/// places rank `hi` at position `hi` with every smaller element before it, so the
+/// `total_cmp`-max of that lower partition is exactly rank `hi - 1 = lo`.
+fn select_ranks(buf: &mut [f64], lo: usize, hi: usize) -> (f64, f64) {
+    if lo == hi {
+        buf.select_nth_unstable_by(lo, |a, b| a.total_cmp(b));
+        let v = buf[lo];
+        (v, v)
+    } else {
+        buf.select_nth_unstable_by(hi, |a, b| a.total_cmp(b));
+        let v_hi = buf[hi];
+        let v_lo = buf[..hi]
+            .iter()
+            .copied()
+            .reduce(|a, b| if a.total_cmp(&b).is_lt() { b } else { a })
+            .unwrap();
+        (v_lo, v_hi)
+    }
+}
+
+/// Linear-interpolation quantile (numpy default), computed in O(n) via
+/// [`select_ranks`] instead of sorting. Byte-identical to
+/// `quantile_sorted(&total_cmp_sorted_copy, q)`.
+fn quantile_select(data: &[f64], q: f64) -> f64 {
+    let n = data.len();
+    if n == 0 {
+        return f64::NAN;
+    }
+    if n == 1 {
+        return data[0];
+    }
+    let pos = q * (n - 1) as f64;
+    let lo = pos.floor() as usize;
+    let hi = pos.ceil() as usize;
+    let frac = pos - lo as f64;
+    let mut buf = data.to_vec();
+    let (v_lo, v_hi) = select_ranks(&mut buf, lo, hi);
+    if lo == hi {
+        v_lo
+    } else {
+        v_lo * (1.0 - frac) + v_hi * frac
+    }
 }
 
 fn quantile_sorted(sorted: &[f64], q: f64) -> f64 {
@@ -31277,13 +31317,15 @@ pub fn median(data: &[f64]) -> f64 {
     if data.is_empty() {
         return f64::NAN;
     }
-    let mut sorted = data.to_vec();
-    sorted.sort_by(|a, b| a.total_cmp(b));
-    let n = sorted.len();
+    let mut buf = data.to_vec();
+    let n = buf.len();
+    // Partial selection (O(n)) of the one or two central ranks, byte-identical
+    // to indexing a full total_cmp sort.
     if n.is_multiple_of(2) {
-        (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
+        let (lo, hi) = select_ranks(&mut buf, n / 2 - 1, n / 2);
+        (lo + hi) / 2.0
     } else {
-        sorted[n / 2]
+        select_ranks(&mut buf, n / 2, n / 2).0
     }
 }
 
