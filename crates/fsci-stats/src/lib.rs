@@ -31433,9 +31433,7 @@ pub fn winsorize(data: &[f64], limits: (f64, f64)) -> Vec<f64> {
     if data.is_empty() {
         return vec![];
     }
-    let mut sorted = data.to_vec();
-    sorted.sort_by(|a, b| a.total_cmp(b));
-    let n = sorted.len();
+    let n = data.len();
 
     // scipy.mstats.winsorize uses Python int() truncation (floor for
     // non-negative) for both the low and high element counts, then
@@ -31446,13 +31444,24 @@ pub fn winsorize(data: &[f64], limits: (f64, f64)) -> Vec<f64> {
     let hi_idx = if upidx == 0 { 0 } else { upidx - 1 };
     let lo_idx = lo_idx.min(n - 1);
     let hi_idx = hi_idx.min(n - 1);
+
+    // Only the two cutoff ranks are needed, so partition for each in O(n) rather
+    // than fully sorting (O(n log n)). select_nth_unstable_by(k) places the k-th
+    // total_cmp-smallest at index k regardless of prior arrangement, so each read
+    // equals the corresponding element of a full total_cmp sort, bit-for-bit.
+    let mut buf = data.to_vec();
     let (lo_val, hi_val) = if lo_idx > hi_idx {
         // When the clipping windows overlap, SciPy collapses everything to the
         // lower-window boundary instead of panicking on an inverted clamp range.
-        let collapsed = sorted[lo_idx];
+        buf.select_nth_unstable_by(lo_idx, |a, b| a.total_cmp(b));
+        let collapsed = buf[lo_idx];
         (collapsed, collapsed)
     } else {
-        (sorted[lo_idx], sorted[hi_idx])
+        buf.select_nth_unstable_by(lo_idx, |a, b| a.total_cmp(b));
+        let lo_val = buf[lo_idx];
+        buf.select_nth_unstable_by(hi_idx, |a, b| a.total_cmp(b));
+        let hi_val = buf[hi_idx];
+        (lo_val, hi_val)
     };
 
     data.iter().map(|&x| x.clamp(lo_val, hi_val)).collect()

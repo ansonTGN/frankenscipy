@@ -1,0 +1,39 @@
+perf: fsci-stats winsorize — full sort O(n log n) -> partial select_nth O(n)
+=============================================================================
+
+Target : crates/fsci-stats/src/lib.rs :: winsorize.
+Lever  : winsorize sorted the whole array only to read the two cutoff ranks (sorted[lo_idx],
+         sorted[hi_idx]) before clamping every element to that [lo_val, hi_val] window. The two
+         ranks are arbitrary (not adjacent), so partition for each with select_nth_unstable_by
+         (total_cmp) in O(n) instead of an O(n log n) sort.
+
+Isomorphism proof (byte-identical output array)
+-----------------------------------------------
+- select_nth_unstable_by(k, total_cmp) places the k-th total_cmp-smallest element at index k
+  regardless of the buffer's prior arrangement, so reading buf[lo_idx] then (after a second
+  partition) buf[hi_idx] yields exactly sorted[lo_idx] and sorted[hi_idx] of a full total_cmp
+  sort, bit-for-bit. The collapse path (lo_idx > hi_idx -> both = sorted[lo_idx]) is preserved.
+- total_cmp is the same total order the old sort used (NaN-last, ±0 distinguished), and the
+  per-element clamp is unchanged, so the winsorized array matches bit-for-bit. No summation is
+  involved, so there is no float-reassociation risk.
+- Empirically: 0 mismatches / 21000 results across 3000 datasets x 7 limit pairs (incl. the
+  overlapping-window collapse (0.5,0.5) and the no-op (0.0,0.0)), with value alphabets for heavy
+  ties, fine continuous, and signed zeros. Every output array compared via .to_bits() vs a
+  verbatim full-sort reference.
+- Golden payload sha256 (per-trial FNV digest of winsorize(data,(0.1,0.1))):
+    38acebf81d9eb4c707d4dcabab62eb92527b8a8dab54cc12f806cb1dce32af87  golden_payload.txt
+
+Timing (same-process A/B, release, mean of 5; uniform f64, limits (0.05,0.05))
+------------------------------------------------------------------------------
+  n=  100000  sort=  3.290 ms   select=869.568 us   ratio= 3.8x
+  n=  500000  sort= 14.703 ms   select=  6.650 ms   ratio= 2.2x
+  n= 2000000  sort= 73.337 ms   select= 25.207 ms   ratio= 2.9x
+(ratio is the removed sort log-factor; the O(n) clamp + output allocation are unchanged, so the
+overall win is smaller than the pure-quantile case.)
+
+Score: Impact 3 x Confidence 5 / Effort 1 = 15  (>> 2.0)
+
+Tests: cargo test -p fsci-stats --lib winsor => 3 passed. clippy + fmt clean.
+
+Same vein as the median/percentile/iqr/mad partial-select win (commit ea41ce8d). scoreatpercentile
+(multi-percentile + interpolation methods) is the next candidate but is left for a follow-up.
