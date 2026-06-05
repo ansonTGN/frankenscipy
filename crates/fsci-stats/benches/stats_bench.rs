@@ -1,8 +1,8 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use fsci_stats::{
     HaltonSampler, SobolSampler, SomersDInput, acf, argsort, centered_discrepancy, ecdf, histogram,
-    kendalltau, l2_star_discrepancy, mannkendall, mixture_discrepancy, pacf, psd_welch, somersd,
-    wraparound_discrepancy,
+    kendalltau, l2_star_discrepancy, mannkendall, mixture_discrepancy, pacf, psd_welch, rand_index,
+    somersd, wraparound_discrepancy,
 };
 
 fn deterministic_data(n: usize) -> Vec<f64> {
@@ -110,6 +110,18 @@ fn bench_somersd(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_rand_index(c: &mut Criterion) {
+    let mut group = c.benchmark_group("rand_index");
+    for &n in &[2000usize, 8000] {
+        let lt: Vec<f64> = (0..n).map(|i| (i % 10) as f64).collect();
+        let lp: Vec<f64> = (0..n).map(|i| ((i * 7 + 3) % 11) as f64).collect();
+        group.bench_function(BenchmarkId::new("k10", n), |b| {
+            b.iter(|| rand_index(&lt, &lp))
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_qmc_discrepancy,
@@ -117,6 +129,7 @@ criterion_group!(
     bench_ordering_and_bins,
     bench_time_series,
     bench_rank_correlation,
-    bench_somersd
+    bench_somersd,
+    bench_rand_index
 );
 criterion_main!(benches);

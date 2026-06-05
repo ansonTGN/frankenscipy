@@ -32561,6 +32561,8 @@ pub fn adjusted_rand_index(labels_true: &[f64], labels_pred: &[f64]) -> f64 {
 }
 
 /// Rand Index for comparing cluster assignments.
+const RAND_INDEX_CONTINGENCY_THRESHOLD: usize = 64;
+
 pub fn rand_index(labels_true: &[f64], labels_pred: &[f64]) -> f64 {
     if labels_true.len() != labels_pred.len() || labels_true.is_empty() {
         return f64::NAN;
@@ -32569,10 +32571,36 @@ pub fn rand_index(labels_true: &[f64], labels_pred: &[f64]) -> f64 {
     if n < 2 {
         return 1.0;
     }
+    let total_pairs = n * (n - 1) / 2;
+
+    // a = pairs grouped together by both labelings, b = pairs separated by both.
+    // Both are derived from the true-vs-pred contingency table in O(n + k^2)
+    // instead of enumerating all O(n^2) pairs. With C(m) = m(m-1)/2:
+    //   a = sum over table cells of C(cell);
+    //   b = total - C(same-true) - C(same-pred) + a   (inclusion-exclusion).
+    // The integer counts — hence the Rand index — are identical to the pair loop.
+    if n >= RAND_INDEX_CONTINGENCY_THRESHOLD {
+        use std::collections::HashMap;
+        let mut table: HashMap<(i64, i64), usize> = HashMap::new();
+        let mut row: HashMap<i64, usize> = HashMap::new();
+        let mut col: HashMap<i64, usize> = HashMap::new();
+        for i in 0..n {
+            let t = labels_true[i].round() as i64;
+            let p = labels_pred[i].round() as i64;
+            *table.entry((t, p)).or_insert(0) += 1;
+            *row.entry(t).or_insert(0) += 1;
+            *col.entry(p).or_insert(0) += 1;
+        }
+        let choose2 = |m: usize| m * (m - 1) / 2;
+        let a: usize = table.values().map(|&m| choose2(m)).sum();
+        let same_true: usize = row.values().map(|&m| choose2(m)).sum();
+        let same_pred: usize = col.values().map(|&m| choose2(m)).sum();
+        let b = total_pairs + a - same_true - same_pred;
+        return (a + b) as f64 / total_pairs as f64;
+    }
 
     let mut a = 0usize;
     let mut b = 0usize;
-
     for i in 0..n {
         for j in (i + 1)..n {
             let same_true = labels_true[i].round() as i64 == labels_true[j].round() as i64;
@@ -32586,7 +32614,6 @@ pub fn rand_index(labels_true: &[f64], labels_pred: &[f64]) -> f64 {
             }
         }
     }
-    let total_pairs = n * (n - 1) / 2;
     (a + b) as f64 / total_pairs as f64
 }
 
@@ -53915,6 +53942,55 @@ mod tests {
             (res3.statistic - (-1.0)).abs() < 1e-10,
             "anti-monotonic spearmanr correlation"
         );
+    }
+
+    #[test]
+    fn rand_index_contingency_matches_pair_loop() {
+        // Isomorphism proof for the contingency-table Rand index: bit-identical to
+        // the O(n^2) pairwise count across sizes (incl. the threshold), cluster
+        // counts (few to many), and perfect/independent agreement.
+        fn naive(lt: &[f64], lp: &[f64]) -> f64 {
+            let n = lt.len();
+            if n < 2 {
+                return 1.0;
+            }
+            let mut a = 0usize;
+            let mut b = 0usize;
+            for i in 0..n {
+                for j in (i + 1)..n {
+                    let st = lt[i].round() as i64 == lt[j].round() as i64;
+                    let sp = lp[i].round() as i64 == lp[j].round() as i64;
+                    if st == sp {
+                        if st {
+                            a += 1;
+                        } else {
+                            b += 1;
+                        }
+                    }
+                }
+            }
+            (a + b) as f64 / (n * (n - 1) / 2) as f64
+        }
+        let mut state: u64 = 0x9090_3636_acac_1212;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            state
+        };
+        for &n in &[2usize, 63, 64, 65, 500, 2000] {
+            for &k in &[1u64, 2, 5, 30] {
+                let lt: Vec<f64> = (0..n).map(|_| (next() % k) as f64).collect();
+                let lp: Vec<f64> = (0..n).map(|_| (next() % k) as f64).collect();
+                assert_eq!(
+                    rand_index(&lt, &lp).to_bits(),
+                    naive(&lt, &lp).to_bits(),
+                    "n={n} k={k}"
+                );
+                // Perfect agreement -> 1.0.
+                assert_eq!(rand_index(&lt, &lt).to_bits(), naive(&lt, &lt).to_bits());
+            }
+        }
     }
 
     #[test]
