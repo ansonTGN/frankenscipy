@@ -780,6 +780,20 @@ pub fn solve_banded(
     validate_finite_matrix_and_vector(ab, b, options.mode, options.check_finite)?;
 
     let dense = dense_from_banded(nlower, nupper, ab, cols);
+    // Fast path: banded Gaussian elimination with partial pivoting that only
+    // touches the band + fill region (O(n·kl·(kl+ku)) vs O(n^3) dense LU). For a
+    // zero/NaN pivot (structurally singular within the band) we fall back to the
+    // robust dense solver below so singular-case behavior is preserved exactly.
+    let mut work = dense.clone();
+    if let Some(x) = banded_gepp_solve(&mut work, b, nlower, nupper) {
+        let backward_error = compute_backward_error_dense(&dense, &x, b);
+        return Ok(SolveResult {
+            x,
+            warning: None,
+            backward_error: Some(backward_error),
+            certificate: None,
+        });
+    }
     solve(
         &dense,
         b,
@@ -5477,6 +5491,84 @@ fn compute_backward_error_dense(a: &[Vec<f64>], x: &[f64], b: &[f64]) -> f64 {
     } else {
         0.0
     }
+}
+
+/// Solve `A x = b` for a banded `A` (lower bandwidth `kl`, upper bandwidth `ku`)
+/// supplied as a dense buffer, using Gaussian elimination with partial pivoting
+/// restricted to the band + fill region.
+///
+/// With partial pivoting the upper bandwidth of `U` grows to at most `kl + ku`,
+/// while `L`'s lower bandwidth stays `kl`; bounding both inner loops to that
+/// region reduces the work from the dense `O(n^3)` to `O(n · kl · (kl + ku))`
+/// (e.g. `O(n)` for a tridiagonal system). The result is the same Gaussian
+/// elimination the dense path performs — operations on the structurally-zero
+/// entries outside the band are `x - m·0` no-ops — so the solution matches the
+/// dense solver to within rounding.
+///
+/// `work` is consumed as scratch (overwritten with the LU factors). Returns
+/// `None` when a zero or non-finite pivot is encountered so the caller can fall
+/// back to the robust dense solver and preserve singular-case behavior.
+#[allow(clippy::needless_range_loop)] // explicit band indices drive pivot search and split_at_mut
+fn banded_gepp_solve(work: &mut [Vec<f64>], b: &[f64], kl: usize, ku: usize) -> Option<Vec<f64>> {
+    let n = work.len();
+    if n == 0 {
+        return Some(Vec::new());
+    }
+    let kuf = ku + kl; // fill-extended upper bandwidth of U
+    let mut rhs = b.to_vec();
+
+    for k in 0..n {
+        let row_end = (k + kl).min(n - 1);
+        // Partial pivot: largest magnitude in column k among rows k..=row_end.
+        let mut piv = k;
+        let mut maxv = work[k][k].abs();
+        for i in (k + 1)..=row_end {
+            let v = work[i][k].abs();
+            if v > maxv {
+                maxv = v;
+                piv = i;
+            }
+        }
+        if maxv == 0.0 || maxv.is_nan() {
+            return None; // zero or NaN pivot column -> defer to dense solver
+        }
+        if piv != k {
+            work.swap(k, piv);
+            rhs.swap(k, piv);
+        }
+        let col_end = (k + kuf).min(n - 1);
+        let pivot = work[k][k];
+        for i in (k + 1)..=row_end {
+            let factor = work[i][k] / pivot;
+            work[i][k] = 0.0;
+            if factor != 0.0 {
+                // Update row i over columns k+1..=col_end using row k.
+                let (head, tail) = work.split_at_mut(i);
+                let row_k = &head[k];
+                let row_i = &mut tail[0];
+                for j in (k + 1)..=col_end {
+                    row_i[j] -= factor * row_k[j];
+                }
+            }
+            rhs[i] -= factor * rhs[k];
+        }
+    }
+
+    // Back substitution against the fill-extended upper-triangular factor.
+    let mut x = vec![0.0; n];
+    for i in (0..n).rev() {
+        let col_end = (i + kuf).min(n - 1);
+        let mut sum = rhs[i];
+        for j in (i + 1)..=col_end {
+            sum -= work[i][j] * x[j];
+        }
+        let diag = work[i][i];
+        if diag == 0.0 {
+            return None;
+        }
+        x[i] = sum / diag;
+    }
+    Some(x)
 }
 
 fn dense_from_banded(nlower: usize, nupper: usize, ab: &[Vec<f64>], n: usize) -> Vec<Vec<f64>> {
