@@ -1276,7 +1276,7 @@ pub fn correlate1d_with_origin(
 
     let offset = weights.len() as i64 / 2;
     let mut output = NdArray::zeros(input.shape.clone());
-    for flat_out in 0..input.size() {
+    fill_pixels_parallel(&mut output, weights.len(), |flat_out, _scratch| {
         let out_idx = input.unravel(flat_out);
         let mut in_idx: Vec<i64> = out_idx.iter().map(|&i| i as i64).collect();
         let mut sum = 0.0;
@@ -1284,8 +1284,8 @@ pub fn correlate1d_with_origin(
             in_idx[axis] = out_idx[axis] as i64 + k as i64 - offset - origin;
             sum += weight * input.get_boundary(&in_idx, mode, cval);
         }
-        output.data[flat_out] = sum;
-    }
+        sum
+    });
 
     Ok(output)
 }
@@ -1599,6 +1599,41 @@ fn ndimage_filter_thread_count(pixels: usize, kernel_total: usize) -> usize {
         .map(std::num::NonZero::get)
         .unwrap_or(1);
     cores.min(pixels / 2).max(1)
+}
+
+/// Fill `output.data` by computing each pixel independently via `pixel(flat_out,
+/// &mut scratch)`, distributing the disjoint output indices across threads. Each
+/// thread gets a fresh `scratch` buffer reused across its pixels (matching the
+/// sequential single-buffer pattern). Because each output element depends only on a
+/// read-only `pixel` computation, the parallel result is bit-identical to the
+/// sequential loop — only the owning core changes. `kernel_work` is the per-pixel
+/// work used to gate parallelism.
+fn fill_pixels_parallel<G>(output: &mut NdArray, kernel_work: usize, pixel: G)
+where
+    G: Fn(usize, &mut Vec<f64>) -> f64 + Sync,
+{
+    let n = output.data.len();
+    let nthreads = ndimage_filter_thread_count(n, kernel_work);
+    if nthreads <= 1 {
+        let mut scratch = Vec::new();
+        for (flat_out, slot) in output.data.iter_mut().enumerate() {
+            *slot = pixel(flat_out, &mut scratch);
+        }
+        return;
+    }
+    let chunk = n.div_ceil(nthreads);
+    let pixel = &pixel;
+    std::thread::scope(|scope| {
+        for (t, out_chunk) in output.data.chunks_mut(chunk).enumerate() {
+            let start = t * chunk;
+            scope.spawn(move || {
+                let mut scratch = Vec::new();
+                for (li, slot) in out_chunk.iter_mut().enumerate() {
+                    *slot = pixel(start + li, &mut scratch);
+                }
+            });
+        }
+    });
 }
 
 /// Fill `output` with a rank/median filter, distributing the independent output
@@ -5715,7 +5750,7 @@ fn filter1d_axis_with_origin<F>(
     reduce: F,
 ) -> Result<NdArray, NdimageError>
 where
-    F: Fn(&[f64]) -> f64,
+    F: Fn(&[f64]) -> f64 + Sync,
 {
     if axis >= input.ndim() {
         return Err(NdimageError::InvalidArgument(format!(
@@ -5735,8 +5770,7 @@ where
 
     let offset = size as i64 / 2;
     let mut output = NdArray::zeros(input.shape.clone());
-    let mut window = Vec::with_capacity(size);
-    for flat_out in 0..input.size() {
+    fill_pixels_parallel(&mut output, size, |flat_out, window| {
         let out_idx = input.unravel(flat_out);
         let mut in_idx: Vec<i64> = out_idx.iter().map(|&i| i as i64).collect();
         window.clear();
@@ -5744,8 +5778,8 @@ where
             in_idx[axis] = out_idx[axis] as i64 + k - offset - origin;
             window.push(input.get_boundary(&in_idx, mode, cval));
         }
-        output.data[flat_out] = reduce(&window);
-    }
+        reduce(window)
+    });
     Ok(output)
 }
 
@@ -7468,6 +7502,49 @@ fn compute_structure_offsets(struct_shape: &[usize], struct_data: &[f64]) -> Vec
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The multithreaded separable filters must be BIT-IDENTICAL to the sequential
+    /// pixel-by-pixel computation. Uses an image large enough to cross the parallel
+    /// gate and compares `correlate1d_with_origin` to a verbatim sequential loop.
+    #[test]
+    fn separable_filter_parallel_is_bit_identical() {
+        let (rows, cols) = (600usize, 600usize); // 360k px * k>=2 >= the 2^18 gate
+        let data: Vec<f64> = (0..rows * cols)
+            .map(|k| ((k % 251) as f64 * 0.013).sin() + 0.5)
+            .collect();
+        let input = NdArray::new(data, vec![rows, cols]).expect("image");
+        let weights = [0.2_f64, -1.3, 0.7, 2.1, -0.5, 1.1, 0.9];
+        for &mode in &[
+            BoundaryMode::Reflect,
+            BoundaryMode::Constant,
+            BoundaryMode::Nearest,
+        ] {
+            for axis in 0..2 {
+                let got = correlate1d_with_origin(&input, &weights, axis, mode, 0.3, 0)
+                    .expect("parallel correlate1d");
+                // Verbatim sequential reference.
+                let offset = weights.len() as i64 / 2;
+                let mut want = NdArray::zeros(input.shape.clone());
+                for flat_out in 0..input.size() {
+                    let out_idx = input.unravel(flat_out);
+                    let mut in_idx: Vec<i64> = out_idx.iter().map(|&i| i as i64).collect();
+                    let mut sum = 0.0;
+                    for (k, &w) in weights.iter().enumerate() {
+                        in_idx[axis] = out_idx[axis] as i64 + k as i64 - offset;
+                        sum += w * input.get_boundary(&in_idx, mode, 0.3);
+                    }
+                    want.data[flat_out] = sum;
+                }
+                for (k, (&g, &w)) in got.data.iter().zip(&want.data).enumerate() {
+                    assert_eq!(
+                        g.to_bits(),
+                        w.to_bits(),
+                        "mismatch axis={axis} {mode:?} at {k}"
+                    );
+                }
+            }
+        }
+    }
 
     fn assert_close_or_nan(actual: &[f64], expected: &[f64]) {
         assert_eq!(actual.len(), expected.len());
