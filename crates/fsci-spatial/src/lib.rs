@@ -3360,6 +3360,33 @@ pub fn k_nearest_neighbors(data: &[Vec<f64>], k: usize) -> (Vec<Vec<usize>>, Vec
     let mut all_indices = Vec::with_capacity(n);
     let mut all_distances = Vec::with_capacity(n);
 
+    // Fast path: a KD-tree finds each point's k nearest in O(log n + k) average
+    // rather than scanning all m = n-1 distances, so all-points k-NN drops from
+    // O(n^2) to O(n log n + n k). BYTE-IDENTICAL to the brute force below:
+    //   * the bounded set is ordered by the SAME composite key (squared distance
+    //     via total_cmp, then ascending index) the brute force sorts by, and a
+    //     point's squared distance feeds the identical `sqrt` -> `euclidean`
+    //     bits, so matched results carry identical distance bits;
+    //   * `knn_search_composite` prunes a far subtree only when its split-plane
+    //     bound `diff*diff` STRICTLY exceeds the current k-th squared distance, so
+    //     every point that could enter the k smallest (including equal-distance
+    //     points with a smaller index) is visited and the composite order then
+    //     selects exactly the brute force's k.
+    // Inputs the tree can't index (ragged rows / non-finite) fall through.
+    if k > 0
+        && let Ok(tree) = KDTree::new(data)
+    {
+        for (i, point) in data.iter().enumerate() {
+            let mut best: Vec<(f64, usize)> = Vec::with_capacity(k + 1);
+            if !tree.nodes.is_empty() {
+                knn_search_composite(&tree.nodes, 0, point, i, k, &mut best);
+            }
+            all_indices.push(best.iter().map(|&(_, idx)| idx).collect());
+            all_distances.push(best.iter().map(|&(ds, _)| ds.sqrt()).collect());
+        }
+        return (all_indices, all_distances);
+    }
+
     // Composite order (distance, then ascending index). Because the candidates
     // are produced in ascending `j`, a stable sort by distance breaks ties by
     // ascending index — exactly what this total order reproduces.
@@ -3388,6 +3415,62 @@ pub fn k_nearest_neighbors(data: &[Vec<f64>], k: usize) -> (Vec<Vec<usize>>, Vec
     }
 
     (all_indices, all_distances)
+}
+
+/// Bounded k-nearest KD-tree descent (excluding one index) whose result is the
+/// `k` smallest points ordered by the composite (squared-distance, index) key —
+/// the same set and order as the brute-force all-pairs select+sort.
+///
+/// `best` stays sorted ascending by that key, capped at `k`. The far subtree is
+/// pruned only when `diff*diff` exceeds the current k-th squared distance, so
+/// equal-distance lower-index points are never missed.
+fn knn_search_composite(
+    nodes: &[KDNode],
+    node_idx: usize,
+    query: &[f64],
+    exclude: usize,
+    k: usize,
+    best: &mut Vec<(f64, usize)>,
+) {
+    use std::cmp::Ordering;
+    let node = &nodes[node_idx];
+    if node.index != exclude {
+        let dist_sq = sqeuclidean(query, &node.point);
+        let should_insert = best.len() < k
+            || best.last().is_none_or(|w| {
+                dist_sq.total_cmp(&w.0).then(node.index.cmp(&w.1)) == Ordering::Less
+            });
+        if should_insert {
+            let pos = best.partition_point(|p| {
+                p.0.total_cmp(&dist_sq).then(p.1.cmp(&node.index)) == Ordering::Less
+            });
+            best.insert(pos, (dist_sq, node.index));
+            if best.len() > k {
+                best.pop();
+            }
+        }
+    }
+
+    let diff = query[node.split_dim] - node.point[node.split_dim];
+    let (near, far) = if diff <= 0.0 {
+        (node.left, node.right)
+    } else {
+        (node.right, node.left)
+    };
+
+    if let Some(near_idx) = near {
+        knn_search_composite(nodes, near_idx, query, exclude, k, best);
+    }
+    let worst = if best.len() < k {
+        f64::INFINITY
+    } else {
+        best[best.len() - 1].0
+    };
+    if diff * diff <= worst
+        && let Some(far_idx) = far
+    {
+        knn_search_composite(nodes, far_idx, query, exclude, k, best);
+    }
 }
 
 /// Compute the centroid of a set of points.
@@ -5797,6 +5880,62 @@ mod tests {
                             b.to_bits(),
                             "dist mismatch n={n} dim={dim} grid={grid}"
                         );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn k_nearest_neighbors_kdtree_matches_brute_force_bitwise() {
+        // The KD-tree fast path must reproduce the O(n^2) brute force exactly for
+        // every k: same k indices in the same composite order and identical
+        // distance bits, including tie-heavy grid-snapped data.
+        fn brute(data: &[Vec<f64>], k: usize) -> (Vec<Vec<usize>>, Vec<Vec<f64>>) {
+            let n = data.len();
+            let cmp = |a: &(usize, f64), b: &(usize, f64)| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0));
+            let mut idx = Vec::new();
+            let mut dist = Vec::new();
+            for i in 0..n {
+                let mut d: Vec<(usize, f64)> = (0..n)
+                    .filter(|&j| j != i)
+                    .map(|j| (j, euclidean(&data[i], &data[j])))
+                    .collect();
+                let ka = k.min(d.len());
+                if ka < d.len() {
+                    d.select_nth_unstable_by(ka, cmp);
+                }
+                d[..ka].sort_by(cmp);
+                idx.push(d[..ka].iter().map(|&(j, _)| j).collect());
+                dist.push(d[..ka].iter().map(|&(_, v)| v).collect());
+            }
+            (idx, dist)
+        }
+        let mut state: u64 = 0x51ed_2718_2845_9045;
+        let mut next = |g: u64| {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            let v = (state >> 11) as f64 / (1u64 << 53) as f64;
+            if g == 0 { v } else { (v * g as f64).floor() }
+        };
+        for &n in &[1usize, 2, 9, 64, 150] {
+            for &dim in &[1usize, 2, 3] {
+                for &k in &[1usize, 3, 8, 1000] {
+                    for &grid in &[0u64, 4] {
+                        let data: Vec<Vec<f64>> = (0..n)
+                            .map(|_| (0..dim).map(|_| next(grid)).collect())
+                            .collect();
+                        let (gi, gd) = k_nearest_neighbors(&data, k);
+                        let (wi, wd) = brute(&data, k);
+                        assert_eq!(gi, wi, "index mismatch n={n} dim={dim} k={k} grid={grid}");
+                        for (a, b) in gd.iter().flatten().zip(wd.iter().flatten()) {
+                            assert_eq!(
+                                a.to_bits(),
+                                b.to_bits(),
+                                "dist mismatch n={n} dim={dim} k={k} grid={grid}"
+                            );
+                        }
                     }
                 }
             }
