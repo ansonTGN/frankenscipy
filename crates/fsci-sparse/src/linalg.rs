@@ -3453,11 +3453,7 @@ fn spmm_rows_parallel(
     m: usize,
     nthreads: usize,
 ) -> (Vec<usize>, Vec<f64>, Vec<usize>, bool) {
-    let chunk = m.div_ceil(nthreads);
-    let ranges: Vec<(usize, usize)> = (0..nthreads)
-        .map(|thread| (thread * chunk, ((thread + 1) * chunk).min(m)))
-        .filter(|(start, end)| start < end)
-        .collect();
+    let ranges = spmm_work_balanced_ranges(a, b, b_rows, m, nthreads);
 
     let count_chunks: Vec<Vec<usize>> = std::thread::scope(|scope| {
         let handles: Vec<_> = ranges
@@ -3513,6 +3509,76 @@ fn spmm_rows_parallel(
         sorted_indices &= *chunk_sorted;
     }
     (cols, vals, indptr, sorted_indices)
+}
+
+fn spmm_work_balanced_ranges(
+    a: &CsrMatrix,
+    b: &CsrMatrix,
+    b_rows: usize,
+    m: usize,
+    nthreads: usize,
+) -> Vec<(usize, usize)> {
+    let partitions = nthreads.min(m);
+    if partitions == 0 {
+        return Vec::new();
+    }
+    if partitions == 1 {
+        return vec![(0, m)];
+    }
+
+    let mut row_work = Vec::with_capacity(m);
+    let mut total_work = 0usize;
+    for i in 0..m {
+        let mut work = 0usize;
+        let a_start = a.indptr()[i];
+        let a_end = a.indptr()[i + 1];
+        for a_idx in a_start..a_end {
+            let k = a.indices()[a_idx];
+            if k < b_rows {
+                work = work.saturating_add(b.indptr()[k + 1] - b.indptr()[k]);
+            }
+        }
+        total_work = total_work.saturating_add(work);
+        row_work.push(work);
+    }
+
+    if total_work == 0 {
+        let chunk = m.div_ceil(partitions);
+        return (0..partitions)
+            .map(|thread| (thread * chunk, ((thread + 1) * chunk).min(m)))
+            .filter(|(start, end)| start < end)
+            .collect();
+    }
+
+    let mut ranges = Vec::with_capacity(partitions);
+    let mut start = 0usize;
+    let mut prefix_work = 0usize;
+    let mut next_boundary = 1usize;
+
+    for (row, &work) in row_work.iter().enumerate() {
+        prefix_work = prefix_work.saturating_add(work);
+        let end = row + 1;
+        let remaining_partitions = partitions - ranges.len() - 1;
+        if remaining_partitions == 0 {
+            break;
+        }
+
+        let target_work = usize::try_from(
+            (total_work as u128)
+                .saturating_mul(next_boundary as u128)
+                .div_ceil(partitions as u128),
+        )
+        .unwrap_or(usize::MAX);
+        let must_close = end == m - remaining_partitions;
+        if end > start && (prefix_work >= target_work || must_close) {
+            ranges.push((start, end));
+            start = end;
+            next_boundary += 1;
+        }
+    }
+
+    ranges.push((start, m));
+    ranges
 }
 
 /// Worker count for an SpGEMM, or 1 to stay serial. Only products with enough
