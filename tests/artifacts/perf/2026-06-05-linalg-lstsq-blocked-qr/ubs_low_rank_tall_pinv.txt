@@ -1,5 +1,5 @@
 ℹ Preparing shadow workspace for 2 specified file(s)
-ℹ Scanning shadow workspace at /data/tmp/tmp.GeV2OZy4Mt/files_scan
+ℹ Scanning shadow workspace at /data/tmp/tmp.EDFUw1ejkw/files_scan
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║  ██╗   ██╗██╗  ████████╗██╗███╗   ███╗ █████╗ ████████╗███████╗              ║
@@ -35,12 +35,12 @@
 ║                     “We see bugs before you do.”                             ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
-UBS Meta-Runner v5.3.2  2026-06-05 17:35:30
+UBS Meta-Runner v5.3.2  2026-06-05 17:38:06
 Project: /data/projects/frankenscipy
 Format:  text
 Detected: rust
 Scanning rust...
-Finished rust (33s)
+Finished rust (34s)
 
 ──────── rust ────────
 
@@ -78,7 +78,7 @@ Finished rust (33s)
 
 
 Project:  /data/projects/frankenscipy
-Started:  2026-06-05 17:35:30
+Started:  2026-06-05 17:38:06
 Files:    2 source files (rs)
 
 ✓ ast-grep available (ast-grep) - full AST analysis enabled
@@ -101,15 +101,15 @@ Panic-prone and debug macros frequently leak into production and cause crashes
   ⚠ Warning (413 found)
     Potential panics via unwrap/expect
     Prefer `?` or match to propagate/handle errors
-      /data/projects/frankenscipy/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs:40 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs#L40)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs:40 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs#L40)
                   black_box(lstsq(&a, &b, LstsqOptions::default()).unwrap());
-      /data/projects/frankenscipy/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs:43 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs#L43)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs:43 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs#L43)
                   black_box(pinv(&a, PinvOptions::default()).unwrap());
-      /data/projects/frankenscipy/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs:54 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs#L54)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs:54 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs#L54)
                   black_box(solve(&a, &b, o).unwrap());
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:4056 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L4056)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:4056 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L4056)
               let tri_evecs = tri_evecs.unwrap();
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:8854 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L8854)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:8854 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L8854)
                   handles.into_iter().map(|h| h.join().unwrap()).collect()
 
 • panic!/unreachable!/todo!/unimplemented!
@@ -159,7 +159,7 @@ Concurrency misuse leads to deadlocks, head-of-line blocking, and performance is
 • Mutex::lock().unwrap()/expect()
   ⚠ Warning (5 found)
     Poisoned lock handling via unwrap/expect
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:9672 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L9672)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:9672 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L9672)
                       let _guard = ledger.lock().expect("acquire ledger");
 
 • await inside loops (sequentialism)
@@ -186,11 +186,11 @@ Numeric bugs cause subtle logic errors or panics in debug builds (overflow)
   ℹ Info (47 found)
     Float equality/inequality check
     Consider epsilon comparisons
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:1079 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L1079)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:1079 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L1079)
           if a_norm == 0.0 || !a_norm.is_finite() {
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:1319 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L1319)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:1319 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L1319)
           if !rcond.is_finite() || rcond == 0.0 {
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:2118 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L2118)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:2118 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L2118)
           if report.rcond_estimate == 0.0 {
 
 • Division/modulo by variable (verify non-zero)
@@ -209,19 +209,19 @@ Iterator misuse often leads to unnecessary allocations or slow paths
 • clone() occurrences & clone() in loops
   ℹ Info (58 found)
     clone() usages - audit for necessity
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:1272 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L1272)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:1272 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L1272)
               let lu = matrix.clone().lu();
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:1274 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L1274)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:1274 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L1274)
                   match safe_svd(matrix.clone(), false, false) {
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:1492 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L1492)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:1492 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L1492)
           let lu: LU<f64, Dyn, Dyn> = matrix.clone().lu();
   ⚠ Warning (3 found)
     clone() inside loops - potential perf hit
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:6355 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L6355)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:6355 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L6355)
       let mut sys = ta.clone();
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:6598 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L6598)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:6598 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L6598)
       let s_inv = s.clone().try_inverse().ok_or(LinalgError::SingularMatrix)?;
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:7796 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L7796)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:7796 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L7796)
       result.push(row.clone());
 
 • collect::<Vec<_>>() then for
@@ -329,11 +329,11 @@ Overly broad visibility complicates API stability and encapsulation
 • Wildcard imports (use crate::* or ::*)
   ℹ Info (3 found)
     Wildcard imports found; prefer explicit names
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:9019 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L9019)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:9019 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L9019)
           use super::*;
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:13148 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L13148)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:13148 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L13148)
           use super::*;
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:13149 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L13149)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:13149 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L13149)
           use proptest::prelude::*;
 
 • pub use re-exports (inventory)
@@ -470,11 +470,11 @@ Panics in destructors or UB hints can crash/abort in subtle ways; these can slip
   ⚠ Warning (695 found)
     Direct indexing/slicing may panic
     Use get()/get_mut(), checked ranges, or prior bounds checks when indexes can come from input
-      /data/projects/frankenscipy/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs:21 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs#L21)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs:21 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs#L21)
                       t += row[i] * row[j];
-      /data/projects/frankenscipy/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs:23 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs#L23)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs:23 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/bin/perf_lstsq_probe.rs#L23)
                   a[i][j] = t + if i == j { n as f64 } else { 0.0 };
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:1043 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L1043)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:1043 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L1043)
                   let value = matrix[(row, col)].abs();
 
 • panic!/unwrap/expect inside Drop
@@ -490,11 +490,11 @@ Panics in destructors or UB hints can crash/abort in subtle ways; these can slip
   ℹ Info (118 found)
     `as` casts present (possible truncation/sign bugs)
     Prefer TryFrom/TryInto for correctness or document invariants
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:4611 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L4611)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:4611 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L4611)
               ((norm1 * 2.0).log2().ceil()) as u32
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:8468 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L8468)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:8468 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L8468)
           let macs = (m as u64)
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:8469 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L8469)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:8469 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L8469)
               .saturating_mul(ka as u64)
 
 • len()/count() narrowed via `as`
@@ -530,11 +530,11 @@ Some perf pitfalls become DoS risks on large inputs or hot paths; these often ev
   ⚠ Warning (10 found)
     String allocation inside loop
     Consider preallocating buffers, using write!, or restructuring to reduce allocations
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:3330 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L3330)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:3330 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L3330)
       detail: "All rows in cb must have the same length".to_string(),
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:3448 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L3448)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:3448 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L3448)
       detail: "All rows in ab must have the same length".to_string(),
-      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:3479 (https://github.com/Dicklesworthstone/frankenscipy/blob/d6b6dbc2ab65098d19d95612b1cbd2f14d5d30e6/crates/fsci-linalg/src/lib.rs#L3479)
+      /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:3479 (https://github.com/Dicklesworthstone/frankenscipy/blob/cce2621c49888dfb0b099c85518ca063a982ec4c/crates/fsci-linalg/src/lib.rs#L3479)
       detail: "Matrix is not positive definite".to_string(),
 
 ═══════════════════════════════════════════════════════════════════════════
@@ -553,7 +553,7 @@ Priority Actions:
   ℹ Consider INFO suggestions
   Code quality improvements and best practices
 
-Scan completed at: 2026-06-05 17:36:02
+Scan completed at: 2026-06-05 17:38:40
 
 Tip: Run with -v/--verbose for more code samples per finding.
 Add to CI: ./ubs --ci --fail-on-warning . > rust-bug-scan.txt
