@@ -266,6 +266,17 @@ fn ellipk_scalar(m: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
     if m.is_nan() {
         return Ok(f64::NAN);
     }
+    if m < 0.0 {
+        if mode == RuntimeMode::Hardened {
+            return domain_error("ellipk", mode, "m must be in [0, 1)");
+        }
+        // Reciprocal-modulus transformation K(m) = K(m/(m-1)) / sqrt(1-m), valid
+        // for m < 0 where m/(m-1) lands in [0, 1). Matches scipy.special.ellipk,
+        // which accepts negative parameters.
+        let mt = m / (m - 1.0);
+        let k = ellipk_scalar(mt, RuntimeMode::Strict)?;
+        return Ok(k / (1.0 - m).sqrt());
+    }
     if !(0.0..=1.0).contains(&m) {
         return domain_error("ellipk", mode, "m must be in [0, 1)");
     }
@@ -335,6 +346,16 @@ fn ellipkm1_scalar(p: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
 fn ellipe_scalar(m: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
     if m.is_nan() {
         return Ok(f64::NAN);
+    }
+    if m < 0.0 {
+        if mode == RuntimeMode::Hardened {
+            return domain_error("ellipe", mode, "m must be in [0, 1]");
+        }
+        // Reciprocal-modulus transformation E(m) = sqrt(1-m) * E(m/(m-1)), valid
+        // for m < 0. Matches scipy.special.ellipe, which accepts negative m.
+        let mt = m / (m - 1.0);
+        let e = ellipe_scalar(mt, RuntimeMode::Strict)?;
+        return Ok((1.0 - m).sqrt() * e);
     }
     if !(0.0..=1.0).contains(&m) {
         return domain_error("ellipe", mode, "m must be in [0, 1]");
@@ -3230,6 +3251,32 @@ mod tests {
         for (m, expected) in cases {
             let got = ellipe_scalar(m, RuntimeMode::Strict).expect("ellipe");
             assert_close(got, expected, 1e-10, &format!("ellipe({m})"));
+        }
+    }
+
+    #[test]
+    fn ellipk_ellipe_negative_m_match_scipy() {
+        // scipy.special.ellipk / ellipe accept negative m (reciprocal-modulus
+        // transformation); we previously fail-closed (NaN) outside [0, 1].
+        let ellipk_cases = [
+            (-0.5, 1.415737208425956_f64),
+            (-1.0, 1.3110287771460598),
+            (-3.0, 1.0782578237498215),
+            (-10.0, 0.7908718902387385),
+        ];
+        for (m, expected) in ellipk_cases {
+            let got = ellipk_scalar(m, RuntimeMode::Strict).expect("ellipk(neg m)");
+            assert_close(got, expected, 1e-12, &format!("ellipk({m})"));
+        }
+        let ellipe_cases = [
+            (-0.5, 1.7517712756948174_f64),
+            (-1.0, 1.9100988945138562),
+            (-3.0, 2.422112055136919),
+            (-10.0, 3.639138038417769),
+        ];
+        for (m, expected) in ellipe_cases {
+            let got = ellipe_scalar(m, RuntimeMode::Strict).expect("ellipe(neg m)");
+            assert_close(got, expected, 1e-12, &format!("ellipe({m})"));
         }
     }
 
