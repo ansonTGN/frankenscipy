@@ -354,13 +354,68 @@ pub fn pdist(x: &[Vec<f64>], metric: DistanceMetric) -> Result<Vec<f64>, Spatial
         }
     }
 
-    let mut result = Vec::with_capacity(n * (n - 1) / 2);
+    let total = n * (n - 1) / 2;
+    let nthreads = cdist_thread_count(n, n, dim);
+    if nthreads <= 1 {
+        let mut result = Vec::with_capacity(total);
+        for i in 0..n {
+            for j in (i + 1)..n {
+                result.push(metric_distance(&x[i], &x[j], metric));
+            }
+        }
+        return Ok(result);
+    }
+
+    // Condensed output: row i writes a contiguous run of (n-1-i) entries starting at
+    // offset(i) = i·(n-1) − i·(i−1)/2. Split the rows across threads at pair-balanced
+    // boundaries (early rows carry more pairs) and let each thread fill its disjoint
+    // contiguous slice — bit-identical to the sequential i<j push order.
+    let mut result = vec![0.0_f64; total];
+    let bounds = pdist_row_bounds(n, nthreads);
+    let offset = |r: usize| -> usize { r * (n - 1) - r * (r.saturating_sub(1)) / 2 };
+    std::thread::scope(|scope| {
+        let mut rest: &mut [f64] = &mut result;
+        let mut prev = 0usize;
+        for w in 0..bounds.len() - 1 {
+            let r0 = bounds[w];
+            let r1 = bounds[w + 1];
+            let take = offset(r1) - prev;
+            prev = offset(r1);
+            let (seg, tail) = rest.split_at_mut(take);
+            rest = tail;
+            scope.spawn(move || {
+                let mut local = 0usize;
+                for i in r0..r1 {
+                    for j in (i + 1)..n {
+                        seg[local] = metric_distance(&x[i], &x[j], metric);
+                        local += 1;
+                    }
+                }
+            });
+        }
+    });
+    Ok(result)
+}
+
+/// Pair-balanced row boundaries for a parallel `pdist`: returns up to `nthreads+1`
+/// monotonic row indices `[0, ..., n]` so each segment carries ~equal numbers of
+/// condensed pairs (row `i` has `n-1-i` pairs, so early rows weigh more).
+fn pdist_row_bounds(n: usize, nthreads: usize) -> Vec<usize> {
+    let total = n * (n - 1) / 2;
+    let mut bounds = Vec::with_capacity(nthreads + 1);
+    bounds.push(0);
+    let mut acc = 0usize;
+    let mut t = 1usize;
     for i in 0..n {
-        for j in (i + 1)..n {
-            result.push(metric_distance(&x[i], &x[j], metric));
+        acc += n - 1 - i;
+        while t < nthreads && acc >= t * total / nthreads {
+            bounds.push(i + 1);
+            t += 1;
         }
     }
-    Ok(result)
+    bounds.push(n);
+    bounds.dedup();
+    bounds
 }
 
 /// Convert a condensed distance vector to a square distance matrix.
@@ -4048,6 +4103,41 @@ impl Default for Rotation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The multithreaded `pdist` must be BIT-IDENTICAL to the sequential condensed
+    /// i<j push order; pair-balanced row boundaries must tile the output exactly.
+    #[test]
+    fn pdist_parallel_is_bit_identical() {
+        let grid = |n: usize, dim: usize, seed: f64| -> Vec<Vec<f64>> {
+            (0..n)
+                .map(|i| {
+                    (0..dim)
+                        .map(|j| (i as f64 * 0.017 + j as f64 * 0.09 + seed).sin() - 0.1)
+                        .collect()
+                })
+                .collect()
+        };
+        for &metric in &[
+            DistanceMetric::Euclidean,
+            DistanceMetric::Cityblock,
+            DistanceMetric::Chebyshev,
+        ] {
+            // n=900 (dim 2) => ~405k pairs * 2 >= the 2^18 gate -> parallel path.
+            let x = grid(900, 2, 0.5);
+            let n = x.len();
+            let got = pdist(&x, metric).expect("parallel pdist");
+            let mut want = Vec::with_capacity(n * (n - 1) / 2);
+            for i in 0..n {
+                for j in (i + 1)..n {
+                    want.push(metric_distance(&x[i], &x[j], metric));
+                }
+            }
+            assert_eq!(got.len(), want.len());
+            for (k, (&g, &w)) in got.iter().zip(&want).enumerate() {
+                assert_eq!(g.to_bits(), w.to_bits(), "pdist mismatch at {k} {metric:?}");
+            }
+        }
+    }
 
     /// The multithreaded `cdist_metric` must be BIT-IDENTICAL to the sequential
     /// row-by-row computation: each output row is an independent reduction over the
