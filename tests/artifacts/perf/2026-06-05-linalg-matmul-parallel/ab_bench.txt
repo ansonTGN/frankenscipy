@@ -1,0 +1,9 @@
+# perf_matmul, square GEMM, 64-core rch worker
+BEFORE (single-threaded):
+n= 1024:    207.801 ms/matmul     10.3 GFLOP/s
+n= 2048:   1538.628 ms/matmul     11.2 GFLOP/s
+n= 4096:  12058.087 ms/matmul     11.4 GFLOP/s
+AFTER (multithreaded row split):
+n= 1024:     40.334 ms/matmul     53.2 GFLOP/s
+n= 2048:    159.842 ms/matmul    107.5 GFLOP/s
+n= 4096:    925.748 ms/matmul    148.5 GFLOP/s

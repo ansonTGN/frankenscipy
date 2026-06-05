@@ -8010,43 +8010,31 @@ fn rows_are_rectangular(rows: &[Vec<f64>], width: usize) -> bool {
     rows.iter().all(|row| row.len() == width)
 }
 
-fn matmul_flat_workspace(
-    a: &[Vec<f64>],
-    b: &[Vec<f64>],
-    m: usize,
+/// Compute output rows `[row_start, row_end)` of the flat-workspace GEMM into
+/// `out` (row-major, length `(row_end-row_start)*n`, indexed from `row_start`).
+///
+/// This is the body of the cache-blocked SIMD micro-kernel, parameterised by a row
+/// range so it can be split across threads. Every `c[i][j]` accumulates `k` in
+/// `0..ka` monotonic order via the same scalar mul+add sequence regardless of the
+/// RB/MR block grouping or which thread owns the row, so the result is bit-identical
+/// to the sequential `naive ijk` reference (the basis for byte-identical parallelism).
+#[allow(clippy::too_many_arguments)]
+fn matmul_flat_compute_rows(
+    out: &mut [f64],
+    row_start: usize,
+    row_end: usize,
+    a_flat: &[f64],
+    packed_b: &[f64],
+    b_flat: &[f64],
     ka: usize,
     n: usize,
-) -> Option<Vec<Vec<f64>>> {
-    let a_len = m.checked_mul(ka)?;
-    let b_len = ka.checked_mul(n)?;
-    let c_len = m.checked_mul(n)?;
-    let mut a_flat = Vec::with_capacity(a_len);
-    for row in a {
-        a_flat.extend_from_slice(row);
-    }
-    let mut b_flat = Vec::with_capacity(b_len);
-    for row in b {
-        b_flat.extend_from_slice(row);
-    }
-    let mut c_flat = vec![0.0; c_len];
-
+) {
     const MR: usize = 4;
     const NR: usize = 8;
     const RB: usize = 64;
-    let full_n_blocks = n / NR;
-    let packed_b_len = full_n_blocks.checked_mul(ka)?.checked_mul(NR)?;
-    let mut packed_b = Vec::with_capacity(packed_b_len);
-    for jb in 0..full_n_blocks {
-        let j0 = jb * NR;
-        for k in 0..ka {
-            let b_base = k * n + j0;
-            packed_b.extend_from_slice(&b_flat[b_base..b_base + NR]);
-        }
-    }
-
-    let mut ib = 0;
-    while ib < m {
-        let i_limit = (ib + RB).min(m);
+    let mut ib = row_start;
+    while ib < row_end {
+        let i_limit = (ib + RB).min(row_end);
         let mut j0 = 0;
         while j0 < n {
             let nr = (n - j0).min(NR);
@@ -8083,26 +8071,26 @@ fn matmul_flat_workspace(
                     }
                     for (di, acc_row) in acc.iter().enumerate().take(MR) {
                         let acc_row = acc_row.to_array();
-                        let c_base = (i0 + di) * n + j0;
-                        c_flat[c_base] = acc_row[0];
-                        c_flat[c_base + 1] = acc_row[1];
-                        c_flat[c_base + 2] = acc_row[2];
-                        c_flat[c_base + 3] = acc_row[3];
-                        c_flat[c_base + 4] = acc_row[4];
-                        c_flat[c_base + 5] = acc_row[5];
-                        c_flat[c_base + 6] = acc_row[6];
-                        c_flat[c_base + 7] = acc_row[7];
+                        let c_base = (i0 + di - row_start) * n + j0;
+                        out[c_base] = acc_row[0];
+                        out[c_base + 1] = acc_row[1];
+                        out[c_base + 2] = acc_row[2];
+                        out[c_base + 3] = acc_row[3];
+                        out[c_base + 4] = acc_row[4];
+                        out[c_base + 5] = acc_row[5];
+                        out[c_base + 6] = acc_row[6];
+                        out[c_base + 7] = acc_row[7];
                     }
                 } else {
                     for di in 0..mr {
                         let a_base = (i0 + di) * ka;
-                        let c_base = (i0 + di) * n + j0;
+                        let c_base = (i0 + di - row_start) * n + j0;
                         for dj in 0..nr {
                             let mut s = 0.0;
                             for k in 0..ka {
                                 s += a_flat[a_base + k] * b_flat[k * n + j0 + dj];
                             }
-                            c_flat[c_base + dj] = s;
+                            out[c_base + dj] = s;
                         }
                     }
                 }
@@ -8111,6 +8099,80 @@ fn matmul_flat_workspace(
             j0 += NR;
         }
         ib += RB;
+    }
+}
+
+/// Number of worker threads for a flat-workspace GEMM of the given dims. Returns 1
+/// (sequential) for matmuls too small to amortise thread spawn; otherwise scales with
+/// cores, capped so each thread owns at least 64 output rows.
+fn matmul_thread_count(m: usize, ka: usize, n: usize) -> usize {
+    let macs = (m as u64)
+        .saturating_mul(ka as u64)
+        .saturating_mul(n as u64);
+    if macs < 64 * 1024 * 1024 {
+        return 1;
+    }
+    let cores = std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(1);
+    cores.min(m / 64).max(1)
+}
+
+fn matmul_flat_workspace(
+    a: &[Vec<f64>],
+    b: &[Vec<f64>],
+    m: usize,
+    ka: usize,
+    n: usize,
+) -> Option<Vec<Vec<f64>>> {
+    let a_len = m.checked_mul(ka)?;
+    let b_len = ka.checked_mul(n)?;
+    let c_len = m.checked_mul(n)?;
+    let mut a_flat = Vec::with_capacity(a_len);
+    for row in a {
+        a_flat.extend_from_slice(row);
+    }
+    let mut b_flat = Vec::with_capacity(b_len);
+    for row in b {
+        b_flat.extend_from_slice(row);
+    }
+    let mut c_flat = vec![0.0; c_len];
+
+    const NR: usize = 8;
+    let full_n_blocks = n / NR;
+    let packed_b_len = full_n_blocks.checked_mul(ka)?.checked_mul(NR)?;
+    let mut packed_b = Vec::with_capacity(packed_b_len);
+    for jb in 0..full_n_blocks {
+        let j0 = jb * NR;
+        for k in 0..ka {
+            let b_base = k * n + j0;
+            packed_b.extend_from_slice(&b_flat[b_base..b_base + NR]);
+        }
+    }
+
+    // Distribute disjoint output-row ranges across threads. Each c[i][j] is computed
+    // by the identical k-ordered reduction irrespective of the row split, so the
+    // result is bit-identical to the sequential kernel (golden sha unchanged); only
+    // *which* core writes each row changes.
+    let nthreads = matmul_thread_count(m, ka, n);
+    if nthreads <= 1 {
+        matmul_flat_compute_rows(&mut c_flat, 0, m, &a_flat, &packed_b, &b_flat, ka, n);
+    } else {
+        let chunk_rows = m.div_ceil(nthreads);
+        let a_ref = &a_flat;
+        let b_ref = &b_flat;
+        let pb_ref = &packed_b;
+        std::thread::scope(|scope| {
+            for (t, out_chunk) in c_flat.chunks_mut(chunk_rows * n).enumerate() {
+                let row_start = t * chunk_rows;
+                let row_end = (row_start + chunk_rows).min(m);
+                scope.spawn(move || {
+                    matmul_flat_compute_rows(
+                        out_chunk, row_start, row_end, a_ref, pb_ref, b_ref, ka, n,
+                    );
+                });
+            }
+        });
     }
 
     let mut c = Vec::with_capacity(m);
@@ -8492,6 +8554,73 @@ mod tests {
                         "flat workspace matmul not bit-identical at ({i},{j}), m={m} ka={ka} n={n}"
                     );
                 }
+            }
+        }
+    }
+
+    /// Byte-identity proof for the multithreaded flat-workspace GEMM: splitting the
+    /// output rows across threads (what `matmul_flat_workspace` does via
+    /// `chunks_mut` + `thread::scope`) must produce bit-identical results to
+    /// computing the whole range in one call. Drives `matmul_flat_compute_rows`
+    /// directly so the parallel invariant is checked without a 1024³ matmul.
+    #[test]
+    fn matmul_flat_compute_rows_row_split_is_bit_identical() {
+        // n = 28 is NOT a multiple of NR(=8): exercises both the SIMD-packed columns
+        // and the scalar tail path under arbitrary row splits.
+        let (m, ka, n) = (37usize, 29usize, 28usize);
+        let make = |rows: usize, cols: usize, seed: u64| -> Vec<f64> {
+            (0..rows * cols)
+                .map(|t| {
+                    let i = (t / cols) as u64;
+                    let j = (t % cols) as u64;
+                    (seed.wrapping_mul(i + 5).wrapping_add(j * 17 + 3) % 8191) as f64 / 2047.0 - 2.0
+                })
+                .collect()
+        };
+        let a_flat = make(m, ka, 23);
+        let b_flat = make(ka, n, 123);
+        const NR: usize = 8;
+        let full_n_blocks = n / NR;
+        let mut packed_b = Vec::new();
+        for jb in 0..full_n_blocks {
+            let j0 = jb * NR;
+            for k in 0..ka {
+                let base = k * n + j0;
+                packed_b.extend_from_slice(&b_flat[base..base + NR]);
+            }
+        }
+
+        let mut full = vec![0.0; m * n];
+        matmul_flat_compute_rows(&mut full, 0, m, &a_flat, &packed_b, &b_flat, ka, n);
+
+        for &nchunks in &[2usize, 3, 5, 8, m] {
+            let chunk = m.div_ceil(nchunks);
+            let mut split = vec![0.0; m * n];
+            let mut t = 0;
+            loop {
+                let rs = t * chunk;
+                if rs >= m {
+                    break;
+                }
+                let re = (rs + chunk).min(m);
+                matmul_flat_compute_rows(
+                    &mut split[rs * n..re * n],
+                    rs,
+                    re,
+                    &a_flat,
+                    &packed_b,
+                    &b_flat,
+                    ka,
+                    n,
+                );
+                t += 1;
+            }
+            for idx in 0..m * n {
+                assert_eq!(
+                    full[idx].to_bits(),
+                    split[idx].to_bits(),
+                    "row-split (nchunks={nchunks}) not bit-identical at flat index {idx}"
+                );
             }
         }
     }
