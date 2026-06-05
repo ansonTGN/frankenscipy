@@ -1,0 +1,20 @@
+--- tests/artifacts/perf/2026-06-04-sparse-spmm-coarse-morsels/golden_before_payload.txt	2026-06-04 17:58:39.219651220 -0400
++++ tests/artifacts/perf/2026-06-04-sparse-spmm-coarse-morsels/golden_after_payload.txt	2026-06-04 17:59:52.761884715 -0400
+@@ -42745,6 +42745,8 @@
+ 131:3fd837395bb13307
+ 4:3fc376c7fa10c12c
+ 358:3fe51bccc899f882
++     Running unittests src/bin/perf_sparse.rs (.rch-target-ts2-job-29872254800105102-1780610340234891388-0/debug/deps/perf_sparse-7d941827cb15a2ba)
++     Running tests/metamorphic_tests.rs (.rch-target-ts2-job-29872254800105102-1780610340234891388-0/debug/deps/metamorphic_tests-0f38635a1798660f)
+ 196:3fdf049f76e09a6b
+ 191:3fc8bf3bceb7b921
+ 157:bfd16834d2176e79
+@@ -42899,8 +42901,6 @@
+ 258:3fea36ab1bf9a51e
+ 50:3fc6838e649c0d20
+ 488:bfc2b277d274bbaf
+-     Running unittests src/bin/perf_sparse.rs (.rch-target-ts2-job-29872254800105087-1780610261196713020-0/debug/deps/perf_sparse-7d941827cb15a2ba)
+-     Running tests/metamorphic_tests.rs (.rch-target-ts2-job-29872254800105087-1780610261196713020-0/debug/deps/metamorphic_tests-0f38635a1798660f)
+ 405:bfd20bd2295dfd27
+ 311:bfbc143008b20530
+ 302:3fceced9a076233e

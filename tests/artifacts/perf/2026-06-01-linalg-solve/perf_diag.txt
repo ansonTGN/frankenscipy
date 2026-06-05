@@ -1,3 +1,4 @@
 === perf version ===
 perf version 6.17.13
 === stats ===
+failed to process sample

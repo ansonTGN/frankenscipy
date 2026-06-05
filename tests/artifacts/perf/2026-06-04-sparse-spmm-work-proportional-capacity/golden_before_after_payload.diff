@@ -1,0 +1,8 @@
+--- tests/artifacts/perf/2026-06-04-sparse-spmm-work-proportional-capacity/golden_before_payload.txt	2026-06-04 17:22:09.201070186 -0400
++++ tests/artifacts/perf/2026-06-04-sparse-spmm-work-proportional-capacity/golden_after_payload.txt	2026-06-04 17:25:00.643777776 -0400
+@@ -141847,5 +141847,3 @@
+ 336:3fbc0964fa6ef014
+ 227:bfb9099cbf3038b4
+ 91:3fc1ad1b8ff858dc
+-test linalg::tests::dump_spmm_payload_for_golden_sha ... ok
+-
