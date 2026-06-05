@@ -964,7 +964,13 @@ fn sorted_unique_coo_to_csr(coo: &CooMatrix) -> SparseResult<Option<CsrMatrix>> 
         indptr[row + 1] += indptr[row];
     }
 
-    CsrMatrix::from_components(shape, coo.data().to_vec(), cols.to_vec(), indptr, true).map(Some)
+    let mut csr =
+        CsrMatrix::from_components_unchecked(shape, coo.data().to_vec(), cols.to_vec(), indptr);
+    csr.canonical = CanonicalMeta {
+        sorted_indices: true,
+        deduplicated: true,
+    };
+    Ok(Some(csr))
 }
 
 fn compress_triplets(
