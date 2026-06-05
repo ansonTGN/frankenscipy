@@ -23694,11 +23694,74 @@ pub fn scoreatpercentile(
         return Ok(vec![f64::NAN; per.len()]);
     }
 
-    filtered.sort_by(|a, b| a.total_cmp(b));
-    per.iter()
-        .copied()
-        .map(|percentile| scoreatpercentile_single(&filtered, percentile, &method))
-        .collect()
+    // Each percentile reads only 1-2 ranks, so when there are few of them
+    // relative to log2(n) it is cheaper to partition per percentile (O(n) each)
+    // than to fully sort once (O(n log n)). Both paths are byte-identical, so the
+    // gate never changes results.
+    if (per.len() as f64) < (filtered.len() as f64).log2().max(1.0) {
+        let mut buf = filtered;
+        let mut out = Vec::with_capacity(per.len());
+        for &percentile in per {
+            out.push(scoreatpercentile_single_select(
+                &mut buf, percentile, &method,
+            )?);
+        }
+        Ok(out)
+    } else {
+        filtered.sort_by(|a, b| a.total_cmp(b));
+        per.iter()
+            .copied()
+            .map(|percentile| scoreatpercentile_single(&filtered, percentile, &method))
+            .collect()
+    }
+}
+
+/// Same result as `scoreatpercentile_single` on a fully `total_cmp`-sorted copy,
+/// but reads the one or two needed ranks via partial selection on `buf` (O(n))
+/// instead of requiring a pre-sorted slice. `buf` may be left partitioned; each
+/// call re-selects from scratch, so repeated calls on the same buffer are fine.
+fn scoreatpercentile_single_select(
+    buf: &mut [f64],
+    per: f64,
+    interpolation_method: &str,
+) -> Result<f64, StatsError> {
+    if !(0.0..=100.0).contains(&per) || per.is_nan() {
+        return Err(StatsError::InvalidArgument(
+            "percentile must be in the range [0, 100]".to_string(),
+        ));
+    }
+    let n = buf.len();
+    if n == 0 {
+        return Ok(f64::NAN);
+    }
+    if n == 1 {
+        return Ok(buf[0]);
+    }
+
+    let idx = per / 100.0 * (n - 1) as f64;
+    let lower = idx.floor() as usize;
+    let upper = idx.ceil() as usize;
+
+    if lower == upper {
+        buf.select_nth_unstable_by(lower, |a, b| a.total_cmp(b));
+        return Ok(buf[lower]);
+    }
+
+    let (v_lower, v_upper) = select_ranks(buf, lower, upper);
+    let value = match interpolation_method {
+        "fraction" => {
+            let frac = idx - lower as f64;
+            v_lower * (1.0 - frac) + v_upper * frac
+        }
+        "lower" => v_lower,
+        "higher" => v_upper,
+        other => {
+            return Err(StatsError::InvalidArgument(format!(
+                "interpolation_method must be one of {{'fraction', 'lower', 'higher'}}, got {other}"
+            )));
+        }
+    };
+    Ok(value)
 }
 
 /// Compute the mean after trimming a proportion from each tail.

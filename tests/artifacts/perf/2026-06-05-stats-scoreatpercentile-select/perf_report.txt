@@ -1,0 +1,39 @@
+perf: fsci-stats scoreatpercentile — full sort O(n log n) -> gated per-percentile select O(n)
+==============================================================================================
+
+Target : crates/fsci-stats/src/lib.rs :: scoreatpercentile.
+Lever  : Each requested percentile reads only the one or two ranks sorted[lower]/sorted[upper]
+         (fraction/lower/higher interpolation). When there are few percentiles relative to
+         log2(n), partition per percentile with select_nth / select_ranks (O(n) each) instead of
+         a single full sort (O(n log n)). New helper: scoreatpercentile_single_select.
+
+Gating
+------
+Select path when per.len() < log2(filtered.len()) (so p*n < n*log n); otherwise the original
+single full sort + scoreatpercentile_single is used. Both paths are byte-identical, so the gate
+only affects speed — never results. A shared buffer is partitioned once per percentile (each
+select_nth re-selects from any arrangement), so the select path allocates a single copy.
+
+Isomorphism proof (byte-identical result vector)
+------------------------------------------------
+- select_nth_unstable_by(k, total_cmp) places the k-th total_cmp-smallest at index k regardless
+  of prior arrangement; select_ranks then recovers sorted[lower] (= total_cmp-max of the lower
+  partition) and sorted[upper] bit-for-bit. total_cmp is the same total order the old sort used.
+  The interpolation arithmetic (fraction/lower/higher) and the limit filter are unchanged.
+- Empirically: 0 mismatches / 45000 results across 3000 datasets x 5 percentile-sets (1..10
+  percentiles, hitting BOTH the select and sort paths) x 3 interpolation methods, with optional
+  value-limit filtering and value alphabets for heavy ties, fine continuous, and signed zeros.
+  Every result vector compared via .to_bits() vs a verbatim full-sort reference.
+- Golden payload sha256 (per-trial digest of scoreatpercentile(data,[25,75])):
+    4cbb8b9f78e7228648a39a239026ba15abf0890718056d90d898186977d7f410  golden_payload.txt
+
+Timing (same-process A/B, release, mean of 5; uniform f64, fraction)
+--------------------------------------------------------------------
+  n=2000000 np= 3  sort= 61.766 ms   new= 13.557 ms   ratio= 4.6x   (select path)
+  n= 500000 np= 3  sort= 11.252 ms   new=  3.198 ms   ratio= 3.5x   (select path)
+  n= 500000 np=40  sort= 13.474 ms   new= 12.313 ms   ratio= 1.1x   (sort path — gate avoids regression)
+
+Score: Impact 3 x Confidence 5 / Effort 1 = 15  (>> 2.0)
+
+Tests: cargo test -p fsci-stats --lib scoreatpercentile => 3 passed. clippy + fmt clean.
+Same partial-select vein as median/percentile/iqr/mad (ea41ce8d) and winsorize (5ed2748f).
