@@ -3839,7 +3839,9 @@ mod tests {
                 .map(|i| {
                     (0..cols)
                         .map(|j| {
-                            let r = (seed.wrapping_mul(i as u64 + 1).wrapping_add(j as u64 * 7 + 3)
+                            let r = (seed
+                                .wrapping_mul(i as u64 + 1)
+                                .wrapping_add(j as u64 * 7 + 3)
                                 % 1999) as f64
                                 / 997.0;
                             r - 1.0
@@ -3896,7 +3898,9 @@ mod tests {
                 .map(|i| {
                     (0..d)
                         .map(|j| {
-                            ((seed.wrapping_mul(i as u64 + 1).wrapping_add(j as u64 * 13 + 5))
+                            ((seed
+                                .wrapping_mul(i as u64 + 1)
+                                .wrapping_add(j as u64 * 13 + 5))
                                 % 4099) as f64
                                 / 1024.0
                         })
@@ -3942,7 +3946,10 @@ mod tests {
 
         let ratio = naive.as_secs_f64() / hoist.as_secs_f64();
         println!("procrustes M: naive={naive:?} hoist={hoist:?} speedup={ratio:.2}x sink={sink}");
-        assert!(ratio > 1.0, "k-hoist should be at least as fast (got {ratio:.2}x)");
+        assert!(
+            ratio > 1.0,
+            "k-hoist should be at least as fast (got {ratio:.2}x)"
+        );
     }
 
     fn point_set_contains(points: &[Vec<f64>], expected: &[f64]) -> bool {
@@ -6069,20 +6076,18 @@ mod tests {
             "kdtree dist got {dist}, expected {expected_dist}"
         );
         // Index should be 0 or 1 (both are equidistant from [0.5, 0.5])
-        assert!(idx == 0 || idx == 1, "kdtree idx got {idx}, expected 0 or 1");
+        assert!(
+            idx == 0 || idx == 1,
+            "kdtree idx got {idx}, expected 0 or 1"
+        );
     }
 
     #[test]
     fn convex_hull_area_matches_scipy_reference_values() {
         // scipy.spatial.ConvexHull([[0,0], [1,0], [1,1], [0,1], [0.5,0.5]]).volume
         // -> 1.0 (area of unit square)
-        let points: Vec<(f64, f64)> = vec![
-            (0.0, 0.0),
-            (1.0, 0.0),
-            (1.0, 1.0),
-            (0.0, 1.0),
-            (0.5, 0.5),
-        ];
+        let points: Vec<(f64, f64)> =
+            vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.5, 0.5)];
         let hull = ConvexHull::new(&points).expect("convex_hull");
         // Hull should be the 4 corner vertices
         assert_eq!(hull.vertices.len(), 4, "hull should have 4 vertices");
@@ -6113,9 +6118,10 @@ mod tests {
         // Should have 1 finite vertex at the center
         assert!(vor.vertices.len() >= 1, "should have at least 1 vertex");
         // Check that center vertex exists
-        let has_center = vor.vertices.iter().any(|&(x, y)| {
-            (x - 0.5).abs() < 1e-10 && (y - 0.5).abs() < 1e-10
-        });
+        let has_center = vor
+            .vertices
+            .iter()
+            .any(|&(x, y)| (x - 0.5).abs() < 1e-10 && (y - 0.5).abs() < 1e-10);
         assert!(has_center, "should have vertex at center (0.5, 0.5)");
     }
 
@@ -6134,13 +6140,20 @@ mod tests {
     fn is_valid_dm_matches_scipy_reference_values() {
         // scipy.spatial.distance.is_valid_dm([[0, 1], [1, 0]]) -> True
         let matrix = vec![vec![0.0, 1.0], vec![1.0, 0.0]];
-        assert!(is_valid_dm(&matrix, 1e-10), "symmetric distance matrix should be valid");
+        assert!(
+            is_valid_dm(&matrix, 1e-10),
+            "symmetric distance matrix should be valid"
+        );
     }
 
     #[test]
     fn num_obs_dm_matches_scipy_reference_values() {
         // scipy.spatial.distance.num_obs_dm([[0, 1, 2], [1, 0, 1], [2, 1, 0]]) -> 3
-        let matrix = vec![vec![0.0, 1.0, 2.0], vec![1.0, 0.0, 1.0], vec![2.0, 1.0, 0.0]];
+        let matrix = vec![
+            vec![0.0, 1.0, 2.0],
+            vec![1.0, 0.0, 1.0],
+            vec![2.0, 1.0, 0.0],
+        ];
         let n = num_obs_dm(&matrix);
         assert_eq!(n, 3, "num_obs_dm should return 3");
     }

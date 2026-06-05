@@ -97,7 +97,10 @@ fn main() {
             }
         }
         let d = directed_hausdorff(&xa, &xb).unwrap();
-        payload.push_str(&format!("trial={trial} n={n} m={m} bits={:016x}\n", d.to_bits()));
+        payload.push_str(&format!(
+            "trial={trial} n={n} m={m} bits={:016x}\n",
+            d.to_bits()
+        ));
     }
     println!("===GOLDEN_PAYLOAD_BEGIN===");
     print!("{payload}");
