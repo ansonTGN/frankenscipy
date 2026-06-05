@@ -35502,6 +35502,114 @@ pub fn theil_sen(x: &[f64], y: &[f64]) -> (f64, f64) {
     (slope, intercept)
 }
 
+#[cfg(test)]
+const THEIL_SLOPE_MIN_X_GAP: f64 = 1e-15;
+
+#[cfg(test)]
+fn count_slopes_le(x: &[f64], y: &[f64], threshold: f64) -> usize {
+    count_slopes_le_by_inversions(x, y, threshold)
+        .unwrap_or_else(|| brute_count_slopes_le(x, y, threshold))
+}
+
+#[cfg(test)]
+fn count_slopes_le_by_inversions(x: &[f64], y: &[f64], threshold: f64) -> Option<usize> {
+    let n = x.len();
+    if n < 2 || n != y.len() || !threshold.is_finite() {
+        return None;
+    }
+
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&left, &right| x[left].total_cmp(&x[right]));
+    for adjacent in order.windows(2) {
+        let gap = x[adjacent[1]] - x[adjacent[0]];
+        if !matches!(
+            gap.partial_cmp(&THEIL_SLOPE_MIN_X_GAP),
+            Some(std::cmp::Ordering::Greater)
+        ) {
+            return None;
+        }
+    }
+
+    let mut transformed = Vec::with_capacity(n);
+    for &index in &order {
+        let value = y[index] - threshold * x[index];
+        if !value.is_finite() {
+            return None;
+        }
+        transformed.push(value);
+    }
+
+    Some(count_non_strict_inversions(&transformed))
+}
+
+#[cfg(test)]
+fn brute_count_slopes_le(x: &[f64], y: &[f64], threshold: f64) -> usize {
+    if x.len() != y.len() {
+        return 0;
+    }
+
+    let mut count = 0usize;
+    for i in 0..x.len() {
+        for j in (i + 1)..x.len() {
+            let dx = x[i] - x[j];
+            if dx.abs() > THEIL_SLOPE_MIN_X_GAP && (y[i] - y[j]) / dx <= threshold {
+                count += 1;
+            }
+        }
+    }
+    count
+}
+
+#[cfg(test)]
+fn count_non_strict_inversions(values: &[f64]) -> usize {
+    let mut buffer = values.to_vec();
+    let mut scratch = vec![0.0; values.len()];
+    count_non_strict_inversions_sort(&mut buffer, &mut scratch)
+}
+
+#[cfg(test)]
+fn count_non_strict_inversions_sort(values: &mut [f64], scratch: &mut [f64]) -> usize {
+    let len = values.len();
+    if len <= 1 {
+        return 0;
+    }
+
+    let mid = len / 2;
+    let mut count = {
+        let (left, right) = values.split_at_mut(mid);
+        let (scratch_left, scratch_right) = scratch.split_at_mut(mid);
+        count_non_strict_inversions_sort(left, scratch_left)
+            + count_non_strict_inversions_sort(right, scratch_right)
+    };
+
+    let mut left = 0usize;
+    let mut right = mid;
+    let mut out = 0usize;
+    while left < mid && right < len {
+        if values[left] < values[right] {
+            scratch[out] = values[left];
+            left += 1;
+        } else {
+            count += mid - left;
+            scratch[out] = values[right];
+            right += 1;
+        }
+        out += 1;
+    }
+    while left < mid {
+        scratch[out] = values[left];
+        left += 1;
+        out += 1;
+    }
+    while right < len {
+        scratch[out] = values[right];
+        right += 1;
+        out += 1;
+    }
+    values.copy_from_slice(&scratch[..len]);
+    count
+}
+
 /// Result for Theil-Sen regression with confidence interval.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TheilslopesResult {
@@ -47651,7 +47759,7 @@ mod tests {
             };
             (medslope, low, high)
         }
-        let mut state: u64 = 0xc0ffee_1234_5678;
+        let mut state: u64 = 0x00c0_ffee_1234_5678;
         let mut next = |g: u64| {
             state = state
                 .wrapping_mul(6364136223846793005)
@@ -47676,6 +47784,138 @@ mod tests {
                     assert!(num_eq(r.high_slope, hi), "high n={n} grid={grid}");
                 }
             }
+        }
+    }
+
+    struct CountSlopeLcg(u64);
+
+    impl CountSlopeLcg {
+        fn unit(&mut self) -> f64 {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (self.0 >> 11) as f64 / (1u64 << 53) as f64
+        }
+
+        fn signed(&mut self, scale: f64) -> f64 {
+            (2.0 * self.unit() - 1.0) * scale
+        }
+
+        fn index(&mut self, len: usize) -> usize {
+            (self.unit() * len as f64).floor() as usize
+        }
+    }
+
+    #[test]
+    fn count_slopes_le_matches_brute_for_distinct_x_random_thresholds() {
+        let mut rng = CountSlopeLcg(0x517c_0ca1_d5e5_cafe);
+        for &n in &[2usize, 3, 7, 32, 96] {
+            for case in 0..20 {
+                let mut points: Vec<(f64, f64)> = (0..n)
+                    .map(|i| {
+                        let x_value = i as f64 * 0.25 + rng.unit() * 0.01;
+                        let y_value = 1.75 * x_value + rng.signed(4.0) + (i % 5) as f64 * 0.125;
+                        (x_value, y_value)
+                    })
+                    .collect();
+                for i in 0..points.len() {
+                    let swap_with = rng.index(points.len());
+                    points.swap(i, swap_with);
+                }
+                let x: Vec<f64> = points.iter().map(|&(x_value, _)| x_value).collect();
+                let y: Vec<f64> = points.iter().map(|&(_, y_value)| y_value).collect();
+
+                for threshold_index in 0..16 {
+                    let threshold = rng.signed(12.0);
+                    assert!(
+                        count_slopes_le_by_inversions(&x, &y, threshold).is_some(),
+                        "expected inversion gate n={n} case={case} threshold_index={threshold_index}"
+                    );
+                    assert_eq!(
+                        count_slopes_le(&x, &y, threshold),
+                        brute_count_slopes_le(&x, &y, threshold),
+                        "count mismatch n={n} case={case} threshold_index={threshold_index}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn count_slopes_le_matches_brute_when_x_ties_or_small_gaps_force_fallback() {
+        let cases = [
+            (
+                vec![0.0, 1.0, 1.0, 2.0, 4.0],
+                vec![3.0, 2.0, 2.25, -1.0, 6.0],
+            ),
+            (
+                vec![0.0, 1.0, 1.0 + 5.0e-16, 2.5, 4.0],
+                vec![1.0, -3.0, 4.0, 2.0, 8.0],
+            ),
+            (vec![2.0, 2.0, 2.0, 2.0], vec![1.0, 3.0, -2.0, 5.0]),
+        ];
+        for (case_index, (x, y)) in cases.iter().enumerate() {
+            for &threshold in &[-10.0, -1.0, 0.0, 0.75, 2.0, 10.0] {
+                assert!(
+                    count_slopes_le_by_inversions(x, y, threshold).is_none(),
+                    "expected fallback case={case_index} threshold={threshold}"
+                );
+                assert_eq!(
+                    count_slopes_le(x, y, threshold),
+                    brute_count_slopes_le(x, y, threshold),
+                    "fallback count mismatch case={case_index} threshold={threshold}"
+                );
+            }
+        }
+
+        let mut rng = CountSlopeLcg(0x9e37_79b9_7f4a_7c15);
+        for &grid in &[2.0, 3.0, 5.0] {
+            for case in 0..24 {
+                let x: Vec<f64> = (0..36).map(|_| (rng.unit() * grid).floor()).collect();
+                let y: Vec<f64> = (0..36).map(|_| rng.signed(9.0).round()).collect();
+                let threshold = rng.signed(6.0);
+                assert!(
+                    count_slopes_le_by_inversions(&x, &y, threshold).is_none(),
+                    "expected tied-grid fallback grid={grid} case={case}"
+                );
+                assert_eq!(
+                    count_slopes_le(&x, &y, threshold),
+                    brute_count_slopes_le(&x, &y, threshold),
+                    "tied-grid count mismatch grid={grid} case={case}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn count_slopes_le_matches_brute_for_non_razor_decimal_inputs() {
+        let x = vec![3.75, -1.25, 0.5, 6.125, 2.25, -3.5, 4.875, 8.0];
+        let y = vec![7.2, -2.6, 1.375, 8.9, 4.05, -4.7, 5.825, 13.4];
+        let thresholds = [-4.75, -1.125, -0.2, 0.375, 1.625, 3.5, 8.25];
+
+        for &threshold in &thresholds {
+            assert!(
+                count_slopes_le_by_inversions(&x, &y, threshold).is_some(),
+                "expected inversion gate threshold={threshold}"
+            );
+            for i in 0..x.len() {
+                for j in (i + 1)..x.len() {
+                    let dx = x[i] - x[j];
+                    if dx.abs() > THEIL_SLOPE_MIN_X_GAP {
+                        let slope = (y[i] - y[j]) / dx;
+                        assert!(
+                            (slope - threshold).abs() > 1.0e-10,
+                            "threshold too close to pair slope: threshold={threshold} slope={slope}"
+                        );
+                    }
+                }
+            }
+            assert_eq!(
+                count_slopes_le(&x, &y, threshold),
+                brute_count_slopes_le(&x, &y, threshold),
+                "non-razor count mismatch threshold={threshold}"
+            );
         }
     }
 
