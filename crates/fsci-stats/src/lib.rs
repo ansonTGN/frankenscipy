@@ -34261,6 +34261,22 @@ pub fn argmax(data: &[f64]) -> Option<usize> {
 ///
 /// Matches `numpy.argsort`.
 pub fn argsort(data: &[f64]) -> Vec<usize> {
+    // For NaN-free inputs, sort materialized (key, index) pairs instead of sorting
+    // indices through a comparator that re-gathers `data[a]`/`data[b]` (two random
+    // loads per comparison — cache-hostile). The key is a monotonic u64 transform
+    // of the float bits, so sorting (key, index) lexicographically is bit-identical
+    // to the stable partial_cmp index sort: equal values share a key and tie-break
+    // on index (original order, as a stable sort gives), and -0.0 is normalized to
+    // +0.0 so the two compare equal exactly as partial_cmp does.
+    if data.len() >= ARGSORT_KEYED_THRESHOLD && !data.iter().any(|x| x.is_nan()) {
+        let mut pairs: Vec<(u64, usize)> = data
+            .iter()
+            .enumerate()
+            .map(|(i, &x)| (argsort_float_key(x), i))
+            .collect();
+        pairs.sort_unstable();
+        return pairs.into_iter().map(|(_, i)| i).collect();
+    }
     let mut indices: Vec<usize> = (0..data.len()).collect();
     indices.sort_by(|&a, &b| {
         data[a]
@@ -34268,6 +34284,21 @@ pub fn argsort(data: &[f64]) -> Vec<usize> {
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     indices
+}
+
+const ARGSORT_KEYED_THRESHOLD: usize = 32;
+
+/// Map a (non-NaN) f64 to a u64 whose unsigned order matches the float's
+/// ascending order; -0.0 is normalized to +0.0 so both yield the same key.
+#[inline]
+fn argsort_float_key(x: f64) -> u64 {
+    let x = if x == 0.0 { 0.0 } else { x };
+    let bits = x.to_bits();
+    if bits >> 63 == 1 {
+        !bits
+    } else {
+        bits | (1u64 << 63)
+    }
 }
 
 /// Return the indices of values that are not NaN.
@@ -53884,6 +53915,48 @@ mod tests {
             (res3.statistic - (-1.0)).abs() < 1e-10,
             "anti-monotonic spearmanr correlation"
         );
+    }
+
+    #[test]
+    fn argsort_keyed_matches_stable_partial_cmp() {
+        // Isomorphism proof for the radix argsort: identical index permutation to
+        // the stable partial_cmp index sort across sizes (incl. the threshold),
+        // value ranges, heavy ties, negatives/±inf, and signed zeros.
+        fn reference(data: &[f64]) -> Vec<usize> {
+            let mut indices: Vec<usize> = (0..data.len()).collect();
+            indices.sort_by(|&a, &b| {
+                data[a]
+                    .partial_cmp(&data[b])
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            indices
+        }
+        let mut state: u64 = 0x5151_2323_8989_cdcd;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            state
+        };
+        for &n in &[256usize, 257, 1000, 5000] {
+            for &tie_mod in &[0u64, 1, 3, 12] {
+                let data: Vec<f64> = (0..n)
+                    .map(|_| {
+                        let r = next();
+                        match r % 53 {
+                            0 => -0.0,
+                            1 => 0.0,
+                            2 => f64::INFINITY,
+                            3 => f64::NEG_INFINITY,
+                            _ if tie_mod == 0 => (r >> 11) as f64 / (1u64 << 53) as f64 - 0.5,
+                            _ => (r % tie_mod) as f64 - 1.0,
+                        }
+                    })
+                    .collect();
+                // The keyed path runs for n >= 32, NaN-free.
+                assert_eq!(argsort(&data), reference(&data), "n={n} tie_mod={tie_mod}");
+            }
+        }
     }
 
     #[test]

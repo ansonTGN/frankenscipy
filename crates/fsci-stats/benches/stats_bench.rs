@@ -58,8 +58,10 @@ fn bench_qmc_sampling(c: &mut Criterion) {
 fn bench_ordering_and_bins(c: &mut Criterion) {
     let data = deterministic_data(4096);
     let x_eval = deterministic_data(512);
+    let data_big = deterministic_data(65536);
     let mut group = c.benchmark_group("ordering_and_bins");
     group.bench_function("argsort/4096", |b| b.iter(|| argsort(&data)));
+    group.bench_function("argsort/65536", |b| b.iter(|| argsort(&data_big)));
     group.bench_function("histogram/4096x64", |b| b.iter(|| histogram(&data, 64)));
     group.bench_function("ecdf/4096x512", |b| b.iter(|| ecdf(&data, &x_eval)));
     group.finish();
