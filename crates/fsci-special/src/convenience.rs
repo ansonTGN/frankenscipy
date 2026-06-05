@@ -2606,10 +2606,16 @@ pub fn poch(x: f64, n: f64) -> f64 {
         }
         return result;
     }
-    let log_result = crate::gammaln_scalar(x + n, fsci_runtime::RuntimeMode::Strict)
-        .unwrap_or(f64::NAN)
-        - crate::gammaln_scalar(x, fsci_runtime::RuntimeMode::Strict).unwrap_or(f64::NAN);
-    log_result.exp()
+    // poch(x,n) = Γ(x+n)/Γ(x) is SIGNED; gammaln gives ln|·|, so restore the sign
+    // from the gamma factors (scipy.special.poch(-4.3, 0.5) = -2.938, not +2.938).
+    // For x>0 both signs are +1, so positive arguments are unchanged.
+    let xn = x + n;
+    let mode = fsci_runtime::RuntimeMode::Strict;
+    let log_result = crate::gammaln_scalar(xn, mode).unwrap_or(f64::NAN)
+        - crate::gammaln_scalar(x, mode).unwrap_or(f64::NAN);
+    let sign = crate::gammasgn_scalar(xn, mode).unwrap_or(f64::NAN)
+        * crate::gammasgn_scalar(x, mode).unwrap_or(f64::NAN);
+    sign * log_result.exp()
 }
 
 /// Softmax function: exp(x_i) / Σ exp(x_j), numerically stable.
@@ -10890,6 +10896,27 @@ mod tests {
             assert!(val.abs() < 1e-10, "logit(0.5) = {val}, expected 0.0");
         } else {
             panic!("logit should return scalar");
+        }
+    }
+
+    #[test]
+    fn poch_negative_args_match_scipy_signed() {
+        // scipy.special.poch = Γ(x+n)/Γ(x) is SIGNED; the gammaln fallback dropped
+        // the sign for negative arguments (the integer-n product path was fine).
+        let cases = [
+            (-4.3, 0.5, -2.938123324828691_f64),
+            (-2.5, 3.5, -1.057855469152043),
+            (-0.5, 1.5, -0.28209479177387814),
+            (-4.3, -1.5, -0.10553603896654783),
+            (2.5, -1.5, 0.7522527780636751),
+            (3.0, 4.0, 360.0), // positive args (product path): unchanged
+        ];
+        for (x, n, want) in cases {
+            let got = super::poch(x, n);
+            assert!(
+                (got - want).abs() <= 1e-11 * want.abs().max(1.0),
+                "poch({x},{n}) got {got}, want {want}"
+            );
         }
     }
 
