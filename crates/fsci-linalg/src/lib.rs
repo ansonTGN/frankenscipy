@@ -718,6 +718,36 @@ pub fn solve(a: &[Vec<f64>], b: &[f64], options: SolveOptions) -> Result<SolveRe
             certificate: None,
         });
     }
+    // Fast path for large symmetric positive-definite systems: our own blocked
+    // Cholesky (parallel trailing update). A non-positive pivot (not actually PD)
+    // returns None and falls through to the portfolio solver, which preserves the
+    // exact `assume_a = pos` rejection behavior.
+    if n >= BLOCKED_LU_MIN_DIM
+        && options.mode == RuntimeMode::Strict
+        && !options.transposed
+        && options.assume_a == Some(MatrixAssumption::PositiveDefinite)
+        && b.len() == n
+        && rows_are_rectangular(a, n)
+        && a.iter().flatten().all(|v| v.is_finite())
+        && b.iter().all(|v| v.is_finite())
+        && let Some(x) = cholesky_solve_blocked(a, b)
+    {
+        let backward_error = compute_backward_error_dense(a, &x, b);
+        emit_trace(LinalgTrace {
+            operation: "solve",
+            matrix_size: (n, n),
+            mode: options.mode,
+            rcond: None,
+            warning: None,
+            error: None,
+        });
+        return Ok(SolveResult {
+            x,
+            warning: None,
+            backward_error: Some(backward_error),
+            certificate: None,
+        });
+    }
     let mut portfolio = SolverPortfolio::new(options.mode, 1);
     solve_with_portfolio_internal(a, b, options, &mut portfolio, "solve", false)
 }
@@ -8570,6 +8600,100 @@ fn inv_blocked(a_in: &[Vec<f64>]) -> Option<Vec<Vec<f64>>> {
     Some(x)
 }
 
+/// Solve a symmetric positive-definite `A x = b` via right-looking **blocked
+/// Cholesky** (`A = L Lᵀ`, lower), parallelising the trailing update
+/// `A22 -= L21·L21ᵀ` through the multithreaded flat-workspace GEMM — our own
+/// Cholesky kernel. Returns `None` if any pivot is non-positive (i.e. `A` is not
+/// positive definite within rounding) so the caller falls back to the portfolio
+/// solver, preserving the `assume_a = pos` rejection semantics. Only the lower
+/// triangle of `A` is read/written for `L`; the upper triangle is left as scratch.
+#[allow(clippy::needless_range_loop)] // explicit triangle indices drive the panel + trailing kernels
+fn cholesky_solve_blocked(a_in: &[Vec<f64>], b: &[f64]) -> Option<Vec<f64>> {
+    let n = a_in.len();
+    if n == 0 || a_in[0].len() != n || b.len() != n {
+        return None;
+    }
+    const NB: usize = 128;
+    let mut a: Vec<Vec<f64>> = a_in.to_vec();
+
+    let mut k = 0;
+    while k < n {
+        let kb = (k + NB).min(n);
+        // (1) Unblocked Cholesky on the diagonal block (rows/cols k..kb).
+        for j in k..kb {
+            let mut d = a[j][j];
+            for p in k..j {
+                d -= a[j][p] * a[j][p];
+            }
+            if d <= 0.0 || d.is_nan() {
+                return None; // not positive definite (or NaN) -> fall back
+            }
+            let ljj = d.sqrt();
+            a[j][j] = ljj;
+            for i in (j + 1)..kb {
+                let mut s = a[i][j];
+                for p in k..j {
+                    s -= a[i][p] * a[j][p];
+                }
+                a[i][j] = s / ljj;
+            }
+        }
+        // (2) Panel solve: A21 = A21 · L11^-T for rows kb..n, cols k..kb.
+        for i in kb..n {
+            for j in k..kb {
+                let mut s = a[i][j];
+                for p in k..j {
+                    s -= a[i][p] * a[j][p];
+                }
+                a[i][j] = s / a[j][j];
+            }
+        }
+        // (3) Trailing update A22 -= L21 · L21ᵀ via the parallel GEMM.
+        if kb < n {
+            let m2 = n - kb;
+            let nb = kb - k;
+            let mut l21 = Vec::with_capacity(m2);
+            for row in a.iter().take(n).skip(kb) {
+                l21.push(row[k..kb].to_vec());
+            }
+            // L21ᵀ as nb×m2.
+            let mut l21t = vec![vec![0.0; m2]; nb];
+            for (ii, row) in a.iter().take(n).skip(kb).enumerate() {
+                for (jj, &v) in row[k..kb].iter().enumerate() {
+                    l21t[jj][ii] = v;
+                }
+            }
+            let prod = matmul_flat_workspace(&l21, &l21t, m2, nb, m2)?;
+            for (ii, i) in (kb..n).enumerate() {
+                let pr = &prod[ii];
+                let row = &mut a[i];
+                for (jj, j) in (kb..n).enumerate() {
+                    row[j] -= pr[jj];
+                }
+            }
+        }
+        k = kb;
+    }
+
+    // Forward solve L y = b (lower), then back solve Lᵀ x = y. Lᵀ[i][p]=L[p][i]=a[p][i].
+    let mut y = b.to_vec();
+    for i in 0..n {
+        let mut s = y[i];
+        for p in 0..i {
+            s -= a[i][p] * y[p];
+        }
+        y[i] = s / a[i][i];
+    }
+    for i in (0..n).rev() {
+        let mut s = y[i];
+        for p in (i + 1)..n {
+            s -= a[p][i] * y[p];
+        }
+        y[i] = s / a[i][i];
+    }
+    Some(y)
+}
+
 /// Matrix-vector multiplication y = A * x.
 ///
 /// Matches `A @ x`.
@@ -8828,6 +8952,70 @@ mod tests {
     /// (nalgebra) LU solve to tolerance and produce a tiny residual ||Ax-b||, across
     /// sizes that exercise both the sequential and parallel trailing-update GEMM and
     /// that force partial pivoting (small/negative diagonals).
+    #[test]
+    #[allow(clippy::needless_range_loop)]
+    fn cholesky_solve_blocked_matches_reference() {
+        // Build SPD A = MᵀM + nI.
+        let spd = |n: usize, seed: u64| -> Vec<Vec<f64>> {
+            let m: Vec<Vec<f64>> = (0..n)
+                .map(|i| {
+                    (0..n)
+                        .map(|j| {
+                            (seed
+                                .wrapping_mul(i as u64 + 7)
+                                .wrapping_add(j as u64 * 31 + 5)
+                                % 9973) as f64
+                                / 4986.0
+                                - 1.0
+                        })
+                        .collect()
+                })
+                .collect();
+            let mut a = vec![vec![0.0; n]; n];
+            for i in 0..n {
+                for j in 0..n {
+                    let mut t = 0.0;
+                    for k in 0..n {
+                        t += m[k][i] * m[k][j];
+                    }
+                    a[i][j] = t + if i == j { n as f64 } else { 0.0 };
+                }
+            }
+            a
+        };
+        for &(n, seed) in &[(16usize, 11u64), (130, 23), (270, 57)] {
+            let a = spd(n, seed);
+            let b: Vec<f64> = (0..n).map(|i| (i as f64 * 0.01).cos()).collect();
+            let x = cholesky_solve_blocked(&a, &b).expect("blocked Cholesky solves SPD");
+            let mut opts = SolveOptions::default();
+            opts.assume_a = Some(MatrixAssumption::PositiveDefinite);
+            let reference = solve(&a, &b, opts).expect("reference SPD solve");
+            let mut max_diff = 0.0_f64;
+            for (&xi, &ri) in x.iter().zip(&reference.x) {
+                max_diff = max_diff.max((xi - ri).abs());
+            }
+            let mut max_res = 0.0_f64;
+            for i in 0..n {
+                let mut s = 0.0;
+                for j in 0..n {
+                    s += a[i][j] * x[j];
+                }
+                max_res = max_res.max((s - b[i]).abs());
+            }
+            assert!(
+                max_diff < 1e-7,
+                "Cholesky vs reference diverged n={n}: {max_diff:e}"
+            );
+            assert!(
+                max_res < 1e-9,
+                "Cholesky residual too large n={n}: {max_res:e}"
+            );
+        }
+        // Non-PD matrix must be rejected (None) so the caller can fall back.
+        let not_pd = vec![vec![1.0, 2.0], vec![2.0, 1.0]]; // eigenvalues 3, -1
+        assert!(cholesky_solve_blocked(&not_pd, &[1.0, 1.0]).is_none());
+    }
+
     #[test]
     #[allow(clippy::needless_range_loop)]
     fn inv_blocked_matches_reference() {
