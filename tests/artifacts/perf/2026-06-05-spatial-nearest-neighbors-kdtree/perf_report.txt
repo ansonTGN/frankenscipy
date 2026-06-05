@@ -1,0 +1,40 @@
+perf: fsci-spatial nearest_neighbors — O(n^2) all-pairs brute force -> KD-tree, O(n log n)
+==========================================================================================
+
+Target : crates/fsci-spatial/src/lib.rs :: nearest_neighbors (all-points 1-NN).
+Lever  : The original found each point's nearest neighbour with an O(n) inner scan over every
+         other point -> O(n^2) total. Build a KD-tree once and descend it per query: O(log n)
+         average per point, O(n log n) total. New `nn_search_lowest_index` excludes the query's
+         own index and breaks distance ties by SMALLEST index, with `diff*diff <= best_dist_sq`
+         (<= not <) so equal-distance subtrees stay in play. Falls back to the brute force for
+         any input the tree cannot index (ragged rows / non-finite), so behaviour is
+         unconditionally preserved.
+
+Isomorphism proof (byte-identical: index AND distance bits)
+-----------------------------------------------------------
+- Distance: `sqeuclidean(a,b).sqrt() == euclidean(a,b)` (identical map/sum/sqrt); the tree stores
+  each point verbatim keyed by original index, so a matched pair yields identical distance bits.
+- Tie-break: best_dist_sq never drops below the true minimum, so EVERY minimum-distance point is
+  visited (its split-plane bound diff*diff <= min <= best_dist_sq is never pruned); the
+  `index < best_idx` update then selects the lowest index — exactly what the brute force's
+  strict `d < min_dist` first-match yields (smallest index on ties).
+- Empirically: 0 mismatches / 336 cases across n in {1,2,5,17,64,256,1000} x dim in {1,2,3,5} x
+  tie densities grid in {0(continuous),3,8} (grid-snapping forces duplicate / equidistant points)
+  x 4 seeds, comparing library index vectors (==) and distance bits (to_bits) to a VERBATIM copy
+  of the O(n^2) code.
+- In-tree test `nearest_neighbors_kdtree_matches_brute_force_bitwise` re-checks across tie-heavy
+  grids. Existing nearest_neighbors tests: 6 passed.
+- Golden payload sha256 (per-config index checksums):
+    5d3685e72fe3dff6e280317068382085fb361d9bdf27b9d6a052f85270421c64  golden_payload.txt
+
+Timing (same-process A/B, release, mean of 3; continuous low-dim data)
+----------------------------------------------------------------------
+  n= 4000 dim=2  old= 79.085 ms  new= 3.068 ms  ratio= 25.8x
+  n= 8000 dim=3  old=365.282 ms  new= 9.537 ms  ratio= 38.3x
+  n=16000 dim=2  old=  1.314 s   new=15.180 ms  ratio= 86.6x
+  (ratio grows with n, as expected for O(n^2) -> O(n log n).)
+
+Score: Impact 4 x Confidence 5 / Effort 2 = 10  (>> 2.0)
+
+Tests: cargo test -p fsci-spatial --lib nearest => 6 passed. fmt + clippy clean.
+Reproduce: cargo run --release -p fsci-spatial --bin perf_nearest_neighbors
