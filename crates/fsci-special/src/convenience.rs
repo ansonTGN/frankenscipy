@@ -1534,7 +1534,28 @@ pub fn hurwitz_zeta(s: f64, a: f64) -> f64 {
         return f64::NAN;
     }
     if a <= 0.0 {
-        return f64::NAN;
+        // A nonpositive-integer a hits a pole (some a+k = 0) => +inf (scipy).
+        if a == a.floor() {
+            return f64::INFINITY;
+        }
+        // For negative non-integer a, scipy.special.zeta(s, a) is real only when s
+        // is an integer (so the negative-base terms (a+j)^{-s} stay real), via the
+        // shift recurrence ζ(s,a) = Σ_{j<m} (a+j)^{-s} + ζ(s, a+m), a+m ∈ (0,1].
+        // Non-integer s with a<0 is NaN in scipy; reproduce that.
+        if s != s.round() || s <= 1.0 {
+            return f64::NAN;
+        }
+        let exp = -(s as i64);
+        if !(i32::MIN as i64..=i32::MAX as i64).contains(&exp) {
+            return f64::NAN;
+        }
+        let exp = exp as i32;
+        let m = (-a).ceil() as i64;
+        let mut acc = 0.0;
+        for j in 0..m {
+            acc += (a + j as f64).powi(exp);
+        }
+        return acc + hurwitz_zeta(s, a + m as f64);
     }
     if s <= 1.0 {
         return f64::INFINITY; // Pole at s=1

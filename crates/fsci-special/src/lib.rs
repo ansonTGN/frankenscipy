@@ -2612,6 +2612,30 @@ mod tests {
     }
 
     #[test]
+    fn hurwitz_zeta_negative_a_matches_scipy() {
+        // scipy.special.zeta(s, a) is finite for a<0 when s is an integer (shift
+        // recurrence over the negative-base terms); we previously returned NaN.
+        let cases: [(f64, f64, f64); 5] = [
+            (2.0, -0.5, 8.934802200544679),
+            (3.0, -1.5, 0.11810202582086413),
+            (4.0, -2.5, 32.457979369864596),
+            (2.0, -2.5, 9.539246644989124),
+            (5.0, -0.5, 0.14476040944446772),
+        ];
+        for (s, a, expected) in cases {
+            let got = hurwitz_zeta(s, a);
+            assert!(
+                (got - expected).abs() <= 1e-11 * expected.abs().max(1.0),
+                "hurwitz_zeta({s}, {a}) = {got}, expected {expected}"
+            );
+        }
+        // Nonpositive-integer a is a pole; non-integer s with a<0 is NaN (scipy).
+        assert!(hurwitz_zeta(2.0, 0.0).is_infinite());
+        assert!(hurwitz_zeta(2.0, -1.0).is_infinite());
+        assert!(hurwitz_zeta(2.5, -0.5).is_nan());
+    }
+
+    #[test]
     fn riemann_zeta_matches_scipy_at_small_s() {
         // scipy.special.zeta(s) for s slightly above the pole at s=1.
         let cases: [(f64, f64); 5] = [
@@ -2634,7 +2658,10 @@ mod tests {
     #[test]
     fn hurwitz_zeta_nan_inputs() {
         assert!(hurwitz_zeta(f64::NAN, 1.0).is_nan());
-        assert!(hurwitz_zeta(2.0, -1.0).is_nan());
+        // a = -1 is a nonpositive-integer pole => +inf (scipy.special.zeta), not
+        // NaN; negative NON-integer a with non-integer s is the NaN case.
+        assert!(hurwitz_zeta(2.0, -1.0).is_infinite());
+        assert!(hurwitz_zeta(2.5, -0.5).is_nan());
     }
 
     #[test]
