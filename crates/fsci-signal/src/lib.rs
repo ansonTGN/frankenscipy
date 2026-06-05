@@ -4336,10 +4336,20 @@ pub fn spectral_contrast(magnitudes: &[f64], n_bands: usize) -> Vec<f64> {
             if band.is_empty() {
                 return 0.0;
             }
-            let mut sorted = band.to_vec();
-            sorted.sort_by(|a, b| a.total_cmp(b));
-            let peak = sorted[sorted.len() - 1];
-            let valley = sorted[0];
+            // Only the band's extremes are needed; a single total_cmp pass yields
+            // the same `peak`/`valley` as sorting (the total_cmp max/min equal
+            // sorted[len-1]/sorted[0] bit-for-bit, incl. NaN/-0.0) in O(band) with
+            // no allocation, instead of an O(band log band) sort.
+            let mut peak = band[0];
+            let mut valley = band[0];
+            for &v in &band[1..] {
+                if v.total_cmp(&peak) == std::cmp::Ordering::Greater {
+                    peak = v;
+                }
+                if v.total_cmp(&valley) == std::cmp::Ordering::Less {
+                    valley = v;
+                }
+            }
             if valley > 0.0 {
                 (peak / valley).log10() * 20.0
             } else {

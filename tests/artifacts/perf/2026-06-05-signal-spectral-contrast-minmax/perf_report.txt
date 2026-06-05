@@ -1,0 +1,32 @@
+perf: fsci-signal spectral_contrast — per-band full sort -> single total_cmp min/max pass, O(n log b) -> O(n)
+===========================================================================================================
+
+Target : crates/fsci-signal/src/lib.rs :: spectral_contrast.
+Lever  : Each frequency band was copied (`band.to_vec()`) and FULLY SORTED only to read its
+         extremes — `peak = sorted[len-1]`, `valley = sorted[0]`. Replaced with one total_cmp pass
+         that tracks max/min directly, no allocation: O(band) instead of O(band log band) per band,
+         O(n) instead of O(n log b) total per frame (b = band size).
+
+Isomorphism proof (byte-identical)
+----------------------------------
+- `sorted[len-1]` is the total_cmp-greatest element and `sorted[0]` the total_cmp-least; tracking
+  max/min with the SAME `total_cmp` reproduces those exact values bit-for-bit (ties are
+  bit-identical; NaN / -0.0 ordering matches total_cmp), and peak/valley feed the unchanged
+  `(peak/valley).log10()*20`.
+- Empirically: 0 mismatches / 315 cases across n in {0,1,2,7,64,513,4096} x n_bands in {1,2,6,12,64}
+  x tie densities grid in {0(continuous),2,5} x 3 seeds, comparing the library to a VERBATIM copy
+  of the original per-band-sort code via to_bits.
+- Golden payload sha256 (per-config xor of output bits):
+    efd54ac601bd88c96ffe073accfff17ff85da0fe7ca97a778f1463e598441779  golden_payload.txt
+
+Timing (same-process A/B, release, mean over 2000 frames)
+---------------------------------------------------------
+  n=2048 nb=6  old=28.898 us  new= 5.003 us  ratio= 5.8x
+  n=4096 nb=7  old=61.103 us  new= 9.609 us  ratio= 6.4x
+  n=8192 nb=8  old=132.340 us new=19.095 us  ratio= 6.9x
+  (per-frame; spectral_contrast is called once per STFT frame, so the win scales with frame count.)
+
+Score: Impact 3 x Confidence 5 / Effort 1 = 15  (>> 2.0)
+
+Tests: cargo test -p fsci-signal --lib => existing suite green; isomorphism via perf bin (0/315).
+Reproduce: cargo run --release -p fsci-signal --bin perf_spectral_contrast
