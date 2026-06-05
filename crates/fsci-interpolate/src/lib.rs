@@ -1469,12 +1469,29 @@ pub fn make_lsq_spline(x: &[f64], y: &[f64], t: &[f64], k: usize) -> Result<BSpl
     }
     let mut ata = vec![vec![0.0; n]; n];
     let mut aty = vec![0.0; n];
+    // A B-spline basis has local support: eval_basis_all returns a length-n vector
+    // with only ~k+1 nonzero entries, so the dense n^2 inner double-loop wastes
+    // O(m*n^2) on terms that contribute nothing. Restrict the A^T A accumulation to
+    // the nonzero basis indices. BIT-IDENTICAL: a skipped (j,l) term is
+    // basis[j]*basis[l] with a zero factor, and basis values are finite (in [0,1]),
+    // so the product is +/-0.0 and `v + (+/-0.0) == v` for every f64 v — the
+    // i-major accumulation order and every bit of A^T A is preserved. The A^T y loop
+    // is left full (O(m*n), not the bottleneck) so any 0*non-finite-y term matches
+    // the original bit-for-bit. [perf]
+    let mut nz: Vec<usize> = Vec::with_capacity(k + 1);
     for i in 0..m {
         let basis = eval_basis_all(t, x[i], k, n);
+        let yi = y[i];
         for j in 0..n {
-            aty[j] += basis[j] * y[i];
-            for l in 0..n {
-                ata[j][l] += basis[j] * basis[l];
+            aty[j] += basis[j] * yi;
+        }
+        nz.clear();
+        nz.extend((0..n).filter(|&idx| basis[idx] != 0.0));
+        for &j in &nz {
+            let bj = basis[j];
+            let row = &mut ata[j];
+            for &l in &nz {
+                row[l] += bj * basis[l];
             }
         }
     }
