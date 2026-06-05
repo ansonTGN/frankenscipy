@@ -7,7 +7,7 @@
 //! four result fields across sizes / tie densities / alphas, and time the win.
 //! Run: `cargo run --release -p fsci-stats --bin perf_theilslopes`.
 
-use fsci_stats::{Normal, TheilslopesResult, find_repeats, median, theilslopes};
+use fsci_stats::{Normal, TheilslopesResult, find_repeats, median, theil_sen, theilslopes};
 use std::time::Instant;
 
 /// Verbatim copy of the original full-sort theilslopes.
@@ -77,6 +77,33 @@ fn old_theilslopes(x: &[f64], y: &[f64], alpha: f64) -> TheilslopesResult {
     }
 }
 
+fn old_theil_sen(x: &[f64], y: &[f64]) -> (f64, f64) {
+    let n = x.len();
+    if n < 2 || n != y.len() {
+        return (f64::NAN, f64::NAN);
+    }
+    let mut slopes = Vec::with_capacity(n * (n - 1) / 2);
+    for i in 0..n {
+        for j in i + 1..n {
+            let dx = x[j] - x[i];
+            if dx.abs() > 1e-15 {
+                slopes.push((y[j] - y[i]) / dx);
+            }
+        }
+    }
+    if slopes.is_empty() {
+        return (0.0, median(y));
+    }
+    let slope = median(&slopes);
+    let intercepts: Vec<f64> = x
+        .iter()
+        .zip(y.iter())
+        .map(|(&xi, &yi)| yi - slope * xi)
+        .collect();
+    let intercept = median(&intercepts);
+    (slope, intercept)
+}
+
 struct Lcg(u64);
 impl Lcg {
     fn next_f64(&mut self) -> f64 {
@@ -130,12 +157,16 @@ fn main() {
                     let (x, y) = make_xy(n, grid, seed * 2657 + 1);
                     let got = theilslopes(&x, &y, alpha);
                     let want = old_theilslopes(&x, &y, alpha);
+                    let got_sen = theil_sen(&x, &y);
+                    let want_sen = old_theil_sen(&x, &y);
                     total += 1;
                     let fields = [
                         (got.slope, want.slope),
                         (got.intercept, want.intercept),
                         (got.low_slope, want.low_slope),
                         (got.high_slope, want.high_slope),
+                        (got_sen.0, want_sen.0),
+                        (got_sen.1, want_sen.1),
                     ];
                     for &(g, w) in &fields {
                         if !eq_num(g, w) {
@@ -151,10 +182,12 @@ fn main() {
                     }
                     if payload.len() < 1500 {
                         payload.push_str(&format!(
-                            "n={n} grid={grid} a={alpha} seed={seed} s={:016x} lo={:016x} hi={:016x}\n",
+                            "n={n} grid={grid} a={alpha} seed={seed} s={:016x} lo={:016x} hi={:016x} sen_s={:016x} sen_i={:016x}\n",
                             got.slope.to_bits(),
                             got.low_slope.to_bits(),
-                            got.high_slope.to_bits()
+                            got.high_slope.to_bits(),
+                            got_sen.0.to_bits(),
+                            got_sen.1.to_bits()
                         ));
                     }
                 }
@@ -166,7 +199,7 @@ fn main() {
     println!("===GOLDEN_PAYLOAD_END===");
     println!(
         "parity: {num_mismatches} numeric mismatches / {total} cases ({} fields); {zero_sign_diffs} benign +0.0/-0.0-sign-only diffs (numerically equal)",
-        total * 4
+        total * 6
     );
 
     // ---- Timing: large n (O(n^2) slopes; old sorts them, new partitions) ----

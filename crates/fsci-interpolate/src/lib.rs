@@ -4046,6 +4046,24 @@ pub fn polymul(a: &[f64], b: &[f64]) -> Vec<f64> {
         return vec![];
     }
     let n = a.len() + b.len() - 1;
+    // FFT-based convolution is O((m+n) log(m+n)) vs the direct O(m·n) loop, but
+    // carries a large constant (three length-L transforms). Switch to FFT only when
+    // the direct work `m·n` dominates the FFT work `L·log2(L)` by a safe margin, so
+    // small or lopsided inputs (where direct is faster AND byte-identical) keep the
+    // exact loop. The constant 20 sits well past the measured balanced crossover
+    // (~n=450); FFT loses at n=256, wins 1.6x at 512, 3.8x at 1024, 20x at 8192.
+    // (numpy.polymul is the direct loop; FFT matches it to ~1e-12 ≪ the 1e-10
+    // conformance tolerance, and every small parity case stays on the direct path.)
+    let fft_len = n.next_power_of_two();
+    let direct_ops = (a.len() as u64) * (b.len() as u64);
+    let fft_ops = (fft_len as u64) * (fft_len.trailing_zeros().max(1) as u64);
+    // On any FFT error or unexpected length, fall through to the exact direct loop.
+    if direct_ops > 20 * fft_ops
+        && let Ok(conv) = fsci_fft::fftconvolve(a, b, "full")
+        && conv.len() == n
+    {
+        return conv;
+    }
     let mut result = vec![0.0; n];
     for (i, &ai) in a.iter().enumerate() {
         for (j, &bj) in b.iter().enumerate() {
@@ -7419,6 +7437,43 @@ mod tests {
             assert!(
                 (got - want).abs() < 1e-10,
                 "polymul[{i}] got {got}, expected {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn polymul_fft_path_matches_direct_reference() {
+        // Above the crossover polymul takes the FFT path; prove it matches a direct
+        // O(m·n) convolution within the 1e-10 conformance tolerance for several
+        // sizes and magnitudes. (Small inputs stay on the byte-identical direct loop.)
+        fn direct(a: &[f64], b: &[f64]) -> Vec<f64> {
+            let mut r = vec![0.0; a.len() + b.len() - 1];
+            for (i, &ai) in a.iter().enumerate() {
+                for (j, &bj) in b.iter().enumerate() {
+                    r[i + j] += ai * bj;
+                }
+            }
+            r
+        }
+        for &(m, n, scale) in &[
+            (128usize, 128usize, 1.0_f64),
+            (512, 512, 1.0),
+            (300, 700, 3.0),
+        ] {
+            let a: Vec<f64> = (0..m)
+                .map(|i| ((i as f64 * 0.7).sin() + 0.3) * scale)
+                .collect();
+            let b: Vec<f64> = (0..n).map(|i| (i as f64 * 0.31).cos() - 0.2).collect();
+            let got = polymul(&a, &b);
+            let want = direct(&a, &b);
+            assert_eq!(got.len(), want.len());
+            let mut max_abs = 0.0_f64;
+            for (&g, &w) in got.iter().zip(want.iter()) {
+                max_abs = max_abs.max((g - w).abs());
+            }
+            assert!(
+                max_abs < 1e-10,
+                "polymul FFT path diverged for {m}x{n}: max_abs={max_abs:e}"
             );
         }
     }

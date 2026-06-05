@@ -1,0 +1,6 @@
+n=  256: direct=   11.769us  fft=   11.806us  speedup= 1.00x  max_rel=0e0
+n=  512: direct=   48.502us  fft=   27.055us  speedup= 1.79x  max_rel=1.2528214334322926e-12
+n= 1024: direct=  182.512us  fft=   60.487us  speedup= 3.02x  max_rel=4.918011634612138e-13
+n= 2048: direct=  759.094us  fft=  142.630us  speedup= 5.32x  max_rel=1.1212118001326437e-13
+n= 4096: direct= 3287.368us  fft=  310.094us  speedup=10.60x  max_rel=2.8261830556115115e-13
+n= 8192: direct=13149.475us  fft=  661.713us  speedup=19.87x  max_rel=7.958017057785301e-12

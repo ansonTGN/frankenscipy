@@ -35475,22 +35475,21 @@ pub fn theil_sen(x: &[f64], y: &[f64]) -> (f64, f64) {
         return (f64::NAN, f64::NAN);
     }
 
-    // Compute all pairwise slopes
-    let mut slopes = Vec::with_capacity(n * (n - 1) / 2);
-    for i in 0..n {
-        for j in i + 1..n {
-            let dx = x[j] - x[i];
-            if dx.abs() > 1e-15 {
-                slopes.push((y[j] - y[i]) / dx);
-            }
-        }
-    }
-
-    if slopes.is_empty() {
+    let Some(total_slopes) = theil_total_clean_slopes(x, y) else {
+        return theil_sen_materialized(x, y);
+    };
+    if total_slopes == 0 {
         return (0.0, median(y));
     }
 
-    let slope = median_in_place(&mut slopes);
+    let median_lo = (total_slopes - 1) / 2;
+    let median_hi = total_slopes / 2;
+    let slope = if let Some(selected) = select_theil_slope_ranks(x, y, &[median_lo, median_hi]) {
+        (selected[0] + selected[1]) / 2.0
+    } else {
+        return theil_sen_materialized(x, y);
+    };
+
     // Intercept: median of y_i - slope * x_i
     let intercepts: Vec<f64> = x
         .iter()
@@ -35502,19 +35501,43 @@ pub fn theil_sen(x: &[f64], y: &[f64]) -> (f64, f64) {
     (slope, intercept)
 }
 
-#[cfg(test)]
 const THEIL_SLOPE_MIN_X_GAP: f64 = 1e-15;
+const THEIL_SLOPE_FAST_MIN_N: usize = 512;
+const THEIL_SLOPE_SAMPLE_TARGET: usize = 8192;
 
-#[cfg(test)]
-fn count_slopes_le(x: &[f64], y: &[f64], threshold: f64) -> usize {
-    count_slopes_le_by_inversions(x, y, threshold)
-        .unwrap_or_else(|| brute_count_slopes_le(x, y, threshold))
+fn theil_sen_materialized(x: &[f64], y: &[f64]) -> (f64, f64) {
+    let n = x.len();
+    let mut slopes = Vec::with_capacity(n * (n - 1) / 2);
+    for i in 0..n {
+        for j in i + 1..n {
+            let dx = x[j] - x[i];
+            if dx.abs() > THEIL_SLOPE_MIN_X_GAP {
+                slopes.push((y[j] - y[i]) / dx);
+            }
+        }
+    }
+
+    if slopes.is_empty() {
+        return (0.0, median(y));
+    }
+
+    let slope = median_in_place(&mut slopes);
+    let intercepts: Vec<f64> = x
+        .iter()
+        .zip(y.iter())
+        .map(|(&xi, &yi)| yi - slope * xi)
+        .collect();
+    let intercept = median(&intercepts);
+
+    (slope, intercept)
 }
 
-#[cfg(test)]
-fn count_slopes_le_by_inversions(x: &[f64], y: &[f64], threshold: f64) -> Option<usize> {
+fn theil_total_clean_slopes(x: &[f64], y: &[f64]) -> Option<usize> {
     let n = x.len();
-    if n < 2 || n != y.len() || !threshold.is_finite() {
+    if n < 2 || n != y.len() || !x.iter().all(|value| value.is_finite()) {
+        return None;
+    }
+    if !y.iter().all(|value| value.is_finite()) {
         return None;
     }
 
@@ -35530,16 +35553,72 @@ fn count_slopes_le_by_inversions(x: &[f64], y: &[f64], threshold: f64) -> Option
         }
     }
 
-    let mut transformed = Vec::with_capacity(n);
-    for &index in &order {
-        let value = y[index] - threshold * x[index];
-        if !value.is_finite() {
+    n.checked_mul(n - 1).map(|pairs| pairs / 2)
+}
+
+struct TheilSlopeOrder {
+    order: Vec<usize>,
+    transformed: Vec<f64>,
+    scratch: Vec<f64>,
+}
+
+impl TheilSlopeOrder {
+    fn new(x: &[f64], y: &[f64]) -> Option<Self> {
+        let n = x.len();
+        if n < 2 || n != y.len() || !x.iter().all(|value| value.is_finite()) {
             return None;
         }
-        transformed.push(value);
+        if !y.iter().all(|value| value.is_finite()) {
+            return None;
+        }
+
+        let mut order: Vec<usize> = (0..n).collect();
+        order.sort_by(|&left, &right| x[left].total_cmp(&x[right]));
+        for adjacent in order.windows(2) {
+            let gap = x[adjacent[1]] - x[adjacent[0]];
+            if !matches!(
+                gap.partial_cmp(&THEIL_SLOPE_MIN_X_GAP),
+                Some(std::cmp::Ordering::Greater)
+            ) {
+                return None;
+            }
+        }
+
+        Some(Self {
+            order,
+            transformed: vec![0.0; n],
+            scratch: vec![0.0; n],
+        })
     }
 
-    Some(count_non_strict_inversions(&transformed))
+    fn count_le(&mut self, x: &[f64], y: &[f64], threshold: f64) -> Option<usize> {
+        if !threshold.is_finite() {
+            return None;
+        }
+        for (out, &index) in self.transformed.iter_mut().zip(self.order.iter()) {
+            let value = y[index] - threshold * x[index];
+            if !value.is_finite() {
+                return None;
+            }
+            *out = value;
+        }
+
+        Some(count_non_strict_inversions_sort(
+            &mut self.transformed,
+            &mut self.scratch,
+        ))
+    }
+}
+
+#[cfg(test)]
+fn count_slopes_le(x: &[f64], y: &[f64], threshold: f64) -> usize {
+    count_slopes_le_by_inversions(x, y, threshold)
+        .unwrap_or_else(|| brute_count_slopes_le(x, y, threshold))
+}
+
+#[cfg(test)]
+fn count_slopes_le_by_inversions(x: &[f64], y: &[f64], threshold: f64) -> Option<usize> {
+    TheilSlopeOrder::new(x, y)?.count_le(x, y, threshold)
 }
 
 #[cfg(test)]
@@ -35560,14 +35639,6 @@ fn brute_count_slopes_le(x: &[f64], y: &[f64], threshold: f64) -> usize {
     count
 }
 
-#[cfg(test)]
-fn count_non_strict_inversions(values: &[f64]) -> usize {
-    let mut buffer = values.to_vec();
-    let mut scratch = vec![0.0; values.len()];
-    count_non_strict_inversions_sort(&mut buffer, &mut scratch)
-}
-
-#[cfg(test)]
 fn count_non_strict_inversions_sort(values: &mut [f64], scratch: &mut [f64]) -> usize {
     let len = values.len();
     if len <= 1 {
@@ -35610,6 +35681,176 @@ fn count_non_strict_inversions_sort(values: &mut [f64], scratch: &mut [f64]) -> 
     count
 }
 
+struct TheilIntervalSlopes {
+    below: usize,
+    slopes: Vec<f64>,
+}
+
+fn collect_theil_slopes_in_interval(
+    x: &[f64],
+    y: &[f64],
+    lower_open: f64,
+    upper_closed: f64,
+    limit: usize,
+) -> Option<TheilIntervalSlopes> {
+    if !matches!(
+        lower_open.partial_cmp(&upper_closed),
+        Some(std::cmp::Ordering::Less)
+    ) {
+        return None;
+    }
+
+    let mut below = 0usize;
+    let mut slopes = Vec::new();
+    for i in 0..x.len() {
+        for j in (i + 1)..x.len() {
+            let dx = x[i] - x[j];
+            if dx.abs() <= THEIL_SLOPE_MIN_X_GAP {
+                continue;
+            }
+            let slope = (y[i] - y[j]) / dx;
+            if !slope.is_finite() {
+                return None;
+            }
+            if slope <= lower_open {
+                below += 1;
+            } else if slope <= upper_closed {
+                slopes.push(slope);
+                if slopes.len() > limit {
+                    return None;
+                }
+            }
+        }
+    }
+
+    Some(TheilIntervalSlopes { below, slopes })
+}
+
+fn select_theil_slope_ranks(x: &[f64], y: &[f64], ranks: &[usize]) -> Option<Vec<f64>> {
+    if ranks.is_empty() || x.len() < THEIL_SLOPE_FAST_MIN_N {
+        return None;
+    }
+
+    let total = theil_total_clean_slopes(x, y)?;
+    let min_rank = ranks.iter().copied().min()?;
+    let max_rank = ranks.iter().copied().max()?;
+    if max_rank >= total {
+        return None;
+    }
+
+    let mut sample = sample_theil_slopes(x, y, total)?;
+    sample.sort_by(|a, b| a.total_cmp(b));
+    let sample_len = sample.len();
+    if sample_len < 16 {
+        return None;
+    }
+
+    let padding = (sample_len / 10).max(32);
+    let lower_index = ((min_rank.saturating_mul(sample_len)) / total).saturating_sub(padding);
+    let upper_index =
+        (((max_rank + 1).saturating_mul(sample_len)) / total + padding).min(sample_len - 1);
+    let lower = next_down_f64(sample[lower_index]);
+    let upper = next_up_f64(sample[upper_index]);
+
+    let mut order = TheilSlopeOrder::new(x, y)?;
+    let estimated_below = order.count_le(x, y, lower)?;
+    let estimated_upper = order.count_le(x, y, upper)?;
+    if estimated_below > min_rank || estimated_upper <= max_rank {
+        return None;
+    }
+
+    let rank_span = max_rank - min_rank + 1;
+    let candidate_limit = theil_candidate_limit(total, rank_span, x.len());
+    let estimated_span = estimated_upper.checked_sub(estimated_below)?;
+    if estimated_span > candidate_limit {
+        return None;
+    }
+
+    let interval = collect_theil_slopes_in_interval(x, y, lower, upper, candidate_limit)?;
+    if interval.below > min_rank || interval.below + interval.slopes.len() <= max_rank {
+        return None;
+    }
+
+    let mut candidates = interval.slopes;
+    let mut selected = Vec::with_capacity(ranks.len());
+    for &rank in ranks {
+        let local_rank = rank.checked_sub(interval.below)?;
+        if local_rank >= candidates.len() {
+            return None;
+        }
+        candidates.select_nth_unstable_by(local_rank, |a, b| a.total_cmp(b));
+        let value = candidates[local_rank];
+        if value == 0.0 {
+            return None;
+        }
+        selected.push(value);
+    }
+
+    Some(selected)
+}
+
+fn sample_theil_slopes(x: &[f64], y: &[f64], total: usize) -> Option<Vec<f64>> {
+    let sample_len = total.min(THEIL_SLOPE_SAMPLE_TARGET);
+    let mut sample = Vec::with_capacity(sample_len);
+    if total <= THEIL_SLOPE_SAMPLE_TARGET {
+        for i in 0..x.len() {
+            for j in (i + 1)..x.len() {
+                sample.push((y[i] - y[j]) / (x[i] - x[j]));
+            }
+        }
+        return Some(sample);
+    }
+
+    let mut state = 0x8f45_3a9d_2c17_6bf5u64 ^ x.len() as u64;
+    for _ in 0..sample_len {
+        let i = next_theil_sample_index(&mut state, x.len());
+        let mut j = next_theil_sample_index(&mut state, x.len());
+        if i == j {
+            j = (j + 1) % x.len();
+        }
+        let slope = (y[i] - y[j]) / (x[i] - x[j]);
+        if !slope.is_finite() {
+            return None;
+        }
+        sample.push(slope);
+    }
+    Some(sample)
+}
+
+fn next_theil_sample_index(state: &mut u64, len: usize) -> usize {
+    *state = state
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
+    ((*state >> 32) as usize) % len
+}
+
+fn theil_candidate_limit(total: usize, rank_span: usize, n: usize) -> usize {
+    rank_span
+        .saturating_mul(12)
+        .max(n.saturating_mul(128))
+        .max(262_144)
+        .min(total)
+}
+
+fn next_up_f64(value: f64) -> f64 {
+    if value.is_nan() || value == f64::INFINITY {
+        return value;
+    }
+    if value == 0.0 {
+        return f64::from_bits(1);
+    }
+    let bits = value.to_bits();
+    if value > 0.0 {
+        f64::from_bits(bits + 1)
+    } else {
+        f64::from_bits(bits - 1)
+    }
+}
+
+fn next_down_f64(value: f64) -> f64 {
+    -next_up_f64(-value)
+}
+
 /// Result for Theil-Sen regression with confidence interval.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TheilslopesResult {
@@ -35648,6 +35889,58 @@ pub fn theilslopes(x: &[f64], y: &[f64], alpha: f64) -> TheilslopesResult {
         };
     }
 
+    theilslopes_fast(x, y, alpha).unwrap_or_else(|| theilslopes_materialized(x, y, alpha))
+}
+
+fn theilslopes_fast(x: &[f64], y: &[f64], alpha: f64) -> Option<TheilslopesResult> {
+    let total_slopes = theil_total_clean_slopes(x, y)?;
+    if total_slopes == 0 {
+        return Some(TheilslopesResult {
+            slope: 0.0,
+            intercept: median(y),
+            low_slope: f64::NAN,
+            high_slope: f64::NAN,
+        });
+    }
+
+    let median_lo = (total_slopes - 1) / 2;
+    let median_hi = total_slopes / 2;
+    let (low_rank, high_rank) = theilslopes_ci_rank_indices(x, y, total_slopes, alpha);
+
+    let mut ranks = Vec::with_capacity(4);
+    ranks.push(median_lo);
+    ranks.push(median_hi);
+    if let Some(rank) = low_rank {
+        ranks.push(rank);
+    }
+    if let Some(rank) = high_rank {
+        ranks.push(rank);
+    }
+
+    let selected = select_theil_slope_ranks(x, y, &ranks)?;
+    let medslope = (selected[0] + selected[1]) / 2.0;
+    let low_slope = if low_rank.is_some() {
+        selected[2]
+    } else {
+        f64::NAN
+    };
+    let high_slope = match (low_rank, high_rank) {
+        (_, None) => f64::NAN,
+        (Some(_), Some(_)) => selected[3],
+        (None, Some(_)) => selected[2],
+    };
+
+    let medinter = median(y) - medslope * median(x);
+    Some(TheilslopesResult {
+        slope: medslope,
+        intercept: medinter,
+        low_slope,
+        high_slope,
+    })
+}
+
+fn theilslopes_materialized(x: &[f64], y: &[f64], alpha: f64) -> TheilslopesResult {
+    let n = x.len();
     // Compute all pairwise slopes for unordered pairs {i, j} with x[i]
     // ≠ x[j]. The slope (y_i - y_j)/(x_i - x_j) is symmetric in i↔j, so
     // we iterate j > i and accept either sign of dx. Resolves
@@ -35673,31 +35966,7 @@ pub fn theilslopes(x: &[f64], y: &[f64], alpha: f64) -> TheilslopesResult {
         };
     }
 
-    // Confidence interval using Sen (1968) equation 2.6
-    let alpha_adj = if alpha > 0.5 { 1.0 - alpha } else { alpha };
-    let z = Normal::new(0.0, 1.0).ppf(alpha_adj / 2.0);
-
-    // Find repeats for tie correction
-    let x_reps = find_repeats(x);
-    let y_reps = find_repeats(y);
-
-    let nt = slopes.len() as f64;
-    let ny = n as f64;
-
-    // Sen (1968) equation 2.6
-    let mut sigsq = ny * (ny - 1.0) * (2.0 * ny + 5.0) / 18.0;
-    for &k in &x_reps.counts {
-        let kf = k as f64;
-        sigsq -= kf * (kf - 1.0) * (2.0 * kf + 5.0) / 18.0;
-    }
-    for &k in &y_reps.counts {
-        let kf = k as f64;
-        sigsq -= kf * (kf - 1.0) * (2.0 * kf + 5.0) / 18.0;
-    }
-
-    let sigma = sigsq.sqrt();
-    let ru = ((nt - z * sigma) / 2.0).round() as usize;
-    let rl = ((nt + z * sigma) / 2.0).round() as usize;
+    let (low_rank, high_rank) = theilslopes_ci_rank_indices(x, y, slopes.len(), alpha);
 
     // The CI reads only the two order statistics slopes[rl-1] and slopes[ru], so
     // partition to those exact ranks with `select_nth_unstable_by` (O(n^2))
@@ -35707,13 +35976,13 @@ pub fn theilslopes(x: &[f64], y: &[f64], alpha: f64) -> TheilslopesResult {
     // on the rank (the original stable sort kept ±0.0 in build order), which is
     // numerically identical (+0.0 == -0.0) and not guaranteed by SciPy either.
     let cmp = |a: &f64, b: &f64| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal);
-    let low_slope = if rl > 0 && rl <= slopes.len() {
-        *slopes.select_nth_unstable_by(rl - 1, cmp).1
+    let low_slope = if let Some(rank) = low_rank {
+        *slopes.select_nth_unstable_by(rank, cmp).1
     } else {
         f64::NAN
     };
-    let high_slope = if ru < slopes.len() {
-        *slopes.select_nth_unstable_by(ru, cmp).1
+    let high_slope = if let Some(rank) = high_rank {
+        *slopes.select_nth_unstable_by(rank, cmp).1
     } else {
         f64::NAN
     };
@@ -35732,6 +36001,42 @@ pub fn theilslopes(x: &[f64], y: &[f64], alpha: f64) -> TheilslopesResult {
         low_slope,
         high_slope,
     }
+}
+
+fn theilslopes_ci_rank_indices(
+    x: &[f64],
+    y: &[f64],
+    slope_count: usize,
+    alpha: f64,
+) -> (Option<usize>, Option<usize>) {
+    let n = x.len();
+    let alpha_adj = if alpha > 0.5 { 1.0 - alpha } else { alpha };
+    let z = Normal::new(0.0, 1.0).ppf(alpha_adj / 2.0);
+    let x_reps = find_repeats(x);
+    let y_reps = find_repeats(y);
+    let nt = slope_count as f64;
+    let ny = n as f64;
+
+    let mut sigsq = ny * (ny - 1.0) * (2.0 * ny + 5.0) / 18.0;
+    for &k in &x_reps.counts {
+        let kf = k as f64;
+        sigsq -= kf * (kf - 1.0) * (2.0 * kf + 5.0) / 18.0;
+    }
+    for &k in &y_reps.counts {
+        let kf = k as f64;
+        sigsq -= kf * (kf - 1.0) * (2.0 * kf + 5.0) / 18.0;
+    }
+
+    let sigma = sigsq.sqrt();
+    let ru = ((nt - z * sigma) / 2.0).round() as usize;
+    let rl = ((nt + z * sigma) / 2.0).round() as usize;
+    let low_rank = if rl > 0 && rl <= slope_count {
+        Some(rl - 1)
+    } else {
+        None
+    };
+    let high_rank = if ru < slope_count { Some(ru) } else { None };
+    (low_rank, high_rank)
 }
 
 /// Result for Siegel's repeated median regression.
@@ -47805,6 +48110,173 @@ mod tests {
         fn index(&mut self, len: usize) -> usize {
             (self.unit() * len as f64).floor() as usize
         }
+    }
+
+    fn sorted_theil_pair_slopes(x: &[f64], y: &[f64]) -> Vec<f64> {
+        let mut slopes = Vec::new();
+        for i in 0..x.len() {
+            for j in (i + 1)..x.len() {
+                let dx = x[i] - x[j];
+                if dx.abs() > THEIL_SLOPE_MIN_X_GAP {
+                    slopes.push((y[i] - y[j]) / dx);
+                }
+            }
+        }
+        slopes.sort_by(|a, b| a.total_cmp(b));
+        slopes
+    }
+
+    fn distinct_theil_case(n: usize, seed: u64) -> (Vec<f64>, Vec<f64>) {
+        let mut rng = CountSlopeLcg(seed);
+        let mut points: Vec<(f64, f64)> = (0..n)
+            .map(|i| {
+                let x_value = i as f64 * 0.5 + rng.unit() * 0.01;
+                let y_value = 1.875 * x_value + rng.signed(3.0) + ((i * 17) % 29) as f64 * 0.03125;
+                (x_value, y_value)
+            })
+            .collect();
+        for i in 0..points.len() {
+            let swap_with = rng.index(points.len());
+            points.swap(i, swap_with);
+        }
+        let x: Vec<f64> = points.iter().map(|&(x_value, _)| x_value).collect();
+        let y: Vec<f64> = points.iter().map(|&(_, y_value)| y_value).collect();
+        (x, y)
+    }
+
+    fn min_slope_gt_by_scan(x: &[f64], y: &[f64], threshold: f64) -> Option<f64> {
+        let mut best = None;
+        for i in 0..x.len() {
+            for j in (i + 1)..x.len() {
+                let dx = x[i] - x[j];
+                if dx.abs() <= THEIL_SLOPE_MIN_X_GAP {
+                    continue;
+                }
+                let slope = (y[i] - y[j]) / dx;
+                if slope > threshold
+                    && best.is_none_or(|current: f64| slope.total_cmp(&current).is_lt())
+                {
+                    best = Some(slope);
+                }
+            }
+        }
+        best
+    }
+
+    #[test]
+    fn min_slope_gt_matches_full_sort_for_exact_and_nextafter_thresholds() {
+        let (x, y) = distinct_theil_case(72, 0x6d69_6e5f_736c_6f70);
+        let slopes = sorted_theil_pair_slopes(&x, &y);
+        for &rank in &[
+            0usize,
+            37,
+            slopes.len() / 3,
+            slopes.len() / 2,
+            slopes.len() - 2,
+        ] {
+            for threshold in [
+                next_down_f64(slopes[rank]),
+                slopes[rank],
+                next_up_f64(slopes[rank]),
+            ] {
+                let expected = slopes.iter().copied().find(|&slope| slope > threshold);
+                assert_eq!(
+                    min_slope_gt_by_scan(&x, &y, threshold).map(f64::to_bits),
+                    expected.map(f64::to_bits),
+                    "threshold={threshold} rank={rank}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn interval_enumeration_matches_full_sort_for_open_closed_bounds() {
+        let (x, y) = distinct_theil_case(80, 0x1eaf_cafe_5eed_f00d);
+        let slopes = sorted_theil_pair_slopes(&x, &y);
+        let cases = [
+            (next_down_f64(slopes[128]), slopes[400]),
+            (slopes[777], slopes[1234]),
+            (next_down_f64(slopes[1500]), next_up_f64(slopes[1800])),
+        ];
+
+        for (lower, upper) in cases {
+            let interval = collect_theil_slopes_in_interval(&x, &y, lower, upper, slopes.len())
+                .expect("interval should enumerate");
+            let expected_below = slopes.iter().filter(|&&slope| slope <= lower).count();
+            let mut expected: Vec<f64> = slopes
+                .iter()
+                .copied()
+                .filter(|&slope| slope > lower && slope <= upper)
+                .collect();
+            let mut got = interval.slopes;
+            expected.sort_by(|a, b| a.total_cmp(b));
+            got.sort_by(|a, b| a.total_cmp(b));
+            assert_eq!(interval.below, expected_below, "below lower={lower}");
+            assert_eq!(
+                got.iter().map(|value| value.to_bits()).collect::<Vec<_>>(),
+                expected
+                    .iter()
+                    .map(|value| value.to_bits())
+                    .collect::<Vec<_>>(),
+                "interval lower={lower} upper={upper}"
+            );
+        }
+    }
+
+    #[test]
+    fn rank_selection_matches_materialized_for_random_distinct_finite_inputs() {
+        for (n, seed) in [
+            (640usize, 0x51e1_ec70_c0de_0001),
+            (777usize, 0x51e1_ec70_c0de_0002),
+        ] {
+            let (x, y) = distinct_theil_case(n, seed);
+            let slopes = sorted_theil_pair_slopes(&x, &y);
+            let center = slopes.len() / 2;
+            let ranks = [center - 2048, center - 1, center, center + 2048];
+            let selected = select_theil_slope_ranks(&x, &y, &ranks)
+                .expect("clean finite input should use fast rank selection");
+            for (&rank, value) in ranks.iter().zip(selected) {
+                assert_eq!(value.to_bits(), slopes[rank].to_bits(), "n={n} rank={rank}");
+            }
+        }
+    }
+
+    #[test]
+    fn theil_fast_paths_match_materialized_reference_for_clean_inputs() {
+        let (x, y) = distinct_theil_case(704, 0x7a57_1e11_5109_e5c1);
+        let fast = theilslopes_fast(&x, &y, 0.95).expect("theilslopes fast path");
+        let reference = theilslopes_materialized(&x, &y, 0.95);
+        assert_eq!(fast.slope.to_bits(), reference.slope.to_bits());
+        assert_eq!(fast.intercept.to_bits(), reference.intercept.to_bits());
+        assert_eq!(fast.low_slope.to_bits(), reference.low_slope.to_bits());
+        assert_eq!(fast.high_slope.to_bits(), reference.high_slope.to_bits());
+
+        let fast_sen = theil_sen(&x, &y);
+        let reference_sen = theil_sen_materialized(&x, &y);
+        assert_eq!(fast_sen.0.to_bits(), reference_sen.0.to_bits());
+        assert_eq!(fast_sen.1.to_bits(), reference_sen.1.to_bits());
+    }
+
+    #[test]
+    fn fast_rank_selection_falls_back_for_unproven_inputs() {
+        let mut x: Vec<f64> = (0..520).map(|i| i as f64).collect();
+        let y: Vec<f64> = x.iter().map(|&value| 3.0 * value + 1.0).collect();
+        let rank = x.len() * (x.len() - 1) / 4;
+
+        x[100] = x[99];
+        assert!(select_theil_slope_ranks(&x, &y, &[rank]).is_none());
+
+        let mut tiny_gap_x: Vec<f64> = (0..520).map(|i| i as f64).collect();
+        tiny_gap_x[100] = tiny_gap_x[99] + 5.0e-16;
+        assert!(select_theil_slope_ranks(&tiny_gap_x, &y, &[rank]).is_none());
+
+        let finite_x: Vec<f64> = (0..520).map(|i| i as f64).collect();
+        let mut nonfinite_y = y.clone();
+        nonfinite_y[3] = f64::NAN;
+        assert!(select_theil_slope_ranks(&finite_x, &nonfinite_y, &[rank]).is_none());
+
+        let zero_y = vec![5.0; 520];
+        assert!(select_theil_slope_ranks(&finite_x, &zero_y, &[rank]).is_none());
     }
 
     #[test]

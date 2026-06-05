@@ -1,0 +1,9 @@
+  [2m2026-06-05T16:37:03.532491Z[0m [33m WARN[0m [1;33mrch::hook[0m[33m: [33mexec called with non-compilation command: hyperfine --warmup 1 --runs 3 'cargo run --release -p fsci-stats --bin perf_theilslopes --locked >/dev/null'[0m
+    [2;3mat[0m rch/src/hook.rs:402 [2;3mon[0m ThreadId(1)
+
+Benchmark 1: cargo run --release -p fsci-stats --bin perf_theilslopes --locked >/dev/null
+  Time (mean ± σ):     29.291 s ± 48.643 s    [User: 9.603 s, System: 0.468 s]
+  Range (min … max):    1.187 s … 85.460 s    3 runs
+ 
+  Warning: The first benchmarking run for this command was significantly slower than the rest (85.460 s). This could be caused by (filesystem) caches that were not filled until after the first run. You are already using the '--warmup' option which helps to fill these caches before the actual benchmark. You can either try to increase the warmup count further or re-run this benchmark on a quiet system in case it was a random outlier. Alternatively, consider using the '--prepare' option to clear the caches before each timing run.
+ 
