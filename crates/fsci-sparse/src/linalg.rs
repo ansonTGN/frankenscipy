@@ -622,8 +622,19 @@ pub fn spilu(a: &CscMatrix, options: IluOptions) -> SparseResult<SparseIluFactor
     // IKJ variant of ILU(0): for each row i, for each nonzero a[i,k] with k < i,
     // compute multiplier a[i,k] /= a[k,k], then for each nonzero a[k,j] with j > k,
     // if (i,j) is in the sparsity pattern, subtract multiplier * a[k,j].
+    let mut row_lookup = vec![usize::MAX; n];
+    let mut row_lookup_touched = Vec::new();
     for i in 0..n {
-        for idx_ik in lu_indptr[i]..lu_indptr[i + 1] {
+        let row_start = lu_indptr[i];
+        let row_end = lu_indptr[i + 1];
+        row_lookup_touched.clear();
+        for (offset, &col) in lu_indices[row_start..row_end].iter().enumerate() {
+            let idx = row_start + offset;
+            row_lookup[col] = idx;
+            row_lookup_touched.push(col);
+        }
+
+        for idx_ik in row_start..row_end {
             let k = lu_indices[idx_ik];
             if k >= i {
                 break; // only process lower triangle (k < i)
@@ -650,11 +661,16 @@ pub fn spilu(a: &CscMatrix, options: IluOptions) -> SparseResult<SparseIluFactor
                 let a_kj = lu_data[idx_kj];
 
                 // If (i, j) exists in the sparsity pattern, subtract
-                if let Some(idx_ij) = find_index_in_row(lu_indices, lu_indptr, i, j) {
+                let idx_ij = row_lookup[j];
+                if idx_ij != usize::MAX {
                     lu_data[idx_ij] -= multiplier * a_kj;
                 }
                 // ILU(0): if (i,j) is NOT in pattern, we drop the fill-in
             }
+        }
+
+        for &col in &row_lookup_touched {
+            row_lookup[col] = usize::MAX;
         }
     }
 
@@ -805,11 +821,6 @@ fn find_value_in_row(
         .zip(data[range].iter())
         .find(|(j, _)| **j == col)
         .map_or(0.0, |(_, v)| *v)
-}
-
-/// Find the index into data/indices arrays for position (row, col).
-fn find_index_in_row(indices: &[usize], indptr: &[usize], row: usize, col: usize) -> Option<usize> {
-    (indptr[row]..indptr[row + 1]).find(|&idx| indices[idx] == col)
 }
 
 /// Options for iterative solvers (CG, GMRES, etc.).
@@ -4676,6 +4687,152 @@ mod tests {
         let a = square_csc();
         let ilu = spilu(&a, IluOptions::default()).expect("spilu should succeed");
         assert_eq!(ilu.shape, (a.shape().rows, a.shape().cols));
+    }
+
+    fn spilu_reference_find_index(
+        indices: &[usize],
+        indptr: &[usize],
+        row: usize,
+        col: usize,
+    ) -> Option<usize> {
+        (indptr[row]..indptr[row + 1]).find(|&idx| indices[idx] == col)
+    }
+
+    fn spilu_reference_linear_scan(a: &CscMatrix) -> SparseResult<SparseIluFactorization> {
+        let csr = a.to_csr()?;
+        let n = csr.shape().rows;
+        let lu_indptr = csr.indptr();
+        let lu_indices = csr.indices();
+        let mut lu_data = csr.data().to_vec();
+
+        for i in 0..n {
+            for idx_ik in lu_indptr[i]..lu_indptr[i + 1] {
+                let k = lu_indices[idx_ik];
+                if k >= i {
+                    break;
+                }
+
+                let diag_k = find_value_in_row(&lu_data, lu_indices, lu_indptr, k, k);
+                if diag_k.abs() < f64::EPSILON * 100.0 {
+                    return Err(SparseError::SingularMatrix {
+                        message: format!("zero pivot at row {k} during ILU(0)"),
+                    });
+                }
+
+                lu_data[idx_ik] /= diag_k;
+                let multiplier = lu_data[idx_ik];
+
+                for idx_kj in lu_indptr[k]..lu_indptr[k + 1] {
+                    let j = lu_indices[idx_kj];
+                    if j <= k {
+                        continue;
+                    }
+                    let a_kj = lu_data[idx_kj];
+
+                    if let Some(idx_ij) = spilu_reference_find_index(lu_indices, lu_indptr, i, j) {
+                        lu_data[idx_ij] -= multiplier * a_kj;
+                    }
+                }
+            }
+        }
+
+        let mut l_data = Vec::new();
+        let mut l_indices = Vec::new();
+        let mut l_indptr = vec![0usize];
+        let mut u_data = Vec::new();
+        let mut u_indices = Vec::new();
+        let mut u_indptr = vec![0usize];
+
+        for i in 0..n {
+            for idx in lu_indptr[i]..lu_indptr[i + 1] {
+                let j = lu_indices[idx];
+                if j < i {
+                    l_data.push(lu_data[idx]);
+                    l_indices.push(j);
+                }
+            }
+            l_data.push(1.0);
+            l_indices.push(i);
+            l_indptr.push(l_data.len());
+
+            for idx in lu_indptr[i]..lu_indptr[i + 1] {
+                let j = lu_indices[idx];
+                if j >= i {
+                    u_data.push(lu_data[idx]);
+                    u_indices.push(j);
+                }
+            }
+            u_indptr.push(u_data.len());
+        }
+
+        Ok(SparseIluFactorization {
+            shape: (n, n),
+            backend_used: SparseBackend::Auto,
+            ordering_used: IluOptions::default().ordering,
+            l_data,
+            l_indices,
+            l_indptr,
+            u_data,
+            u_indices,
+            u_indptr,
+            n,
+        })
+    }
+
+    fn spilu_banded_csc(n: usize, half_bandwidth: usize) -> CscMatrix {
+        let entries_per_row = half_bandwidth.saturating_mul(2).saturating_add(1);
+        let mut data = Vec::with_capacity(n.saturating_mul(entries_per_row));
+        let mut rows = Vec::with_capacity(data.capacity());
+        let mut cols = Vec::with_capacity(data.capacity());
+
+        for row in 0..n {
+            let start = row.saturating_sub(half_bandwidth);
+            let end = row.saturating_add(half_bandwidth).min(n.saturating_sub(1));
+            for col in start..=end {
+                rows.push(row);
+                cols.push(col);
+                if row == col {
+                    data.push(entries_per_row as f64 + 2.0 + (row % 17) as f64 * 0.001);
+                } else {
+                    data.push(-1.0 / (row.abs_diff(col) + 1) as f64);
+                }
+            }
+        }
+
+        CooMatrix::from_triplets(Shape2D::new(n, n), data, rows, cols, false)
+            .expect("spilu banded coo")
+            .to_csc()
+            .expect("spilu banded csc")
+    }
+
+    fn float_bits(values: &[f64]) -> Vec<u64> {
+        values.iter().map(|value| value.to_bits()).collect()
+    }
+
+    fn assert_spilu_factors_same_bits(
+        actual: &SparseIluFactorization,
+        expected: &SparseIluFactorization,
+    ) {
+        assert_eq!(actual.shape, expected.shape);
+        assert_eq!(actual.backend_used, expected.backend_used);
+        assert_eq!(actual.ordering_used, expected.ordering_used);
+        assert_eq!(actual.n, expected.n);
+        assert_eq!(actual.l_indptr, expected.l_indptr);
+        assert_eq!(actual.l_indices, expected.l_indices);
+        assert_eq!(float_bits(&actual.l_data), float_bits(&expected.l_data));
+        assert_eq!(actual.u_indptr, expected.u_indptr);
+        assert_eq!(actual.u_indices, expected.u_indices);
+        assert_eq!(float_bits(&actual.u_data), float_bits(&expected.u_data));
+    }
+
+    #[test]
+    fn spilu_row_workspace_matches_linear_scan_factor_bits() {
+        for &(n, half_bandwidth) in &[(16usize, 3usize), (64, 5), (160, 7)] {
+            let matrix = spilu_banded_csc(n, half_bandwidth);
+            let actual = spilu(&matrix, IluOptions::default()).expect("workspace spilu");
+            let expected = spilu_reference_linear_scan(&matrix).expect("reference spilu");
+            assert_spilu_factors_same_bits(&actual, &expected);
+        }
     }
 
     #[test]

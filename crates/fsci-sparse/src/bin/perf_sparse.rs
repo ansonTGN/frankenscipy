@@ -6,6 +6,8 @@
 //! Usage:
 //!   `perf_sparse add-csr <n> <density> <repeats>`
 //!   `perf_sparse add-csr-golden [path]`
+//!   `perf_sparse spilu <n> <half_bandwidth> <repeats>`
+//!   `perf_sparse spilu-golden [path]`
 
 use std::fmt::Write as _;
 use std::hint::black_box;
@@ -13,7 +15,8 @@ use std::path::Path;
 use std::time::Instant;
 
 use fsci_sparse::{
-    CooMatrix, CsrMatrix, FormatConvertible, Shape2D, add_csr, diags, random, scale_csr,
+    CooMatrix, CscMatrix, CsrMatrix, FormatConvertible, IluOptions, Shape2D, add_csr, diags,
+    random, scale_csr, spilu,
 };
 
 const SEED: u64 = 0xBEEF_CAFE;
@@ -225,16 +228,67 @@ fn scale_csr_golden_text() -> String {
     output
 }
 
+fn make_spilu_banded_csc(n: usize, half_bandwidth: usize) -> CscMatrix {
+    let entries_per_row = half_bandwidth.saturating_mul(2).saturating_add(1);
+    let mut data = Vec::with_capacity(n.saturating_mul(entries_per_row));
+    let mut rows = Vec::with_capacity(data.capacity());
+    let mut cols = Vec::with_capacity(data.capacity());
+
+    for row in 0..n {
+        let start = row.saturating_sub(half_bandwidth);
+        let end = row.saturating_add(half_bandwidth).min(n.saturating_sub(1));
+        for col in start..=end {
+            rows.push(row);
+            cols.push(col);
+            if row == col {
+                data.push(entries_per_row as f64 + 2.0 + (row % 17) as f64 * 0.001);
+            } else {
+                data.push(-1.0 / (row.abs_diff(col) + 1) as f64);
+            }
+        }
+    }
+
+    CooMatrix::from_triplets(Shape2D::new(n, n), data, rows, cols, false)
+        .expect("spilu banded coo")
+        .to_csc()
+        .expect("spilu banded csc")
+}
+
+fn spilu_rhs(n: usize) -> Vec<f64> {
+    (0..n)
+        .map(|i| ((i % 23) as f64 - 11.0) * 0.125 + 1.0)
+        .collect()
+}
+
+fn spilu_golden_text() -> String {
+    let mut output = String::new();
+    for &(n, half_bandwidth) in &[(16usize, 3usize), (64, 5), (160, 7)] {
+        let matrix = make_spilu_banded_csc(n, half_bandwidth);
+        let ilu = spilu(&matrix, IluOptions::default()).expect("spilu golden");
+        let solution = ilu.solve(&spilu_rhs(n)).expect("spilu solve");
+        write!(
+            output,
+            "case=banded-{n}-{half_bandwidth} shape={}x{} solution=",
+            ilu.shape.0, ilu.shape.1
+        )
+        .expect("write spilu golden header");
+        for value in solution {
+            write!(output, "{:016x},", value.to_bits()).expect("write spilu solve bits");
+        }
+        output.push('\n');
+    }
+    output
+}
+
 fn write_or_print_golden(output: String, path: Option<&str>) {
     if let Some(path) = path {
         let path = Path::new(path);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).expect("create golden artifact parent");
         }
-        std::fs::write(path, output).expect("write golden artifact");
-    } else {
-        print!("{output}");
+        std::fs::write(path, output.as_bytes()).expect("write golden artifact");
     }
+    print!("{output}");
 }
 
 fn main() {
@@ -254,6 +308,33 @@ fn main() {
     }
     if mode == "scale-csr-golden" {
         write_or_print_golden(scale_csr_golden_text(), args.get(2).map(String::as_str));
+        return;
+    }
+    if mode == "spilu-golden" {
+        write_or_print_golden(spilu_golden_text(), args.get(2).map(String::as_str));
+        return;
+    }
+    if mode == "spilu" {
+        let n: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(1_024);
+        let half_bandwidth: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(32);
+        let repeats: usize = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(10);
+        let matrix = make_spilu_banded_csc(n, half_bandwidth);
+        let rhs = spilu_rhs(n);
+
+        let t0 = Instant::now();
+        let mut checksum = 0.0_f64;
+        for _ in 0..repeats {
+            let ilu = spilu(black_box(&matrix), IluOptions::default()).expect("spilu");
+            checksum += ilu.shape.0 as f64 + ilu.shape.1 as f64;
+            checksum += ilu.solve(black_box(&rhs)).expect("spilu solve")[n / 2];
+            black_box(&ilu);
+        }
+        let elapsed = t0.elapsed();
+        let total_ms = elapsed.as_secs_f64() * 1e3;
+        let per_call_ms = total_ms / repeats as f64;
+        println!(
+            "{{\"mode\":\"{mode}\",\"n\":{n},\"half_bandwidth\":{half_bandwidth},\"repeats\":{repeats},\"total_ms\":{total_ms:.3},\"per_call_ms\":{per_call_ms:.6},\"checksum\":{checksum:.12e}}}",
+        );
         return;
     }
     if mode != "add-csr" {

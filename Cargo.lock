@@ -703,6 +703,7 @@ name = "fsci-interpolate"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "fsci-fft",
  "fsci-runtime",
  "fsci-spatial",
  "proptest",
