@@ -7131,34 +7131,63 @@ pub fn welch(
 
     let step = nperseg - noverlap;
     let win_coeffs = get_window(window.unwrap_or("hann"), nperseg)?;
-
-    // Segment the signal and compute periodograms
     let n_freqs = nperseg / 2 + 1;
-    let mut avg_psd = vec![0.0; n_freqs];
-    let mut n_segments = 0usize;
 
-    let mut start = 0;
-    while start + nperseg <= x.len() {
+    // nperseg <= x.len() above, so at least one segment fits.
+    let n_segments = (x.len() - nperseg) / step + 1;
+
+    // Each segment's periodogram (constant-detrend + window + rfft) is independent and
+    // expensive; for many segments the work is split across threads. The per-segment
+    // computation is deterministic and the averaging fold below runs in segment order,
+    // so the result is bit-identical to the sequential loop. scipy.signal.welch defaults
+    // to detrend='constant' (remove each segment's mean) — kept verbatim.
+    let compute_segment = |s: usize| -> Result<Vec<f64>, SignalError> {
+        let start = s * step;
         let segment = &x[start..start + nperseg];
-        // scipy.signal.welch defaults to detrend='constant': remove each
-        // segment's mean before the periodogram. Without it the DC and
-        // low-frequency bins of a non-zero-mean signal (e.g. a ramp) are
-        // hugely inflated.
         let mean = segment.iter().sum::<f64>() / nperseg as f64;
         let detrended: Vec<f64> = segment.iter().map(|&v| v - mean).collect();
-        let seg_result = periodogram(&detrended, fs, Some(&win_coeffs))?;
+        Ok(periodogram(&detrended, fs, Some(&win_coeffs))?.psd)
+    };
 
-        for (avg, &val) in avg_psd.iter_mut().zip(seg_result.psd.iter()) {
+    let seg_psds: Vec<Vec<f64>> = {
+        let nthreads = stft_frame_thread_count(n_segments, nperseg);
+        if nthreads <= 1 {
+            (0..n_segments)
+                .map(&compute_segment)
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            let chunk = n_segments.div_ceil(nthreads);
+            let cs = &compute_segment;
+            type SegChunk = Result<Vec<Vec<f64>>, SignalError>;
+            let chunk_results: Vec<SegChunk> = std::thread::scope(|scope| {
+                let handles: Vec<_> = (0..nthreads)
+                    .filter_map(|t| {
+                        let s0 = t * chunk;
+                        if s0 >= n_segments {
+                            return None;
+                        }
+                        let s1 = (s0 + chunk).min(n_segments);
+                        Some(scope.spawn(move || (s0..s1).map(cs).collect::<Result<Vec<_>, _>>()))
+                    })
+                    .collect();
+                handles
+                    .into_iter()
+                    .map(|h| h.join().expect("welch worker panicked"))
+                    .collect()
+            });
+            let mut v = Vec::with_capacity(n_segments);
+            for cr in chunk_results {
+                v.extend(cr?);
+            }
+            v
+        }
+    };
+
+    let mut avg_psd = vec![0.0; n_freqs];
+    for seg in &seg_psds {
+        for (avg, &val) in avg_psd.iter_mut().zip(seg.iter()) {
             *avg += val;
         }
-        n_segments += 1;
-        start += step;
-    }
-
-    if n_segments == 0 {
-        return Err(SignalError::InvalidArgument(
-            "signal too short for any segment".to_string(),
-        ));
     }
 
     // Average
