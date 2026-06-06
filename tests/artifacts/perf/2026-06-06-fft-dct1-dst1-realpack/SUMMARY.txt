@@ -1,0 +1,7 @@
+fsci-fft DCT-I/DST-I via real-FFT pack (half the FFT points)
+Correctness: max err vs naive Type-I = 1.16e-11 (parity tol 1e-9).
+Tests: fsci-fft 144 pass; diff_fft_dct_dst + diff_fft_dctn_dstn conformance pass; clippy clean.
+Min-of-3 A/B (old full complex -> new real pack, 2x point reduction):
+  dct_i: 513:1.40x 1025:1.44x 2049:1.48x 4097:1.59x 8193:1.59x 16385:1.67x
+  dst_i: 513:1.91x 1025:1.75x 2049:1.85x 4097:1.86x 8193:1.90x 16385:1.83x
+Below 2x (real-pack constants); completes the DCT/DST family off full-complex paths.

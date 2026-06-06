@@ -1242,18 +1242,19 @@ pub fn dct_i(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError> 
         return Ok(vec![input[0]]);
     }
 
+    // DCT-I is the FFT of the real symmetric period-(2N-2) extension; since that
+    // extension is real, use the real-FFT pack (an (N-1)-point complex FFT)
+    // rather than a full (2N-2)-point complex FFT — half the FFT points.
     let compute_backward = |src: &[f64]| -> Vec<f64> {
         let m = 2 * n - 2;
-        let mut extended = vec![(0.0, 0.0); m];
-        for i in 0..n {
-            extended[i] = (src[i], 0.0);
-        }
+        let mut extended = vec![0.0f64; m];
+        extended[..n].copy_from_slice(&src[..n]);
         for i in 1..n - 1 {
-            extended[m - i] = (src[i], 0.0);
+            extended[m - i] = src[i];
         }
         let backend = resolve_backend(options.backend);
-        let spectrum = backend.transform_1d_unscaled(&extended, false);
-        spectrum.into_iter().take(n).map(|v| v.0).collect()
+        let half = real_fft_specialized(&extended, backend); // bins 0..=(N-1)
+        half.into_iter().take(n).map(|v| v.0).collect()
     };
 
     let nm1 = (n - 1) as f64;
@@ -1388,19 +1389,21 @@ pub fn dst_i(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError> 
     validate_finite_real(input, options)?;
 
     let n = input.len();
-    // DST-I via FFT of length 2N+2
+    // DST-I is the FFT of the real antisymmetric period-(2N+2) extension; that
+    // extension is real, so use the real-FFT pack (an (N+1)-point complex FFT)
+    // instead of a full (2N+2)-point complex FFT — half the FFT points.
     let m = 2 * n + 2;
-    let mut extended = vec![(0.0, 0.0); m];
+    let mut extended = vec![0.0f64; m];
     for i in 0..n {
-        extended[i + 1] = (input[i], 0.0);
-        extended[m - i - 1] = (-input[i], 0.0);
+        extended[i + 1] = input[i];
+        extended[m - i - 1] = -input[i];
     }
 
     let backend = resolve_backend(options.backend);
-    let spectrum = backend.transform_1d_unscaled(&extended, false);
+    let half = real_fft_specialized(&extended, backend); // bins 0..=(N+1)
 
     let mut result = Vec::with_capacity(n);
-    for val in spectrum.iter().take(n + 1).skip(1) {
+    for val in half.iter().take(n + 1).skip(1) {
         result.push(-val.1); // -Im part corresponds to 2 * sum
     }
     // br-0wg1: DST-I normalization is uniform — ortho divides by
