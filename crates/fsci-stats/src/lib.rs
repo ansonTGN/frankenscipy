@@ -24528,7 +24528,96 @@ pub fn weightedtau(x: &[f64], y: &[f64]) -> f64 {
     (tau_x + tau_y) / 2.0
 }
 
+/// O(n log n) weighted Kendall tau for one hyperbolic ranking. The numerator
+/// `sum_{i<j} (wi+wj)·sign((xi-xj)(yi-yj))` and denominator `sum_{i<j} (wi+wj)`
+/// (with `wi = 1/(rank_i+1)`) are computed without the O(n^2) all-pairs loop.
+/// Denominator: each element lies in `n-1` pairs, so D = (n-1)·sum(wi). Numerator:
+/// sort by x (grouping x-ties, which contribute 0); process points in x order, and for
+/// each point query two Fenwick trees over the y-rank (one of weights, one of counts)
+/// to get, among already-inserted points (strictly smaller x), the weighted concordant
+/// minus discordant contribution `(sum_w + wb·cnt)_{y_a<y_b} - (sum_w + wb·cnt)_{y_a>y_b}`.
+/// y-ties (y_a==y_b) fall in neither side and contribute 0, matching `sign(...)==0`.
+/// Tolerance-parity with the O(n^2) reference (the weighted sums accumulate in a
+/// different order); validated bit-close by `weightedtau_one_side_matches_reference`.
 fn weightedtau_one_side(x: &[f64], y: &[f64], ranks: &[f64]) -> f64 {
+    let n = x.len();
+    if n < 2 {
+        return f64::NAN;
+    }
+    let w: Vec<f64> = ranks.iter().map(|&r| 1.0 / (r + 1.0)).collect();
+    let denom = (n as f64 - 1.0) * w.iter().sum::<f64>();
+    if denom == 0.0 {
+        return f64::NAN;
+    }
+
+    // Dense 1-based y-ranks (equal y -> equal rank) for Fenwick indexing.
+    let mut order_y: Vec<usize> = (0..n).collect();
+    order_y.sort_by(|&a, &b| y[a].total_cmp(&y[b]));
+    let mut yrank = vec![0usize; n];
+    let mut dense = 0usize;
+    for k in 0..n {
+        if k == 0 || y[order_y[k]].total_cmp(&y[order_y[k - 1]]) != std::cmp::Ordering::Equal {
+            dense += 1;
+        }
+        yrank[order_y[k]] = dense;
+    }
+    let max_rank = dense;
+
+    let mut order_x: Vec<usize> = (0..n).collect();
+    order_x.sort_by(|&a, &b| x[a].total_cmp(&x[b]));
+
+    // Two Fenwick (BIT) trees over y-rank: prefix weight sum and prefix count.
+    let mut bit_w = vec![0.0_f64; max_rank + 1];
+    let mut bit_c = vec![0.0_f64; max_rank + 1];
+    let prefix = |bit: &[f64], mut r: usize| -> f64 {
+        let mut s = 0.0;
+        while r > 0 {
+            s += bit[r];
+            r -= r & r.wrapping_neg();
+        }
+        s
+    };
+    let mut total_w = 0.0_f64;
+    let mut total_c = 0.0_f64;
+    let mut numer = 0.0_f64;
+
+    let mut k = 0;
+    while k < n {
+        let mut g = k + 1;
+        while g < n && x[order_x[g]].total_cmp(&x[order_x[k]]) == std::cmp::Ordering::Equal {
+            g += 1;
+        }
+        for &b in &order_x[k..g] {
+            let rb = yrank[b];
+            let wb = w[b];
+            let sum_w_lt = prefix(&bit_w, rb - 1);
+            let cnt_lt = prefix(&bit_c, rb - 1);
+            let sum_w_le = prefix(&bit_w, rb);
+            let cnt_le = prefix(&bit_c, rb);
+            let sum_w_gt = total_w - sum_w_le;
+            let cnt_gt = total_c - cnt_le;
+            numer += (sum_w_lt + wb * cnt_lt) - (sum_w_gt + wb * cnt_gt);
+        }
+        for &b in &order_x[k..g] {
+            let mut r = yrank[b];
+            while r <= max_rank {
+                bit_w[r] += w[b];
+                bit_c[r] += 1.0;
+                r += r & r.wrapping_neg();
+            }
+            total_w += w[b];
+            total_c += 1.0;
+        }
+        k = g;
+    }
+
+    numer / denom
+}
+
+/// Verbatim O(n²) weighted-tau one-side, retained as the isomorphism oracle for the
+/// O(n log n) implementation.
+#[cfg(test)]
+fn weightedtau_one_side_reference(x: &[f64], y: &[f64], ranks: &[f64]) -> f64 {
     let n = x.len();
     let mut weighted_concordant = 0.0;
     let mut weighted_discordant = 0.0;
@@ -24536,20 +24625,13 @@ fn weightedtau_one_side(x: &[f64], y: &[f64], ranks: &[f64]) -> f64 {
 
     for i in 0..n {
         for j in (i + 1)..n {
-            // Hyperbolic weigher applied to the chosen ranking.
             let w = 1.0 / (ranks[i] + 1.0) + 1.0 / (ranks[j] + 1.0);
-
-            let x_diff = x[i] - x[j];
-            let y_diff = y[i] - y[j];
-            let sign = x_diff * y_diff;
-
+            let sign = (x[i] - x[j]) * (y[i] - y[j]);
             if sign > 0.0 {
                 weighted_concordant += w;
             } else if sign < 0.0 {
                 weighted_discordant += w;
             }
-            // ties contribute 0
-
             total_weight += w;
         }
     }
@@ -24557,7 +24639,6 @@ fn weightedtau_one_side(x: &[f64], y: &[f64], ranks: &[f64]) -> f64 {
     if total_weight == 0.0 {
         return f64::NAN;
     }
-
     (weighted_concordant - weighted_discordant) / total_weight
 }
 
@@ -47970,6 +48051,48 @@ mod tests {
         let y = [5.0, 4.0, 3.0, 2.0, 1.0];
         let result = weightedtau(&x, &y);
         assert!((result - (-1.0)).abs() < 1e-10);
+    }
+
+    #[test]
+    fn weightedtau_one_side_matches_reference() {
+        // The O(n log n) Fenwick implementation must match the O(n^2) all-pairs reference
+        // to float tolerance across distinct values, x-ties, y-ties, and both rankings.
+        let mut s = 0x1234_5678_9abc_def0u64;
+        let mut rng = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (s >> 11) as f64 / (1u64 << 53) as f64
+        };
+        for &n in &[2usize, 3, 7, 40, 200] {
+            for tie_mod in &[0u64, 3, 7] {
+                let x: Vec<f64> = (0..n)
+                    .map(|_| {
+                        let v = rng() * 10.0;
+                        if *tie_mod > 0 {
+                            (v * *tie_mod as f64).round() / *tie_mod as f64
+                        } else {
+                            v
+                        }
+                    })
+                    .collect();
+                let y: Vec<f64> = (0..n)
+                    .map(|_| {
+                        let v = rng() * 10.0;
+                        if *tie_mod > 0 {
+                            (v * *tie_mod as f64).round() / *tie_mod as f64
+                        } else {
+                            v
+                        }
+                    })
+                    .collect();
+                let ranks = rank_values(&x);
+                let fast = weightedtau_one_side(&x, &y, &ranks);
+                let slow = weightedtau_one_side_reference(&x, &y, &ranks);
+                assert!(
+                    (fast - slow).abs() < 1e-9 || (fast.is_nan() && slow.is_nan()),
+                    "n={n} tie_mod={tie_mod}: fast={fast} slow={slow}"
+                );
+            }
+        }
     }
 
     #[test]
