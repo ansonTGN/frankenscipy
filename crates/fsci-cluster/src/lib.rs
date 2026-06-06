@@ -1578,58 +1578,12 @@ fn comb2_usize(x: usize) -> f64 {
 pub fn silhouette_score(data: &[Vec<f64>], labels: &[usize]) -> Result<f64, ClusterError> {
     let n = data.len();
     let (labels, k) = validate_cluster_metric_data(data, labels, "silhouette_score")?;
-    let mut total = 0.0;
 
-    // Single sweep over j buckets per-cluster (sum, count) so we can
-    // derive both a(i) and b(i) in O(N + k) per anchor instead of
-    // O(N·k). Resolves [frankenscipy-ktpz0]: previous loop was
-    // O(N²·k); this is O(N² + Nk).
-    let mut cluster_sum = vec![0.0_f64; k];
-    let mut cluster_count = vec![0usize; k];
-    for i in 0..n {
-        let li = labels[i];
-
-        for v in cluster_sum.iter_mut() {
-            *v = 0.0;
-        }
-        for v in cluster_count.iter_mut() {
-            *v = 0;
-        }
-        for j in 0..n {
-            if i == j {
-                continue;
-            }
-            let d = sq_dist(&data[i], &data[j]).sqrt();
-            cluster_sum[labels[j]] += d;
-            cluster_count[labels[j]] += 1;
-        }
-
-        let a = if cluster_count[li] > 0 {
-            cluster_sum[li] / cluster_count[li] as f64
-        } else {
-            0.0
-        };
-
-        let mut b = f64::INFINITY;
-        for c in 0..k {
-            if c == li || cluster_count[c] == 0 {
-                continue;
-            }
-            let mean_c = cluster_sum[c] / cluster_count[c] as f64;
-            if mean_c < b {
-                b = mean_c;
-            }
-        }
-
-        let s = if a.max(b) > 0.0 {
-            (b - a) / a.max(b)
-        } else {
-            0.0
-        };
-        total += s;
-    }
-
-    Ok(total / n as f64)
+    // Mean of the per-anchor silhouette coefficients. The anchor pass is parallel and
+    // returns values in index order, and summing in index order matches the original
+    // serial `total += s` accumulation, so the mean is bit-for-bit unchanged.
+    let samples = silhouette_samples_bucket_pass(data, &labels, k);
+    Ok(samples.iter().sum::<f64>() / n as f64)
 }
 
 /// Calinski-Harabasz index: ratio of between-cluster to within-cluster dispersion.
@@ -2235,108 +2189,103 @@ fn bron_kerbosch(
 ///
 /// Matches `sklearn.metrics.silhouette_samples`.
 pub fn silhouette_samples(data: &[Vec<f64>], labels: &[usize]) -> Result<Vec<f64>, ClusterError> {
-    let n = data.len();
     let (labels, k) = validate_cluster_metric_data(data, labels, "silhouette_samples")?;
-    const PAIRWISE_BUCKET_LIMIT: usize = 8_000_000;
-    const PAIRWISE_MIN_SAMPLES: usize = 256;
-
-    let Some(bucket_len) = n.checked_mul(k) else {
-        return Ok(silhouette_samples_bucket_pass(data, &labels, k));
-    };
-    if n < PAIRWISE_MIN_SAMPLES || bucket_len > PAIRWISE_BUCKET_LIMIT {
-        return Ok(silhouette_samples_bucket_pass(data, &labels, k));
-    }
-
-    let mut cluster_sizes = vec![0usize; k];
-    for &label in &labels {
-        cluster_sizes[label] += 1;
-    }
-
-    let mut cluster_sum = vec![0.0_f64; bucket_len];
-    for i in 0..n {
-        for j in (i + 1)..n {
-            let d = sq_dist(&data[i], &data[j]).sqrt();
-            cluster_sum[i * k + labels[j]] += d;
-            cluster_sum[j * k + labels[i]] += d;
-        }
-    }
-
-    let mut samples = Vec::with_capacity(n);
-    for i in 0..n {
-        let li = labels[i];
-        let row = &cluster_sum[i * k..i * k + k];
-        let own_count = cluster_sizes[li] - 1;
-        let a = if own_count > 0 {
-            row[li] / own_count as f64
-        } else {
-            0.0
-        };
-
-        let mut b = f64::INFINITY;
-        for c in 0..k {
-            if c == li || cluster_sizes[c] == 0 {
-                continue;
-            }
-            let mean_c = row[c] / cluster_sizes[c] as f64;
-            if mean_c < b {
-                b = mean_c;
-            }
-        }
-
-        samples.push(if a.max(b) > 0.0 {
-            (b - a) / a.max(b)
-        } else {
-            0.0
-        });
-    }
-
-    Ok(samples)
+    // The per-anchor bucket pass is bit-identical to the former upper-triangle matrix
+    // accumulation (same dist values and same per-cluster summation order) and is
+    // parallel across anchors, so it supersedes the n×k matrix path for every size.
+    Ok(silhouette_samples_bucket_pass(data, &labels, k))
 }
 
+/// Silhouette coefficient per anchor point. Each point's `s(i)` depends only on its
+/// distances to every other point bucketed by cluster, so the anchors are independent
+/// and the loop parallelizes byte-identically. The per-anchor bucket sum accumulates in
+/// increasing `j` order — identical to the upper-triangle matrix accumulation
+/// (dist(i,j) == dist(j,i) bit-for-bit, and each `cluster_sum[i][c]` there also fills in
+/// increasing source order) — so this is bit-identical to both the matrix and the old
+/// serial bucket paths.
 fn silhouette_samples_bucket_pass(data: &[Vec<f64>], labels: &[usize], k: usize) -> Vec<f64> {
     let n = data.len();
-    let mut samples = Vec::with_capacity(n);
-    let mut cluster_sum = vec![0.0_f64; k];
-    let mut cluster_count = vec![0usize; k];
-    for i in 0..n {
-        let li = labels[i];
-
-        cluster_sum.fill(0.0);
-        cluster_count.fill(0);
-        for j in 0..n {
-            if i == j {
-                continue;
+    // Compute anchors [i0, i1) into `out`, reusing two length-k scratch buffers across
+    // anchors (no per-anchor allocation).
+    let run = |i0: usize, i1: usize, out: &mut Vec<f64>| {
+        let mut cluster_sum = vec![0.0_f64; k];
+        let mut cluster_count = vec![0usize; k];
+        for i in i0..i1 {
+            let li = labels[i];
+            cluster_sum.iter_mut().for_each(|v| *v = 0.0);
+            cluster_count.iter_mut().for_each(|v| *v = 0);
+            for j in 0..n {
+                if i == j {
+                    continue;
+                }
+                let lj = labels[j];
+                cluster_sum[lj] += sq_dist(&data[i], &data[j]).sqrt();
+                cluster_count[lj] += 1;
             }
-            let lj = labels[j];
-            cluster_sum[lj] += sq_dist(&data[i], &data[j]).sqrt();
-            cluster_count[lj] += 1;
+            let a = if cluster_count[li] > 0 {
+                cluster_sum[li] / cluster_count[li] as f64
+            } else {
+                0.0
+            };
+            let mut b = f64::INFINITY;
+            for c in 0..k {
+                if c == li || cluster_count[c] == 0 {
+                    continue;
+                }
+                let mean_c = cluster_sum[c] / cluster_count[c] as f64;
+                if mean_c < b {
+                    b = mean_c;
+                }
+            }
+            out.push(if a.max(b) > 0.0 {
+                (b - a) / a.max(b)
+            } else {
+                0.0
+            });
         }
+    };
 
-        let a = if cluster_count[li] > 0 {
-            cluster_sum[li] / cluster_count[li] as f64
-        } else {
-            0.0
-        };
-
-        let mut b = f64::INFINITY;
-        for c in 0..k {
-            if c == li || cluster_count[c] == 0 {
-                continue;
-            }
-            let mean_c = cluster_sum[c] / cluster_count[c] as f64;
-            if mean_c < b {
-                b = mean_c;
-            }
-        }
-
-        samples.push(if a.max(b) > 0.0 {
-            (b - a) / a.max(b)
-        } else {
-            0.0
-        });
+    // Each anchor is an O(n·d) reduction; parallelize across anchors for large n²·d.
+    let d = data.first().map_or(0, Vec::len);
+    let work = (n as u64)
+        .saturating_mul(n as u64)
+        .saturating_mul(d.max(1) as u64);
+    let nthreads = if work < 1 << 21 || n < 64 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(1)
+            .min(n / 32)
+            .max(1)
+    };
+    if nthreads <= 1 {
+        let mut out = Vec::with_capacity(n);
+        run(0, n, &mut out);
+        return out;
     }
-
-    samples
+    let chunk = n.div_ceil(nthreads);
+    let run = &run;
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..nthreads)
+            .filter_map(|t| {
+                let i0 = t * chunk;
+                if i0 >= n {
+                    return None;
+                }
+                let i1 = (i0 + chunk).min(n);
+                Some(scope.spawn(move || {
+                    let mut out = Vec::with_capacity(i1 - i0);
+                    run(i0, i1, &mut out);
+                    out
+                }))
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|h| h.join().expect("silhouette worker panicked"))
+            .collect()
+    })
 }
 
 /// Gap statistic: compare within-cluster dispersion to reference.
