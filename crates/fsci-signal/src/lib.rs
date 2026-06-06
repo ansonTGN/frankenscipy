@@ -9595,15 +9595,18 @@ pub fn csd_with_scaling(
     let n_freqs = nperseg / 2 + 1;
     let opts = fsci_fft::FftOptions::default();
 
-    let mut avg_csd = vec![(0.0, 0.0); n_freqs];
-    let mut n_segments = 0usize;
-    let mut start = 0;
+    // nperseg <= x.len() above, so at least one segment fits.
+    let n_segments = (x.len() - nperseg) / step + 1;
 
-    while start + nperseg <= x.len() {
+    // Each segment's cross-periodogram (constant-detrend + window + two rffts + conj(X)*Y)
+    // is independent and expensive (two FFTs per segment); for many segments the work is
+    // split across threads. Each segment returns its per-bin contribution (with the
+    // one-sided factor applied), and the averaging fold runs in segment order, so the
+    // result is bit-identical to the sequential loop.
+    let compute_segment = |s: usize| -> Result<Vec<(f64, f64)>, SignalError> {
+        let start = s * step;
         let xs = &x[start..start + nperseg];
         let ys = &y[start..start + nperseg];
-        // scipy.signal.csd defaults to detrend='constant': remove each
-        // segment's mean before windowing.
         let xmean = xs.iter().sum::<f64>() / nperseg as f64;
         let ymean = ys.iter().sum::<f64>() / nperseg as f64;
         let wx: Vec<f64> = xs
@@ -9616,16 +9619,12 @@ pub fn csd_with_scaling(
             .zip(&win_coeffs)
             .map(|(&yi, &wi)| (yi - ymean) * wi)
             .collect();
-
         let sx = fsci_fft::rfft(&wx, &opts)
             .map_err(|e| SignalError::InvalidArgument(format!("FFT failed: {e}")))?;
         let sy = fsci_fft::rfft(&wy, &opts)
             .map_err(|e| SignalError::InvalidArgument(format!("FFT failed: {e}")))?;
-
-        // Pxy = conj(X) * Y
-        for (k, ((avg_re, avg_im), (&(xr, xi), &(yr, yi)))) in
-            avg_csd.iter_mut().zip(sx.iter().zip(sy.iter())).enumerate()
-        {
+        let mut out = Vec::with_capacity(n_freqs);
+        for (k, (&(xr, xi), &(yr, yi))) in sx.iter().zip(sy.iter()).take(n_freqs).enumerate() {
             // conj(X) * Y = (xr - j*xi) * (yr + j*yi) = (xr*yr + xi*yi) + j*(xr*yi - xi*yr)
             let re = xr * yr + xi * yi;
             let im = xr * yi - xi * yr;
@@ -9634,17 +9633,51 @@ pub fn csd_with_scaling(
             } else {
                 2.0
             };
-            *avg_re += re * factor;
-            *avg_im += im * factor;
+            out.push((re * factor, im * factor));
         }
-        n_segments += 1;
-        start += step;
-    }
+        Ok(out)
+    };
 
-    if n_segments == 0 {
-        return Err(SignalError::InvalidArgument(
-            "signal too short for any segment".to_string(),
-        ));
+    let seg_csds: Vec<Vec<(f64, f64)>> = {
+        let nthreads = stft_frame_thread_count(n_segments, nperseg);
+        if nthreads <= 1 {
+            (0..n_segments)
+                .map(&compute_segment)
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            let chunk = n_segments.div_ceil(nthreads);
+            let cs = &compute_segment;
+            type SegChunk = Result<Vec<Vec<(f64, f64)>>, SignalError>;
+            let chunk_results: Vec<SegChunk> = std::thread::scope(|scope| {
+                let handles: Vec<_> = (0..nthreads)
+                    .filter_map(|t| {
+                        let s0 = t * chunk;
+                        if s0 >= n_segments {
+                            return None;
+                        }
+                        let s1 = (s0 + chunk).min(n_segments);
+                        Some(scope.spawn(move || (s0..s1).map(cs).collect::<Result<Vec<_>, _>>()))
+                    })
+                    .collect();
+                handles
+                    .into_iter()
+                    .map(|h| h.join().expect("csd worker panicked"))
+                    .collect()
+            });
+            let mut v = Vec::with_capacity(n_segments);
+            for cr in chunk_results {
+                v.extend(cr?);
+            }
+            v
+        }
+    };
+
+    let mut avg_csd = vec![(0.0, 0.0); n_freqs];
+    for seg in &seg_csds {
+        for ((avg_re, avg_im), &(re, im)) in avg_csd.iter_mut().zip(seg.iter()) {
+            *avg_re += re;
+            *avg_im += im;
+        }
     }
 
     let scale = match scaling {
