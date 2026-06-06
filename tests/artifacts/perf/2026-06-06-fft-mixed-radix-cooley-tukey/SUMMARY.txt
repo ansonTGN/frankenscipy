@@ -1,0 +1,12 @@
+fsci-fft mixed-radix Cooley-Tukey (composite non-pow2 lengths)
+Correctness: max abs err vs naive O(n^2) DFT = 4.271e-14 (FFT parity tol 1e-9).
+Tests: fsci-fft 144+54 pass; all diff_fft_* conformance pass; clippy clean.
+Same-session A/B (perf_mixed_radix, Bluestein -> mixed-radix):
+  n=720  : 46.2us -> 17.3us  = 2.67x
+  n=1000 : 41.4us -> 23.0us  = 1.80x
+  n=1080 : 88.4us -> 27.9us  = 3.17x
+  n=1500 : 94.0us -> 39.1us  = 2.41x
+  n=1920 :109.3us -> 54.1us  = 2.02x
+  n=3000 :325.5us -> 74.6us  = 4.36x
+  n=5000 :449.0us ->123.6us  = 3.63x
+  n=10000:1031us  ->364.4us  = 2.83x

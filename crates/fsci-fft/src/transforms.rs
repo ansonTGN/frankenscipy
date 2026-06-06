@@ -93,9 +93,14 @@ impl FftBackend for CooleyTukeyBackend {
         if n.is_power_of_two() {
             cooley_tukey_radix2_inplace(data, inverse);
         } else {
-            // For non-power-of-2: use Bluestein's algorithm (chirp-z transform)
-            let result = bluestein_fft(data, inverse);
-            data.copy_from_slice(&result);
+            // Non-power-of-2: recursive mixed-radix Cooley-Tukey. Decomposes
+            // along the prime factors (radix-2 butterflies for the even part,
+            // small in-place DFTs for odd-prime factors), so a smooth length is
+            // O(n·Σfactors) ≈ O(n log n); Bluestein only carries large residual
+            // prime factors. Uses one scratch buffer the size of the input.
+            let mut scratch = vec![(0.0, 0.0); n];
+            mixed_radix_fft(data, 0, 1, &mut scratch, n, inverse);
+            data.copy_from_slice(&scratch);
         }
     }
 }
@@ -302,6 +307,176 @@ fn bluestein_fft(input: &[Complex64], inverse: bool) -> Vec<Complex64> {
         .zip(&plan.chirp)
         .map(|(&value, &chirp)| complex_mul(chirp, complex_scale(value, inv_m)))
         .collect()
+}
+
+/// Largest prime length still handled by an in-place O(p²) DFT before falling
+/// back to Bluestein. Small odd-prime factors (3, 5, 7, …) bottom out here
+/// cheaply; only genuinely large residual prime factors go through Bluestein.
+const MIXED_RADIX_DIRECT_MAX_PRIME: usize = 61;
+
+/// Smallest prime factor of `n` (n ≥ 2) by trial division; returns `n` if prime.
+fn smallest_prime_factor(n: usize) -> usize {
+    if n.is_multiple_of(2) {
+        return 2;
+    }
+    let mut f = 3;
+    while f * f <= n {
+        if n.is_multiple_of(f) {
+            return f;
+        }
+        f += 2;
+    }
+    n
+}
+
+/// Recursive mixed-radix Cooley-Tukey (decimation-in-time).
+///
+/// Reads the length-`n` input as `x[t] = src[base + t·stride]` and writes the
+/// unscaled DFT (sign per `inverse`, like the radix-2 / Bluestein kernels) into
+/// `out[0..n]`. For a composite `n = p·m` (`p` = smallest prime factor):
+///   X[r + m·u] = Σ_{j<p} (W_n^{j·r} · X_j[r]) · W_p^{j·u}
+/// where `X_j = DFT_m` of the stride-`p` decimated sub-sequence `x[j + p·s]`.
+/// The `p` sub-FFTs land in disjoint length-`m` blocks of `out`; the combine
+/// step twiddles and applies a length-`p` DFT across blocks (radix-2 hard-coded,
+/// other small primes via a direct length-`p` DFT). Prime lengths bottom out in
+/// a direct O(p²) DFT, or Bluestein when large.
+fn mixed_radix_fft(
+    src: &[Complex64],
+    base: usize,
+    stride: usize,
+    out: &mut [Complex64],
+    n: usize,
+    inverse: bool,
+) {
+    // Prefer a radix-4 split for the power-of-2 part (fewer, cheaper passes),
+    // otherwise peel the smallest prime factor.
+    let p = if n.is_multiple_of(4) {
+        4
+    } else {
+        smallest_prime_factor(n)
+    };
+    if p == n {
+        if n > MIXED_RADIX_DIRECT_MAX_PRIME {
+            // Large prime: gather the strided samples and let Bluestein carry it.
+            let gathered: Vec<Complex64> = (0..n).map(|t| src[base + t * stride]).collect();
+            let spectrum = bluestein_fft(&gathered, inverse);
+            out[..n].copy_from_slice(&spectrum);
+        } else {
+            let tw = get_or_compute_twiddles(n, inverse);
+            for (k, slot) in out.iter_mut().enumerate().take(n) {
+                let mut acc = (0.0, 0.0);
+                for t in 0..n {
+                    acc = complex_add(acc, complex_mul(src[base + t * stride], tw[(t * k) % n]));
+                }
+                *slot = acc;
+            }
+        }
+        return;
+    }
+
+    let m = n / p;
+    // p sub-FFTs of length m over the stride-p decimated sub-sequences, written
+    // into disjoint contiguous blocks of `out`.
+    for (j, block) in out.chunks_mut(m).enumerate().take(p) {
+        mixed_radix_fft(src, base + j * stride, stride * p, block, m, inverse);
+    }
+
+    // Combine: twiddle each block then apply the length-p DFT across blocks.
+    let twn = get_or_compute_twiddles(n, inverse);
+    let mut tmp = vec![(0.0, 0.0); p];
+    if p == 4 {
+        // Radix-4 butterfly: halves the passes over the power-of-2 part versus
+        // two radix-2 stages. z = DFT_4 of the twiddled blocks (W_4 = ∓i).
+        for r in 0..m {
+            let t0 = out[r];
+            let t1 = complex_mul(out[m + r], twn[r % n]);
+            let t2 = complex_mul(out[2 * m + r], twn[(2 * r) % n]);
+            let t3 = complex_mul(out[3 * m + r], twn[(3 * r) % n]);
+            let a02 = complex_add(t0, t2);
+            let b02 = complex_sub(t0, t2);
+            let a13 = complex_add(t1, t3);
+            let b13 = complex_sub(t1, t3);
+            // ∓i·b13: forward (-i)·(x,y)=(y,-x); inverse (+i)·(x,y)=(-y,x).
+            let rot = if inverse {
+                (-b13.1, b13.0)
+            } else {
+                (b13.1, -b13.0)
+            };
+            out[r] = complex_add(a02, a13);
+            out[m + r] = complex_add(b02, rot);
+            out[2 * m + r] = complex_sub(a02, a13);
+            out[3 * m + r] = complex_sub(b02, rot);
+        }
+    } else if p == 2 {
+        for r in 0..m {
+            let a = out[r];
+            let b = complex_mul(out[m + r], twn[r % n]);
+            out[r] = complex_add(a, b);
+            out[m + r] = complex_sub(a, b);
+        }
+    } else if p == 3 {
+        // Radix-3 butterfly. c = cos(2π/3) = -1/2, s = sin(2π/3).
+        const S3: f64 = 0.866_025_403_784_438_6;
+        let s = if inverse { -S3 } else { S3 };
+        for r in 0..m {
+            let t0 = out[r];
+            let t1 = complex_mul(out[m + r], twn[r % n]);
+            let t2 = complex_mul(out[2 * m + r], twn[(2 * r) % n]);
+            let psum = complex_add(t1, t2);
+            let pdif = complex_sub(t1, t2);
+            let a = (t0.0 - 0.5 * psum.0, t0.1 - 0.5 * psum.1);
+            out[r] = complex_add(t0, psum);
+            out[m + r] = (a.0 + s * pdif.1, a.1 - s * pdif.0);
+            out[2 * m + r] = (a.0 - s * pdif.1, a.1 + s * pdif.0);
+        }
+    } else if p == 5 {
+        // Radix-5 butterfly. c1=cos(2π/5), c2=cos(4π/5), s1=sin(2π/5), s2=sin(4π/5).
+        const C1: f64 = 0.309_016_994_374_947_45;
+        const C2: f64 = -0.809_016_994_374_947_4;
+        const S1: f64 = 0.951_056_516_295_153_6;
+        const S2: f64 = 0.587_785_252_292_473_1;
+        let (s1, s2) = if inverse { (-S1, -S2) } else { (S1, S2) };
+        for r in 0..m {
+            let t0 = out[r];
+            let t1 = complex_mul(out[m + r], twn[r % n]);
+            let t2 = complex_mul(out[2 * m + r], twn[(2 * r) % n]);
+            let t3 = complex_mul(out[3 * m + r], twn[(3 * r) % n]);
+            let t4 = complex_mul(out[4 * m + r], twn[(4 * r) % n]);
+            let t1p4 = complex_add(t1, t4);
+            let t1m4 = complex_sub(t1, t4);
+            let t2p3 = complex_add(t2, t3);
+            let t2m3 = complex_sub(t2, t3);
+            let a1 = (
+                t0.0 + C1 * t1p4.0 + C2 * t2p3.0,
+                t0.1 + C1 * t1p4.1 + C2 * t2p3.1,
+            );
+            let a2 = (
+                t0.0 + C2 * t1p4.0 + C1 * t2p3.0,
+                t0.1 + C2 * t1p4.1 + C1 * t2p3.1,
+            );
+            let b1 = (s1 * t1m4.0 + s2 * t2m3.0, s1 * t1m4.1 + s2 * t2m3.1);
+            let b2 = (s2 * t1m4.0 - s1 * t2m3.0, s2 * t1m4.1 - s1 * t2m3.1);
+            out[r] = (t0.0 + t1p4.0 + t2p3.0, t0.1 + t1p4.1 + t2p3.1);
+            out[m + r] = (a1.0 + b1.1, a1.1 - b1.0);
+            out[2 * m + r] = (a2.0 + b2.1, a2.1 - b2.0);
+            out[3 * m + r] = (a2.0 - b2.1, a2.1 + b2.0);
+            out[4 * m + r] = (a1.0 - b1.1, a1.1 + b1.0);
+        }
+    } else {
+        let twp = get_or_compute_twiddles(p, inverse);
+        for r in 0..m {
+            for (j, slot) in tmp.iter_mut().enumerate() {
+                *slot = complex_mul(out[j * m + r], twn[(j * r) % n]);
+            }
+            for u in 0..p {
+                let mut acc = (0.0, 0.0);
+                for (j, &t) in tmp.iter().enumerate() {
+                    acc = complex_add(acc, complex_mul(t, twp[(j * u) % p]));
+                }
+                out[u * m + r] = acc;
+            }
+        }
+    }
 }
 
 /// Reverse the lower `bits` bits of `x`.
