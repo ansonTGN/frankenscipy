@@ -77,5 +77,10 @@ Passed during the trial:
 - RCH `ts1` bitwise equivalence test
 - RCH `vmi1264463` same-binary perf probe
 
-Post-rejection validation should run on the restored source before the rejection
-record is committed.
+Passed after source restore:
+
+- `cargo fmt -p fsci-linalg --check`
+- `git diff --check`
+- RCH `cargo check -p fsci-linalg --lib --locked`
+- RCH `cargo test -p fsci-linalg --release --lib bidiag_fused_rank_k_update_matches_scalar_reference_bits --locked -- --nocapture`
+- RCH `cargo test -p fsci-linalg --release --lib public_svd_lstsq_pinv_golden_payload --locked -- --nocapture`
