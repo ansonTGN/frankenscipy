@@ -1,0 +1,27 @@
+ns=   100 seed=42     est_bits=3ff157fb62de83ba se_bits=3fc96da74a6ea260
+ns=   100 seed=12345  est_bits=3ff4008011092122 se_bits=3fc9cc94c67b647b
+ns=  1000 seed=42     est_bits=3ff12281dcb8c85f se_bits=3fad56739ff0b5ca
+ns=  1000 seed=12345  est_bits=3ff20c1629ae9261 se_bits=3fae793fd79c3945
+ns= 10000 seed=42     est_bits=3ff12f29425afc20 se_bits=3f9343ba786e9eec
+ns= 10000 seed=12345  est_bits=3ff1ea4067a398ec se_bits=3f93112c6a91ac9a
+ns=  20000    1.688ms/call (acc=5.500663)
+ns= 100000    7.813ms/call (acc=5.482019)
+ns= 400000   27.456ms/call (acc=5.474209)
+ns=   100 seed=42     est_bits=3ff157fb62de83ba se_bits=3fc96da74a6ea260
+ns=   100 seed=12345  est_bits=3ff4008011092122 se_bits=3fc9cc94c67b647b
+ns=  1000 seed=42     est_bits=3ff12281dcb8c85f se_bits=3fad56739ff0b5ca
+ns=  1000 seed=12345  est_bits=3ff20c1629ae9261 se_bits=3fae793fd79c3945
+ns= 10000 seed=42     est_bits=3ff12f29425afc20 se_bits=3f9343ba786e9eec
+ns= 10000 seed=12345  est_bits=3ff1ea4067a398ec se_bits=3f93112c6a91ac9a
+ns=  20000    1.514ms/call (acc=5.500663)
+ns= 100000    6.663ms/call (acc=5.482019)
+ns= 400000   30.420ms/call (acc=5.474209)
+ns=   100 seed=42     est_bits=3ff157fb62de83ba se_bits=3fc96da74a6ea260
+ns=   100 seed=12345  est_bits=3ff4008011092122 se_bits=3fc9cc94c67b647b
+ns=  1000 seed=42     est_bits=3ff12281dcb8c85f se_bits=3fad56739ff0b5ca
+ns=  1000 seed=12345  est_bits=3ff20c1629ae9261 se_bits=3fae793fd79c3945
+ns= 10000 seed=42     est_bits=3ff12f29425afc20 se_bits=3f9343ba786e9eec
+ns= 10000 seed=12345  est_bits=3ff1ea4067a398ec se_bits=3f93112c6a91ac9a
+ns=  20000    1.818ms/call (acc=5.500663)
+ns= 100000    7.127ms/call (acc=5.482019)
+ns= 400000   27.606ms/call (acc=5.474209)

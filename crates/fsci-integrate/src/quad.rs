@@ -2807,6 +2807,30 @@ where
 /// Monte Carlo integration of a function over `[a,b]^d`.
 ///
 /// Uses random sampling to estimate the integral.
+/// LCG multiplier for the Monte Carlo sampler (state -> a*state + 1).
+const MC_LCG_A: u64 = 6364136223846793005;
+
+/// `steps`-fold composition of the affine LCG step `x -> a*x + c`, returned as
+/// `(A, C)` with `x_steps = A*x + C` (wrapping). Lets each thread start its
+/// sample chunk from the exact RNG state the serial loop would reach (each
+/// sample consumes `d` draws), without replaying every draw — enabling
+/// byte-identical parallelism.
+fn lcg_jump(a: u64, c: u64, steps: usize) -> (u64, u64) {
+    let (mut res_a, mut res_c) = (1u64, 0u64);
+    let (mut base_a, mut base_c) = (a, c);
+    let mut e = steps;
+    while e > 0 {
+        if e & 1 == 1 {
+            res_c = base_a.wrapping_mul(res_c).wrapping_add(base_c);
+            res_a = base_a.wrapping_mul(res_a);
+        }
+        base_c = base_a.wrapping_mul(base_c).wrapping_add(base_c);
+        base_a = base_a.wrapping_mul(base_a);
+        e >>= 1;
+    }
+    (res_a, res_c)
+}
+
 pub fn monte_carlo_integrate<F>(
     f: F,
     bounds: &[(f64, f64)],
@@ -2814,7 +2838,7 @@ pub fn monte_carlo_integrate<F>(
     seed: u64,
 ) -> (f64, f64)
 where
-    F: Fn(&[f64]) -> f64,
+    F: Fn(&[f64]) -> f64 + Sync,
 {
     let d = bounds.len();
     if d == 0 || n_samples == 0 {
@@ -2822,18 +2846,89 @@ where
     }
 
     let volume: f64 = bounds.iter().map(|&(a, b)| b - a).product();
-    let mut rng = seed;
+
+    // Each sample consumes exactly `d` LCG draws, so chunk-boundary RNG states
+    // are reachable via an `(chunk*d)`-step LCG jump. Evaluate the (expensive)
+    // integrand per sample in parallel into ordered slots, then reduce
+    // SEQUENTIALLY in sample order — byte-identical to the serial loop (same
+    // RNG stream, same points, same float summation order).
+    let eval_sample = |rng: &mut u64, point: &mut [f64]| -> f64 {
+        for (j, p) in point.iter_mut().enumerate() {
+            *rng = rng.wrapping_mul(MC_LCG_A).wrapping_add(1);
+            let u = (*rng >> 11) as f64 / (1u64 << 53) as f64;
+            *p = bounds[j].0 + u * (bounds[j].1 - bounds[j].0);
+        }
+        f(point)
+    };
+
+    // Parallel only pays off once the sampling work is large enough to absorb
+    // the extra fvals buffer + separate sequential reduction pass; below that
+    // the fused serial loop (byte-identical, zero overhead) wins.
+    let work = n_samples.saturating_mul(d);
+    let nthreads = if work < (1 << 18) || n_samples < 2 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(|c| c.get())
+            .unwrap_or(1)
+            .min(n_samples)
+    };
+
+    if nthreads <= 1 {
+        // Fused serial loop, byte-for-byte the original (sampling inlined, no
+        // closure indirection, no fvals allocation) so small inputs never regress.
+        let mut rng = seed;
+        let mut sum = 0.0;
+        let mut sum_sq = 0.0;
+        let mut point = vec![0.0; d];
+        for _ in 0..n_samples {
+            for j in 0..d {
+                rng = rng.wrapping_mul(MC_LCG_A).wrapping_add(1);
+                let u = (rng >> 11) as f64 / (1u64 << 53) as f64;
+                point[j] = bounds[j].0 + u * (bounds[j].1 - bounds[j].0);
+            }
+            let fval = f(&point);
+            sum += fval;
+            sum_sq += fval * fval;
+        }
+        let nf = n_samples as f64;
+        let mean = sum / nf;
+        let variance = sum_sq / nf - mean * mean;
+        let std_err = (variance / nf).sqrt() * volume;
+        return (mean * volume, std_err);
+    }
+
+    let fvals: Vec<f64> = {
+        let chunk = n_samples.div_ceil(nthreads);
+        let (jump_a, jump_c) = lcg_jump(MC_LCG_A, 1, chunk * d);
+        let mut starts = Vec::new();
+        let mut cs = seed;
+        let mut t = 0;
+        while t * chunk < n_samples {
+            starts.push(cs);
+            cs = jump_a.wrapping_mul(cs).wrapping_add(jump_c);
+            t += 1;
+        }
+        let mut out = vec![0.0; n_samples];
+        let chunks: Vec<&mut [f64]> = out.chunks_mut(chunk).collect();
+        let eval_sample = &eval_sample;
+        std::thread::scope(|scope| {
+            for (state0, slot) in starts.into_iter().zip(chunks) {
+                scope.spawn(move || {
+                    let mut rng = state0;
+                    let mut point = vec![0.0; d];
+                    for o in slot.iter_mut() {
+                        *o = eval_sample(&mut rng, &mut point);
+                    }
+                });
+            }
+        });
+        out
+    };
+
     let mut sum = 0.0;
     let mut sum_sq = 0.0;
-    let mut point = vec![0.0; d];
-
-    for _ in 0..n_samples {
-        for j in 0..d {
-            rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
-            let u = (rng >> 11) as f64 / (1u64 << 53) as f64;
-            point[j] = bounds[j].0 + u * (bounds[j].1 - bounds[j].0);
-        }
-        let fval = f(&point);
+    for &fval in &fvals {
         sum += fval;
         sum_sq += fval * fval;
     }

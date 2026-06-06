@@ -1,0 +1,7 @@
+fsci-integrate monte_carlo_integrate parallel via LCG jump-ahead
+Each sample = exactly d LCG draws => chunk-boundary RNG via (chunk*d)-step jump; integrand evaluated parallel into ordered slots; sum/sum_sq reduced SEQUENTIALLY in sample order (byte-identical).
+Byte-identical: (est,std_err) bits match serial (digest 0adcdd6a).
+Serial path = fully-inlined original (no regression); parallel gated work>=1<<18.
+Tests: diff_integrate_monte_carlo_qmc_quad + 56 integrate metamorphic_tests pass; clippy clean.
+Min-of-3 A/B (original serial -> new):
+  ns=20000:1.10x (serial-fused, no regression) ns=100000:2.65x ns=400000:6.29x
