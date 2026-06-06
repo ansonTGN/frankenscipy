@@ -1600,30 +1600,47 @@ fn penalty_first_off_diagonal(i: usize, n: usize, lambda: f64) -> f64 {
 
 fn eval_basis_all(t: &[f64], x: f64, k: usize, n: usize) -> Vec<f64> {
     let mut basis = vec![0.0; n];
+    // Degree-0 indicator: exactly the interval(s) containing x become 1.0. Track the
+    // nonzero span [lo, hi] so the Cox-de Boor recursion can be restricted to the
+    // B-spline local support instead of sweeping all n indices at every level.
+    let mut lo = n;
+    let mut hi = 0usize;
+    let mut any = false;
     for i in 0..n {
-        if i + 1 < t.len() {
-            basis[i] = if (t[i] <= x && x < t[i + 1]) || (x == t[i + 1] && i + 1 == t.len() - k - 1)
-            {
-                1.0
-            } else {
-                0.0
-            };
+        if i + 1 < t.len()
+            && ((t[i] <= x && x < t[i + 1]) || (x == t[i + 1] && i + 1 == t.len() - k - 1))
+        {
+            basis[i] = 1.0;
+            if !any {
+                lo = i;
+                any = true;
+            }
+            hi = i;
         }
     }
+    if !any {
+        return basis; // x outside the knot span -> all basis functions are 0
+    }
+    // At level p the support of the active functions is [lo - p, hi]; indices outside
+    // it are provably 0 (they were 0 at level p-1 and stay 0), so we skip them. The
+    // sweep is ascending and in place: when computing basis[i] we read basis[i] (still
+    // the previous level's value, not yet overwritten) and basis[i+1] (overwritten only
+    // at the later step i+1), so the values and float ops are bit-identical to the
+    // clone-per-level version — just without the O(n) clone and the dead 0*0 work.
     for p in 1..=k {
-        let prev = basis.clone();
-        for i in 0..n {
+        let start = lo.saturating_sub(p);
+        for i in start..=hi {
             let mut val = 0.0;
             if i + p < t.len() {
                 let denom_left = t[i + p] - t[i];
                 if denom_left > 0.0 {
-                    val += (x - t[i]) / denom_left * prev[i];
+                    val += (x - t[i]) / denom_left * basis[i];
                 }
             }
             if i + p + 1 < t.len() && i + 1 < n {
                 let denom_right = t[i + p + 1] - t[i + 1];
                 if denom_right > 0.0 {
-                    val += (t[i + p + 1] - x) / denom_right * prev[i + 1];
+                    val += (t[i + p + 1] - x) / denom_right * basis[i + 1];
                 }
             }
             basis[i] = val;
