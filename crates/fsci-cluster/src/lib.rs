@@ -1924,13 +1924,41 @@ pub fn elbow_inertias(data: &[Vec<f64>], max_k: usize, seed: u64) -> Vec<f64> {
     if data.iter().flatten().any(|v| !v.is_finite()) {
         return vec![];
     }
-    (1..=max_k.min(data.len()))
-        .map(|k| {
-            kmeans(data, k, 50, seed.wrapping_add(k as u64))
-                .map(|r| r.inertia)
-                .unwrap_or(f64::INFINITY)
-        })
-        .collect()
+    // Each k runs an independent (deterministic, seed+k) full kmeans, in k order
+    // with no cross-k reduction — so the inertias are computed in parallel into
+    // ordered slots, byte-identical to the serial map. kmeans is itself serial,
+    // so there is no nested-parallelism oversubscription.
+    let kmax = max_k.min(data.len());
+    let inertia_at = |k: usize| -> f64 {
+        kmeans(data, k, 50, seed.wrapping_add(k as u64))
+            .map(|r| r.inertia)
+            .unwrap_or(f64::INFINITY)
+    };
+    let nthreads = if kmax < 2 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(|c| c.get())
+            .unwrap_or(1)
+            .min(kmax)
+    };
+    if nthreads <= 1 {
+        return (1..=kmax).map(inertia_at).collect();
+    }
+    let mut out = vec![0.0; kmax];
+    let chunk = kmax.div_ceil(nthreads);
+    let inertia_at = &inertia_at;
+    std::thread::scope(|scope| {
+        for (t, slot) in out.chunks_mut(chunk).enumerate() {
+            let base = t * chunk;
+            scope.spawn(move || {
+                for (i, o) in slot.iter_mut().enumerate() {
+                    *o = inertia_at(base + i + 1); // k starts at 1
+                }
+            });
+        }
+    });
+    out
 }
 
 /// Mean-shift clustering: find cluster centers via kernel density gradient ascent.

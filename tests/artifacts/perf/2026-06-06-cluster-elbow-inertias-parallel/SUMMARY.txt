@@ -1,0 +1,6 @@
+fsci-cluster elbow_inertias: parallel across k
+Each k = independent kmeans(data,k,seed+k); computed parallel into ordered slots, no reduction.
+Byte-identical: inertia-vector bits match serial (digest 59c8abb6).
+Tests: gap_elbow metamorphic conformance passes; clippy clean (pre-existing perf_kmeans warning only).
+Min-of-3 A/B (serial -> parallel):
+  n=400 d=5 max_k=12: 2.23x   n=800 d=8 max_k=20: 4.53x
