@@ -1,0 +1,5 @@
+stage3 current public guard baseline (rch ts1)
+command: rch exec -- cargo bench -p fsci-linalg --bench linalg_bench -- --warm-up-time 1 --measurement-time 3 'lstsq/512x256|pinv/512x256'
+worker: ts1
+lstsq/512x256 time: [86.278 ms 86.819 ms 87.374 ms]
+pinv/512x256 time: [92.424 ms 93.199 ms 93.957 ms]

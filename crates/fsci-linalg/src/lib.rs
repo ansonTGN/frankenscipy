@@ -6036,6 +6036,15 @@ struct BidiagonalSvd {
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
+struct DeterministicThinSvd {
+    singular_values: Vec<f64>,
+    u: DMatrix<f64>,
+    v_t: DMatrix<f64>,
+    jacobi_sweeps: usize,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
 struct SymmetricJacobiEigen {
     eigenvalues: Vec<f64>,
     eigenvectors: DMatrix<f64>,
@@ -6073,6 +6082,67 @@ impl BidiagonalSvd {
             sigma[(idx, idx)] = *value;
         }
         sigma
+    }
+}
+
+#[allow(dead_code)]
+impl DeterministicThinSvd {
+    fn sigma_matrix(&self) -> DMatrix<f64> {
+        let mut sigma =
+            DMatrix::<f64>::zeros(self.singular_values.len(), self.singular_values.len());
+        for (idx, value) in self.singular_values.iter().enumerate() {
+            sigma[(idx, idx)] = *value;
+        }
+        sigma
+    }
+
+    fn pseudo_inverse(&self, threshold: f64) -> DMatrix<f64> {
+        let p = self.singular_values.len();
+        let mut sigma_pinv = DMatrix::<f64>::zeros(p, p);
+        for (idx, value) in self.singular_values.iter().enumerate() {
+            if value.is_nan() {
+                sigma_pinv[(idx, idx)] = f64::NAN;
+            } else if *value > threshold {
+                sigma_pinv[(idx, idx)] = 1.0 / *value;
+            }
+        }
+        self.v_t.transpose() * sigma_pinv * self.u.transpose()
+    }
+
+    fn least_squares_solution(
+        &self,
+        threshold: f64,
+        rhs: &DVector<f64>,
+    ) -> Result<DVector<f64>, LinalgError> {
+        if rhs.len() != self.u.nrows() {
+            return Err(LinalgError::UnsupportedAssumption);
+        }
+
+        let p = self.singular_values.len();
+        let mut sigma_u_rhs = DVector::<f64>::zeros(p);
+        for (idx, value) in self.singular_values.iter().enumerate() {
+            let mut projected = 0.0;
+            for row in 0..self.u.nrows() {
+                projected += self.u[(row, idx)] * rhs[row];
+            }
+            sigma_u_rhs[idx] = if value.is_nan() {
+                projected * f64::NAN
+            } else if *value > threshold {
+                projected / *value
+            } else {
+                0.0
+            };
+        }
+
+        let mut x = DVector::<f64>::zeros(self.v_t.ncols());
+        for col in 0..self.v_t.ncols() {
+            let mut value = 0.0;
+            for idx in 0..p {
+                value += self.v_t[(idx, col)] * sigma_u_rhs[idx];
+            }
+            x[col] = value;
+        }
+        Ok(x)
     }
 }
 
@@ -6272,6 +6342,38 @@ fn canonicalize_slice_sign(values: &mut [f64]) {
     }
 }
 
+fn canonicalize_svd_factor_signs(u: &mut DMatrix<f64>, v_t: &mut DMatrix<f64>) {
+    for idx in 0..u.ncols() {
+        let mut pivot = None;
+        for row in 0..u.nrows() {
+            let value = u[(row, idx)];
+            if value.abs() > BIDIAG_JACOBI_TOLERANCE {
+                pivot = Some(value);
+                break;
+            }
+        }
+        if pivot.is_none() {
+            for col in 0..v_t.ncols() {
+                let value = v_t[(idx, col)];
+                if value.abs() > BIDIAG_JACOBI_TOLERANCE {
+                    pivot = Some(value);
+                    break;
+                }
+            }
+        }
+        if let Some(value) = pivot
+            && value.is_sign_negative()
+        {
+            for row in 0..u.nrows() {
+                u[(row, idx)] = -u[(row, idx)];
+            }
+            for col in 0..v_t.ncols() {
+                v_t[(idx, col)] = -v_t[(idx, col)];
+            }
+        }
+    }
+}
+
 fn fill_deterministic_left_vector(u: &mut DMatrix<f64>, column: usize) -> Result<(), LinalgError> {
     let rows = u.nrows();
     for basis_idx in 0..rows {
@@ -6417,6 +6519,31 @@ fn deterministic_bidiagonal_svd(
         v_t,
         sweeps: eigen.sweeps,
     })
+}
+
+#[allow(dead_code)]
+fn deterministic_thin_svd_from_reduction(
+    reduction: &BidiagonalReduction,
+) -> Result<DeterministicThinSvd, LinalgError> {
+    let bidiagonal_svd = deterministic_bidiagonal_svd_from_reduction(reduction)?;
+    let q_t = reduction.left_product_transpose();
+    let right_product = reduction.right_product();
+    let mut u = q_t.transpose() * bidiagonal_svd.u;
+    let mut v_t = bidiagonal_svd.v_t * right_product.transpose();
+    canonicalize_svd_factor_signs(&mut u, &mut v_t);
+
+    Ok(DeterministicThinSvd {
+        singular_values: bidiagonal_svd.singular_values,
+        u,
+        v_t,
+        jacobi_sweeps: bidiagonal_svd.sweeps,
+    })
+}
+
+#[allow(dead_code)]
+fn deterministic_thin_svd(matrix: &DMatrix<f64>) -> Result<DeterministicThinSvd, LinalgError> {
+    let reduction = golub_kahan_bidiagonal_reduction(matrix)?;
+    deterministic_thin_svd_from_reduction(&reduction)
 }
 
 #[allow(dead_code)]
@@ -12402,6 +12529,186 @@ mod tests {
             println!("singular[{idx}]={:.17e}", svd.singular_values[idx]);
         }
         println!("BIDIAG_SVD_GOLDEN_END");
+    }
+
+    #[test]
+    fn thin_bidiag_svd_reconstructs_original_tall_matrix() {
+        let original = bidiag_deterministic_matrix(9, 5);
+        let svd = deterministic_thin_svd(&original).expect("deterministic thin SVD");
+        assert_eq!(svd.u.nrows(), original.nrows());
+        assert_eq!(svd.u.ncols(), original.ncols());
+        assert_eq!(svd.v_t.nrows(), original.ncols());
+        assert_eq!(svd.v_t.ncols(), original.ncols());
+        assert_nonincreasing(&svd.singular_values);
+
+        let reconstructed = &svd.u * svd.sigma_matrix() * &svd.v_t;
+        let reconstruction_error = max_abs_dmatrix_diff(&reconstructed, &original);
+        let u_error = dmatrix_column_orthogonality_error(&svd.u);
+        let v_error = dmatrix_orthogonality_error(&svd.v_t);
+        assert!(
+            reconstruction_error < 1e-9,
+            "thin SVD reconstruction error {reconstruction_error:.17e}"
+        );
+        assert!(u_error < 1e-12, "thin U orthogonality error {u_error:.17e}");
+        assert!(
+            v_error < 1e-12,
+            "thin Vt orthogonality error {v_error:.17e}"
+        );
+    }
+
+    #[test]
+    fn thin_bidiag_svd_is_bit_deterministic_for_fixed_input() {
+        let original = bidiag_deterministic_matrix(8, 5);
+        let first = deterministic_thin_svd(&original).expect("first deterministic thin SVD");
+        let second = deterministic_thin_svd(&original).expect("second deterministic thin SVD");
+
+        for idx in 0..first.singular_values.len() {
+            assert_eq!(
+                first.singular_values[idx].to_bits(),
+                second.singular_values[idx].to_bits()
+            );
+        }
+        for row in 0..first.u.nrows() {
+            for col in 0..first.u.ncols() {
+                assert_eq!(
+                    first.u[(row, col)].to_bits(),
+                    second.u[(row, col)].to_bits()
+                );
+            }
+        }
+        for row in 0..first.v_t.nrows() {
+            for col in 0..first.v_t.ncols() {
+                assert_eq!(
+                    first.v_t[(row, col)].to_bits(),
+                    second.v_t[(row, col)].to_bits()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn thin_bidiag_svd_lstsq_and_pinv_match_public_routes() {
+        let original = bidiag_deterministic_matrix(12, 6);
+        let rows = original.nrows();
+        let cols = original.ncols();
+        let matrix_rows = rows_from_dmatrix(&original);
+        let rhs_values: Vec<f64> = (0..rows)
+            .map(|idx| ((idx * 19 + 7) % 31) as f64 - 11.0)
+            .collect();
+        let rhs = DVector::from_column_slice(&rhs_values);
+
+        let thin = deterministic_thin_svd(&original).expect("deterministic thin SVD");
+        let max_s = thin.singular_values.iter().copied().fold(0.0_f64, f64::max);
+        let lstsq_threshold = f64::EPSILON * max_s;
+        let pinv_threshold = (rows.max(cols) as f64) * f64::EPSILON * max_s;
+        let expected_rank = thin
+            .singular_values
+            .iter()
+            .filter(|value| **value > lstsq_threshold)
+            .count();
+
+        let thin_lstsq = thin
+            .least_squares_solution(lstsq_threshold, &rhs)
+            .expect("thin SVD least-squares solution");
+        let public_lstsq =
+            lstsq(&matrix_rows, &rhs_values, LstsqOptions::default()).expect("public lstsq");
+        let thin_lstsq_values: Vec<f64> = thin_lstsq.iter().copied().collect();
+        assert_eq!(public_lstsq.rank, expected_rank);
+        assert_close_slice(&thin_lstsq_values, &public_lstsq.x, 1e-8, 1e-8);
+        assert_close_slice(
+            &thin.singular_values,
+            &public_lstsq.singular_values,
+            1e-8,
+            1e-8,
+        );
+
+        let thin_pinv = thin.pseudo_inverse(pinv_threshold);
+        let public_pinv = pinv(&matrix_rows, PinvOptions::default()).expect("public pinv");
+        assert_eq!(public_pinv.rank, expected_rank);
+        assert_close_matrix(
+            &rows_from_dmatrix(&thin_pinv),
+            &public_pinv.pseudo_inverse,
+            1e-8,
+            1e-8,
+        );
+    }
+
+    #[test]
+    fn thin_bidiag_svd_golden_payload() {
+        let original = bidiag_deterministic_matrix(7, 4);
+        let svd = deterministic_thin_svd(&original).expect("deterministic thin SVD");
+        let reconstructed = &svd.u * svd.sigma_matrix() * &svd.v_t;
+        let reconstruction_error = max_abs_dmatrix_diff(&reconstructed, &original);
+        let u_error = dmatrix_column_orthogonality_error(&svd.u);
+        let v_error = dmatrix_orthogonality_error(&svd.v_t);
+
+        println!("THIN_BIDIAG_SVD_GOLDEN_BEGIN");
+        println!("shape={}x{}", original.nrows(), original.ncols());
+        println!("jacobi_sweeps={}", svd.jacobi_sweeps);
+        println!("reconstruction_error={reconstruction_error:.17e}");
+        println!("u_column_orthogonality_error={u_error:.17e}");
+        println!("vt_orthogonality_error={v_error:.17e}");
+        for idx in 0..svd.singular_values.len() {
+            println!("singular[{idx}]={:.17e}", svd.singular_values[idx]);
+        }
+        for (row, col) in [(0, 0), (2, 1), (6, 3)] {
+            println!("u[{row},{col}]={:.17e}", svd.u[(row, col)]);
+        }
+        for (row, col) in [(0, 0), (1, 3), (3, 2)] {
+            println!("vt[{row},{col}]={:.17e}", svd.v_t[(row, col)]);
+        }
+        println!("THIN_BIDIAG_SVD_GOLDEN_END");
+    }
+
+    #[test]
+    fn public_svd_lstsq_pinv_golden_payload() {
+        let original = bidiag_deterministic_matrix(10, 5);
+        let matrix_rows = rows_from_dmatrix(&original);
+        let rhs: Vec<f64> = (0..original.nrows())
+            .map(|idx| ((idx * 13 + 5) % 23) as f64 - 7.0)
+            .collect();
+
+        let svd_result = svd(&matrix_rows, DecompOptions::default()).expect("public svd");
+        let svdvals_result =
+            svdvals(&matrix_rows, DecompOptions::default()).expect("public svdvals");
+        let lstsq_result =
+            lstsq(&matrix_rows, &rhs, LstsqOptions::default()).expect("public lstsq");
+        let pinv_result = pinv(&matrix_rows, PinvOptions::default()).expect("public pinv");
+        assert_close_slice(&svd_result.s, &svdvals_result, 1e-14, 1e-14);
+
+        println!("PUBLIC_SVD_LSTSQ_PINV_GOLDEN_BEGIN");
+        println!("shape={}x{}", original.nrows(), original.ncols());
+        println!(
+            "svd_u_shape={}x{}",
+            svd_result.u.len(),
+            svd_result.u[0].len()
+        );
+        println!(
+            "svd_vt_shape={}x{}",
+            svd_result.vt.len(),
+            svd_result.vt[0].len()
+        );
+        println!("lstsq_rank={}", lstsq_result.rank);
+        println!("pinv_rank={}", pinv_result.rank);
+        for idx in 0..svd_result.s.len() {
+            println!("svd_singular[{idx}]={:.17e}", svd_result.s[idx]);
+        }
+        for (row, col) in [(0, 0), (3, 2), (9, 4)] {
+            println!("svd_u[{row},{col}]={:.17e}", svd_result.u[row][col]);
+        }
+        for (row, col) in [(0, 0), (2, 3), (4, 1)] {
+            println!("svd_vt[{row},{col}]={:.17e}", svd_result.vt[row][col]);
+        }
+        for idx in 0..lstsq_result.x.len() {
+            println!("lstsq_x[{idx}]={:.17e}", lstsq_result.x[idx]);
+        }
+        for (row, col) in [(0, 0), (1, 7), (4, 9)] {
+            println!(
+                "pinv[{row},{col}]={:.17e}",
+                pinv_result.pseudo_inverse[row][col]
+            );
+        }
+        println!("PUBLIC_SVD_LSTSQ_PINV_GOLDEN_END");
     }
 
     #[test]

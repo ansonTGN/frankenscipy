@@ -1,0 +1,5 @@
+stage3 post-change public guard (rch vmi1227854; cross-worker vs baseline, guard only)
+command: rch exec -- cargo bench -p fsci-linalg --bench linalg_bench -- --warm-up-time 1 --measurement-time 3 'lstsq/512x256|pinv/512x256'
+worker: vmi1227854
+lstsq/512x256 time: [114.59 ms 115.49 ms 116.39 ms]
+pinv/512x256 time: [118.34 ms 119.65 ms 121.03 ms]
