@@ -6252,6 +6252,71 @@ fn apply_householder_right_with_workspace(
     }
 }
 
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+fn apply_bidiag_fused_rank_k_update(
+    matrix: &mut DMatrix<f64>,
+    row_start: usize,
+    col_start: usize,
+    k_count: usize,
+    v_by_k_row: &[f64],
+    y_by_col_k: &[f64],
+    x_by_k_row: &[f64],
+    u_by_col_k: &[f64],
+) -> Result<(), LinalgError> {
+    let rows = matrix.nrows();
+    let cols = matrix.ncols();
+    if row_start > rows || col_start > cols {
+        return Err(LinalgError::IncompatibleShapes {
+            a_shape: (rows, cols),
+            b_len: row_start.max(col_start),
+        });
+    }
+    let row_count = rows - row_start;
+    let col_count = cols - col_start;
+    let row_panel_len = k_count
+        .checked_mul(row_count)
+        .ok_or(LinalgError::UnsupportedAssumption)?;
+    let col_panel_len = col_count
+        .checked_mul(k_count)
+        .ok_or(LinalgError::UnsupportedAssumption)?;
+    if v_by_k_row.len() != row_panel_len
+        || x_by_k_row.len() != row_panel_len
+        || y_by_col_k.len() != col_panel_len
+        || u_by_col_k.len() != col_panel_len
+    {
+        return Err(LinalgError::IncompatibleShapes {
+            a_shape: (row_panel_len, col_panel_len),
+            b_len: v_by_k_row
+                .len()
+                .max(x_by_k_row.len())
+                .max(y_by_col_k.len())
+                .max(u_by_col_k.len()),
+        });
+    }
+    if k_count == 0 || row_count == 0 || col_count == 0 {
+        return Ok(());
+    }
+
+    for col_rel in 0..col_count {
+        let col = col_start + col_rel;
+        let col_panel_base = col_rel * k_count;
+        for row_rel in 0..row_count {
+            let row = row_start + row_rel;
+            let mut value = matrix[(row, col)];
+            for k in 0..k_count {
+                let row_panel_idx = k * row_count + row_rel;
+                let col_panel_idx = col_panel_base + k;
+                value -= v_by_k_row[row_panel_idx] * y_by_col_k[col_panel_idx];
+                value -= x_by_k_row[row_panel_idx] * u_by_col_k[col_panel_idx];
+            }
+            matrix[(row, col)] = value;
+        }
+    }
+
+    Ok(())
+}
+
 fn symmetric_offdiagonal_max(matrix: &DMatrix<f64>) -> f64 {
     let mut max_abs = 0.0_f64;
     for row in 0..matrix.nrows() {
@@ -12546,6 +12611,182 @@ mod tests {
             digest = digest.wrapping_mul(FNV_PRIME);
         }
         digest
+    }
+
+    fn dmatrix_bits_digest(matrix: &DMatrix<f64>) -> u64 {
+        const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+        const FNV_PRIME: u64 = 0x100000001b3;
+
+        let mut digest = FNV_OFFSET;
+        for value in matrix.iter() {
+            digest ^= value.to_bits();
+            digest = digest.wrapping_mul(FNV_PRIME);
+        }
+        digest
+    }
+
+    fn bidiag_update_panels(
+        row_count: usize,
+        col_count: usize,
+        k_count: usize,
+    ) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
+        let mut v_by_k_row = vec![0.0; row_count * k_count];
+        let mut x_by_k_row = vec![0.0; row_count * k_count];
+        let mut y_by_col_k = vec![0.0; col_count * k_count];
+        let mut u_by_col_k = vec![0.0; col_count * k_count];
+
+        for k in 0..k_count {
+            for row in 0..row_count {
+                let seed = (row as f64 + 1.0) * (k as f64 + 0.75);
+                v_by_k_row[k * row_count + row] = (seed.sin() * 0.03125) + 0.0005 * row as f64;
+                x_by_k_row[k * row_count + row] = (seed.cos() * 0.02734375) - 0.0003 * k as f64;
+            }
+        }
+        for col in 0..col_count {
+            for k in 0..k_count {
+                let seed = (col as f64 + 0.5) * (k as f64 + 1.25);
+                y_by_col_k[col * k_count + k] = (seed.cos() * 0.021484375) + 0.0007 * k as f64;
+                u_by_col_k[col * k_count + k] = (seed.sin() * 0.01953125) - 0.0002 * col as f64;
+            }
+        }
+
+        (v_by_k_row, y_by_col_k, x_by_k_row, u_by_col_k)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn apply_bidiag_rank_k_update_scalar_reference(
+        matrix: &mut DMatrix<f64>,
+        row_start: usize,
+        col_start: usize,
+        k_count: usize,
+        v_by_k_row: &[f64],
+        y_by_col_k: &[f64],
+        x_by_k_row: &[f64],
+        u_by_col_k: &[f64],
+    ) {
+        let row_count = matrix.nrows() - row_start;
+        let col_count = matrix.ncols() - col_start;
+        for col_rel in 0..col_count {
+            let col = col_start + col_rel;
+            let col_panel_base = col_rel * k_count;
+            for row_rel in 0..row_count {
+                let row = row_start + row_rel;
+                for k in 0..k_count {
+                    let row_panel_idx = k * row_count + row_rel;
+                    let col_panel_idx = col_panel_base + k;
+                    matrix[(row, col)] -= v_by_k_row[row_panel_idx] * y_by_col_k[col_panel_idx];
+                    matrix[(row, col)] -= x_by_k_row[row_panel_idx] * u_by_col_k[col_panel_idx];
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn bidiag_fused_rank_k_update_matches_scalar_reference_bits() {
+        for (rows, cols, row_start, col_start, k_count) in [
+            (6, 5, 0, 0, 1),
+            (17, 19, 2, 3, 2),
+            (33, 31, 5, 4, 8),
+            (65, 67, 1, 1, 16),
+        ] {
+            let original = bidiag_deterministic_matrix(rows, cols);
+            let row_count = rows - row_start;
+            let col_count = cols - col_start;
+            let (v_by_k_row, y_by_col_k, x_by_k_row, u_by_col_k) =
+                bidiag_update_panels(row_count, col_count, k_count);
+
+            let mut reference = original.clone();
+            apply_bidiag_rank_k_update_scalar_reference(
+                &mut reference,
+                row_start,
+                col_start,
+                k_count,
+                &v_by_k_row,
+                &y_by_col_k,
+                &x_by_k_row,
+                &u_by_col_k,
+            );
+
+            let mut fused = original;
+            apply_bidiag_fused_rank_k_update(
+                &mut fused,
+                row_start,
+                col_start,
+                k_count,
+                &v_by_k_row,
+                &y_by_col_k,
+                &x_by_k_row,
+                &u_by_col_k,
+            )
+            .expect("fused update");
+
+            for row in 0..rows {
+                for col in 0..cols {
+                    assert_eq!(
+                        reference[(row, col)].to_bits(),
+                        fused[(row, col)].to_bits(),
+                        "shape={rows}x{cols} start={row_start},{col_start} k={k_count} cell={row},{col}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "perf probe: run with rch and --release for scalar vs fused far update timing"]
+    fn bidiag_fused_rank_k_update_perf_probe() {
+        let rows = 1024;
+        let cols = 512;
+        let row_start = 16;
+        let col_start = 16;
+        let k_count = 16;
+        let row_count = rows - row_start;
+        let col_count = cols - col_start;
+        let original = bidiag_deterministic_matrix(rows, cols);
+        let (v_by_k_row, y_by_col_k, x_by_k_row, u_by_col_k) =
+            bidiag_update_panels(row_count, col_count, k_count);
+
+        let mut reference = original.clone();
+        let started_at = std::time::Instant::now();
+        apply_bidiag_rank_k_update_scalar_reference(
+            &mut reference,
+            row_start,
+            col_start,
+            k_count,
+            &v_by_k_row,
+            &y_by_col_k,
+            &x_by_k_row,
+            &u_by_col_k,
+        );
+        let reference_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
+
+        let mut fused = original;
+        let started_at = std::time::Instant::now();
+        apply_bidiag_fused_rank_k_update(
+            &mut fused,
+            row_start,
+            col_start,
+            k_count,
+            &v_by_k_row,
+            &y_by_col_k,
+            &x_by_k_row,
+            &u_by_col_k,
+        )
+        .expect("fused update");
+        let fused_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
+
+        assert_eq!(dmatrix_bits_digest(&reference), dmatrix_bits_digest(&fused));
+
+        println!("BIDIAG_FUSED_RANK_K_UPDATE_PERF_BEGIN");
+        println!("shape={rows}x{cols}");
+        println!("panel_start={row_start},{col_start}");
+        println!("k_count={k_count}");
+        println!("reference_ms={reference_ms:.6}");
+        println!("fused_ms={fused_ms:.6}");
+        println!("reference_digest={:#018x}", dmatrix_bits_digest(&reference));
+        println!("fused_digest={:#018x}", dmatrix_bits_digest(&fused));
+        println!("speedup={:.6}", reference_ms / fused_ms);
+        println!("BIDIAG_FUSED_RANK_K_UPDATE_PERF_END");
     }
 
     #[test]
