@@ -10009,23 +10009,49 @@ pub fn resample_poly_with_padtype(
     // Equivalent to: upsample -> convolve(mode=Same) -> downsample.
     let upsampled_len = input.len() * up;
     let half_taps = (n_taps - 1) as i64 / 2;
-    let mut output = Vec::with_capacity(upsampled_len.div_ceil(down));
+    let n_out = upsampled_len.div_ceil(down);
 
-    let mut i = 0usize;
-    while i < upsampled_len {
-        let mut val = 0.0;
-        let target = i as i64 + half_taps;
-
-        // k must satisfy: 0 <= k < n_taps AND (target - k) is a multiple of 'up'.
+    // Output sample `j` reads upsampled position `i = j*down` and is an independent FIR
+    // dot product over the polyphase taps, so the samples are filled in parallel —
+    // bit-identical to the serial loop (same tap order, written to its own index).
+    let compute = |j: usize| -> f64 {
+        let target = (j * down) as i64 + half_taps;
         let k_start = (target % up as i64 + up as i64) % up as i64;
+        let mut val = 0.0;
         for k in (k_start as usize..n_taps).step_by(up) {
             let x_idx = (target - k as i64) / up as i64;
             val += h_scaled[k] * resample_poly_sample(&input, x_idx, pad_mode);
         }
-        output.push(val + background);
-        i += down;
-    }
+        val + background
+    };
 
+    let taps_per_out = n_taps / up + 1;
+    let work = (n_out as u64).saturating_mul(taps_per_out as u64);
+    let nthreads = if work < 1 << 16 || n_out < 64 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(1)
+            .min(n_out / 2)
+            .max(1)
+    };
+    if nthreads <= 1 {
+        return Ok((0..n_out).map(compute).collect());
+    }
+    let mut output = vec![0.0_f64; n_out];
+    let chunk = n_out.div_ceil(nthreads);
+    let compute = &compute;
+    std::thread::scope(|scope| {
+        for (t, out_chunk) in output.chunks_mut(chunk).enumerate() {
+            let start = t * chunk;
+            scope.spawn(move || {
+                for (li, slot) in out_chunk.iter_mut().enumerate() {
+                    *slot = compute(start + li);
+                }
+            });
+        }
+    });
     Ok(output)
 }
 
