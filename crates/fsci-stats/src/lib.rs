@@ -33407,30 +33407,73 @@ pub fn multivariate_normal_rvs(
         }
     }
 
-    let mut rng = seed;
-    let mut samples = Vec::with_capacity(n_samples);
-
-    for _ in 0..n_samples {
-        // Generate standard normal samples via Box-Muller
+    // One sample = exactly 2*d LCG draws (Box-Muller) + an O(d²) Cholesky
+    // transform, and samples are independent — so chunk-boundary RNG states are
+    // reachable via a (chunk*2*d)-step LCG jump (no sequential pre-pass) and the
+    // samples can be filled in parallel into ordered slots. Byte-identical: each
+    // sample replays the exact serial RNG stream and lands in its original index.
+    let gen_sample = |rng: &mut u64| -> Vec<f64> {
         let mut z = vec![0.0; d];
         for item in z.iter_mut().take(d) {
-            rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
-            let u1 = ((rng >> 11) as f64 / (1u64 << 53) as f64).max(1e-15);
-            rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
-            let u2 = (rng >> 11) as f64 / (1u64 << 53) as f64;
+            *rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let u1 = ((*rng >> 11) as f64 / (1u64 << 53) as f64).max(1e-15);
+            *rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let u2 = (*rng >> 11) as f64 / (1u64 << 53) as f64;
             *item = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
         }
-
-        // Transform: x = mean + L * z
         let mut x = mean.to_vec();
         for i in 0..d {
             for j in 0..=i {
                 x[i] += l[i][j] * z[j];
             }
         }
-        samples.push(x);
+        x
+    };
+
+    // Parallel only once there is enough per-sample work to absorb thread setup;
+    // otherwise the inlined serial loop wins.
+    let work = n_samples.saturating_mul(d * d + 2 * d);
+    let nthreads = if work < (1 << 16) || n_samples < 2 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(|c| c.get())
+            .unwrap_or(1)
+            .min(n_samples)
+    };
+
+    if nthreads <= 1 {
+        let mut rng = seed;
+        let mut samples = Vec::with_capacity(n_samples);
+        for _ in 0..n_samples {
+            samples.push(gen_sample(&mut rng));
+        }
+        return samples;
     }
 
+    let chunk = n_samples.div_ceil(nthreads);
+    let (jump_a, jump_c) = lcg_jump(6364136223846793005, 1, chunk * 2 * d);
+    let mut starts = Vec::new();
+    let mut cs = seed;
+    let mut t = 0;
+    while t * chunk < n_samples {
+        starts.push(cs);
+        cs = jump_a.wrapping_mul(cs).wrapping_add(jump_c);
+        t += 1;
+    }
+    let mut samples = vec![Vec::new(); n_samples];
+    let slabs: Vec<&mut [Vec<f64>]> = samples.chunks_mut(chunk).collect();
+    let gen_sample = &gen_sample;
+    std::thread::scope(|scope| {
+        for (state0, slot) in starts.into_iter().zip(slabs) {
+            scope.spawn(move || {
+                let mut rng = state0;
+                for cell in slot.iter_mut() {
+                    *cell = gen_sample(&mut rng);
+                }
+            });
+        }
+    });
     samples
 }
 

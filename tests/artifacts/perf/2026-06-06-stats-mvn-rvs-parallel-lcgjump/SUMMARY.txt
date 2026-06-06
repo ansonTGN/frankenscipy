@@ -1,0 +1,7 @@
+fsci-stats multivariate_normal_rvs parallel via LCG jump-ahead
+Each sample = exactly 2*d LCG draws (Box-Muller) + O(d^2) Cholesky transform; chunk-boundary RNG via (chunk*2*d)-step lcg_jump; samples filled parallel into ordered slots.
+Byte-identical: serial vs parallel sample digests match across all (d,ns,seed).
+Serial path inlined (no regression); parallel gated work>=1<<16.
+Tests: 4 mvn unit tests + metamorphic_stats_multivariate_normal_rvs conformance pass; clippy clean.
+Min-of-3 A/B (serial -> parallel):
+  d=16 ns=5000:1.06x  d=32 ns=10000:3.57x  d=64 ns=20000:9.62x (grows with d^2 transform)
