@@ -1135,20 +1135,23 @@ pub fn lombscargle(
         ));
     }
 
-    let mut power = Vec::with_capacity(freqs.len());
     let sample_count = x.len() as f64;
     let inv_sample_count = 1.0 / sample_count;
     let mean_square = y.iter().map(|value| value * value).sum::<f64>() * inv_sample_count;
 
-    for &omega in freqs {
+    // Each frequency's periodogram value is an independent reduction over the samples
+    // (two fixed-order passes over x/y); the result depends only on (omega, x, y). So
+    // the per-frequency closure is pure and the frequency loop parallelizes byte-
+    // identically — each `power[k]` is computed exactly as the serial version and
+    // written to its own index, with the sample-summation order untouched.
+    let power_at = |omega: f64| -> f64 {
         if !omega.is_finite() {
-            power.push(f64::NAN);
-            continue;
+            return f64::NAN;
         }
         if omega == 0.0 {
             let y_sum = y.iter().sum::<f64>();
             let p = 0.5 * y_sum.powi(2) / x.len() as f64;
-            power.push(if normalize {
+            return if normalize {
                 if mean_square == 0.0 {
                     f64::NAN
                 } else {
@@ -1156,8 +1159,7 @@ pub fn lombscargle(
                 }
             } else {
                 p
-            });
-            continue;
+            };
         }
 
         let mut cos2_mean = 0.0;
@@ -1198,7 +1200,7 @@ pub fn lombscargle(
         let normalized_power = 2.0 * (a * y_cos_mean + b * y_sin_mean);
         let p = normalized_power * sample_count / 4.0;
 
-        power.push(if normalize {
+        if normalize {
             if mean_square == 0.0 {
                 f64::NAN
             } else {
@@ -1206,10 +1208,41 @@ pub fn lombscargle(
             }
         } else {
             p
-        });
+        }
+    };
+
+    let nthreads = lombscargle_thread_count(freqs.len(), x.len());
+    if nthreads <= 1 {
+        return Ok(freqs.iter().map(|&omega| power_at(omega)).collect());
     }
 
+    let mut power = vec![0.0; freqs.len()];
+    let chunk = freqs.len().div_ceil(nthreads);
+    let power_at = &power_at;
+    std::thread::scope(|scope| {
+        for (out_chunk, freq_chunk) in power.chunks_mut(chunk).zip(freqs.chunks(chunk)) {
+            scope.spawn(move || {
+                for (slot, &omega) in out_chunk.iter_mut().zip(freq_chunk.iter()) {
+                    *slot = power_at(omega);
+                }
+            });
+        }
+    });
     Ok(power)
+}
+
+/// Threads for `lombscargle`: each of the `m` frequencies costs ~`n` cos/sin pairs
+/// over two sample passes, so total work ~ `m*n` trig evaluations. Only split when
+/// that clearly amortises thread spawn.
+fn lombscargle_thread_count(m: usize, n: usize) -> usize {
+    let work = (m as u64).saturating_mul(n as u64);
+    if work < 1 << 16 || m < 16 {
+        return 1;
+    }
+    let cores = std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(1);
+    cores.min(m / 4).max(1)
 }
 
 /// Gaussian-modulated sinusoidal pulse.
