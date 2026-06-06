@@ -1,0 +1,7 @@
+fsci-stats bootstrap_mean/bootstrap_std parallel via LCG jump-ahead
+Each resample = exactly n LCG draws => chunk-boundary RNG states via (chunk*n)-step affine LCG jump; no sequential pre-pass (the fix vs permutation_test's non-jumpable cumulative shuffle).
+Byte-identical: (lo,hi) bounds bit-match serial (sha256 of bits-lines equal); digest 31a69d81.
+Tests: 6 bootstrap unit tests pass; metamorphic_stats_perm_bootstrap_mean conformance passes; clippy clean for changed code.
+Min-of-3 A/B (serial -> parallel):
+  bootstrap_mean: nb2000:1.39x nb10000:3.81x nb40000:7.25x
+  bootstrap_std : nb2000:2.03x nb10000:5.78x nb40000:8.89x

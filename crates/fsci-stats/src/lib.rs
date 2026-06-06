@@ -31128,6 +31128,100 @@ where
     (lo, hi)
 }
 
+/// LCG multiplier shared by the bootstrap resamplers (matches `next_rng`).
+const BOOTSTRAP_LCG_A: u64 = 6364136223846793005;
+
+/// `steps`-fold composition of the affine LCG step `x -> a*x + c`, returned as
+/// `(A, C)` with `x_steps = A*x + C` (wrapping). Lets each bootstrap chunk start
+/// from the exact RNG state the serial loop would reach, without replaying every
+/// draw — enabling byte-identical parallelism.
+fn lcg_jump(a: u64, c: u64, steps: usize) -> (u64, u64) {
+    let (mut res_a, mut res_c) = (1u64, 0u64);
+    let (mut base_a, mut base_c) = (a, c);
+    let mut e = steps;
+    while e > 0 {
+        if e & 1 == 1 {
+            res_c = base_a.wrapping_mul(res_c).wrapping_add(base_c);
+            res_a = base_a.wrapping_mul(res_a);
+        }
+        base_c = base_a.wrapping_mul(base_c).wrapping_add(base_c);
+        base_a = base_a.wrapping_mul(base_a);
+        e >>= 1;
+    }
+    (res_a, res_c)
+}
+
+/// Evaluate a per-resample statistic over `n_bootstrap` bootstrap resamples
+/// (sampling `data` with replacement via the LCG seeded at `seed`), in parallel.
+/// Each resample consumes exactly `n` LCG draws, so chunk-boundary RNG states are
+/// reached by an `(chunk*n)`-step LCG jump — no sequential pre-pass. Byte-identical
+/// to the serial loop: same per-resample RNG stream, results in resample order.
+fn bootstrap_statistics<G>(data: &[f64], n_bootstrap: usize, seed: u64, stat: G) -> Vec<f64>
+where
+    G: Fn(&[f64]) -> f64 + Sync,
+{
+    let n = data.len();
+    let draw = |state: &mut u64| -> usize {
+        *state = state.wrapping_mul(BOOTSTRAP_LCG_A).wrapping_add(1);
+        ((*state >> 33) as usize) % n
+    };
+
+    let work = n_bootstrap.saturating_mul(n);
+    let nthreads = if work < (1 << 14) || n_bootstrap < 2 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(|c| c.get())
+            .unwrap_or(1)
+            .min(n_bootstrap)
+    };
+
+    if nthreads <= 1 {
+        let mut state = seed;
+        let mut sample = vec![0.0; n];
+        return (0..n_bootstrap)
+            .map(|_| {
+                for s in sample.iter_mut() {
+                    *s = data[draw(&mut state)];
+                }
+                stat(&sample)
+            })
+            .collect();
+    }
+
+    let chunk = n_bootstrap.div_ceil(nthreads);
+    let (jump_a, jump_c) = lcg_jump(BOOTSTRAP_LCG_A, 1, chunk * n);
+    // RNG state at the start of each chunk = seed advanced by t*chunk*n draws.
+    let mut starts = Vec::new();
+    let mut cs = seed;
+    let mut t = 0;
+    while t * chunk < n_bootstrap {
+        starts.push(cs);
+        cs = jump_a.wrapping_mul(cs).wrapping_add(jump_c);
+        t += 1;
+    }
+
+    let mut out = vec![0.0; n_bootstrap];
+    let chunks: Vec<&mut [f64]> = out.chunks_mut(chunk).collect();
+    let draw = &draw;
+    let stat = &stat;
+    std::thread::scope(|scope| {
+        for (state0, slot) in starts.into_iter().zip(chunks) {
+            scope.spawn(move || {
+                let mut state = state0;
+                let mut sample = vec![0.0; n];
+                for o in slot.iter_mut() {
+                    for s in sample.iter_mut() {
+                        *s = data[draw(&mut state)];
+                    }
+                    *o = stat(&sample);
+                }
+            });
+        }
+    });
+    out
+}
+
 /// Compute BCa (bias-corrected and accelerated) bootstrap confidence interval for the mean.
 ///
 /// BCa provides more accurate coverage than the percentile method by adjusting
@@ -31142,22 +31236,10 @@ pub fn bootstrap_mean(data: &[f64], n_bootstrap: usize, confidence: f64, seed: u
 
     let original_mean: f64 = data.iter().sum::<f64>() / n as f64;
 
-    let mut rng_state = seed;
-    let next_rng = |state: &mut u64| -> usize {
-        *state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-        ((*state >> 33) as usize) % n
-    };
-
-    let mut boot_means = Vec::with_capacity(n_bootstrap);
-    let mut sample = vec![0.0; n];
-
-    for _ in 0..n_bootstrap {
-        for s in sample.iter_mut() {
-            *s = data[next_rng(&mut rng_state)];
-        }
-        let mean: f64 = sample.iter().sum::<f64>() / n as f64;
-        boot_means.push(mean);
-    }
+    let nf_div = n as f64;
+    let mut boot_means = bootstrap_statistics(data, n_bootstrap, seed, |sample| {
+        sample.iter().sum::<f64>() / nf_div
+    });
 
     let count_below = boot_means.iter().filter(|&&x| x < original_mean).count();
     let prop = count_below as f64 / n_bootstrap as f64;
@@ -31220,24 +31302,12 @@ pub fn bootstrap_std(data: &[f64], n_bootstrap: usize, confidence: f64, seed: u6
         return (f64::NAN, f64::NAN);
     }
 
-    let mut rng_state = seed;
-    let next_rng = |state: &mut u64| -> usize {
-        *state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-        ((*state >> 33) as usize) % n
-    };
-
-    let mut boot_stds = Vec::with_capacity(n_bootstrap);
-    let mut sample = vec![0.0; n];
-
-    for _ in 0..n_bootstrap {
-        for s in sample.iter_mut() {
-            *s = data[next_rng(&mut rng_state)];
-        }
+    let mut boot_stds = bootstrap_statistics(data, n_bootstrap, seed, |sample| {
         let nf = n as f64;
         let mean: f64 = sample.iter().sum::<f64>() / nf;
         let var: f64 = sample.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / (nf - 1.0);
-        boot_stds.push(var.sqrt());
-    }
+        var.sqrt()
+    });
 
     boot_stds.sort_by(|a, b| a.total_cmp(b));
 
