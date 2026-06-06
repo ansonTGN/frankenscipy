@@ -6620,10 +6620,51 @@ fn deterministic_thin_svd_from_reduction(
     reduction: &BidiagonalReduction,
 ) -> Result<DeterministicThinSvd, LinalgError> {
     let bidiagonal_svd = deterministic_bidiagonal_svd_from_reduction(reduction)?;
+    deterministic_thin_svd_from_reduction_parts(reduction, bidiagonal_svd)
+}
+
+#[allow(dead_code)]
+fn deterministic_thin_svd_from_reduction_dense_product_reference(
+    reduction: &BidiagonalReduction,
+) -> Result<DeterministicThinSvd, LinalgError> {
+    let bidiagonal_svd = deterministic_bidiagonal_svd_from_reduction(reduction)?;
+    deterministic_thin_svd_from_reduction_parts_dense_product_reference(reduction, bidiagonal_svd)
+}
+
+#[allow(dead_code)]
+fn deterministic_thin_svd_from_reduction_parts_dense_product_reference(
+    reduction: &BidiagonalReduction,
+    bidiagonal_svd: BidiagonalSvd,
+) -> Result<DeterministicThinSvd, LinalgError> {
     let q_t = reduction.left_product_transpose();
     let right_product = reduction.right_product();
     let mut u = q_t.transpose() * bidiagonal_svd.u;
     let mut v_t = bidiagonal_svd.v_t * right_product.transpose();
+    canonicalize_svd_factor_signs(&mut u, &mut v_t);
+
+    Ok(DeterministicThinSvd {
+        singular_values: bidiagonal_svd.singular_values,
+        u,
+        v_t,
+        jacobi_sweeps: bidiagonal_svd.sweeps,
+    })
+}
+
+#[allow(dead_code)]
+fn deterministic_thin_svd_from_reduction_parts(
+    reduction: &BidiagonalReduction,
+    bidiagonal_svd: BidiagonalSvd,
+) -> Result<DeterministicThinSvd, LinalgError> {
+    let mut u = bidiagonal_svd.u;
+    for reflector in reduction.left_reflectors.iter().rev() {
+        apply_householder_left(&mut u, reflector, 0);
+    }
+
+    let mut v_t = bidiagonal_svd.v_t;
+    for reflector in reduction.right_reflectors.iter().rev() {
+        apply_householder_right(&mut v_t, reflector, 0);
+    }
+
     canonicalize_svd_factor_signs(&mut u, &mut v_t);
 
     Ok(DeterministicThinSvd {
@@ -12625,6 +12666,23 @@ mod tests {
         digest
     }
 
+    fn thin_svd_bits_digest(svd: &DeterministicThinSvd) -> u64 {
+        const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+        const FNV_PRIME: u64 = 0x100000001b3;
+
+        let mut digest = FNV_OFFSET;
+        for value in svd
+            .singular_values
+            .iter()
+            .chain(svd.u.iter())
+            .chain(svd.v_t.iter())
+        {
+            digest ^= value.to_bits();
+            digest = digest.wrapping_mul(FNV_PRIME);
+        }
+        digest
+    }
+
     fn bidiag_update_panels(
         row_count: usize,
         col_count: usize,
@@ -13106,6 +13164,112 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn thin_bidiag_reflector_replay_matches_dense_product_reference() {
+        for (rows, cols) in [(9, 5), (17, 8), (64, 32)] {
+            let original = bidiag_deterministic_matrix(rows, cols);
+            let reduction =
+                golub_kahan_bidiagonal_reduction(&original).expect("bidiagonal reduction");
+            let reference =
+                deterministic_thin_svd_from_reduction_dense_product_reference(&reduction)
+                    .expect("dense-product reference thin SVD");
+            let replay = deterministic_thin_svd_from_reduction(&reduction)
+                .expect("reflector-replay thin SVD");
+
+            for idx in 0..reference.singular_values.len() {
+                assert_eq!(
+                    reference.singular_values[idx].to_bits(),
+                    replay.singular_values[idx].to_bits(),
+                    "singular value {idx} changed for shape {rows}x{cols}"
+                );
+            }
+
+            let u_diff = max_abs_dmatrix_diff(&reference.u, &replay.u);
+            let vt_diff = max_abs_dmatrix_diff(&reference.v_t, &replay.v_t);
+            assert!(
+                u_diff <= 1e-11,
+                "U replay drift {u_diff:.17e} for shape {rows}x{cols}"
+            );
+            assert!(
+                vt_diff <= 1e-11,
+                "Vt replay drift {vt_diff:.17e} for shape {rows}x{cols}"
+            );
+
+            let reconstructed = &replay.u * replay.sigma_matrix() * &replay.v_t;
+            let reconstruction_error = max_abs_dmatrix_diff(&reconstructed, &original);
+            let u_error = dmatrix_column_orthogonality_error(&replay.u);
+            let v_error = dmatrix_orthogonality_error(&replay.v_t);
+            assert!(
+                reconstruction_error < 1e-9,
+                "replay reconstruction error {reconstruction_error:.17e}"
+            );
+            assert!(u_error < 1e-12, "replay U orthogonality {u_error:.17e}");
+            assert!(v_error < 1e-12, "replay Vt orthogonality {v_error:.17e}");
+        }
+    }
+
+    #[test]
+    #[ignore = "perf probe: run with rch and --release for dense factor products vs reflector replay"]
+    fn thin_bidiag_factor_replay_perf_probe() {
+        let original = bidiag_deterministic_matrix(1024, 512);
+        let reduction = golub_kahan_bidiagonal_reduction(std::hint::black_box(&original))
+            .expect("bidiagonal reduction");
+        let bidiagonal_svd =
+            deterministic_bidiagonal_svd_from_reduction(&reduction).expect("bidiagonal SVD");
+
+        let started_at = std::time::Instant::now();
+        let reference = deterministic_thin_svd_from_reduction_parts_dense_product_reference(
+            std::hint::black_box(&reduction),
+            std::hint::black_box(bidiagonal_svd.clone()),
+        )
+        .expect("dense-product reference thin SVD");
+        let reference_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
+
+        let started_at = std::time::Instant::now();
+        let replay = deterministic_thin_svd_from_reduction_parts(
+            std::hint::black_box(&reduction),
+            std::hint::black_box(bidiagonal_svd),
+        )
+        .expect("reflector-replay thin SVD");
+        let replay_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
+
+        for idx in 0..reference.singular_values.len() {
+            assert_eq!(
+                reference.singular_values[idx].to_bits(),
+                replay.singular_values[idx].to_bits(),
+                "singular value {idx}"
+            );
+        }
+        let u_diff = max_abs_dmatrix_diff(&reference.u, &replay.u);
+        let vt_diff = max_abs_dmatrix_diff(&reference.v_t, &replay.v_t);
+        assert!(
+            u_diff <= 1e-10,
+            "U replay drift {u_diff:.17e} exceeds tolerance"
+        );
+        assert!(
+            vt_diff <= 1e-10,
+            "Vt replay drift {vt_diff:.17e} exceeds tolerance"
+        );
+
+        println!("THIN_BIDIAG_FACTOR_REPLAY_PERF_BEGIN");
+        println!("shape={}x{}", original.nrows(), original.ncols());
+        println!(
+            "reduction_digest={:#018x}",
+            bidiag_reduction_digest(&reduction)
+        );
+        println!("reference_ms={reference_ms:.6}");
+        println!("replay_ms={replay_ms:.6}");
+        println!("speedup={:.6}", reference_ms / replay_ms);
+        println!("u_max_abs_diff={u_diff:.17e}");
+        println!("vt_max_abs_diff={vt_diff:.17e}");
+        println!(
+            "reference_digest={:#018x}",
+            thin_svd_bits_digest(&reference)
+        );
+        println!("replay_digest={:#018x}", thin_svd_bits_digest(&replay));
+        println!("THIN_BIDIAG_FACTOR_REPLAY_PERF_END");
     }
 
     #[test]
