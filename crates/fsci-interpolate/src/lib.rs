@@ -1469,30 +1469,59 @@ pub fn make_lsq_spline(x: &[f64], y: &[f64], t: &[f64], k: usize) -> Result<BSpl
     }
     let mut ata = vec![vec![0.0; n]; n];
     let mut aty = vec![0.0; n];
-    // A B-spline basis has local support: eval_basis_all returns a length-n vector
-    // with only ~k+1 nonzero entries, so the dense n^2 inner double-loop wastes
-    // O(m*n^2) on terms that contribute nothing. Restrict the A^T A accumulation to
-    // the nonzero basis indices. BIT-IDENTICAL: a skipped (j,l) term is
-    // basis[j]*basis[l] with a zero factor, and basis values are finite (in [0,1]),
-    // so the product is +/-0.0 and `v + (+/-0.0) == v` for every f64 v — the
-    // i-major accumulation order and every bit of A^T A is preserved. The A^T y loop
-    // is left full (O(m*n), not the bottleneck) so any 0*non-finite-y term matches
-    // the original bit-for-bit. [perf]
-    let mut nz: Vec<usize> = Vec::with_capacity(k + 1);
+    // O(m*k^2) sparse normal-equations assembly. A B-spline basis has local support: for
+    // each sample only the k+1 functions on the knot span containing x[i] are nonzero. So
+    // find that span (`mu`, O(log n)), evaluate just its k+1 basis values with the exact
+    // Cox-de Boor recursion into a REUSED scratch buffer (no per-sample length-n alloc, no
+    // O(n) sweep), and scatter the rank-1 outer product over the window [mu-k, mu].
+    //
+    // Bit-identical to the previous dense build for finite y: the windowed de Boor produces
+    // the same basis values bit-for-bit (identical recursion, same ascending in-place sweep
+    // as eval_basis_all); the window superset of the nonzeros only adds basis[a]*basis[b]
+    // terms with a zero factor (+/-0.0, `v + (+/-0.0) == v`); the per-sample (a,b) order is
+    // ascending and the sample order is unchanged, so every bit of A^T A matches. A^T y is
+    // accumulated only over the window — for the finite inputs SciPy's make_lsq_spline
+    // accepts this equals the full loop bit-for-bit (skipped 0*y = +/-0.0); the sibling
+    // make_smoothing_spline_impl already assembles A^T y sparsely the same way. [perf]
+    let mut scratch = vec![0.0_f64; n];
     for i in 0..m {
-        let basis = eval_basis_all(t, x[i], k, n);
-        let yi = y[i];
-        for j in 0..n {
-            aty[j] += basis[j] * yi;
-        }
-        nz.clear();
-        nz.extend((0..n).filter(|&idx| basis[idx] != 0.0));
-        for &j in &nz {
-            let bj = basis[j];
-            let row = &mut ata[j];
-            for &l in &nz {
-                row[l] += bj * basis[l];
+        let Some(mu) = bspline_find_interval(t, x[i], n) else {
+            continue;
+        };
+        // Windowed Cox-de Boor (lo == hi == mu in eval_basis_all's terms).
+        scratch[mu] = 1.0;
+        for p in 1..=k {
+            let start = mu.saturating_sub(p);
+            for idx in start..=mu {
+                let mut val = 0.0;
+                if idx + p < t.len() {
+                    let denom_left = t[idx + p] - t[idx];
+                    if denom_left > 0.0 {
+                        val += (x[i] - t[idx]) / denom_left * scratch[idx];
+                    }
+                }
+                if idx + p + 1 < t.len() && idx + 1 < n {
+                    let denom_right = t[idx + p + 1] - t[idx + 1];
+                    if denom_right > 0.0 {
+                        val += (t[idx + p + 1] - x[i]) / denom_right * scratch[idx + 1];
+                    }
+                }
+                scratch[idx] = val;
             }
+        }
+        let lo = mu.saturating_sub(k);
+        let yi = y[i];
+        for a in lo..=mu {
+            let ba = scratch[a];
+            aty[a] += ba * yi;
+            let row = &mut ata[a];
+            for b in lo..=mu {
+                row[b] += ba * scratch[b];
+            }
+        }
+        // Reset only the touched window so the buffer stays clean for the next sample.
+        for s in scratch[lo..=mu].iter_mut() {
+            *s = 0.0;
         }
     }
     let c = solve_dense_system(&mut ata, &mut aty)?;
@@ -1598,6 +1627,35 @@ fn penalty_first_off_diagonal(i: usize, n: usize, lambda: f64) -> f64 {
     }
 }
 
+/// Index `mu` of the knot span containing `x`, i.e. the unique `i` in `[0, n)` that
+/// `eval_basis_all`'s degree-0 indicator sets to 1.0:
+///   `(t[i] <= x && x < t[i+1]) || (x == t[i+1] && i+1 == n)`   (n == t.len()-k-1).
+/// Returns `None` when `x` is outside the knot span (all basis functions are 0). The
+/// knot vector `t` is non-decreasing, so `partition_point` finds the span in O(log n)
+/// for any `x` (no assumption on the ordering of the sample points). Validated to match
+/// `eval_basis_all`'s selection bit-for-bit by `bspline_find_interval_matches_eval_basis`.
+fn bspline_find_interval(t: &[f64], x: f64, n: usize) -> Option<usize> {
+    if n == 0 {
+        return None;
+    }
+    debug_assert!(t.len() > n);
+    // p = number of knots in t[0..=n] that are <= x.
+    let p = t[..=n].partition_point(|&v| v <= x);
+    if p == 0 {
+        return None; // x < t[0]
+    }
+    let mu = p - 1;
+    if mu < n {
+        // partition guarantees t[mu] <= x and t[mu+1] = t[p] > x: the first clause holds.
+        Some(mu)
+    } else if x == t[n] {
+        // mu == n: x >= t[n]; only the right-boundary clause (x == t[n], i+1 == n) applies.
+        Some(n - 1)
+    } else {
+        None // x > t[n], past the knot span
+    }
+}
+
 fn eval_basis_all(t: &[f64], x: f64, k: usize, n: usize) -> Vec<f64> {
     let mut basis = vec![0.0; n];
     // Degree-0 indicator: exactly the interval(s) containing x become 1.0. Track the
@@ -1674,11 +1732,27 @@ fn solve_dense_system(a: &mut [Vec<f64>], b: &mut [f64]) -> Result<Vec<f64>, Int
             a.swap(col, max_row);
             b.swap(col, max_row);
         }
+        // Zero-skipping Gaussian elimination. A row with `a[row][col] == 0` has factor 0,
+        // so subtracting `factor * pivot` is `-= +/-0.0` for every entry — a no-op — and is
+        // skipped; likewise a pivot entry of 0 contributes `+/-0.0` and is skipped. This is
+        // bit-identical to the dense elimination (`v + (+/-0.0) == v` for finite `v`, and
+        // the pivot ensures `factor` is finite) but only touches the actual non-zeros, so a
+        // banded matrix (e.g. a B-spline A^T A) is solved in ~O(n * bandwidth) work instead
+        // of O(n^3). split_at_mut borrows the pivot row in place (no per-row clone).
+        let pivot_diag = a[col][col];
         for row in col + 1..n {
-            let factor = a[row][col] / a[col][col];
-            let pivot_row = a[col].clone();
-            for (j, pval) in pivot_row.iter().enumerate().skip(col) {
-                a[row][j] -= factor * pval;
+            if a[row][col] == 0.0 {
+                continue;
+            }
+            let factor = a[row][col] / pivot_diag;
+            let (head, tail) = a.split_at_mut(row);
+            let pivot = &head[col];
+            let target = &mut tail[0];
+            for j in col..n {
+                let pval = pivot[j];
+                if pval != 0.0 {
+                    target[j] -= factor * pval;
+                }
             }
             b[row] -= factor * b[col];
         }
@@ -1687,7 +1761,10 @@ fn solve_dense_system(a: &mut [Vec<f64>], b: &mut [f64]) -> Result<Vec<f64>, Int
     for i in (0..n).rev() {
         let mut s = b[i];
         for j in i + 1..n {
-            s -= a[i][j] * x[j];
+            let aij = a[i][j];
+            if aij != 0.0 {
+                s -= aij * x[j];
+            }
         }
         x[i] = s / a[i][i];
     }
@@ -5798,6 +5875,43 @@ mod tests {
                 (got - want).abs() < 1e-12,
                 "knot[{i}] = {got}, expected {want}"
             );
+        }
+    }
+
+    #[test]
+    fn bspline_find_interval_matches_eval_basis() {
+        // bspline_find_interval must return exactly the index eval_basis_all's degree-0
+        // indicator sets to 1.0 (None when none does), across clamped/repeated/non-uniform
+        // knots and x on knots, between knots, and outside the span.
+        fn brute(t: &[f64], x: f64, k: usize, n: usize) -> Option<usize> {
+            (0..n).find(|&i| {
+                i + 1 < t.len()
+                    && ((t[i] <= x && x < t[i + 1])
+                        || (x == t[i + 1] && i + 1 == t.len() - k - 1))
+            })
+        }
+        let knot_sets: Vec<(Vec<f64>, usize)> = vec![
+            (vec![0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0, 2.0], 3),
+            (vec![0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 4.0], 1),
+            (vec![0.0, 0.0, 0.0, 1.0, 1.0, 2.0, 3.0, 3.0, 3.0], 2),
+            (vec![-2.0, -2.0, -2.0, 0.5, 0.5, 0.5, 5.0, 5.0, 5.0], 2),
+        ];
+        for (t, k) in &knot_sets {
+            let n = t.len() - k - 1;
+            // Probe knots, midpoints, and out-of-range points.
+            let mut probes: Vec<f64> = t.clone();
+            for w in t.windows(2) {
+                probes.push(0.5 * (w[0] + w[1]));
+            }
+            probes.push(t[0] - 1.0);
+            probes.push(t[t.len() - 1] + 1.0);
+            for &x in &probes {
+                assert_eq!(
+                    bspline_find_interval(t, x, n),
+                    brute(t, x, *k, n),
+                    "interval mismatch t={t:?} k={k} x={x}"
+                );
+            }
         }
     }
 
