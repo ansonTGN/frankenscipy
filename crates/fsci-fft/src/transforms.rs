@@ -1180,27 +1180,51 @@ pub fn idct(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError> {
     };
 
     // DCT-III: x[n] = X[0]/(2N) + (1/N) * sum_{k=1}^{N-1} X[k] * cos(π*k*(2n+1)/(2N))
-    // Compute via inverse of the DCT-II process
+    // Compute via the inverse Makhoul reorder: an N/2-point real inverse FFT
+    // instead of the naive 2N-point complex inverse FFT.
     let backend = resolve_backend(options.backend);
 
-    // Prepare: multiply by twiddle and create Hermitian-symmetric spectrum
+    if n.is_multiple_of(2) {
+        // Recover the length-(N/2+1) half-spectrum V (the FFT of the reordered
+        // real sequence v) from the DCT coefficients X = scaled_input:
+        //   e^{-iπk/2N}·V[k] = (X[k] - i·X[N-k])/2  ⇒  V[k] = e^{+iπk/2N}(X[k]-iX[N-k])/2,
+        //   V[0] = X[0]/2.
+        let m = n / 2;
+        let mut half = Vec::with_capacity(m + 1);
+        half.push((0.5 * scaled_input[0], 0.0));
+        for k in 1..=m {
+            let xk = scaled_input[k];
+            let xnk = scaled_input[n - k];
+            let angle = PI * k as f64 / (2.0 * nf);
+            let twiddle = (angle.cos(), angle.sin());
+            half.push(complex_mul((0.5 * xk, -0.5 * xnk), twiddle));
+        }
+        // v = N·v_true (unscaled real inverse FFT); un-interleave the forward
+        // reorder and divide by N to recover x.
+        let v = real_ifft_unscaled(&half, n, backend);
+        let inv_n = 1.0 / nf;
+        let mut result = vec![0.0; n];
+        for (j, &vj) in v.iter().enumerate() {
+            let dst = if 2 * j < n { 2 * j } else { 2 * (n - j) - 1 };
+            result[dst] = vj * inv_n;
+        }
+        return Ok(result);
+    }
+
+    // Odd N: fall back to the 2N-point complex inverse FFT of the Hermitian
+    // spectrum (the real-FFT pack needs an even length).
     let mut spectrum = vec![(0.0, 0.0); 2 * n];
     for k in 0..n {
         let angle = PI * k as f64 / (2.0 * nf);
         let twiddle = (angle.cos(), angle.sin());
         spectrum[k] = complex_mul((scaled_input[k], 0.0), twiddle);
     }
-    // Hermitian symmetry for real output
     for k in 1..n {
         spectrum[2 * n - k] = complex_conj(spectrum[k]);
     }
-
     let time_domain = backend.transform_1d_unscaled(&spectrum, true);
-
-    // Extract: take first N values, scale by 1/(2N)
     let scale = 1.0 / (2.0 * nf);
     let result: Vec<f64> = time_domain.iter().take(n).map(|v| v.0 * scale).collect();
-
     Ok(result)
 }
 
@@ -2705,6 +2729,34 @@ fn real_fft_unscaled(input: &[f64], backend: &dyn FftBackend) -> Vec<Complex64> 
 }
 
 fn real_ifft_unscaled(input: &[Complex64], n: usize, backend: &dyn FftBackend) -> Vec<f64> {
+    // Even n: invert the real-FFT pack (mirror of `real_fft_specialized`) with a
+    // single M = n/2-point complex inverse FFT instead of a full n-point one.
+    // Recover the packed half-spectrum Z[k] = even + i·e^{+2πik/n}·odd, where
+    // even = (X[k] + conj(X[M-k]))/2 and odd = (X[k] - conj(X[M-k]))/2; then the
+    // M-point IFFT gives z, and x[2k] = 2·Re z[k], x[2k+1] = 2·Im z[k] (the ×2
+    // matches the unscaled n-point convention this helper returns).
+    if n >= 4 && n.is_multiple_of(2) {
+        let m = n / 2;
+        let twiddles = get_or_compute_twiddles(n, true); // e^{+2πik/n}
+        let mut packed = Vec::with_capacity(m);
+        for k in 0..m {
+            let xk = input[k];
+            let xmk = complex_conj(input[m - k]);
+            let even = (0.5 * (xk.0 + xmk.0), 0.5 * (xk.1 + xmk.1));
+            let odd = (0.5 * (xk.0 - xmk.0), 0.5 * (xk.1 - xmk.1));
+            let odd_tw = complex_mul(odd, twiddles[k]);
+            // multiply by i: (a, b) -> (-b, a)
+            packed.push(complex_add(even, (-odd_tw.1, odd_tw.0)));
+        }
+        let z = backend.transform_1d_unscaled(&packed, true);
+        let mut out = vec![0.0; n];
+        for (k, &(re, im)) in z.iter().enumerate() {
+            out[2 * k] = 2.0 * re;
+            out[2 * k + 1] = 2.0 * im;
+        }
+        return out;
+    }
+
     let reconstructed = rebuild_hermitian(input, n);
     backend
         .transform_1d_unscaled(&reconstructed, true)

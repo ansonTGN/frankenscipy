@@ -1,0 +1,7 @@
+fsci-fft inverse real-FFT N/2 pack (idct inverse-Makhoul + irfft family)
+Correctness: idct(dct(x)) roundtrip err 9.99e-16; irfft(rfft(x)) roundtrip err 1.11e-15.
+Tests: fsci-fft 144 pass; diff_fft_dct_dst(33)+diff_fft_dctn_dstn+diff_fft conformance pass; clippy clean.
+Min-of-3 A/B idct (old 2N complex -> new N/2 real):
+  512:1.93x 1000:2.83x 2048:2.40x 4096:2.74x 10000:4.16x 16384:5.02x
+Min-of-3 A/B irfft (old N complex -> new N/2 real, bonus):
+  512:1.41x 1000:2.25x 2048:1.66x 4096:1.67x 10000:1.83x 16384:1.81x
