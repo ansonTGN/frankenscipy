@@ -1157,9 +1157,42 @@ impl KDTree {
             return Ok(vec![]);
         }
 
-        let mut results = vec![Vec::new(); self.nodes.len()];
-        for node in &self.nodes {
-            results[node.index] = other.query_ball_point(&node.point, r)?;
+        let n = self.nodes.len();
+        // Each point's neighbour list is an independent query against `other` and is stored
+        // at its own `node.index`, so the queries parallelize bit-identically.
+        let nthreads = cdist_thread_count(n, other.nodes.len(), self.dim);
+        if nthreads <= 1 {
+            let mut results = vec![Vec::new(); n];
+            for node in &self.nodes {
+                results[node.index] = other.query_ball_point(&node.point, r)?;
+            }
+            return Ok(results);
+        }
+        let chunk = n.div_ceil(nthreads);
+        type Computed = Result<Vec<(usize, Vec<usize>)>, SpatialError>;
+        let computed: Vec<Computed> = std::thread::scope(|scope| {
+            let handles: Vec<_> = self
+                .nodes
+                .chunks(chunk)
+                .map(|chunk_nodes| {
+                    scope.spawn(move || {
+                        chunk_nodes
+                            .iter()
+                            .map(|nd| other.query_ball_point(&nd.point, r).map(|res| (nd.index, res)))
+                            .collect::<Result<Vec<_>, _>>()
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|h| h.join().expect("query_ball_tree worker panicked"))
+                .collect()
+        });
+        let mut results = vec![Vec::new(); n];
+        for chunk_res in computed {
+            for (idx, res) in chunk_res? {
+                results[idx] = res;
+            }
         }
         Ok(results)
     }
@@ -1179,14 +1212,53 @@ impl KDTree {
             return Ok(Vec::new());
         }
 
-        let mut pairs = Vec::new();
-        for node in &self.nodes {
-            for neighbor_index in self.query_ball_point(&node.point, r)? {
-                if neighbor_index > node.index {
-                    pairs.push((node.index, neighbor_index));
+        // Each anchor's pairs are an independent query; the final sort makes the collected
+        // set order-independent, so gathering per-thread pair lists is bit-identical.
+        let n = self.nodes.len();
+        let nthreads = cdist_thread_count(n, n, self.dim);
+        let mut pairs = if nthreads <= 1 {
+            let mut pairs = Vec::new();
+            for node in &self.nodes {
+                for neighbor_index in self.query_ball_point(&node.point, r)? {
+                    if neighbor_index > node.index {
+                        pairs.push((node.index, neighbor_index));
+                    }
                 }
             }
-        }
+            pairs
+        } else {
+            let tree: &KDTree = self;
+            let chunk = n.div_ceil(nthreads);
+            type Computed = Result<Vec<(usize, usize)>, SpatialError>;
+            let computed: Vec<Computed> = std::thread::scope(|scope| {
+                let handles: Vec<_> = self
+                    .nodes
+                    .chunks(chunk)
+                    .map(|chunk_nodes| {
+                        scope.spawn(move || {
+                            let mut local = Vec::new();
+                            for node in chunk_nodes {
+                                for neighbor_index in tree.query_ball_point(&node.point, r)? {
+                                    if neighbor_index > node.index {
+                                        local.push((node.index, neighbor_index));
+                                    }
+                                }
+                            }
+                            Ok(local)
+                        })
+                    })
+                    .collect();
+                handles
+                    .into_iter()
+                    .map(|h| h.join().expect("query_pairs worker panicked"))
+                    .collect()
+            });
+            let mut pairs = Vec::new();
+            for chunk_res in computed {
+                pairs.extend(chunk_res?);
+            }
+            pairs
+        };
         pairs.sort_unstable();
         Ok(pairs)
     }
@@ -1210,10 +1282,38 @@ impl KDTree {
             return Ok(0);
         }
         let r_sq = r * r;
-        let mut count = 0;
-        for other_node in &other.nodes {
-            count += ball_search_count(&self.nodes, 0, &other_node.point, r_sq);
+        // Each query into `self` is an independent tree descent, and the total is an exact
+        // integer sum (associative/commutative), so splitting `other`'s points across
+        // threads and summing the partials is bit-identical to the serial accumulation.
+        let m = other.nodes.len();
+        let nthreads = cdist_thread_count(m, self.nodes.len(), self.dim);
+        if nthreads <= 1 {
+            let mut count = 0;
+            for other_node in &other.nodes {
+                count += ball_search_count(&self.nodes, 0, &other_node.point, r_sq);
+            }
+            return Ok(count);
         }
+        let self_nodes = self.nodes.as_slice();
+        let chunk = m.div_ceil(nthreads);
+        let count: usize = std::thread::scope(|scope| {
+            let handles: Vec<_> = other
+                .nodes
+                .chunks(chunk)
+                .map(|chunk_nodes| {
+                    scope.spawn(move || {
+                        chunk_nodes
+                            .iter()
+                            .map(|nd| ball_search_count(self_nodes, 0, &nd.point, r_sq))
+                            .sum::<usize>()
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|h| h.join().expect("count_neighbors worker panicked"))
+                .sum()
+        });
         Ok(count)
     }
 
