@@ -1,0 +1,7 @@
+fsci-fft DCT-IV/DST-IV via 2N-point FFT (pre/post half-sample rotation)
+u[n]=x[n]e^{-i pi n/2N} zero-padded to 2N; U=FFT_2N(u); X[k]=2Re(e^{-i pi(2k+1)/4N} U[k]) (DCT-IV), -2Im (DST-IV).
+Correctness: max err vs naive Type-IV = 1.10e-11 (parity tol 1e-9).
+Tests: fsci-fft 144 pass; diff_fft_dct_dst + diff_fft_dctn_dstn conformance pass; clippy clean.
+Min-of-3 A/B (old 8N complex -> new 2N complex):
+  dct_iv: 512:1.87x 1000:2.89x 2048:4.30x 4096:4.41x 10000:2.98x 16384:3.33x
+  dst_iv: 512:1.68x 1000:2.67x 2048:4.30x 4096:4.17x 10000:3.19x 16384:3.43x

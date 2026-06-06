@@ -1325,6 +1325,21 @@ pub fn dct_iii(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError
     }
 }
 
+/// Shared core for the Type-IV cosine/sine transforms: pre-rotate the input by a
+/// half sample, run one 2N-point complex FFT, and return its first N bins `U[k]`.
+/// DCT-IV reads `2·Re(e^{-iπ(2k+1)/4N}·U[k])` and DST-IV `-2·Im(...)`.
+fn dct4_core_fft(input: &[f64], options: &FftOptions) -> Vec<Complex64> {
+    let n = input.len();
+    let two_n = 2 * n;
+    let mut u = vec![(0.0, 0.0); two_n];
+    for (nn, slot) in u.iter_mut().enumerate().take(n) {
+        let angle = -PI * nn as f64 / (2.0 * n as f64);
+        *slot = complex_mul((input[nn], 0.0), (angle.cos(), angle.sin()));
+    }
+    let backend = resolve_backend(options.backend);
+    backend.transform_1d_unscaled(&u, false)
+}
+
 /// Discrete Cosine Transform Type IV.
 ///
 /// DCT-IV: `X[k] = 2 * Σ_{n=0}^{N-1} x[n] * cos(π(2n+1)(2k+1)/(4N))`
@@ -1335,21 +1350,17 @@ pub fn dct_iv(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError>
     validate_finite_real(input, options)?;
 
     let n = input.len();
-    // DCT-IV via FFT of length 8N
-    let m = 8 * n;
-    let mut extended = vec![(0.0, 0.0); m];
-    for i in 0..n {
-        extended[2 * i + 1] = (input[i], 0.0);
-        extended[m - 2 * i - 1] = (input[i], 0.0);
-    }
-
-    let backend = resolve_backend(options.backend);
-    let spectrum = backend.transform_1d_unscaled(&extended, false);
-
+    // DCT-IV via a 2N-point complex FFT (pre/post half-sample rotation) instead
+    // of the old 8N-point complex FFT. Factoring the kernel
+    //   (2n+1)(2k+1)/4N = nk/N + n/2N + k/2N + 1/4N  gives
+    //   X[k] = 2·Re{ e^{-iπ(2k+1)/4N} · U[k] },  U = FFT_{2N}(u),
+    //   u[n] = x[n]·e^{-iπn/2N} (n<N), zero-padded to 2N.
+    let spectrum = dct4_core_fft(input, options);
     let mut result = Vec::with_capacity(n);
-    for k in 0..n {
-        // Real part of bin 2k+1
-        result.push(spectrum[2 * k + 1].0);
+    for (k, &uk) in spectrum.iter().enumerate().take(n) {
+        let angle = -PI * (2 * k + 1) as f64 / (4.0 * n as f64);
+        let a = (angle.cos(), angle.sin());
+        result.push(2.0 * complex_mul(a, uk).0); // 2·Re
     }
     // br-yjas: scipy normalization. DCT-IV is orthonormal up to a
     // 1/sqrt(2N) factor; "ortho" applies that factor and "forward"
@@ -1527,21 +1538,14 @@ pub fn dst_iv(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError>
     validate_finite_real(input, options)?;
 
     let n = input.len();
-    // DST-IV via FFT of length 8N
-    let m = 8 * n;
-    let mut extended = vec![(0.0, 0.0); m];
-    for i in 0..n {
-        extended[2 * i + 1] = (input[i], 0.0);
-        extended[m - 2 * i - 1] = (-input[i], 0.0);
-    }
-
-    let backend = resolve_backend(options.backend);
-    let spectrum = backend.transform_1d_unscaled(&extended, false);
-
+    // DST-IV via the same 2N-point complex FFT as DCT-IV (pre/post rotation);
+    // it reads -2·Im instead of 2·Re of e^{-iπ(2k+1)/4N}·U[k]. 8N → 2N.
+    let spectrum = dct4_core_fft(input, options);
     let mut result = Vec::with_capacity(n);
-    for k in 0..n {
-        // -Imaginary part of bin 2k+1
-        result.push(-spectrum[2 * k + 1].1);
+    for (k, &uk) in spectrum.iter().enumerate().take(n) {
+        let angle = -PI * (2 * k + 1) as f64 / (4.0 * n as f64);
+        let a = (angle.cos(), angle.sin());
+        result.push(-2.0 * complex_mul(a, uk).1); // -2·Im
     }
     // br-yjas: scipy normalization for DST-IV (mirror of DCT-IV).
     let scale = match options.normalization {
