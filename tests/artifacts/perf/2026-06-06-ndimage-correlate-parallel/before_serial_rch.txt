@@ -1,0 +1,18 @@
+img=[64, 64] ker=[3, 3] digest=8492755b336b7481
+img=[128, 128] ker=[5, 5] digest=c954daa629a80c3f
+img=[256, 256] ker=[7, 7] digest=281ac5636a5dc691
+img=[256, 256] ker=[7, 7]    86.325ms/call (acc=47.355582)
+img=[512, 512] ker=[9, 9]   581.923ms/call (acc=114.147043)
+img=[700, 700] ker=[11, 11]      1.612s/call (acc=135.231267)
+img=[64, 64] ker=[3, 3] digest=8492755b336b7481
+img=[128, 128] ker=[5, 5] digest=c954daa629a80c3f
+img=[256, 256] ker=[7, 7] digest=281ac5636a5dc691
+img=[256, 256] ker=[7, 7]    86.827ms/call (acc=47.355582)
+img=[512, 512] ker=[9, 9]   582.544ms/call (acc=114.147043)
+img=[700, 700] ker=[11, 11]      1.634s/call (acc=135.231267)
+img=[64, 64] ker=[3, 3] digest=8492755b336b7481
+img=[128, 128] ker=[5, 5] digest=c954daa629a80c3f
+img=[256, 256] ker=[7, 7] digest=281ac5636a5dc691
+img=[256, 256] ker=[7, 7]    87.418ms/call (acc=47.355582)
+img=[512, 512] ker=[9, 9]   676.195ms/call (acc=114.147043)
+img=[700, 700] ker=[11, 11]      1.754s/call (acc=135.231267)

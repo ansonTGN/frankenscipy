@@ -1192,21 +1192,25 @@ pub fn correlate_with_origins(
 
     let offsets: Vec<i64> = weights.shape.iter().map(|&s| s as i64 / 2).collect();
 
-    for flat_out in 0..input.size() {
+    // Each output pixel is an independent weighted sum over the (read-only)
+    // kernel footprint, so distribute the output pixels across threads. The
+    // `in_idx` scratch vector is reused per pixel within a worker. Byte-identical:
+    // the same weights are summed in the same flat_k order, written to the same
+    // flat_out slot — only the owning core changes.
+    let kernel_work = weights.size().max(1);
+    fill_pixels_parallel(&mut output, kernel_work, |flat_out, _scratch| {
         let out_idx = input.unravel(flat_out);
+        let mut in_idx = vec![0i64; ndim];
         let mut sum = 0.0;
-
         for flat_k in 0..weights.size() {
             let k_idx = weights.unravel(flat_k);
-            let mut in_idx = vec![0i64; ndim];
             for d in 0..ndim {
                 in_idx[d] = out_idx[d] as i64 + k_idx[d] as i64 - offsets[d] - origins[d];
             }
             sum += weights.data[flat_k] * input.get_boundary(&in_idx, mode, cval);
         }
-
-        output.data[flat_out] = sum;
-    }
+        sum
+    });
 
     Ok(output)
 }

@@ -1,0 +1,6 @@
+fsci-ndimage nd correlate/convolve: parallel per-output pixels
+correlate_with_origins per-output weighted sum routed through fill_pixels_parallel (each pixel independent, own slot).
+Byte-identical: output bits match serial (dad1e3ce).
+Tests: 8 correlate + convolve unit tests pass; clippy clean.
+Min-of-3 A/B (serial -> parallel):
+  img=256x256 ker=7x7: 10.95x   img=512x512 ker=9x9: 17.43x
