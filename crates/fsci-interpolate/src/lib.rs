@@ -1908,7 +1908,10 @@ impl NearestNDInterpolator {
         Ok(self.values[idx])
     }
     pub fn eval_many(&self, queries: &[Vec<f64>]) -> Result<Vec<f64>, InterpError> {
-        queries.iter().map(|q| self.eval(q)).collect()
+        // Each query is an independent KD-tree nearest-neighbour lookup; parallelize across
+        // queries (bit-identical — each result is a pure lookup written in query order).
+        let work = self.values.len().max(2).ilog2() as usize * 8;
+        par_query_try_map(queries, work, |q| self.eval(q))
     }
 }
 
@@ -2867,7 +2870,11 @@ impl LinearNDInterpolator {
         }
     }
     pub fn eval_many(&self, queries: &[Vec<f64>]) -> Result<Vec<f64>, InterpError> {
-        queries.iter().map(|q| self.eval(q)).collect()
+        // Each query independently locates its simplex and evaluates the barycentric
+        // interpolant; parallelize across queries (bit-identical, query-order preserved).
+        // Low work weight: the simplex lookup is cheap, so only batch-parallelize when the
+        // query count is large enough to amortize the spawn (avoids a small-m regression).
+        par_query_try_map(queries, 6, |q| self.eval(q))
     }
 }
 
@@ -2970,7 +2977,9 @@ impl CloughTocher2DInterpolator {
     }
 
     pub fn eval_many(&self, queries: &[Vec<f64>]) -> Result<Vec<f64>, InterpError> {
-        queries.iter().map(|query| self.eval(query)).collect()
+        // Each query independently locates its simplex and evaluates the Clough-Tocher
+        // cubic; parallelize across queries (bit-identical, query-order preserved).
+        par_query_try_map(queries, 160, |query| self.eval(query))
     }
 
     fn transform_query(&self, point: (f64, f64)) -> (f64, f64) {
@@ -3462,6 +3471,57 @@ where
             .flat_map(|h| h.join().expect("interpolate worker panicked"))
             .collect()
     })
+}
+
+/// Like `par_query_map` but for fallible per-query evaluation. Returns the first error in
+/// query order (matching the serial `queries.iter().map(f).collect::<Result<Vec<_>, _>>()`):
+/// chunks are processed in order, and a chunk's own `collect` short-circuits at its first
+/// error, so the earliest erroring query wins exactly as in the serial fold. On all-success
+/// the values are bit-identical (each query is an independent pure eval, chunks concatenated
+/// in order).
+fn par_query_try_map<T, E, F>(queries: &[T], work_per_query: usize, f: F) -> Result<Vec<f64>, E>
+where
+    T: Sync,
+    E: Send,
+    F: Fn(&T) -> Result<f64, E> + Sync,
+{
+    let m = queries.len();
+    let work = (m as u64).saturating_mul(work_per_query.max(1) as u64);
+    if work < 1 << 18 || m < 4 {
+        return queries.iter().map(&f).collect();
+    }
+    let cores = std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(1);
+    let nthreads = cores.min(m / 2).max(1);
+    if nthreads <= 1 {
+        return queries.iter().map(&f).collect();
+    }
+    let chunk = m.div_ceil(nthreads);
+    let f = &f;
+    let chunk_results: Vec<Result<Vec<f64>, E>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..nthreads)
+            .filter_map(|t| {
+                let i0 = t * chunk;
+                if i0 >= m {
+                    return None;
+                }
+                let i1 = (i0 + chunk).min(m);
+                Some(scope.spawn(move || {
+                    queries[i0..i1].iter().map(f).collect::<Result<Vec<f64>, E>>()
+                }))
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().expect("interpolate worker panicked"))
+            .collect()
+    });
+    let mut out = Vec::with_capacity(m);
+    for cr in chunk_results {
+        out.extend(cr?);
+    }
+    Ok(out)
 }
 
 fn rbf_eval(kernel: RbfKernel, r: f64, epsilon: f64) -> f64 {
