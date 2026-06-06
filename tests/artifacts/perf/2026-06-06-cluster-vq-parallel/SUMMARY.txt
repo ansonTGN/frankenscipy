@@ -1,0 +1,6 @@
+fsci-cluster vq: parallel nearest-centroid assignment (single pass)
+Each point's lowest-index argmin is independent; assigned parallel into ordered (label,dist) slots.
+Byte-identical: labels+dists digest match serial (21f8e5ed).
+Tests: 8 vq unit tests pass; clippy clean.
+Min-of-3 A/B (serial -> parallel):
+  n=20000 d=8 k=32: 3.47x   n=50000 d=16 k=64: 11.17x   n=100000 d=24 k=128: 20.17x

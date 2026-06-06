@@ -314,21 +314,50 @@ pub fn vq(
         ));
     }
 
-    let mut labels = Vec::with_capacity(data.len());
-    let mut dists = Vec::with_capacity(data.len());
-
     // Resolves [frankenscipy-dnunq]: compare in squared-distance space
     // so we only sqrt the winning min_sq once per data point instead
     // of once per (point, centroid) pair. Monotone-equivalent for
     // nearest-neighbor selection.
     let k = centroids.len();
     let centroids_flat = flatten_centroids(centroids, d);
-    for point in data {
-        let (best_c, min_sq) = nearest_centroid(point, &centroids_flat, k, d);
-        labels.push(best_c);
-        dists.push(min_sq.sqrt());
-    }
+    let n = data.len();
 
+    // Each point's nearest-centroid lookup is independent; assign them in
+    // parallel into ordered slots (single pass — threads are spawned once).
+    // Byte-identical: same per-point lowest-index argmin, results in data order.
+    let assign = |point: &[f64]| -> (usize, f64) {
+        let (best_c, min_sq) = nearest_centroid(point, &centroids_flat, k, d);
+        (best_c, min_sq.sqrt())
+    };
+    let nthreads = if n.saturating_mul(k).saturating_mul(d) < (1 << 16) || n < 2 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(|c| c.get())
+            .unwrap_or(1)
+            .min(n)
+    };
+    let pairs: Vec<(usize, f64)> = if nthreads <= 1 {
+        data.iter().map(|p| assign(p)).collect()
+    } else {
+        let mut out = vec![(0usize, 0.0f64); n];
+        let chunk = n.div_ceil(nthreads);
+        let assign = &assign;
+        std::thread::scope(|scope| {
+            for (t, slot) in out.chunks_mut(chunk).enumerate() {
+                let base = t * chunk;
+                scope.spawn(move || {
+                    for (i, o) in slot.iter_mut().enumerate() {
+                        *o = assign(&data[base + i]);
+                    }
+                });
+            }
+        });
+        out
+    };
+
+    let labels: Vec<usize> = pairs.iter().map(|p| p.0).collect();
+    let dists: Vec<f64> = pairs.iter().map(|p| p.1).collect();
     Ok((labels, dists))
 }
 

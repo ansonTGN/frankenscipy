@@ -1,0 +1,18 @@
+n=500 d=4 k=8 digest=1e5f553ecf201c45
+n=2000 d=8 k=32 digest=8d569afeba1c1402
+n=5000 d=16 k=64 digest=9c4fc345bb4d9b63
+n=20000 d=8 k=32    12.760ms/call (acc=34.779789)
+n=50000 d=16 k=64    93.755ms/call (acc=45.783889)
+n=100000 d=24 k=128   423.152ms/call (acc=74.932408)
+n=500 d=4 k=8 digest=1e5f553ecf201c45
+n=2000 d=8 k=32 digest=8d569afeba1c1402
+n=5000 d=16 k=64 digest=9c4fc345bb4d9b63
+n=20000 d=8 k=32    12.502ms/call (acc=34.779789)
+n=50000 d=16 k=64    85.322ms/call (acc=45.783889)
+n=100000 d=24 k=128   424.485ms/call (acc=74.932408)
+n=500 d=4 k=8 digest=1e5f553ecf201c45
+n=2000 d=8 k=32 digest=8d569afeba1c1402
+n=5000 d=16 k=64 digest=9c4fc345bb4d9b63
+n=20000 d=8 k=32    12.869ms/call (acc=34.779789)
+n=50000 d=16 k=64    85.819ms/call (acc=45.783889)
+n=100000 d=24 k=128   423.100ms/call (acc=74.932408)
