@@ -25302,19 +25302,23 @@ fn double_center_distance_matrix(distances: &[Vec<f64>]) -> Vec<Vec<f64>> {
 
 /// Compute ranks using max method (number of values <= this value)
 fn rank_max(data: &[f64]) -> Vec<f64> {
-    let n = data.len();
-    let mut ranks = vec![0.0; n];
-
-    for i in 0..n {
-        let mut count = 0.0;
-        for j in 0..n {
-            if data[j] <= data[i] {
-                count += 1.0;
+    // rank_max[i] = #{ j : data[j] <= data[i] }. `<=` on f64 is false whenever either
+    // operand is NaN, so NaN entries never count and a NaN query gets 0. Sort the
+    // non-NaN values once; for a non-NaN query v the count is the number of sorted
+    // values <= v, which is a monotone predicate over the ascending array, so a single
+    // partition_point gives it. O(n log n) instead of O(n^2), and because the counts
+    // are exact integers the result is bit-identical to the double loop.
+    let mut sorted: Vec<f64> = data.iter().copied().filter(|v| !v.is_nan()).collect();
+    sorted.sort_by(|a, b| a.partial_cmp(b).expect("non-NaN values compare"));
+    data.iter()
+        .map(|&v| {
+            if v.is_nan() {
+                0.0
+            } else {
+                sorted.partition_point(|&x| x <= v) as f64
             }
-        }
-        ranks[i] = count;
-    }
-    ranks
+        })
+        .collect()
 }
 
 /// Result of sigma clipping operation.
@@ -47992,6 +47996,34 @@ mod tests {
     }
 
     // ── chatterjeexi tests ───────────────────────────────────────────
+
+    #[test]
+    fn rank_max_matches_quadratic_reference() {
+        // O(n log n) rank_max must equal the brute O(n^2) #{j: data[j] <= data[i]}
+        // count exactly, including duplicates, -0.0/0.0, and NaN handling.
+        fn brute(data: &[f64]) -> Vec<f64> {
+            data.iter()
+                .map(|&vi| data.iter().filter(|&&vj| vj <= vi).count() as f64)
+                .collect()
+        }
+        let cases: Vec<Vec<f64>> = vec![
+            vec![3.0, 1.0, 2.0, 2.0, 5.0, 1.0],
+            vec![-0.0, 0.0, -0.0, 1.0, -1.0],
+            vec![f64::NAN, 1.0, 2.0, f64::NAN, 0.5],
+            vec![7.0; 9],
+            (0..200).map(|i| ((i * 7 + 3) % 23) as f64).collect(),
+            vec![f64::INFINITY, f64::NEG_INFINITY, 0.0, f64::NAN],
+        ];
+        for data in &cases {
+            let got = rank_max(data);
+            let want = brute(data);
+            assert_eq!(
+                got.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+                want.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+                "rank_max mismatch for {data:?}"
+            );
+        }
+    }
 
     #[test]
     fn chatterjeexi_functional_relationship() {
