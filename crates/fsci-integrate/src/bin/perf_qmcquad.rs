@@ -66,13 +66,15 @@ fn old_qmc_quad<F: Fn(&[f64]) -> f64>(
     (mean, se)
 }
 
+type Integrand = fn(&[f64]) -> f64;
+
 fn main() {
     let mut total = 0usize;
     let mut mismatches = 0usize;
     let mut payload = String::new();
 
     // Cheap integrands across several dims; the result must be byte-identical.
-    let cases: &[(&str, fn(&[f64]) -> f64)] = &[
+    let cases: &[(&str, Integrand)] = &[
         ("sumsq", |x| x.iter().map(|&v| v * v).sum()),
         ("prod1p", |x| x.iter().map(|&v| 1.0 + v).product()),
         ("first", |x| x[0]),

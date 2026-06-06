@@ -1,0 +1,4 @@
+isomorphism: 0 mismatches / 72 qmc_quad runs (0 == byte-identical)
+d= 8 np= 20000 ne=16  old=  47.839ms  new=  48.229ms  ratio=    1.0x  (acc=15.999)
+d= 4 np= 40000 ne=16  old=  72.590ms  new=  75.278ms  ratio=    1.0x  (acc=8.000)
+d= 2 np= 80000 ne=16  old= 114.384ms  new= 114.760ms  ratio=    1.0x  (acc=4.000)

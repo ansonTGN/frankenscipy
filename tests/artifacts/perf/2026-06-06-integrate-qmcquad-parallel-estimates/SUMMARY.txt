@@ -1,0 +1,8 @@
+qmc_quad parallel-estimates lever (frankenscipy-a64ru)
+A/B: same perf_qmcquad harness; OLD = serial library (this edit stashed), NEW = parallel.
+Both builds: isomorphism 0 mismatches / 72 runs (byte-identical .to_bits()).
+
+serial-library 'new' col vs parallel-library 'new' col (ne=16):
+  d=8  np=20000:  48.229ms -> 6.134ms   = 7.86x
+  d=4  np=40000:  75.278ms -> 7.591ms   = 9.92x
+  d=2  np=80000: 114.760ms -> 10.637ms  = 10.79x

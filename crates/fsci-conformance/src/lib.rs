@@ -8446,7 +8446,7 @@ fn make_integrate_tplquad_func(
 // br-gm7n: vector-input integrand registry for qmc_quad. Keys are
 // shared with fixture cases — point[j] is the j-th coordinate.
 #[allow(clippy::type_complexity)]
-fn make_integrate_qmc_func(name: &str) -> Option<Box<dyn Fn(&[f64]) -> f64>> {
+fn make_integrate_qmc_func(name: &str) -> Option<Box<dyn Fn(&[f64]) -> f64 + Sync>> {
     match name {
         "x_squared_1d" => Some(Box::new(|p| p[0] * p[0])),
         "sin_x_1d" => Some(Box::new(|p| p[0].sin())),

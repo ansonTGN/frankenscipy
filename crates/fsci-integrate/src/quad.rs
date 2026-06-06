@@ -2897,7 +2897,7 @@ pub fn qmc_quad<F>(
     n_points: usize,
 ) -> Result<QmcQuadResult, IntegrateValidationError>
 where
-    F: Fn(&[f64]) -> f64,
+    F: Fn(&[f64]) -> f64 + Sync,
 {
     if lb.len() != ub.len() {
         return Err(IntegrateValidationError::QuadInvalidBounds {
@@ -2931,12 +2931,15 @@ where
         volume *= ub[j] - lb[j];
     }
 
-    let mut estimates = Vec::with_capacity(n_estimates);
-    let mut point = vec![0.0; d];
-    for est in 0..n_estimates {
-        // Use a fresh contiguous Halton block for each estimate. Skip
-        // the first sample (idx=0 = origin) and offset by est*n_points
-        // so blocks are disjoint segments of the deterministic sequence.
+    // Each estimate is an independent Halton block: a fixed-order sum over its
+    // own disjoint segment of the deterministic sequence. Compute one estimate
+    // per slot — the per-estimate sum keeps its exact `i`-order arithmetic and
+    // the cross-estimate mean/variance below stay sequential in index order, so
+    // splitting the estimates across threads is byte-identical to the serial
+    // loop. Each worker owns a `point` scratch buffer and disjoint output slots.
+    let estimate = |est: usize, point: &mut [f64]| -> f64 {
+        // Skip the first sample (idx=0 = origin) and offset by est*n_points so
+        // blocks are disjoint segments of the deterministic sequence.
         let start = 1 + est * n_points;
         let mut sum = 0.0;
         for i in 0..n_points {
@@ -2945,10 +2948,45 @@ where
                 let u = van_der_corput(idx, QMC_PRIMES[j]);
                 point[j] = lb[j] + u * (ub[j] - lb[j]);
             }
-            sum += f(&point);
+            sum += f(&point[..d]);
         }
-        estimates.push(sum / n_points as f64 * volume);
-    }
+        sum / n_points as f64 * volume
+    };
+
+    let work = n_estimates.saturating_mul(n_points).saturating_mul(d.max(1));
+    let nthreads = if work < (1 << 16) || n_estimates < 2 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+            .min(n_estimates)
+    };
+
+    let estimates = if nthreads <= 1 {
+        let mut estimates = Vec::with_capacity(n_estimates);
+        let mut point = vec![0.0; d];
+        for est in 0..n_estimates {
+            estimates.push(estimate(est, &mut point));
+        }
+        estimates
+    } else {
+        let mut estimates = vec![0.0; n_estimates];
+        let chunk = n_estimates.div_ceil(nthreads);
+        let estimate = &estimate;
+        std::thread::scope(|scope| {
+            for (t, slots) in estimates.chunks_mut(chunk).enumerate() {
+                let base = t * chunk;
+                scope.spawn(move || {
+                    let mut point = vec![0.0; d];
+                    for (k, slot) in slots.iter_mut().enumerate() {
+                        *slot = estimate(base + k, &mut point);
+                    }
+                });
+            }
+        });
+        estimates
+    };
 
     let n_est_f = n_estimates as f64;
     let mean = estimates.iter().sum::<f64>() / n_est_f;
