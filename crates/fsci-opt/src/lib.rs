@@ -1899,7 +1899,7 @@ where
 /// Matches `scipy.optimize.brute(func, ranges, Ns=ns)`.
 pub fn brute<F>(func: F, ranges: &[(f64, f64)], ns: usize) -> Result<OptimizeResult, OptError>
 where
-    F: Fn(&[f64]) -> f64,
+    F: Fn(&[f64]) -> f64 + Sync,
 {
     let ndim = ranges.len();
     if ndim == 0 {
@@ -1920,26 +1920,53 @@ where
         }
     }
 
-    let mut best_x = vec![0.0; ndim];
-    let mut best_f = f64::INFINITY;
-    let mut nfev = 0;
-
     let total_points = ns.pow(ndim as u32);
-    for idx in 0..total_points {
+    let nfev = total_points;
+
+    // Grid point for a flattened index (column-major over the per-dim steps).
+    let point_at = |idx: usize| -> Vec<f64> {
         let mut current_idx = idx;
         let mut x = vec![0.0; ndim];
-        for d in 0..ndim {
+        for (d, slot) in x.iter_mut().enumerate() {
             let step_idx = current_idx % ns;
             current_idx /= ns;
             let (lb, ub) = ranges[d];
-            x[d] = lb + (ub - lb) * (step_idx as f64) / ((ns - 1) as f64);
+            *slot = lb + (ub - lb) * (step_idx as f64) / ((ns - 1) as f64);
         }
+        x
+    };
 
-        let f = func(&x);
-        nfev += 1;
+    // Every grid point's objective is independent, so evaluate them in parallel
+    // into a flat score array; the argmin below then keeps the FIRST index at the
+    // minimum, bit-identical to the serial `if f < best_f` strict-`<` scan.
+    let mut fs = vec![f64::INFINITY; total_points];
+    let nthreads = brute_thread_count(total_points);
+    if nthreads <= 1 {
+        for (idx, slot) in fs.iter_mut().enumerate() {
+            *slot = func(&point_at(idx));
+        }
+    } else {
+        let chunk = total_points.div_ceil(nthreads);
+        let point_at = &point_at;
+        let func = &func;
+        std::thread::scope(|scope| {
+            for (ci, block) in fs.chunks_mut(chunk).enumerate() {
+                let base = ci * chunk;
+                scope.spawn(move || {
+                    for (li, slot) in block.iter_mut().enumerate() {
+                        *slot = func(&point_at(base + li));
+                    }
+                });
+            }
+        });
+    }
+
+    let mut best_x = vec![0.0; ndim];
+    let mut best_f = f64::INFINITY;
+    for (idx, &f) in fs.iter().enumerate() {
         if f < best_f {
             best_f = f;
-            best_x = x;
+            best_x = point_at(idx);
         }
     }
 
@@ -1957,6 +1984,20 @@ where
         hess_inv: None,
         maxcv: None,
     })
+}
+
+/// Worker count for `brute`'s grid evaluation, or 1 to stay serial. The objective
+/// cost is unknown, so gate on the grid size: a high threshold ensures the total
+/// work amortises thread spawn even for cheap objectives.
+fn brute_thread_count(total_points: usize) -> usize {
+    if total_points < 1 << 18 {
+        return 1;
+    }
+    std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(1)
+        .min(total_points)
+        .max(1)
 }
 
 /// Simplicial homology global optimization over a bounded box.
