@@ -3611,7 +3611,11 @@ impl KroghInterpolator {
 
     /// Evaluate at multiple points.
     pub fn evaluate_many(&self, xs: &[f64]) -> Vec<f64> {
-        xs.iter().map(|&x| self.evaluate(x)).collect()
+        // Each query is an independent O(degree) Horner evaluation of the Newton
+        // form over the (L1-resident, reused) coefficients, so the queries fan out
+        // across threads in contiguous chunks. Concatenated in query order with
+        // each eval unchanged, so the result is bit-identical to the serial map.
+        par_query_map(xs, self.coeffs.len(), |&x| self.evaluate(x))
     }
 }
 
