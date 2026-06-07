@@ -5714,18 +5714,89 @@ pub fn lfilter_axis_2d(
         });
     }
 
+    let nfilt = a.len().max(b.len());
     match axis {
-        -1 | 1 => x
-            .iter()
-            .map(|row| lfilter(b, a, row, None))
-            .collect::<Result<Vec<_>, _>>(),
+        // Each row is filtered independently with zero initial conditions, so the
+        // rows fan out across threads in contiguous chunks (one spawn-set). Each
+        // worker filters whole rows it owns, so outputs are disjoint and assembled
+        // in row order — bit-identical to the serial map.
+        -1 | 1 => {
+            let nthreads = lfilter_axis_thread_count(x.len(), cols, nfilt);
+            if nthreads <= 1 {
+                return x
+                    .iter()
+                    .map(|row| lfilter(b, a, row, None))
+                    .collect::<Result<Vec<_>, _>>();
+            }
+            let chunk = x.len().div_ceil(nthreads);
+            let chunk_results: Vec<Result<Vec<Vec<f64>>, SignalError>> =
+                std::thread::scope(|scope| {
+                    x.chunks(chunk)
+                        .map(|rows| {
+                            scope.spawn(move || {
+                                rows.iter()
+                                    .map(|row| lfilter(b, a, row, None))
+                                    .collect::<Result<Vec<_>, _>>()
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .map(|h| h.join().expect("lfilter row chunk panicked"))
+                        .collect()
+                });
+            let mut y = Vec::with_capacity(x.len());
+            for chunk_result in chunk_results {
+                y.extend(chunk_result?);
+            }
+            Ok(y)
+        }
         0 => {
-            let mut y = vec![vec![0.0; cols]; x.len()];
-            for col in 0..cols {
-                let column: Vec<f64> = x.iter().map(|row| row[col]).collect();
-                let filtered = lfilter(b, a, &column, None)?;
-                for (row_idx, value) in filtered.into_iter().enumerate() {
-                    y[row_idx][col] = value;
+            // Columns are independent; filter contiguous column-blocks in parallel
+            // (each worker gathers/filters its own columns) then scatter back. Same
+            // per-column lfilter outputs in the same layout — bit-identical.
+            let nrows = x.len();
+            let nthreads = lfilter_axis_thread_count(cols, nrows, nfilt);
+            if nthreads <= 1 {
+                let mut y = vec![vec![0.0; cols]; nrows];
+                for col in 0..cols {
+                    let column: Vec<f64> = x.iter().map(|row| row[col]).collect();
+                    let filtered = lfilter(b, a, &column, None)?;
+                    for (row_idx, value) in filtered.into_iter().enumerate() {
+                        y[row_idx][col] = value;
+                    }
+                }
+                return Ok(y);
+            }
+            let chunk = cols.div_ceil(nthreads);
+            // Each worker returns (col_start, filtered-columns) for its block.
+            let chunk_results: Vec<Result<(usize, Vec<Vec<f64>>), SignalError>> =
+                std::thread::scope(|scope| {
+                    (0..cols)
+                        .step_by(chunk)
+                        .map(|col0| {
+                            scope.spawn(move || {
+                                let col1 = (col0 + chunk).min(cols);
+                                let mut block = Vec::with_capacity(col1 - col0);
+                                for col in col0..col1 {
+                                    let column: Vec<f64> = x.iter().map(|row| row[col]).collect();
+                                    block.push(lfilter(b, a, &column, None)?);
+                                }
+                                Ok((col0, block))
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .map(|h| h.join().expect("lfilter col chunk panicked"))
+                        .collect()
+                });
+            let mut y = vec![vec![0.0; cols]; nrows];
+            for chunk_result in chunk_results {
+                let (col0, block) = chunk_result?;
+                for (offset, filtered) in block.into_iter().enumerate() {
+                    let col = col0 + offset;
+                    for (row_idx, value) in filtered.into_iter().enumerate() {
+                        y[row_idx][col] = value;
+                    }
                 }
             }
             Ok(y)
@@ -5734,6 +5805,23 @@ pub fn lfilter_axis_2d(
             "axis must be 0, 1, or -1 for 2-D lfilter, got {other}"
         ))),
     }
+}
+
+/// Worker count for 2-D `lfilter`, or 1 to stay serial. Each line costs
+/// ~`line_len * nfilt` multiply-adds; only inputs whose total clearly amortises
+/// thread spawn fan out.
+fn lfilter_axis_thread_count(lines: usize, line_len: usize, nfilt: usize) -> usize {
+    let work = (lines as u64)
+        .saturating_mul(line_len as u64)
+        .saturating_mul(nfilt as u64);
+    if work < 1 << 20 || lines < 8 {
+        return 1;
+    }
+    std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(1)
+        .min(lines)
+        .max(1)
 }
 
 /// Apply a digital filter forward and backward (zero-phase filtering).
