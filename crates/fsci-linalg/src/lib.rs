@@ -7832,6 +7832,37 @@ fn solve_shifted_upper_triangular(
     Ok(x)
 }
 
+/// Solve `(scale·U − I) x = rhs` for an upper-triangular `U` by back-substitution.
+///
+/// The discrete-Lyapunov column sweep solves `(T[j,j]·T − I) y = rhs` where the
+/// Schur factor `T` is upper quasi-triangular; when `T` is strictly upper
+/// triangular (A has only real eigenvalues — the common case) so is `scale·U − I`,
+/// and an O(n²) back-substitution replaces the general O(n³) LU. Each off-diagonal
+/// entry `scale·U[i][k]` is formed exactly as the LU path materialized it, and an
+/// upper-triangular matrix needs no pivoting, so results agree to rounding.
+/// Singularity (zero diagonal) surfaces as `SingularMatrix`, matching the LU
+/// path's `None`.
+fn solve_scaled_upper_triangular_minus_id(
+    u: &DMatrix<f64>,
+    scale: f64,
+    rhs: &DVector<f64>,
+) -> Result<DVector<f64>, LinalgError> {
+    let n = u.nrows();
+    let mut x = DVector::<f64>::zeros(n);
+    for i in (0..n).rev() {
+        let mut acc = rhs[i];
+        for k in (i + 1)..n {
+            acc -= scale * u[(i, k)] * x[k];
+        }
+        let diag = scale * u[(i, i)] - 1.0;
+        if diag == 0.0 {
+            return Err(LinalgError::SingularMatrix);
+        }
+        x[i] = acc / diag;
+    }
+    Ok(x)
+}
+
 /// Solve the Sylvester equation AX + XB = Q.
 ///
 /// Uses the Bartels-Stewart algorithm: reduce A and B to Schur form,
@@ -8043,6 +8074,13 @@ pub fn solve_discrete_lyapunov(
     let (u, t) = a_mat.clone().schur().unpack();
     let c = -(u.transpose() * &q_mat * &u); // C = -U^T Q U
 
+    // When T is strictly upper triangular (A has only real eigenvalues — the
+    // common case) each 1×1-block system (T[j,j]·T − I) is upper triangular and
+    // is solved by O(n²) back-substitution rather than a general O(n³) LU, making
+    // the column sweep O(n³) instead of O(n⁴). A 2×2 Schur block (complex
+    // eigenpair) falls back to the LU path.
+    let t_upper_triangular = (0..n.saturating_sub(1)).all(|i| t[(i + 1, i)] == 0.0);
+
     let mut y = DMatrix::<f64>::zeros(n, n);
     // ty[:,q] caches T·y_q for every already-solved column q.
     let mut ty = DMatrix::<f64>::zeros(n, n);
@@ -8062,14 +8100,18 @@ pub fn solve_discrete_lyapunov(
                 }
             }
             let tjj = t[(j, j)];
-            let mut sys = DMatrix::<f64>::zeros(n, n);
-            for r in 0..n {
-                for col in 0..n {
-                    sys[(r, col)] = tjj * t[(r, col)];
+            let yj = if t_upper_triangular {
+                solve_scaled_upper_triangular_minus_id(&t, tjj, &rhs)?
+            } else {
+                let mut sys = DMatrix::<f64>::zeros(n, n);
+                for r in 0..n {
+                    for col in 0..n {
+                        sys[(r, col)] = tjj * t[(r, col)];
+                    }
+                    sys[(r, r)] -= 1.0;
                 }
-                sys[(r, r)] -= 1.0;
-            }
-            let yj = sys.lu().solve(&rhs).ok_or(LinalgError::SingularMatrix)?;
+                sys.lu().solve(&rhs).ok_or(LinalgError::SingularMatrix)?
+            };
             let tyj = &t * &yj;
             y.set_column(j, &yj);
             ty.set_column(j, &tyj);

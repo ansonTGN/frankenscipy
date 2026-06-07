@@ -1,0 +1,20 @@
+# solve_discrete_lyapunov fixed + timing cases — residual ‖A X Aᵀ − X + Q‖_max
+# proves each computed X is a correct solution (independent of build). acc values
+# (X[0][0] sums) are IDENTICAL across builds; checksums differ only in low bits
+# (tolerance-parity; n=6 is bit-identical).
+
+# NEW (scaled upper-triangular back-substitution fast path):
+n=6 seed=1 chk=e8e43fa14572b31f residual_max=2.220e-16
+n=20 seed=2 chk=5c35f08847ed7a42 residual_max=4.441e-16
+n=50 seed=3 chk=9edd80e9299eaf6c residual_max=1.776e-15
+n=64  residual_max=1.44e-15 acc=10.536570
+n=128 residual_max=2.66e-15 acc=-10.849430
+n=256 residual_max=5.33e-15 acc=-8.751633
+
+# BASELINE (general LU per column):
+n=6 seed=1 chk=e8e43fa14572b31f residual_max=2.220e-16
+n=20 seed=2 chk=8767936d5f675272 residual_max=4.441e-16
+n=50 seed=3 chk=dbba088a0421302f residual_max=1.665e-15
+n=64  residual_max=1.44e-15 acc=10.536570
+n=128 residual_max=2.55e-15 acc=-10.849430
+n=256 residual_max=6.22e-15 acc=-8.751633
