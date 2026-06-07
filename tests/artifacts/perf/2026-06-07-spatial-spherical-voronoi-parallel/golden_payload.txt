@@ -1,0 +1,6 @@
+# SphericalVoronoi::new — vertices+regions FNV checksum, IDENTICAL across the
+# serial baseline and the parallel-face-detection build (byte-identical).
+# nverts = 2n-4 (convex-polytope hull facets), confirming correctness.
+n=8 seed=1 nverts=12 chk=4591d26abdb2b44b
+n=16 seed=2 nverts=28 chk=4daf10d9d12aca89
+n=30 seed=3 nverts=56 chk=e6161fc32c94dd64

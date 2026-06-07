@@ -2550,6 +2550,10 @@ pub struct SphericalVoronoi {
     pub radius: f64,
 }
 
+/// A candidate Voronoi face: its generating point triplet `(i, j, k)` and the
+/// projected vertex on the sphere.
+type SvCandidateFace = ((usize, usize, usize), [f64; 3]);
+
 impl SphericalVoronoi {
     /// Construct a spherical Voronoi diagram for 3D points on a common sphere.
     pub fn new(points: &[[f64; 3]], center: [f64; 3], radius: f64) -> Result<Self, SpatialError> {
@@ -2589,54 +2593,105 @@ impl SphericalVoronoi {
             }
         }
 
-        let mut vertices = Vec::new();
-        let mut face_indices = Vec::new();
         let n = points.len();
-        for i in 0..n {
-            for j in (i + 1)..n {
-                for k in (j + 1)..n {
-                    let pi = points[i];
-                    let pj = points[j];
-                    let pk = points[k];
-                    let mut normal = cross3(sub3(pj, pi), sub3(pk, pi));
-                    let normal_norm = norm3(normal);
-                    if normal_norm <= 1e-12 {
-                        continue;
-                    }
-                    if dot3(normal, sub3(pi, center)) < 0.0 {
-                        normal = scale3(normal, -1.0);
-                    }
 
-                    let mut is_face = true;
-                    for (idx, &point) in points.iter().enumerate() {
-                        if idx == i || idx == j || idx == k {
+        // Face detection is the O(n³)-triplet × O(n)-validation cost (overall
+        // O(n⁴)); each (i,j,k) triplet's gift-wrapping test is independent. Detect
+        // the accepted faces in parallel over pair-balanced i-ranges (early i carry
+        // more (j,k) pairs), then collect per-range results in i-order and flatten,
+        // so the accepted triplets appear in exactly the sequential (i,j,k) order.
+        // The dedup check + push (which need the growing `vertices`) stay serial in
+        // that order — byte-identical to the original interleaved loop. A convex-
+        // hull-dual rewrite would reorder the output vertices, so parallelising the
+        // brute force is the parity-preserving lever here.
+        let detect_range = |i0: usize, i1: usize| -> Vec<SvCandidateFace> {
+            let mut out = Vec::new();
+            for i in i0..i1 {
+                for j in (i + 1)..n {
+                    for k in (j + 1)..n {
+                        let pi = points[i];
+                        let pj = points[j];
+                        let pk = points[k];
+                        let mut normal = cross3(sub3(pj, pi), sub3(pk, pi));
+                        let normal_norm = norm3(normal);
+                        if normal_norm <= 1e-12 {
                             continue;
                         }
-                        let signed = dot3(normal, sub3(point, pi));
-                        if signed > tol * radius.max(1.0) {
-                            is_face = false;
-                            break;
+                        if dot3(normal, sub3(pi, center)) < 0.0 {
+                            normal = scale3(normal, -1.0);
                         }
-                    }
-                    if !is_face {
-                        continue;
-                    }
 
-                    let unit = scale3(normal, 1.0 / norm3(normal));
-                    let vertex = add3(center, scale3(unit, radius));
-                    if vertices
-                        .iter()
-                        .any(|&existing| norm3(sub3(existing, vertex)) <= tol * radius.max(1.0))
-                    {
-                        return Err(SpatialError::InvalidArgument(
-                            "spherical voronoi requires non-coplanar generators on the sphere"
-                                .to_string(),
-                        ));
+                        let mut is_face = true;
+                        for (idx, &point) in points.iter().enumerate() {
+                            if idx == i || idx == j || idx == k {
+                                continue;
+                            }
+                            let signed = dot3(normal, sub3(point, pi));
+                            if signed > tol * radius.max(1.0) {
+                                is_face = false;
+                                break;
+                            }
+                        }
+                        if !is_face {
+                            continue;
+                        }
+
+                        let unit = scale3(normal, 1.0 / norm3(normal));
+                        let vertex = add3(center, scale3(unit, radius));
+                        out.push(((i, j, k), vertex));
                     }
-                    vertices.push(vertex);
-                    face_indices.push((i, j, k));
                 }
             }
+            out
+        };
+
+        // Only parallelize once the O(n³) triplet work dwarfs thread-spawn cost
+        // (≈ n ≥ 128); below that the serial sweep is faster. Cap the worker count
+        // so medium n doesn't oversubscribe and pay spawn overhead it can't amortize.
+        let nthreads = if n < 128 {
+            1
+        } else {
+            std::thread::available_parallelism()
+                .map(std::num::NonZero::get)
+                .unwrap_or(1)
+                .min(n / 8)
+                .max(1)
+        };
+        let accepted: Vec<SvCandidateFace> = if nthreads <= 1 {
+            detect_range(0, n)
+        } else {
+            let bounds = pdist_row_bounds(n, nthreads);
+            let detect = &detect_range;
+            let parts: Vec<Vec<SvCandidateFace>> =
+                std::thread::scope(|scope| {
+                    let handles: Vec<_> = bounds
+                        .windows(2)
+                        .map(|w| {
+                            let (a, b) = (w[0], w[1]);
+                            scope.spawn(move || detect(a, b))
+                        })
+                        .collect();
+                    handles
+                        .into_iter()
+                        .map(|h| h.join().expect("spherical voronoi worker panicked"))
+                        .collect()
+                });
+            parts.into_iter().flatten().collect()
+        };
+
+        let mut vertices = Vec::new();
+        let mut face_indices = Vec::new();
+        for ((i, j, k), vertex) in accepted {
+            if vertices
+                .iter()
+                .any(|&existing| norm3(sub3(existing, vertex)) <= tol * radius.max(1.0))
+            {
+                return Err(SpatialError::InvalidArgument(
+                    "spherical voronoi requires non-coplanar generators on the sphere".to_string(),
+                ));
+            }
+            vertices.push(vertex);
+            face_indices.push((i, j, k));
         }
 
         if vertices.len() < 4 {
