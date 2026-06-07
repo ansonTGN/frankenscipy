@@ -1,0 +1,13 @@
+# solve_continuous_lyapunov fixed cases — residual ‖A X + X Aᵀ − Q‖_max proves
+# each computed X is a correct solution (independent of build). Checksums differ
+# only in low mantissa bits (tolerance-parity); residuals + acc agree.
+
+# NEW (upper-triangular back-substitution fast path):
+n=6 seed=1 chk=75a71c738adb80e9 residual_max=1.887e-15
+n=20 seed=2 chk=518f8639f5e18579 residual_max=9.326e-15
+n=50 seed=3 chk=2bc0ca5c34675568 residual_max=2.842e-14
+
+# BASELINE (general LU per column):
+n=6 seed=1 chk=75a79d738adbb0e9 residual_max=1.887e-15
+n=20 seed=2 chk=29db5868e359926e residual_max=9.326e-15
+n=50 seed=3 chk=9e85caf41ad00643 residual_max=2.831e-14

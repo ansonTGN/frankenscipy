@@ -7803,6 +7803,35 @@ fn lstsq_low_rank_tall(
 // Matrix Equation Solvers
 // ══════════════════════════════════════════════════════════════════════
 
+/// Solve `(U + shift·I) x = rhs` for an upper-triangular `U` by back-substitution.
+///
+/// Specializes the Bartels-Stewart 1×1-block solve for the common case where the
+/// Schur factor `T_A` is strictly upper triangular (A has only real eigenvalues).
+/// An upper-triangular matrix needs no pivoting, so a general LU reduces to
+/// exactly this back-substitution (`L = I`, `U = T_A + shift·I`); this is the
+/// O(m²) `trtrs`-style solve in place of the O(m³) LU. Singularity (a zero
+/// diagonal) surfaces as `SingularMatrix`, matching the LU path's `None`.
+fn solve_shifted_upper_triangular(
+    u: &DMatrix<f64>,
+    shift: f64,
+    rhs: &DVector<f64>,
+) -> Result<DVector<f64>, LinalgError> {
+    let m = u.nrows();
+    let mut x = DVector::<f64>::zeros(m);
+    for i in (0..m).rev() {
+        let mut acc = rhs[i];
+        for k in (i + 1)..m {
+            acc -= u[(i, k)] * x[k];
+        }
+        let diag = u[(i, i)] + shift;
+        if diag == 0.0 {
+            return Err(LinalgError::SingularMatrix);
+        }
+        x[i] = acc / diag;
+    }
+    Ok(x)
+}
+
 /// Solve the Sylvester equation AX + XB = Q.
 ///
 /// Uses the Bartels-Stewart algorithm: reduce A and B to Schur form,
@@ -7859,6 +7888,13 @@ pub fn solve_sylvester(
     // SciPy differential at 1e-9): this matches SciPy's own algorithm, and a
     // singular Sylvester operator still surfaces as `SingularMatrix` because the
     // per-block LU returns no solution exactly when a block is singular.
+    // When T_A is strictly upper triangular (A has only real eigenvalues — the
+    // common case) every shifted 1×1-block system (T_A + s·I) is upper triangular
+    // and solved by O(m²) back-substitution instead of a general O(m³) LU, making
+    // the column sweep O(n·m²) rather than O(n·m³). A 2×2 Schur block in T_A
+    // (complex eigenpair) falls back to the LU path.
+    let ta_upper_triangular = (0..m.saturating_sub(1)).all(|i| ta[(i + 1, i)] == 0.0);
+
     let mut y = DMatrix::<f64>::zeros(m, n);
     let mut j = 0;
     while j < n {
@@ -7874,12 +7910,16 @@ pub fn solve_sylvester(
                     rhs.axpy(-tbkj, &y.column(k), 1.0);
                 }
             }
-            let mut sys = ta.clone();
             let shift = tb[(j, j)];
-            for d in 0..m {
-                sys[(d, d)] += shift;
-            }
-            let yj = sys.lu().solve(&rhs).ok_or(LinalgError::SingularMatrix)?;
+            let yj = if ta_upper_triangular {
+                solve_shifted_upper_triangular(&ta, shift, &rhs)?
+            } else {
+                let mut sys = ta.clone();
+                for d in 0..m {
+                    sys[(d, d)] += shift;
+                }
+                sys.lu().solve(&rhs).ok_or(LinalgError::SingularMatrix)?
+            };
             y.set_column(j, &yj);
             j += 1;
         } else {
