@@ -2143,7 +2143,7 @@ pub fn generic_filter<F>(
     cval: f64,
 ) -> Result<NdArray, NdimageError>
 where
-    F: Fn(&[f64]) -> f64,
+    F: Fn(&[f64]) -> f64 + Sync,
 {
     generic_filter_with_origins(input, function, size, &[0], mode, cval)
 }
@@ -2161,7 +2161,7 @@ pub fn generic_filter_axes<F>(
     cval: f64,
 ) -> Result<NdArray, NdimageError>
 where
-    F: Fn(&[f64]) -> f64,
+    F: Fn(&[f64]) -> f64 + Sync,
 {
     let axes = normalize_signed_axes(axes, input.ndim())?;
     if axes.is_empty() {
@@ -2178,10 +2178,11 @@ where
     let kernel_shape: Vec<usize> = vec![size; axes.len()];
     let kernel_strides = compute_strides(&kernel_shape);
 
-    for flat_out in 0..input.size() {
+    // Independent per-output neighbourhood gather + user function (reuses the
+    // thread-local scratch as the neighbourhood buffer). Byte-identical.
+    fill_pixels_parallel(&mut output, kernel_total, |flat_out, neighborhood| {
         let out_idx = input.unravel(flat_out);
-        let mut neighborhood = Vec::with_capacity(kernel_total);
-
+        neighborhood.clear();
         for flat_k in 0..kernel_total {
             let mut k_idx = vec![0usize; axes.len()];
             let mut rem = flat_k;
@@ -2189,16 +2190,14 @@ where
                 *slot = rem / kernel_strides[d];
                 rem %= kernel_strides[d];
             }
-
             let mut in_idx: Vec<i64> = out_idx.iter().map(|&coord| coord as i64).collect();
             for (d, &axis) in axes.iter().enumerate() {
                 in_idx[axis] += k_idx[d] as i64 - offsets[d];
             }
             neighborhood.push(input.get_boundary(&in_idx, mode, cval));
         }
-
-        output.data[flat_out] = function(&neighborhood);
-    }
+        function(neighborhood.as_slice())
+    });
 
     Ok(output)
 }
@@ -2213,7 +2212,7 @@ pub fn generic_filter_with_origins<F>(
     cval: f64,
 ) -> Result<NdArray, NdimageError>
 where
-    F: Fn(&[f64]) -> f64,
+    F: Fn(&[f64]) -> f64 + Sync,
 {
     filter_footprint_size(input.ndim(), size)?;
     if input.size() == 0 {
@@ -2228,10 +2227,14 @@ where
     let kernel_strides = compute_strides(&kernel_shape);
     let origins = normalize_filter_origins(ndim, &kernel_shape, origins)?;
 
-    for flat_out in 0..input.size() {
+    // Each output pixel gathers its (read-only) neighbourhood and applies the
+    // user function independently — distribute across threads. Byte-identical:
+    // the neighbourhood is gathered in the same flat_k order and `function` is
+    // pure, so each flat_out slot gets the same value. The thread-local scratch
+    // Vec is reused as the neighbourhood buffer.
+    fill_pixels_parallel(&mut output, kernel_total, |flat_out, neighborhood| {
         let out_idx = input.unravel(flat_out);
-        let mut neighborhood = Vec::with_capacity(kernel_total);
-
+        neighborhood.clear();
         for flat_k in 0..kernel_total {
             let mut k_idx = vec![0usize; ndim];
             let mut rem = flat_k;
@@ -2239,16 +2242,14 @@ where
                 *slot = rem / kernel_strides[d];
                 rem %= kernel_strides[d];
             }
-
             let mut in_idx = vec![0i64; ndim];
             for d in 0..ndim {
                 in_idx[d] = out_idx[d] as i64 + k_idx[d] as i64 - offsets[d] - origins[d];
             }
             neighborhood.push(input.get_boundary(&in_idx, mode, cval));
         }
-
-        output.data[flat_out] = function(&neighborhood);
-    }
+        function(neighborhood.as_slice())
+    });
 
     Ok(output)
 }
@@ -2360,7 +2361,7 @@ pub fn vectorized_filter<F>(
     cval: f64,
 ) -> Result<NdArray, NdimageError>
 where
-    F: Fn(&[f64]) -> f64,
+    F: Fn(&[f64]) -> f64 + Sync,
 {
     generic_filter(input, function, size, mode, cval)
 }
@@ -11635,11 +11636,13 @@ mod tests {
     #[test]
     fn generic_filter_axes_empty_axes_does_not_invoke_callback() {
         let input = NdArray::new(vec![4.0, 1.0, 7.0, 2.0, 9.0, 3.0], vec![2, 3]).unwrap();
-        let calls = std::cell::Cell::new(0usize);
+        // AtomicUsize (Sync) so the callback satisfies the parallelized
+        // generic_filter_axes `F: Fn + Sync` bound; empty axes never invokes it.
+        let calls = std::sync::atomic::AtomicUsize::new(0);
         let result = generic_filter_axes(
             &input,
             |values| {
-                calls.set(calls.get() + 1);
+                calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 values.iter().sum()
             },
             0,
@@ -11650,7 +11653,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(result.data, input.data);
-        assert_eq!(calls.get(), 0);
+        assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 0);
     }
 
     #[test]

@@ -1,0 +1,15 @@
+img=[64, 64] size=3 digest=66c3078944c06d88
+img=[128, 128] size=5 digest=9cacc9fc28bebcba
+img=[200, 200] size=7 digest=8f18dec9c8096bb0
+img=[256, 256] size=7     8.292ms/call (acc=0.256132)
+img=[400, 400] size=9    26.889ms/call (acc=0.430006)
+img=[64, 64] size=3 digest=66c3078944c06d88
+img=[128, 128] size=5 digest=9cacc9fc28bebcba
+img=[200, 200] size=7 digest=8f18dec9c8096bb0
+img=[256, 256] size=7     8.210ms/call (acc=0.256132)
+img=[400, 400] size=9    26.233ms/call (acc=0.430006)
+img=[64, 64] size=3 digest=66c3078944c06d88
+img=[128, 128] size=5 digest=9cacc9fc28bebcba
+img=[200, 200] size=7 digest=8f18dec9c8096bb0
+img=[256, 256] size=7     8.147ms/call (acc=0.256132)
+img=[400, 400] size=9    26.718ms/call (acc=0.430006)

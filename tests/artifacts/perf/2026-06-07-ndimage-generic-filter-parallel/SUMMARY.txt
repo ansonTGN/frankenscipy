@@ -1,0 +1,6 @@
+fsci-ndimage generic_filter family: parallel per-output neighbourhoods
+generic_filter_with_origins + generic_filter_axes per-output gather+user-fn routed through fill_pixels_parallel (scratch reused as neighbourhood); F:Fn+Sync.
+Byte-identical: output bits match serial (e66f46be); 13 generic lib tests + diff_ndimage_generic_filter + variance_std conformance pass.
+Test closure switched Cell->AtomicUsize for +Sync (empty-axes early-return, never invokes).
+Min-of-3 A/B (serial -> parallel):
+  img=256x256 size=7: 12.12x   img=400x400 size=9: 15.24x
