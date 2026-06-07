@@ -2938,36 +2938,136 @@ pub fn floyd_warshall(graph: &CsrMatrix) -> Vec<Vec<f64>> {
         return vec![];
     }
     let n = shape.rows;
-    let mut dist = vec![vec![f64::INFINITY; n]; n];
 
-    // Initialize from graph edges
-    for (i, row) in dist.iter_mut().enumerate().take(n) {
-        row[i] = 0.0;
+    // Flat row-major distance matrix initialised from the graph edges.
+    let mut d = vec![f64::INFINITY; n * n];
+    for i in 0..n {
+        d[i * n + i] = 0.0;
         let row_start = graph.indptr()[i];
         let row_end = graph.indptr()[i + 1];
         for idx in row_start..row_end {
             let j = graph.indices()[idx];
-            let w = graph.data()[idx];
-            row[j] = w;
+            d[i * n + j] = graph.data()[idx];
         }
     }
 
-    // Floyd-Warshall relaxation
-    for k in 0..n {
-        for i in 0..n {
-            if dist[i][k] == f64::INFINITY {
-                continue;
-            }
-            for j in 0..n {
-                let through_k = dist[i][k] + dist[k][j];
-                if through_k < dist[i][j] {
-                    dist[i][j] = through_k;
+    if n < 128 {
+        // Small graphs: textbook O(n^3) relaxation (bit-identical reference path).
+        for k in 0..n {
+            for i in 0..n {
+                let dik = d[i * n + k];
+                if dik == f64::INFINITY {
+                    continue;
+                }
+                let (base, kbase) = (i * n, k * n);
+                for j in 0..n {
+                    let through = dik + d[kbase + j];
+                    if through < d[base + j] {
+                        d[base + j] = through;
+                    }
                 }
             }
         }
+    } else {
+        floyd_warshall_blocked(&mut d, n);
     }
 
-    dist
+    d.chunks_exact(n).map(<[f64]>::to_vec).collect()
+}
+
+/// Block-pivot Floyd-Warshall. Pivots are processed B at a time (`n/B` rounds).
+/// Each round first resolves the diagonal pivot block's own rows through its B
+/// pivots (an in-block FW, serial), snapshots those resolved pivot rows, then
+/// relaxes every other row through the pivot block. That second step is the bulk
+/// of the work and is row-independent (each row reads only the shared pivot
+/// snapshot + its own cells), so it fans out across threads with just one
+/// spawn-set per round — coarse enough to amortise on a contended machine, where
+/// the per-stage barriers of plain parallel FW do not. The pivot block stays
+/// cache-resident across all B of its pivots. Still O(n³); same shortest-path
+/// distances as the serial loop up to float reassociation (tolerance-parity).
+fn floyd_warshall_blocked(d: &mut [f64], n: usize) {
+    const B: usize = 64;
+    let nb = n.div_ceil(B);
+    let nthreads = floyd_warshall_thread_count(n);
+    for t in 0..nb {
+        let p0 = t * B;
+        let p1 = (p0 + B).min(n);
+
+        // Step 1: resolve the pivot block's rows through its own pivots in place.
+        for k in p0..p1 {
+            let kbase = k * n;
+            for i in p0..p1 {
+                let dik = d[i * n + k];
+                if dik == f64::INFINITY {
+                    continue;
+                }
+                let base = i * n;
+                for j in 0..n {
+                    let through = dik + d[kbase + j];
+                    if through < d[base + j] {
+                        d[base + j] = through;
+                    }
+                }
+            }
+        }
+
+        // Step 2: snapshot the resolved pivot rows (read-only for step 3).
+        let piv: Vec<f64> = d[p0 * n..p1 * n].to_vec();
+        let pb = p1 - p0;
+
+        // Step 3: relax every non-pivot row through the pivot block. Rows are
+        // independent; `row0` is the global index of this chunk's first row.
+        let relax_rows = |rows: &mut [f64], row0: usize| {
+            let nrows = rows.len() / n;
+            for kk in 0..pb {
+                let k = p0 + kk;
+                let pivrow = &piv[kk * n..kk * n + n];
+                for lr in 0..nrows {
+                    let gi = row0 + lr;
+                    if gi >= p0 && gi < p1 {
+                        continue; // pivot-block rows already done in step 1
+                    }
+                    let base = lr * n;
+                    let dik = rows[base + k];
+                    if dik == f64::INFINITY {
+                        continue;
+                    }
+                    for j in 0..n {
+                        let through = dik + pivrow[j];
+                        if through < rows[base + j] {
+                            rows[base + j] = through;
+                        }
+                    }
+                }
+            }
+        };
+
+        if nthreads <= 1 {
+            relax_rows(d, 0);
+        } else {
+            let chunk_rows = n.div_ceil(nthreads);
+            std::thread::scope(|scope| {
+                for (ci, rows) in d.chunks_mut(chunk_rows * n).enumerate() {
+                    let relax_rows = &relax_rows;
+                    scope.spawn(move || relax_rows(rows, ci * chunk_rows));
+                }
+            });
+        }
+    }
+}
+
+/// Worker count for block-pivot Floyd-Warshall's per-round row relaxation, or 1
+/// to stay serial. Only large graphs (where each round's O(n·B) row sweep
+/// dominates the per-round spawn) fan out.
+fn floyd_warshall_thread_count(n: usize) -> usize {
+    if n < 512 {
+        return 1;
+    }
+    std::thread::available_parallelism()
+        .map(|c| c.get())
+        .unwrap_or(1)
+        .min(n)
+        .max(1)
 }
 
 /// Shortest path between two nodes using Dijkstra's algorithm.
