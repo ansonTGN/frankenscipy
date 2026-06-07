@@ -1,0 +1,5 @@
+# shortest_path: same-process A/B, naive O(V^2) linear-scan Dijkstra vs the new
+# heap Dijkstra, across 2400 (graph, source, target) queries — half UNIT-weight
+# (tie-heavy) graphs, half random-weight, sizes n=5..64.
+isomorphism: 0 mismatches / 2400 (0 == byte-identical)
+path+dist digest=0dcfc008ef958bfd

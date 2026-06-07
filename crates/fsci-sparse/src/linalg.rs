@@ -3076,6 +3076,30 @@ fn floyd_warshall_thread_count(n: usize) -> usize {
 /// Returns (INFINITY, empty) if no path exists.
 ///
 /// Matches `scipy.sparse.csgraph.shortest_path` for single source/target.
+/// Heap entry for `shortest_path`'s Dijkstra. Ordered as a MIN-heap on
+/// `(cost, position)` (lowest cost first, lowest node index on ties) so the
+/// pop order reproduces the naive linear scan's selection exactly.
+#[derive(PartialEq)]
+struct SpDijkstraState {
+    cost: f64,
+    position: usize,
+}
+impl Eq for SpDijkstraState {}
+impl PartialOrd for SpDijkstraState {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for SpDijkstraState {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Reverse cost (min-heap), then reverse position (lowest index pops first).
+        other
+            .cost
+            .total_cmp(&self.cost)
+            .then_with(|| other.position.cmp(&self.position))
+    }
+}
+
 pub fn shortest_path(graph: &CsrMatrix, source: usize, target: usize) -> (f64, Vec<usize>) {
     let n = graph.shape().rows;
     if source >= n || target >= n {
@@ -3087,22 +3111,31 @@ pub fn shortest_path(graph: &CsrMatrix, source: usize, target: usize) -> (f64, V
     let mut visited = vec![false; n];
     dist[source] = 0.0;
 
-    for _ in 0..n {
-        // Find unvisited node with minimum distance
-        let mut u = usize::MAX;
-        let mut min_d = f64::INFINITY;
-        for (i, (&d, &v)) in dist.iter().zip(visited.iter()).enumerate() {
-            if !v && d < min_d {
-                min_d = d;
-                u = i;
-            }
-        }
+    // Heap-based Dijkstra, O((V+E) log V) instead of the O(V²) linear-scan select.
+    // The min-heap pops by (cost asc, position asc) and a node is finalized once
+    // (visited), so the sequence of selected nodes — global-min unvisited distance,
+    // lowest index on ties — is IDENTICAL to the linear scan's. With the same CSR
+    // neighbour order and the same strict `alt < dist[v]` relaxation, every `prev`
+    // assignment (hence each distance's exact float sum and the reconstructed path)
+    // is byte-identical to the naive version, for any edge-weight signs.
+    let mut heap = BinaryHeap::new();
+    heap.push(SpDijkstraState {
+        cost: 0.0,
+        position: source,
+    });
 
-        if u == usize::MAX || u == target {
+    while let Some(SpDijkstraState { cost, position: u }) = heap.pop() {
+        if visited[u] {
+            continue;
+        }
+        // Stale guard: a never-relaxed node can only enter the heap via `dist[v]`,
+        // so the popped `cost` always equals the finalized distance; `visited`
+        // alone makes selection match the linear scan.
+        let _ = cost;
+        visited[u] = true;
+        if u == target {
             break;
         }
-
-        visited[u] = true;
 
         let row_start = graph.indptr()[u];
         let row_end = graph.indptr()[u + 1];
@@ -3113,6 +3146,10 @@ pub fn shortest_path(graph: &CsrMatrix, source: usize, target: usize) -> (f64, V
             if alt < dist[v] {
                 dist[v] = alt;
                 prev[v] = u;
+                heap.push(SpDijkstraState {
+                    cost: alt,
+                    position: v,
+                });
             }
         }
     }
