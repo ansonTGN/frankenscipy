@@ -1178,7 +1178,11 @@ impl KDTree {
                     scope.spawn(move || {
                         chunk_nodes
                             .iter()
-                            .map(|nd| other.query_ball_point(&nd.point, r).map(|res| (nd.index, res)))
+                            .map(|nd| {
+                                other
+                                    .query_ball_point(&nd.point, r)
+                                    .map(|res| (nd.index, res))
+                            })
                             .collect::<Result<Vec<_>, _>>()
                     })
                 })
@@ -1721,6 +1725,7 @@ type Halfspace2 = [f64; 3];
 type Equation2 = [f64; 3];
 type NdVertices = Vec<Vec<f64>>;
 type NdFacets = Vec<Vec<usize>>;
+type NdVertexCandidate = (Vec<f64>, Vec<usize>);
 
 /// Halfspace intersection result for bounded N-D halfspaces.
 ///
@@ -2282,21 +2287,7 @@ fn enumerate_halfspace_vertices_nd(
 
     let mut vertices = Vec::<Vec<f64>>::new();
     let mut facets = Vec::<Vec<usize>>::new();
-    for combo in combos {
-        let mut matrix = vec![vec![0.0; ndim]; ndim];
-        let mut rhs = vec![0.0; ndim];
-        for (row_idx, &halfspace_idx) in combo.iter().enumerate() {
-            matrix[row_idx].copy_from_slice(&halfspaces[halfspace_idx][..ndim]);
-            rhs[row_idx] = -halfspaces[halfspace_idx][ndim];
-        }
-
-        let Some(solution) = solve_linear_system(&matrix, &rhs, 1e-10) else {
-            continue;
-        };
-        if !point_satisfies_halfspaces(&solution, halfspaces, 1e-8) {
-            continue;
-        }
-
+    for (solution, combo) in halfspace_vertex_candidates_nd(halfspaces, ndim, &combos) {
         if let Some(existing_idx) = vertices
             .iter()
             .position(|vertex| points_approx_eq(vertex, &solution, 1e-8))
@@ -2315,6 +2306,91 @@ fn enumerate_halfspace_vertices_nd(
     }
 
     Ok((vertices, facets))
+}
+
+fn halfspace_vertex_candidates_nd(
+    halfspaces: &[Vec<f64>],
+    ndim: usize,
+    combos: &[Vec<usize>],
+) -> Vec<NdVertexCandidate> {
+    let worker_count = halfspace_vertex_enum_thread_count(combos.len(), halfspaces.len(), ndim);
+    halfspace_vertex_candidates_nd_with_workers(halfspaces, ndim, combos, worker_count)
+}
+
+fn halfspace_vertex_candidates_nd_with_workers(
+    halfspaces: &[Vec<f64>],
+    ndim: usize,
+    combos: &[Vec<usize>],
+    worker_count: usize,
+) -> Vec<NdVertexCandidate> {
+    if worker_count <= 1 {
+        return combos
+            .iter()
+            .filter_map(|combo| halfspace_vertex_candidate_nd(halfspaces, ndim, combo))
+            .collect();
+    }
+
+    let worker_count = worker_count.min(combos.len()).max(1);
+    let chunk_len = combos.len().div_ceil(worker_count);
+    let parts: Vec<Vec<NdVertexCandidate>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = combos
+            .chunks(chunk_len)
+            .map(|chunk| {
+                scope.spawn(move || {
+                    chunk
+                        .iter()
+                        .filter_map(|combo| halfspace_vertex_candidate_nd(halfspaces, ndim, combo))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| {
+                handle
+                    .join()
+                    .expect("halfspace vertex enumeration worker panicked")
+            })
+            .collect()
+    });
+    parts.into_iter().flatten().collect()
+}
+
+fn halfspace_vertex_enum_thread_count(
+    combo_count: usize,
+    halfspace_count: usize,
+    ndim: usize,
+) -> usize {
+    let work = (combo_count as u64)
+        .saturating_mul(halfspace_count as u64)
+        .saturating_mul(ndim.max(1) as u64);
+    if combo_count < 4096 || work < 1 << 20 {
+        return 1;
+    }
+    let cores = std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(1);
+    cores.min(combo_count / 1024).clamp(1, 16)
+}
+
+fn halfspace_vertex_candidate_nd(
+    halfspaces: &[Vec<f64>],
+    ndim: usize,
+    combo: &[usize],
+) -> Option<NdVertexCandidate> {
+    let mut matrix = vec![vec![0.0; ndim]; ndim];
+    let mut rhs = vec![0.0; ndim];
+    for (row_idx, &halfspace_idx) in combo.iter().enumerate() {
+        matrix[row_idx].copy_from_slice(&halfspaces[halfspace_idx][..ndim]);
+        rhs[row_idx] = -halfspaces[halfspace_idx][ndim];
+    }
+
+    let solution = solve_linear_system(&matrix, &rhs, 1e-10)?;
+    if !point_satisfies_halfspaces(&solution, halfspaces, 1e-8) {
+        return None;
+    }
+
+    Some((solution, combo.to_vec()))
 }
 
 fn collect_dual_vertices(facets: &[Vec<usize>], total_halfspaces: usize) -> Vec<usize> {
@@ -2700,20 +2776,19 @@ impl SphericalVoronoi {
         } else {
             let bounds = pdist_row_bounds(n, nthreads);
             let detect = &detect_range;
-            let parts: Vec<Vec<SvCandidateFace>> =
-                std::thread::scope(|scope| {
-                    let handles: Vec<_> = bounds
-                        .windows(2)
-                        .map(|w| {
-                            let (a, b) = (w[0], w[1]);
-                            scope.spawn(move || detect(a, b))
-                        })
-                        .collect();
-                    handles
-                        .into_iter()
-                        .map(|h| h.join().expect("spherical voronoi worker panicked"))
-                        .collect()
-                });
+            let parts: Vec<Vec<SvCandidateFace>> = std::thread::scope(|scope| {
+                let handles: Vec<_> = bounds
+                    .windows(2)
+                    .map(|w| {
+                        let (a, b) = (w[0], w[1]);
+                        scope.spawn(move || detect(a, b))
+                    })
+                    .collect();
+                handles
+                    .into_iter()
+                    .map(|h| h.join().expect("spherical voronoi worker panicked"))
+                    .collect()
+            });
             parts.into_iter().flatten().collect()
         };
 
@@ -5619,6 +5694,121 @@ mod tests {
     }
 
     #[test]
+    fn halfspace_vertex_candidates_parallel_matches_serial_bits_and_order() {
+        let halfspaces = vec![
+            vec![-1.0, 0.0, 0.0, 0.0],
+            vec![0.0, -1.0, 0.0, 0.0],
+            vec![0.0, 0.0, -1.0, 0.0],
+            vec![1.0, 0.0, 0.0, -1.0],
+            vec![0.0, 1.0, 0.0, -1.0],
+            vec![0.0, 0.0, 1.0, -1.0],
+            vec![1.0, 1.0, 1.0, -1.8],
+            vec![-1.0, -1.0, 0.0, 0.1],
+        ];
+        let ndim = 3;
+        let mut combos = Vec::new();
+        combinations_recursive(halfspaces.len(), ndim, 0, &mut Vec::new(), &mut combos);
+
+        let serial = halfspace_vertex_candidates_nd_with_workers(&halfspaces, ndim, &combos, 1);
+        let parallel = halfspace_vertex_candidates_nd_with_workers(&halfspaces, ndim, &combos, 4);
+
+        assert_eq!(serial.len(), parallel.len());
+        for ((serial_point, serial_combo), (parallel_point, parallel_combo)) in
+            serial.iter().zip(parallel.iter())
+        {
+            assert_eq!(serial_combo, parallel_combo);
+            assert_eq!(serial_point.len(), parallel_point.len());
+            for (&serial_coord, &parallel_coord) in serial_point.iter().zip(parallel_point.iter()) {
+                assert_eq!(serial_coord.to_bits(), parallel_coord.to_bits());
+            }
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn halfspace_vertex_candidates_parallel_perf_probe() {
+        fn next_u64(state: &mut u64) -> u64 {
+            *state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            *state
+        }
+        fn unit(state: &mut u64) -> f64 {
+            (next_u64(state) >> 11) as f64 / (1u64 << 53) as f64
+        }
+        fn halfspaces(m: usize, ndim: usize, seed: u64) -> Vec<Vec<f64>> {
+            let mut state = seed;
+            let mut out = Vec::with_capacity(m);
+            while out.len() < m {
+                let a = (0..ndim)
+                    .map(|_| unit(&mut state) * 2.0 - 1.0)
+                    .collect::<Vec<_>>();
+                let nrm = a.iter().map(|value| value * value).sum::<f64>().sqrt();
+                if nrm < 1e-6 {
+                    continue;
+                }
+                let mut row = a.iter().map(|value| value / nrm).collect::<Vec<_>>();
+                row.push(-1.0);
+                out.push(row);
+            }
+            out
+        }
+        fn digest(candidates: &[NdVertexCandidate]) -> u64 {
+            let mut h = 1469598103934665603u64;
+            for (point, combo) in candidates {
+                for &coord in point {
+                    h = (h ^ coord.to_bits()).wrapping_mul(1099511628211);
+                }
+                h = h.wrapping_mul(31);
+                for &idx in combo {
+                    h = (h ^ idx as u64).wrapping_mul(1099511628211);
+                }
+                h = h.wrapping_mul(31);
+            }
+            h
+        }
+
+        for &(m, ndim) in &[(120usize, 3usize), (60, 4)] {
+            let halfspaces = halfspaces(m, ndim, 7);
+            let mut combos = Vec::new();
+            combinations_recursive(halfspaces.len(), ndim, 0, &mut Vec::new(), &mut combos);
+            let workers = halfspace_vertex_enum_thread_count(combos.len(), halfspaces.len(), ndim);
+
+            let serial = halfspace_vertex_candidates_nd_with_workers(&halfspaces, ndim, &combos, 1);
+            let parallel = halfspace_vertex_candidates_nd(&halfspaces, ndim, &combos);
+            let serial_digest = digest(&serial);
+            let parallel_digest = digest(&parallel);
+            assert_eq!(serial.len(), parallel.len());
+            assert_eq!(serial_digest, parallel_digest);
+
+            let reps = 3;
+            let start = std::time::Instant::now();
+            let mut serial_acc = 0u64;
+            for _ in 0..reps {
+                let candidates =
+                    halfspace_vertex_candidates_nd_with_workers(&halfspaces, ndim, &combos, 1);
+                serial_acc ^= digest(std::hint::black_box(&candidates));
+            }
+            let serial_ms = start.elapsed().as_secs_f64() * 1000.0 / reps as f64;
+
+            let start = std::time::Instant::now();
+            let mut parallel_acc = 0u64;
+            for _ in 0..reps {
+                let candidates = halfspace_vertex_candidates_nd(&halfspaces, ndim, &combos);
+                parallel_acc ^= digest(std::hint::black_box(&candidates));
+            }
+            let parallel_ms = start.elapsed().as_secs_f64() * 1000.0 / reps as f64;
+            assert_eq!(serial_acc, parallel_acc);
+
+            println!(
+                "halfspace_vertex_candidates m={m} ndim={ndim} combos={} workers={workers} serial_ms={serial_ms:.6} parallel_ms={parallel_ms:.6} speedup={:.6} digest=0x{serial_digest:016x}",
+                combos.len(),
+                serial_ms / parallel_ms
+            );
+        }
+    }
+
+    #[test]
     fn halfspace_intersection_from_nd_marks_unbounded_3d_region() {
         let halfspaces = vec![
             vec![-1.0, 0.0, 0.0, 0.0],
@@ -6520,7 +6710,14 @@ mod tests {
             vec![1.0, 1.0],
         ];
         let result = pdist(&x, DistanceMetric::Euclidean).expect("pdist");
-        let expected = [1.0, 1.0, 1.4142135623730951, 1.4142135623730951, 1.0, 1.0];
+        let expected = [
+            1.0,
+            1.0,
+            std::f64::consts::SQRT_2,
+            std::f64::consts::SQRT_2,
+            1.0,
+            1.0,
+        ];
         for (i, val) in result.iter().enumerate() {
             assert!(
                 (*val - expected[i]).abs() < 1e-10,
@@ -6536,7 +6733,10 @@ mod tests {
         let xa = vec![vec![0.0, 0.0], vec![1.0, 0.0]];
         let xb = vec![vec![0.0, 1.0], vec![1.0, 1.0]];
         let result = cdist(&xa, &xb).expect("cdist");
-        let expected = [[1.0, 1.4142135623730951], [1.4142135623730951, 1.0]];
+        let expected = [
+            [1.0, std::f64::consts::SQRT_2],
+            [std::f64::consts::SQRT_2, 1.0],
+        ];
         for (i, row) in result.iter().enumerate() {
             for (j, val) in row.iter().enumerate() {
                 assert!(
@@ -6638,11 +6838,7 @@ mod tests {
         // -> array([[0., 1., 2.], [1., 0., 3.], [2., 3., 0.]])
         let condensed = vec![1.0, 2.0, 3.0];
         let result = squareform_to_matrix(&condensed).expect("squareform should succeed");
-        let expected = vec![
-            vec![0.0, 1.0, 2.0],
-            vec![1.0, 0.0, 3.0],
-            vec![2.0, 3.0, 0.0],
-        ];
+        let expected = [[0.0, 1.0, 2.0], [1.0, 0.0, 3.0], [2.0, 3.0, 0.0]];
         for (i, row) in result.iter().enumerate() {
             for (j, &got) in row.iter().enumerate() {
                 let want = expected[i][j];
@@ -6789,7 +6985,7 @@ mod tests {
         let points = vec![vec![0.0, 0.0], vec![1.0, 1.0], vec![2.0, 2.0]];
         let tree = KDTree::new(&points).expect("kdtree");
         let (idx, dist) = tree.query(&[0.5, 0.5]).expect("query");
-        let expected_dist = 0.7071067811865476;
+        let expected_dist = std::f64::consts::FRAC_1_SQRT_2;
         assert!(
             (dist - expected_dist).abs() < 1e-10,
             "kdtree dist got {dist}, expected {expected_dist}"
@@ -6835,7 +7031,7 @@ mod tests {
         let points: Vec<(f64, f64)> = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
         let vor = Voronoi::new(&points).expect("voronoi");
         // Should have 1 finite vertex at the center
-        assert!(vor.vertices.len() >= 1, "should have at least 1 vertex");
+        assert!(!vor.vertices.is_empty(), "should have at least 1 vertex");
         // Check that center vertex exists
         let has_center = vor
             .vertices
