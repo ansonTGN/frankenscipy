@@ -35839,33 +35839,104 @@ pub fn ljung_box(data: &[f64], lags: usize) -> (f64, f64) {
 /// Multiple linear regression: y = X * beta + epsilon.
 ///
 /// Returns (coefficients, residuals, r_squared, std_errors).
-pub fn multiple_regression(x: &[Vec<f64>], y: &[f64]) -> (Vec<f64>, Vec<f64>, f64, Vec<f64>) {
+/// Build the intercept-augmented normal-equation matrices `(X̃ᵀX̃, X̃ᵀy)` for the
+/// design `X̃ = [1 | X]` (n rows, p+1 columns).
+///
+/// The per-sample rank-1 accumulation scatter-writes the whole `(p+1)²` matrix
+/// once per sample, so for large p it is memory-bound on a matrix that spills
+/// cache. Instead transpose `X̃` into contiguous columns and form each entry as a
+/// streamed dot product over the samples: the same products summed in the same
+/// sample order, so the result is BIT-identical, but the layout is cache-friendly
+/// and the output rows are independent, so they fan out across threads. Returns
+/// the full (mirrored) `X̃ᵀX̃` and `X̃ᵀy`. Small p keeps the textbook path.
+fn augmented_normal_equations(x: &[Vec<f64>], y: &[f64], p: usize) -> (Vec<Vec<f64>>, Vec<f64>) {
     let n = x.len();
-    if n == 0 || n != y.len() {
-        return (vec![], vec![], f64::NAN, vec![]);
-    }
-    let p = x[0].len();
-
-    // Add intercept column
     let p1 = p + 1;
-    let mut xtx = vec![vec![0.0; p1]; p1];
-    let mut xty = vec![0.0; p1];
 
-    // Accumulate only the upper triangle of XtX (symmetric), reusing one row
-    // buffer instead of allocating per sample, and mirror to the lower triangle
-    // ONCE after the loop. Previously the mirror ran inside the n-loop, doing
-    // O(n·p²) redundant scattered writes; the final XtX/Xty (and hence beta,
-    // residuals, everything downstream) are byte-identical — the accumulation
-    // order and operands are unchanged.
-    let mut row = vec![1.0; p1]; // row[0] is the intercept, stays 1.0
-    for i in 0..n {
-        row[1..].copy_from_slice(&x[i][..p]);
-        for j in 0..p1 {
-            xty[j] += row[j] * y[i];
-            for k in j..p1 {
-                xtx[j][k] += row[j] * row[k];
+    if p1 < 48 {
+        let mut xtx = vec![vec![0.0; p1]; p1];
+        let mut xty = vec![0.0; p1];
+        let mut row = vec![1.0; p1]; // row[0] is the intercept, stays 1.0
+        for i in 0..n {
+            row[1..].copy_from_slice(&x[i][..p]);
+            for j in 0..p1 {
+                xty[j] += row[j] * y[i];
+                for k in j..p1 {
+                    xtx[j][k] += row[j] * row[k];
+                }
             }
         }
+        #[allow(clippy::needless_range_loop)]
+        for j in 0..p1 {
+            for k in (j + 1)..p1 {
+                xtx[k][j] = xtx[j][k];
+            }
+        }
+        return (xtx, xty);
+    }
+
+    // Transposed augmented columns: col[0] = ones, col[1+j][i] = x[i][j].
+    let mut cols = vec![vec![0.0f64; n]; p1];
+    cols[0].iter_mut().for_each(|v| *v = 1.0);
+    for (i, xi) in x.iter().enumerate() {
+        for j in 0..p {
+            cols[j + 1][i] = xi[j];
+        }
+    }
+
+    let mut xtx = vec![vec![0.0f64; p1]; p1];
+    let mut xty = vec![0.0f64; p1];
+    // Fill upper-triangle row j of X̃ᵀX̃ and return (X̃ᵀy)[j], all as in-order dots.
+    let fill = |j: usize, out: &mut [f64]| -> f64 {
+        let cj = &cols[j];
+        for k in j..p1 {
+            let ck = &cols[k];
+            let mut s = 0.0f64;
+            for i in 0..n {
+                s += cj[i] * ck[i];
+            }
+            out[k] = s;
+        }
+        let mut sy = 0.0f64;
+        for i in 0..n {
+            sy += cj[i] * y[i];
+        }
+        sy
+    };
+
+    let work = (p1 as u64).saturating_mul(p1 as u64).saturating_mul(n as u64);
+    let nthreads = if work < 1 << 22 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(1)
+            .min(p1)
+            .max(1)
+    };
+    if nthreads <= 1 {
+        for j in 0..p1 {
+            xty[j] = fill(j, &mut xtx[j]);
+        }
+    } else {
+        let chunk = p1.div_ceil(nthreads);
+        let fill = &fill;
+        std::thread::scope(|scope| {
+            for (ci, (xtx_rows, xty_slice)) in xtx
+                .chunks_mut(chunk)
+                .zip(xty.chunks_mut(chunk))
+                .enumerate()
+            {
+                let base = ci * chunk;
+                scope.spawn(move || {
+                    for (lj, (row, yj)) in
+                        xtx_rows.iter_mut().zip(xty_slice.iter_mut()).enumerate()
+                    {
+                        *yj = fill(base + lj, row);
+                    }
+                });
+            }
+        });
     }
     #[allow(clippy::needless_range_loop)]
     for j in 0..p1 {
@@ -35873,6 +35944,19 @@ pub fn multiple_regression(x: &[Vec<f64>], y: &[f64]) -> (Vec<f64>, Vec<f64>, f6
             xtx[k][j] = xtx[j][k];
         }
     }
+    (xtx, xty)
+}
+
+pub fn multiple_regression(x: &[Vec<f64>], y: &[f64]) -> (Vec<f64>, Vec<f64>, f64, Vec<f64>) {
+    let n = x.len();
+    if n == 0 || n != y.len() {
+        return (vec![], vec![], f64::NAN, vec![]);
+    }
+    let p = x[0].len();
+    let p1 = p + 1;
+
+    // Intercept-augmented normal equations (transposed-Gram, parallel for large p).
+    let (xtx, xty) = augmented_normal_equations(x, y, p);
 
     // Solve XtX * beta = Xty via Cholesky
     let beta = solve_regression_system(&xtx, &xty);
@@ -36018,33 +36102,8 @@ pub fn ridge_regression(x: &[Vec<f64>], y: &[f64], alpha: f64) -> Vec<f64> {
     let p = x[0].len();
     let p1 = p + 1;
 
-    // Build XtX + alpha*I and Xty
-    let mut xtx = vec![vec![0.0; p1]; p1];
-    let mut xty = vec![0.0; p1];
-
-    // XtX is symmetric, so accumulate only the upper triangle (halving the
-    // O(n·p²) work) and mirror once afterwards; reuse one row buffer instead of
-    // allocating per sample. Byte-identical: the previous full loop computed the
-    // lower entry as xtx[k][j] += row[k]*row[j], and IEEE-754 multiplication is
-    // commutative (row[j]*row[k] == row[k]*row[j] bit-for-bit) accumulated over
-    // the same samples in the same order — so the mirrored value equals it
-    // exactly, and the reused buffer yields identical row[j].
-    let mut row = vec![1.0; p1]; // row[0] is the intercept, stays 1.0
-    for i in 0..n {
-        row[1..].copy_from_slice(&x[i][..p]);
-        for j in 0..p1 {
-            xty[j] += row[j] * y[i];
-            for k in j..p1 {
-                xtx[j][k] += row[j] * row[k];
-            }
-        }
-    }
-    #[allow(clippy::needless_range_loop)]
-    for j in 0..p1 {
-        for k in (j + 1)..p1 {
-            xtx[k][j] = xtx[j][k];
-        }
-    }
+    // Intercept-augmented normal equations (transposed-Gram, parallel for large p).
+    let (mut xtx, xty) = augmented_normal_equations(x, y, p);
 
     // Add regularization (skip intercept at index 0)
     for (j, item) in xtx.iter_mut().enumerate().take(p1).skip(1) {
