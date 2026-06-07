@@ -2686,6 +2686,33 @@ pub fn nnls(a: &[Vec<f64>], b: &[f64]) -> Result<(Vec<f64>, f64), OptError> {
     let mut x = vec![0.0; n];
     let mut passive = vec![false; n]; // passive set (unconstrained)
 
+    // Precompute the full Gram matrix G = AᵀA and Aᵀb ONCE. The passive
+    // sub-problem rebuilt `ata[pi][pj] = Σ_i a[i][ji]·a[i][jj]` and
+    // `atb_sub[pi] = Σ_i a[i][ji]·b[i]` from scratch (O(p²·m) / O(p·m)) on every
+    // inner solve. Those are exactly `gram[ji][jj]` and `atb[ji]`; accumulating
+    // them once with the same `for i in 0..m` order makes the per-iteration
+    // gather bit-identical to recomputing, while removing the O(p²·m) rebuild
+    // from each inner iteration (the precompute is the same O(n²·m) order as the
+    // gradient pass already run each outer step, so it adds no dominant term).
+    let mut gram = vec![vec![0.0; n]; n];
+    for j1 in 0..n {
+        for j2 in 0..n {
+            let mut acc = 0.0;
+            for row in a.iter() {
+                acc += row[j1] * row[j2];
+            }
+            gram[j1][j2] = acc;
+        }
+    }
+    let mut atb = vec![0.0; n];
+    for j in 0..n {
+        let mut acc = 0.0;
+        for (row, &bi) in a.iter().zip(b.iter()) {
+            acc += row[j] * bi;
+        }
+        atb[j] = acc;
+    }
+
     for _ in 0..3 * n {
         // Compute gradient: w = A^T (b - Ax)
         let mut ax = vec![0.0; m];
@@ -2727,21 +2754,16 @@ pub fn nnls(a: &[Vec<f64>], b: &[f64]) -> Result<(Vec<f64>, f64), OptError> {
                 break;
             }
 
-            // Build sub-problem: A_P * s_P = b
+            // Build sub-problem A_P·s_P = b by GATHERING from the precomputed
+            // Gram / Aᵀb — bit-identical to recomputing each Σ_i in place.
             let mut ata = vec![vec![0.0; p]; p];
             let mut atb_sub = vec![0.0; p];
 
             for (pi, &ji) in passive_indices.iter().enumerate() {
                 for (pj, &jj) in passive_indices.iter().enumerate() {
-                    #[allow(clippy::needless_range_loop)]
-                    for i in 0..m {
-                        ata[pi][pj] += a[i][ji] * a[i][jj];
-                    }
+                    ata[pi][pj] = gram[ji][jj];
                 }
-                #[allow(clippy::needless_range_loop)]
-                for i in 0..m {
-                    atb_sub[pi] += a[i][ji] * b[i];
-                }
+                atb_sub[pi] = atb[ji];
             }
 
             // Solve ata * s = atb_sub
