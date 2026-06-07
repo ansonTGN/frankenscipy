@@ -35533,38 +35533,74 @@ pub fn psd_welch(data: &[f64], window_size: usize, overlap: usize, fs: f64) -> V
             )
         };
 
+    // Window every overlapping segment once. Each frequency bin's periodogram is
+    // an independent O(window) DFT dot summed over these segments, so the bins fan
+    // out across threads (one spawn-set). psd[k] accumulates over the segments in
+    // the same order as the serial loop, so the result is bit-identical.
+    let mut segments: Vec<Vec<f64>> = Vec::new();
     let mut start = 0;
     while start + window_size <= data.len() {
-        let segment: Vec<f64> = data[start..start + window_size]
-            .iter()
-            .zip(win.iter())
-            .map(|(&d, &w)| d * w)
-            .collect();
+        segments.push(
+            data[start..start + window_size]
+                .iter()
+                .zip(win.iter())
+                .map(|(&d, &w)| d * w)
+                .collect(),
+        );
+        start += hop;
+    }
+    n_segments = segments.len();
+    if n_segments == 0 {
+        return psd;
+    }
 
-        // Compute periodogram of segment
-        for (k, psd_k) in psd.iter_mut().enumerate().take(n_freq) {
+    let denom = window_size as f64 * fs;
+    let n_seg_f = n_segments as f64;
+    let psd_bin = |k: usize| -> f64 {
+        let cos_row = &twiddle_cos[k * window_size..(k + 1) * window_size];
+        let sin_row = &twiddle_sin[k * window_size..(k + 1) * window_size];
+        let mut acc = 0.0;
+        for segment in &segments {
             let mut re = 0.0;
             let mut im = 0.0;
-            let row_start = k * window_size;
-            let row_end = row_start + window_size;
-            let cos_row = &twiddle_cos[row_start..row_end];
-            let sin_row = &twiddle_sin[row_start..row_end];
             for ((&s, &cos), &sin) in segment.iter().zip(cos_row.iter()).zip(sin_row.iter()) {
                 re += s * cos;
                 im -= s * sin;
             }
-            let power = (re * re + im * im) / (window_size as f64 * fs);
-            *psd_k += power;
+            acc += (re * re + im * im) / denom;
         }
+        acc / n_seg_f
+    };
 
-        n_segments += 1;
-        start += hop;
-    }
-
-    if n_segments > 0 {
-        for v in &mut psd {
-            *v /= n_segments as f64;
+    let work = (n_freq as u64)
+        .saturating_mul(n_segments as u64)
+        .saturating_mul(window_size as u64);
+    let nthreads = if work < 1 << 20 || n_freq < 4 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(1)
+            .min(n_freq)
+            .max(1)
+    };
+    if nthreads <= 1 {
+        for (k, psd_k) in psd.iter_mut().enumerate() {
+            *psd_k = psd_bin(k);
         }
+    } else {
+        let chunk = n_freq.div_ceil(nthreads);
+        let psd_bin = &psd_bin;
+        std::thread::scope(|scope| {
+            for (ci, out_block) in psd.chunks_mut(chunk).enumerate() {
+                let base = ci * chunk;
+                scope.spawn(move || {
+                    for (lk, slot) in out_block.iter_mut().enumerate() {
+                        *slot = psd_bin(base + lk);
+                    }
+                });
+            }
+        });
     }
 
     psd
