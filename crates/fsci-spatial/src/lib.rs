@@ -2215,10 +2215,16 @@ fn halfspace_region_is_bounded_nd(halfspaces: &[Vec<f64>], ndim: usize) -> bool 
         .iter()
         .map(|row| row[..ndim].to_vec())
         .collect::<Vec<_>>();
-    let mut combos = Vec::new();
-    combinations_recursive(normals.len(), ndim + 1, 0, &mut Vec::new(), &mut combos);
 
-    combos.into_iter().any(|combo| {
+    // The region is bounded iff some (ndim+1)-subset of normals has the origin
+    // strictly inside its positive cone. Test each (ndim+1)-subset LAZILY in
+    // lexicographic order, short-circuiting on the first witness — identical to
+    // `combinations_recursive(..).into_iter().any(..)` but WITHOUT first
+    // materializing all C(m, ndim+1) subsets (≈ m/(ndim+1)× more than the vertex
+    // enumeration, e.g. 8.2M tiny Vecs for m=120, ndim=3). For bounded regions a
+    // witness is found almost immediately; unbounded regions still scan all
+    // subsets but no longer pay the O(C(m,ndim+1)) allocation up front.
+    combinations_any(normals.len(), ndim + 1, |combo| {
         let mut matrix = vec![vec![0.0; ndim + 1]; ndim + 1];
         let mut rhs = vec![0.0; ndim + 1];
         rhs[ndim] = 1.0;
@@ -2233,6 +2239,38 @@ fn halfspace_region_is_bounded_nd(halfspaces: &[Vec<f64>], ndim: usize) -> bool 
         solve_linear_system(&matrix, &rhs, 1e-10)
             .is_some_and(|weights| weights.iter().all(|value| *value > 1e-9))
     })
+}
+
+/// Evaluate `pred` on each k-subset of `0..n` in the SAME lexicographic order as
+/// [`combinations_recursive`], short-circuiting (true) on the first subset that
+/// satisfies it. Equivalent to
+/// `combinations_recursive(n, k, ..).into_iter().any(pred)` but streams the
+/// subsets instead of materializing all C(n, k) of them first.
+fn combinations_any(n: usize, k: usize, mut pred: impl FnMut(&[usize]) -> bool) -> bool {
+    fn rec(
+        n: usize,
+        k: usize,
+        start: usize,
+        current: &mut Vec<usize>,
+        pred: &mut dyn FnMut(&[usize]) -> bool,
+    ) -> bool {
+        if current.len() == k {
+            return pred(current);
+        }
+        if start >= n {
+            return false;
+        }
+        for next in start..=n - (k - current.len()) {
+            current.push(next);
+            if rec(n, k, next + 1, current, pred) {
+                return true;
+            }
+            current.pop();
+        }
+        false
+    }
+    let mut current = Vec::with_capacity(k);
+    rec(n, k, 0, &mut current, &mut pred)
 }
 
 fn enumerate_halfspace_vertices_nd(

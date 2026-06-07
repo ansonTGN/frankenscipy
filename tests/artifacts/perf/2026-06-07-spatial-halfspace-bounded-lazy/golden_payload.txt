@@ -1,0 +1,5 @@
+# HalfspaceIntersection::from_nd — intersections+dual_facets+dual_vertices FNV
+# checksum, IDENTICAL across the serial baseline and the lazy-bounded build.
+m=10 ndim=3 seed=1 nverts=16 chk=8b5b9c9d36c31dc9
+m=20 ndim=3 seed=2 nverts=36 chk=912b75a80142fbf5
+m=16 ndim=4 seed=3 nverts=58 chk=6a353199eb77efe3
