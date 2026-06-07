@@ -2388,6 +2388,67 @@ pub fn lstsq_with_casp(
     let matrix = dmatrix_from_rows(a)?;
     let rhs = DVector::from_column_slice(b);
 
+    if let Some(thin_svd) = public_bidiag_thin_svd_candidate(&matrix)
+        && let Some((max_s, min_s)) = public_bidiag_svd_stats(&thin_svd.singular_values)
+    {
+        let threshold = cond * max_s;
+        if public_bidiag_svd_accepts(&matrix, &thin_svd, threshold) {
+            let rcond_estimate = min_s / max_s;
+            let rank = thin_svd
+                .singular_values
+                .iter()
+                .filter(|s| **s > threshold)
+                .count();
+            let singular_values_out = thin_svd.singular_values.clone();
+
+            let (selected_action, posterior, expected_losses, _) =
+                portfolio.select_action(rcond_estimate, None);
+            let action = SolverAction::SVDFallback;
+            let x = thin_svd.least_squares_solution(threshold, &rhs)?;
+            let residual = &rhs - &matrix * x.clone();
+
+            let certificate = SolveCertificate {
+                action,
+                matrix_shape: (rows, cols),
+                rcond_estimate,
+                structural_evidence: StructuralEvidence::General,
+                posterior: posterior.to_vec(),
+                expected_losses: expected_losses.to_vec(),
+                chosen_expected_loss: expected_losses[action.index()],
+                fallback_active: action != selected_action,
+            };
+
+            emit_trace(LinalgTrace {
+                operation: "lstsq_with_casp",
+                matrix_size: (rows, cols),
+                mode: options.mode,
+                rcond: Some(rcond_estimate),
+                warning: None,
+                error: None,
+            });
+
+            portfolio.record_evidence(SolverEvidenceEntry {
+                component: "lstsq_with_casp",
+                matrix_shape: (rows, cols),
+                rcond_estimate,
+                chosen_action: action,
+                posterior: posterior.to_vec(),
+                expected_losses: expected_losses.to_vec(),
+                chosen_expected_loss: expected_losses[action.index()],
+                fallback_active: action != selected_action,
+                backward_error: None,
+            });
+
+            return Ok(LstsqResult {
+                x: x.iter().copied().collect(),
+                residuals: vec![residual.dot(&residual)],
+                rank,
+                singular_values: singular_values_out,
+                certificate: Some(certificate),
+            });
+        }
+    }
+
     let full_svd_for_rectangular = if rows == cols {
         None
     } else {
@@ -2594,6 +2655,62 @@ pub fn pinv_with_casp(
     }
 
     let matrix = dmatrix_from_rows(a)?;
+    if let Some(thin_svd) = public_bidiag_thin_svd_candidate(&matrix)
+        && let Some((max_s, min_s)) = public_bidiag_svd_stats(&thin_svd.singular_values)
+    {
+        let threshold = atol + rtol * max_s;
+        if public_bidiag_svd_accepts(&matrix, &thin_svd, threshold) {
+            let rcond_estimate = min_s / max_s;
+            let rank = thin_svd
+                .singular_values
+                .iter()
+                .filter(|s| **s > threshold)
+                .count();
+            let pinv_matrix = thin_svd.pseudo_inverse(threshold);
+
+            let (_, posterior, expected_losses, _) = portfolio.select_action(rcond_estimate, None);
+            let action = SolverAction::SVDFallback;
+
+            let certificate = SolveCertificate {
+                action,
+                matrix_shape: (rows, cols),
+                rcond_estimate,
+                structural_evidence: StructuralEvidence::General,
+                posterior: posterior.to_vec(),
+                expected_losses: expected_losses.to_vec(),
+                chosen_expected_loss: expected_losses[action.index()],
+                fallback_active: false,
+            };
+
+            emit_trace(LinalgTrace {
+                operation: "pinv_with_casp",
+                matrix_size: (rows, cols),
+                mode: options.mode,
+                rcond: Some(rcond_estimate),
+                warning: None,
+                error: None,
+            });
+
+            portfolio.record_evidence(SolverEvidenceEntry {
+                component: "pinv_with_casp",
+                matrix_shape: (rows, cols),
+                rcond_estimate,
+                chosen_action: action,
+                posterior: posterior.to_vec(),
+                expected_losses: expected_losses.to_vec(),
+                chosen_expected_loss: expected_losses[action.index()],
+                fallback_active: false,
+                backward_error: None,
+            });
+
+            return Ok(PinvResult {
+                pseudo_inverse: rows_from_dmatrix(&pinv_matrix),
+                rank,
+                certificate: Some(certificate),
+            });
+        }
+    }
+
     let svd = safe_svd(matrix, true, true)?;
     let singular_values = &svd.singular_values;
     let max_s = singular_values.iter().copied().fold(0.0_f64, |acc, v| {
@@ -3170,6 +3287,28 @@ pub fn svd(a: &[Vec<f64>], options: DecompOptions) -> Result<SvdResult, LinalgEr
     }
 
     let matrix = dmatrix_from_rows(a)?;
+    if let Some(thin_svd) = public_bidiag_thin_svd_candidate(&matrix)
+        && let Some((max_s, _)) = public_bidiag_svd_stats(&thin_svd.singular_values)
+    {
+        let threshold = public_bidiag_default_threshold(rows, cols, max_s);
+        if public_bidiag_svd_accepts(&matrix, &thin_svd, threshold) {
+            emit_trace(LinalgTrace {
+                operation: "svd",
+                matrix_size: (rows, cols),
+                mode: options.mode,
+                rcond: None,
+                warning: None,
+                error: None,
+            });
+
+            return Ok(SvdResult {
+                u: rows_from_dmatrix(&thin_svd.u),
+                s: thin_svd.singular_values,
+                vt: rows_from_dmatrix(&thin_svd.v_t),
+            });
+        }
+    }
+
     let svd_decomp = safe_svd(matrix, true, true)?;
 
     let u_mat = svd_decomp
@@ -3215,6 +3354,24 @@ pub fn svdvals(a: &[Vec<f64>], options: DecompOptions) -> Result<Vec<f64>, Linal
     }
 
     let matrix = dmatrix_from_rows(a)?;
+    if let Some(thin_svd) = public_bidiag_thin_svd_candidate(&matrix)
+        && let Some((max_s, _)) = public_bidiag_svd_stats(&thin_svd.singular_values)
+    {
+        let threshold = public_bidiag_default_threshold(rows, cols, max_s);
+        if public_bidiag_svd_accepts(&matrix, &thin_svd, threshold) {
+            emit_trace(LinalgTrace {
+                operation: "svdvals",
+                matrix_size: (rows, cols),
+                mode: options.mode,
+                rcond: None,
+                warning: None,
+                error: None,
+            });
+
+            return Ok(thin_svd.singular_values);
+        }
+    }
+
     let svd_decomp = safe_svd(matrix, false, false)?;
     let s: Vec<f64> = svd_decomp.singular_values.iter().copied().collect();
 
@@ -6054,6 +6211,9 @@ struct SymmetricJacobiEigen {
 const BIDIAG_JACOBI_TOLERANCE: f64 = 1e-14;
 const BIDIAG_JACOBI_MAX_SWEEPS: usize = 128;
 const BIDIAG_SYMMETRIC_EIGEN_MIN_DIM: usize = 32;
+const PUBLIC_BIDIAG_SVD_MIN_COLS: usize = 64;
+const PUBLIC_BIDIAG_RANK_GAP_REL_TOL: f64 = 64.0 * f64::EPSILON;
+const PUBLIC_BIDIAG_RECON_REL_TOL: f64 = 1e-8;
 
 #[allow(dead_code)]
 impl BidiagonalReduction {
@@ -6757,6 +6917,93 @@ fn deterministic_thin_svd_from_reduction_parts(
 fn deterministic_thin_svd(matrix: &DMatrix<f64>) -> Result<DeterministicThinSvd, LinalgError> {
     let reduction = golub_kahan_bidiagonal_reduction(matrix)?;
     deterministic_thin_svd_from_reduction(&reduction)
+}
+
+fn public_bidiag_thin_svd_candidate(matrix: &DMatrix<f64>) -> Option<DeterministicThinSvd> {
+    let rows = matrix.nrows();
+    let cols = matrix.ncols();
+    if rows < cols.saturating_mul(2) || cols < PUBLIC_BIDIAG_SVD_MIN_COLS {
+        return None;
+    }
+    deterministic_thin_svd(matrix).ok()
+}
+
+fn public_bidiag_svd_stats(singular_values: &[f64]) -> Option<(f64, f64)> {
+    let mut max_s = 0.0_f64;
+    let mut min_s = f64::MAX;
+    for &singular in singular_values {
+        if !singular.is_finite() || singular < 0.0 {
+            return None;
+        }
+        max_s = max_s.max(singular);
+        min_s = min_s.min(singular);
+    }
+    if max_s > 0.0 {
+        Some((max_s, min_s))
+    } else {
+        None
+    }
+}
+
+fn dmatrix_max_abs_value(matrix: &DMatrix<f64>) -> f64 {
+    matrix.iter().copied().map(f64::abs).fold(0.0_f64, f64::max)
+}
+
+fn dmatrix_max_abs_difference(left: &DMatrix<f64>, right: &DMatrix<f64>) -> Option<f64> {
+    if left.nrows() != right.nrows() || left.ncols() != right.ncols() {
+        return None;
+    }
+    let mut max_abs = 0.0_f64;
+    for row in 0..left.nrows() {
+        for col in 0..left.ncols() {
+            max_abs = max_abs.max((left[(row, col)] - right[(row, col)]).abs());
+        }
+    }
+    Some(max_abs)
+}
+
+fn public_bidiag_svd_accepts(
+    matrix: &DMatrix<f64>,
+    thin: &DeterministicThinSvd,
+    threshold: f64,
+) -> bool {
+    let rows = matrix.nrows();
+    let cols = matrix.ncols();
+    if threshold < 0.0
+        || !threshold.is_finite()
+        || thin.u.nrows() != rows
+        || thin.u.ncols() != cols
+        || thin.v_t.nrows() != cols
+        || thin.v_t.ncols() != cols
+        || thin.singular_values.len() != cols
+    {
+        return false;
+    }
+
+    let Some((max_s, min_s)) = public_bidiag_svd_stats(&thin.singular_values) else {
+        return false;
+    };
+    let rank_gap_floor = (max_s * PUBLIC_BIDIAG_RANK_GAP_REL_TOL).max(threshold);
+    if min_s <= rank_gap_floor {
+        return false;
+    }
+    let tie_gap_floor = max_s * PUBLIC_BIDIAG_RANK_GAP_REL_TOL;
+    for pair in thin.singular_values.windows(2) {
+        if pair[0] < pair[1] || pair[0] - pair[1] <= tie_gap_floor {
+            return false;
+        }
+    }
+
+    let reconstructed = &thin.u * thin.sigma_matrix() * &thin.v_t;
+    let Some(reconstruction_error) = dmatrix_max_abs_difference(&reconstructed, matrix) else {
+        return false;
+    };
+    let scale = dmatrix_max_abs_value(matrix).max(1.0);
+    reconstruction_error <= PUBLIC_BIDIAG_RECON_REL_TOL * scale * (cols as f64).sqrt()
+}
+
+fn public_bidiag_default_threshold(rows: usize, cols: usize, max_s: f64) -> f64 {
+    (rows.max(cols) as f64) * f64::EPSILON * max_s
 }
 
 #[allow(dead_code)]
@@ -13585,6 +13832,165 @@ mod tests {
             1e-8,
             1e-8,
         );
+    }
+
+    #[test]
+    fn public_bidiag_svd_route_matches_safe_svd_reference() {
+        let original = bidiag_deterministic_matrix(128, 64);
+        let rows = original.nrows();
+        let cols = original.ncols();
+        let matrix_rows = rows_from_dmatrix(&original);
+        let rhs_values: Vec<f64> = (0..rows)
+            .map(|idx| ((idx * 29 + 3) % 43) as f64 - 17.0)
+            .collect();
+        let rhs = DVector::from_column_slice(&rhs_values);
+
+        let thin = public_bidiag_thin_svd_candidate(&original).expect("public route candidate");
+        let (max_s, _) =
+            public_bidiag_svd_stats(&thin.singular_values).expect("finite singular spectrum");
+        let lstsq_threshold = f64::EPSILON * max_s;
+        assert!(public_bidiag_svd_accepts(&original, &thin, lstsq_threshold));
+
+        let reference_svd = safe_svd(original.clone(), true, true).expect("reference SVD");
+        let reference_x = least_squares_solution_from_svd(&reference_svd, lstsq_threshold, &rhs)
+            .expect("reference lstsq");
+        let reference_pinv = pseudo_inverse_from_svd(
+            &reference_svd,
+            public_bidiag_default_threshold(rows, cols, max_s),
+        )
+        .expect("reference pinv");
+
+        let routed_svd = svd(&matrix_rows, DecompOptions::default()).expect("routed public svd");
+        let routed_svdvals =
+            svdvals(&matrix_rows, DecompOptions::default()).expect("routed public svdvals");
+        let routed_lstsq =
+            lstsq(&matrix_rows, &rhs_values, LstsqOptions::default()).expect("routed lstsq");
+        let routed_pinv = pinv(&matrix_rows, PinvOptions::default()).expect("routed pinv");
+
+        assert_eq!(routed_lstsq.rank, cols);
+        assert_eq!(routed_pinv.rank, cols);
+        assert_close_slice(&routed_svd.s, &routed_svdvals, 1e-12, 1e-12);
+        assert_close_slice(
+            &routed_svd.s,
+            reference_svd.singular_values.as_slice(),
+            1e-7,
+            1e-7,
+        );
+        assert_close_slice(&routed_lstsq.x, reference_x.as_slice(), 1e-7, 1e-7);
+        assert_close_matrix(
+            &routed_pinv.pseudo_inverse,
+            &rows_from_dmatrix(&reference_pinv),
+            1e-7,
+            1e-7,
+        );
+
+        let u = dmatrix_from_rows(&routed_svd.u).expect("routed U");
+        let vt = dmatrix_from_rows(&routed_svd.vt).expect("routed Vt");
+        let routed_thin = DeterministicThinSvd {
+            singular_values: routed_svd.s,
+            u,
+            v_t: vt,
+            jacobi_sweeps: 0,
+        };
+        let reconstructed = &routed_thin.u * routed_thin.sigma_matrix() * &routed_thin.v_t;
+        let reconstruction_error = max_abs_dmatrix_diff(&reconstructed, &original);
+        assert!(
+            reconstruction_error <= 1e-8 * dmatrix_max_abs_value(&original).max(1.0),
+            "public route reconstruction error {reconstruction_error:.17e}"
+        );
+    }
+
+    #[test]
+    fn public_bidiag_svd_route_rejects_clustered_spectrum() {
+        let rows = 128;
+        let cols = 64;
+        let matrix =
+            DMatrix::<f64>::from_fn(rows, cols, |row, col| if row == col { 1.0 } else { 0.0 });
+        let thin = public_bidiag_thin_svd_candidate(&matrix).expect("candidate");
+        assert!(!public_bidiag_svd_accepts(&matrix, &thin, f64::EPSILON));
+    }
+
+    #[test]
+    #[ignore = "perf probe: run with rch and --release for public full-rank bidiag SVD routing"]
+    fn public_bidiag_svd_route_perf_probe() {
+        let original = bidiag_deterministic_matrix(512, 256);
+        let rows = original.nrows();
+        let cols = original.ncols();
+        let matrix_rows = rows_from_dmatrix(&original);
+        let rhs_values: Vec<f64> = (0..rows)
+            .map(|idx| ((idx * 29 + 3) % 43) as f64 - 17.0)
+            .collect();
+        let rhs = DVector::from_column_slice(&rhs_values);
+
+        let reference_lstsq_start = std::time::Instant::now();
+        let reference_lstsq_svd =
+            safe_svd(std::hint::black_box(original.clone()), true, true).expect("reference SVD");
+        let reference_lstsq_max_s = reference_lstsq_svd
+            .singular_values
+            .iter()
+            .copied()
+            .fold(0.0_f64, f64::max);
+        let reference_lstsq_threshold = f64::EPSILON * reference_lstsq_max_s;
+        let reference_lstsq =
+            least_squares_solution_from_svd(&reference_lstsq_svd, reference_lstsq_threshold, &rhs)
+                .expect("reference lstsq");
+        let reference_lstsq_ms = reference_lstsq_start.elapsed().as_secs_f64() * 1e3;
+
+        let routed_lstsq_start = std::time::Instant::now();
+        let routed_lstsq = lstsq(
+            std::hint::black_box(&matrix_rows),
+            std::hint::black_box(&rhs_values),
+            LstsqOptions::default(),
+        )
+        .expect("routed lstsq");
+        let routed_lstsq_ms = routed_lstsq_start.elapsed().as_secs_f64() * 1e3;
+
+        let reference_pinv_start = std::time::Instant::now();
+        let reference_pinv_svd =
+            safe_svd(std::hint::black_box(original.clone()), true, true).expect("reference SVD");
+        let reference_pinv_max_s = reference_pinv_svd
+            .singular_values
+            .iter()
+            .copied()
+            .fold(0.0_f64, f64::max);
+        let reference_pinv_threshold =
+            public_bidiag_default_threshold(rows, cols, reference_pinv_max_s);
+        let reference_pinv = pseudo_inverse_from_svd(&reference_pinv_svd, reference_pinv_threshold)
+            .expect("reference pinv");
+        let reference_pinv_ms = reference_pinv_start.elapsed().as_secs_f64() * 1e3;
+
+        let routed_pinv_start = std::time::Instant::now();
+        let routed_pinv =
+            pinv(std::hint::black_box(&matrix_rows), PinvOptions::default()).expect("routed pinv");
+        let routed_pinv_ms = routed_pinv_start.elapsed().as_secs_f64() * 1e3;
+
+        let mut lstsq_max_abs_diff = 0.0_f64;
+        for (&actual, &expected) in routed_lstsq.x.iter().zip(reference_lstsq.iter()) {
+            lstsq_max_abs_diff = lstsq_max_abs_diff.max((actual - expected).abs());
+        }
+        let pinv_max_abs_diff = max_abs_dmatrix_diff(
+            &dmatrix_from_rows(&routed_pinv.pseudo_inverse).expect("routed pinv matrix"),
+            &reference_pinv,
+        );
+
+        println!("PUBLIC_BIDIAG_SVD_ROUTE_PERF_BEGIN");
+        println!("shape={rows}x{cols}");
+        println!("reference_lstsq_ms={reference_lstsq_ms:.6}");
+        println!("routed_lstsq_ms={routed_lstsq_ms:.6}");
+        println!("lstsq_speedup={:.6}", reference_lstsq_ms / routed_lstsq_ms);
+        println!("reference_pinv_ms={reference_pinv_ms:.6}");
+        println!("routed_pinv_ms={routed_pinv_ms:.6}");
+        println!("pinv_speedup={:.6}", reference_pinv_ms / routed_pinv_ms);
+        println!("lstsq_rank={}", routed_lstsq.rank);
+        println!("pinv_rank={}", routed_pinv.rank);
+        println!("lstsq_max_abs_diff={lstsq_max_abs_diff:.17e}");
+        println!("pinv_max_abs_diff={pinv_max_abs_diff:.17e}");
+        println!("PUBLIC_BIDIAG_SVD_ROUTE_PERF_END");
+
+        assert_eq!(routed_lstsq.rank, cols);
+        assert_eq!(routed_pinv.rank, cols);
+        assert!(lstsq_max_abs_diff <= 1e-7);
+        assert!(pinv_max_abs_diff <= 1e-7);
     }
 
     #[test]
