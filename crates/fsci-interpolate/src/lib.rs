@@ -1302,7 +1302,11 @@ impl BarycentricInterpolator {
     }
 
     pub fn eval_many(&self, xs: &[f64]) -> Vec<f64> {
-        xs.iter().map(|&x| self.eval(x)).collect()
+        // Each query is an independent O(n_nodes) barycentric evaluation dominated
+        // by one reciprocal per node (compute-bound), so the queries fan out
+        // across threads in contiguous chunks. Concatenated in query order with
+        // each eval unchanged, so the result is bit-identical to the serial map.
+        par_query_map(xs, self.xi.len(), |&x| self.eval(x))
     }
 }
 
