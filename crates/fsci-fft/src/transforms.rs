@@ -2725,7 +2725,13 @@ fn rebuild_hermitian(half: &[Complex64], n: usize) -> Vec<Complex64> {
 }
 
 fn real_fft_unscaled(input: &[f64], backend: &dyn FftBackend) -> Vec<Complex64> {
-    if input.len().is_power_of_two() && input.len() >= 4 {
+    // The pack-two-reals-into-one-complex trick (`real_fft_specialized`) only
+    // needs an N/2-point complex FFT, which the backend computes for any size —
+    // it is not specific to powers of two. So every EVEN N takes the half-size
+    // path instead of transforming N points and discarding the redundant half;
+    // for the common non-pow2 even lengths (1000, 22050, 44100, …) that roughly
+    // halves the FFT work. Odd N keeps the full transform (no even pack exists).
+    if input.len() >= 4 && input.len() % 2 == 0 {
         real_fft_specialized(input, backend)
     } else {
         let complex_input: Vec<Complex64> = input.iter().map(|&x| (x, 0.0)).collect();
