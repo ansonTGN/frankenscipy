@@ -2782,6 +2782,19 @@ impl ContinuousDistribution for BetaDist {
         regularized_incomplete_beta(self.a, self.b, x)
     }
 
+    fn sf(&self, x: f64) -> f64 {
+        // Closed-form survival: 1 − I_x(a,b) = I_{1−x}(b,a). Computing it directly
+        // avoids the default 1−cdf collapsing to 0 as x→1 (beta(2,8).sf(0.999)
+        // returned 0 where scipy gives 9e-24). frankenscipy-…
+        if x <= 0.0 {
+            return 1.0;
+        }
+        if x >= 1.0 {
+            return 0.0;
+        }
+        regularized_incomplete_beta(self.b, self.a, 1.0 - x)
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
@@ -3224,6 +3237,24 @@ impl ContinuousDistribution for GenGamma {
             lower_regularized_gamma(a, y)
         } else {
             upper_regularized_gamma(a, y)
+        }
+    }
+
+    fn sf(&self, x: f64) -> f64 {
+        // Closed-form survival = complement of the cdf's regularized gamma,
+        // computed directly so the right tail doesn't collapse to 0 under the
+        // default 1−cdf (gengamma(2,1).sf(80) returned 0 vs scipy 1.5e-33).
+        // frankenscipy-…
+        if x <= 0.0 {
+            return 1.0;
+        }
+        let a = self.a;
+        let c = self.c;
+        let y = x.powf(c.abs());
+        if c > 0.0 {
+            upper_regularized_gamma(a, y)
+        } else {
+            lower_regularized_gamma(a, y)
         }
     }
 
@@ -38084,6 +38115,40 @@ mod tests {
         let b = BetaDist::new(2.0, 5.0);
         assert_eq!(b.cdf(0.0), 0.0);
         assert_eq!(b.cdf(1.0), 1.0);
+    }
+
+    #[test]
+    fn beta_dist_sf_tail_matches_scipy() {
+        // frankenscipy-…: BetaDist.sf inherited the lossy 1−cdf default and
+        // returned 0 as x→1 (beta(2,8).sf(0.9999) scipy 9e-32). Closed-form
+        // sf = I_{1−x}(b,a). scipy.stats.beta.sf 1.17.1.
+        let cases = [
+            (2.0, 8.0, 0.999, 8.992000000000064e-24),
+            (2.0, 8.0, 0.9999, 8.999199999992071e-32),
+            (5.0, 2.0, 0.99, 0.0014604476050000025),
+        ];
+        for (a, b, x, expected) in cases {
+            let got = BetaDist::new(a, b).sf(x);
+            let rel = ((got - expected) / expected).abs();
+            assert!(rel < 1e-12, "Beta({a},{b}).sf({x}) = {got:e}, scipy {expected:e}, rel={rel:e}");
+        }
+    }
+
+    #[test]
+    fn gengamma_sf_tail_matches_scipy() {
+        // frankenscipy-…: GenGamma.sf returned 0 in the right tail (gengamma(2,1)
+        // .sf(80) scipy 1.46e-33). Closed-form survival via the complementary
+        // regularized gamma. scipy.stats.gengamma.sf 1.17.1.
+        let cases = [
+            (2.0, 1.0, 40.0, 1.7418252446695558e-16),
+            (2.0, 1.0, 80.0, 1.4619296241547749e-33),
+            (3.0, 2.0, 20.0, 1.5398155074540412e-169),
+        ];
+        for (a, c, x, expected) in cases {
+            let got = GenGamma::new(a, c).sf(x);
+            let rel = ((got - expected) / expected).abs();
+            assert!(rel < 1e-12, "GenGamma({a},{c}).sf({x}) = {got:e}, scipy {expected:e}, rel={rel:e}");
+        }
     }
 
     #[test]
