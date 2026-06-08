@@ -11506,6 +11506,17 @@ impl ContinuousDistribution for Rice {
         x * (-(x * x + b * b) / 2.0).exp() * modified_bessel_i(0.0, b * x)
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln(x) − (x²+b²)/2 + ln I₀(b·x), with ln I₀(z) = log_ive(0,z) + z;
+        // finite far into the tail where the pdf's I₀(b·x) overflows. frankenscipy-7m3xk
+        if x < 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        let b = self.b;
+        let bx = b * x;
+        x.ln() - (x * x + b * b) / 2.0 + fsci_special::log_ive_scalar(0.0, bx) + bx
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         if x <= 0.0 {
             return 0.0;
@@ -40600,6 +40611,23 @@ mod tests {
         assert_eq!(big.pdf(6000.0), 0.0); // z≈775 → e^z overflows in pdf
         let lp = big.logpdf(6000.0);
         assert!(lp.is_finite() && lp < -300.0, "overflow-band logpdf={lp}");
+    }
+
+    #[test]
+    fn rice_logpdf_consistent_and_finite() {
+        // logpdf == ln(pdf) in the bulk; finite where the pdf's I₀(b·x) overflows
+        // (b·x > 709) and the density becomes NaN/garbage. frankenscipy-7m3xk
+        let d = Rice::new(2.0);
+        for &x in &[0.5, 1.0, 3.0, 8.0] {
+            let lp = d.logpdf(x);
+            let p = d.pdf(x);
+            assert!(p > 0.0 && (lp - p.ln()).abs() <= 1e-7, "logpdf({x})={lp} vs ln(pdf)={}", p.ln());
+        }
+        // Tail: b·x = 800 > 709 → pdf's I₀ overflows (pdf NaN/0), logpdf finite.
+        let lp = d.logpdf(400.0);
+        assert!(lp.is_finite() && lp < -100.0, "rice tail logpdf={lp}");
+        assert!(!(d.pdf(400.0) > 0.0 && d.pdf(400.0).is_finite()), "pdf should be unreliable here");
+        assert_eq!(d.logpdf(-1.0), f64::NEG_INFINITY);
     }
 
     // ── Exponential distribution ────────────────────────────────────
