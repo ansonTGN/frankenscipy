@@ -1,0 +1,6 @@
+===GOLDEN_PAYLOAD_BEGIN===
+n=100 hankel1e(len=100,xor=e34e56cac6c7b5d1) hankel2e(len=100,xor=1cb1aacac6c7b5ee)
+n=5000 hankel1e(len=5000,xor=c492a49a80450bb3) hankel2e(len=5000,xor=c492a49a80453473)
+n=50000 hankel1e(len=50000,xor=a17a9567942d8c73) hankel2e(len=50000,xor=5e856a986bed8c4c)
+===GOLDEN_PAYLOAD_END===
+timing acc: hankel1e 500k=1890abd05e314c30  hankel2e 500k=1890abefa1ceb3f0
