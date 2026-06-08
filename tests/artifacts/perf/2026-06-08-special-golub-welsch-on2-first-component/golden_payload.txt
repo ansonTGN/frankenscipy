@@ -1,0 +1,14 @@
+# Golub-Welsch O(n^2): track only first eigenvector row (z0) through the same QL.
+# BYTE-IDENTICAL to the O(n^3) full-eigenvector path (commit 91fd275a) — every
+# node/weight/wsum/quad-exactness matches exactly, incl. subnormal weights.
+legendre n=8   node[0]=-9.602898564975364e-1 w[0]=1.012285362903761e-1   quad_err=3.053e-16
+legendre n=32  node[0]=-9.972638618494809e-1 w[0]=7.018610009468964e-3   quad_err=2.505e-15
+legendre n=100 node[0]=-9.997137267734418e-1 w[0]=7.346344905055336e-4   quad_err=6.471e-16
+hermite  n=8   node[0]=-2.930637420257244e0  w[0]=1.996040722113707e-4
+hermite  n=32  w[0]=7.310699972606609e-23   hermite n=100 w[0]=2.692516706990397e-32
+# (all identical between O(n^2) new and O(n^3) baseline)
+
+# Timing roots_legendre (rch, 64 cores, release-perf): O(n^3) -> O(n^2)
+n=200   4.304ms  -> 1.116ms  (3.86x)
+n=500   45.335ms -> 7.225ms  (6.27x)
+n=1000  356.155ms -> 27.844ms (12.79x)

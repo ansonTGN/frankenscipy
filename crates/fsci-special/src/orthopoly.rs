@@ -23,7 +23,6 @@
 
 use std::f64::consts::PI;
 
-use fsci_linalg::{DecompOptions, eigh_tridiagonal};
 
 /// Evaluate the Legendre polynomial P_n(x) of degree n at point x.
 ///
@@ -1075,17 +1074,32 @@ where
         return (Vec::new(), Vec::new());
     }
 
-    // The Golub-Welsch Jacobi matrix is symmetric TRIDIAGONAL; solve it with the
-    // dedicated tridiagonal eigensolver instead of densifying to n×n + a general
-    // symmetric eigensolver. `d` is the diagonal, `e` the n-1 off-diagonals.
+    // The Golub-Welsch Jacobi matrix is symmetric TRIDIAGONAL and the quadrature
+    // weights need ONLY w_i = mu0·v_i[0]² — the first component of each
+    // eigenvector. Tracking the full n×n eigenvector matrix is O(n³); instead run
+    // the same symmetric-tridiagonal QL but accumulate only the first eigenvector
+    // row, dropping that to O(n²). `d` is the diagonal, `e` the n-1 off-diagonals.
     let d: Vec<f64> = (0..n).map(&diag).collect();
     let e: Vec<f64> = (1..n).map(&offdiag).collect();
-    let (eigenvalues, eigenvectors) = eigh_tridiagonal(&d, &e, false, DecompOptions::default())
-        .unwrap_or_else(|_| (vec![0.0; n], Some(vec![vec![0.0; n]; n])));
-    let eigenvectors = eigenvectors.unwrap_or_else(|| vec![vec![0.0; n]; n]);
-    let mut nodes = eigenvalues;
-    let mut weights: Vec<f64> = (0..n)
-        .map(|col| mu0 * eigenvectors[0][col] * eigenvectors[0][col])
+    let (eigenvalues, first_row) = gw_tridiagonal_eigen_first_row(&d, &e).unwrap_or_else(|| {
+        let mut z0 = vec![0.0; n];
+        z0[0] = 1.0;
+        (vec![0.0; n], z0)
+    });
+
+    // Sort ascending by eigenvalue (matching `eigh_tridiagonal`), carrying the
+    // first-component along, so nodes/weights are bit-identical to the full
+    // eigenvector path.
+    let mut indices: Vec<usize> = (0..n).collect();
+    indices.sort_by(|&a, &b| {
+        eigenvalues[a]
+            .partial_cmp(&eigenvalues[b])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut nodes: Vec<f64> = indices.iter().map(|&i| eigenvalues[i]).collect();
+    let mut weights: Vec<f64> = indices
+        .iter()
+        .map(|&i| mu0 * first_row[i] * first_row[i])
         .collect();
 
     if symmetrize {
@@ -1093,6 +1107,196 @@ where
     }
 
     (nodes, weights)
+}
+
+/// Symmetric-tridiagonal QL eigensolve returning eigenvalues and ONLY the first
+/// row of the eigenvector matrix, in O(n²). This is a faithful port of
+/// `fsci_linalg::symmetric_tridiagonal_qr_eigen` (the routine `eigh_tridiagonal`
+/// uses) that applies the identical Givens rotations but rotates a single length-n
+/// row `z0` instead of the full n×n matrix. Because the diagonal/off-diagonal
+/// updates and rotation coefficients are identical, `z0[j]` equals the full
+/// solver's `eigenvectors[(0, j)]` bit-for-bit — so Golub-Welsch weights
+/// `mu0·z0[j]²` match the full-eigenvector path while the eigenvector work drops
+/// from O(n³) to O(n²).
+fn gw_tridiagonal_eigen_first_row(
+    diagonal: &[f64],
+    offdiagonal: &[f64],
+) -> Option<(Vec<f64>, Vec<f64>)> {
+    let size = diagonal.len();
+    if offdiagonal.len() != size.saturating_sub(1) {
+        return None;
+    }
+    if size == 0 {
+        return Some((Vec::new(), Vec::new()));
+    }
+
+    let scale = diagonal
+        .iter()
+        .chain(offdiagonal.iter())
+        .copied()
+        .map(f64::abs)
+        .fold(0.0_f64, f64::max);
+    if scale == 0.0 {
+        let mut z0 = vec![0.0; size];
+        z0[0] = 1.0;
+        return Some((vec![0.0; size], z0));
+    }
+
+    let mut diag: Vec<f64> = diagonal.iter().map(|value| value / scale).collect();
+    let mut off: Vec<f64> = offdiagonal.iter().map(|value| value / scale).collect();
+    // First row of the identity eigenvector matrix.
+    let mut z0 = vec![0.0_f64; size];
+    z0[0] = 1.0;
+    let tolerance = f64::EPSILON;
+    let max_iterations = 64 * size; // BIDIAG_TRIDIAGONAL_QR_MAX_ITERS_PER_DIM * size
+    let (mut start, mut end) = gw_delimit_subproblem(&diag, &mut off, size - 1, tolerance);
+    let mut iterations = 0_usize;
+
+    while end != start {
+        let subdim = end - start + 1;
+        if subdim > 2 {
+            let tail_prev = end - 1;
+            let shift = gw_wilkinson_shift(diag[tail_prev], diag[end], off[tail_prev]);
+            let mut x = diag[start] - shift;
+            let mut y = off[start];
+
+            for idx in start..end {
+                let Some((c, s, norm)) = gw_cancel_y(x, y) else {
+                    break;
+                };
+                if idx > start {
+                    off[idx - 1] = norm;
+                }
+
+                let left = diag[idx];
+                let right = diag[idx + 1];
+                let bridge = off[idx];
+                let cc = c * c;
+                let ss = s * s;
+                let cs = c * s;
+
+                diag[idx] = cc * left + ss * right - 2.0 * cs * bridge;
+                diag[idx + 1] = ss * left + cc * right + 2.0 * cs * bridge;
+                off[idx] = cs * (left - right) + (cc - ss) * bridge;
+
+                if idx + 1 < end {
+                    x = off[idx];
+                    y = -s * off[idx + 1];
+                    off[idx + 1] *= c;
+                }
+
+                // Rotate columns idx, idx+1 of the first eigenvector row only.
+                let zl = z0[idx];
+                let zr = z0[idx + 1];
+                z0[idx] = c * zl - s * zr;
+                z0[idx + 1] = s * zl + c * zr;
+            }
+
+            if off[tail_prev].abs() <= tolerance * (diag[tail_prev].abs() + diag[end].abs()) {
+                off[tail_prev] = 0.0;
+                end -= 1;
+            }
+        } else {
+            gw_diagonalize_two_by_two(&mut diag, &mut off, &mut z0, start);
+            end -= 1;
+        }
+
+        (start, end) = gw_delimit_subproblem(&diag, &mut off, end, tolerance);
+        iterations += 1;
+        if iterations > max_iterations {
+            return None;
+        }
+    }
+
+    for value in &mut diag {
+        *value *= scale;
+    }
+
+    Some((diag, z0))
+}
+
+fn gw_wilkinson_shift(tmm: f64, tnn: f64, tmn: f64) -> f64 {
+    let tmn_sq = tmn * tmn;
+    if tmn_sq == 0.0 {
+        return tnn;
+    }
+    let delta = 0.5 * (tmm - tnn);
+    tnn - tmn_sq / (delta + delta.signum() * (delta * delta + tmn_sq).sqrt())
+}
+
+fn gw_cancel_y(x: f64, y: f64) -> Option<(f64, f64, f64)> {
+    if y == 0.0 {
+        return None;
+    }
+    let norm = x.hypot(y);
+    if norm == 0.0 {
+        return None;
+    }
+    let sign = if x.is_sign_negative() { -1.0 } else { 1.0 };
+    let c = x.abs() / norm;
+    let s = -y / (sign * norm);
+    Some((c, s, sign * norm))
+}
+
+fn gw_delimit_subproblem(
+    diagonal: &[f64],
+    offdiagonal: &mut [f64],
+    end: usize,
+    tolerance: f64,
+) -> (usize, usize) {
+    let mut sub_end = end;
+    while sub_end > 0 {
+        let prev = sub_end - 1;
+        let scale = diagonal[sub_end].abs() + diagonal[prev].abs();
+        if offdiagonal[prev].abs() > tolerance * scale {
+            break;
+        }
+        offdiagonal[prev] = 0.0;
+        sub_end -= 1;
+    }
+
+    if sub_end == 0 {
+        return (0, 0);
+    }
+
+    let mut sub_start = sub_end - 1;
+    while sub_start > 0 {
+        let prev = sub_start - 1;
+        let scale = diagonal[sub_start].abs() + diagonal[prev].abs();
+        if offdiagonal[prev] == 0.0 || offdiagonal[prev].abs() <= tolerance * scale {
+            offdiagonal[prev] = 0.0;
+            break;
+        }
+        sub_start -= 1;
+    }
+
+    (sub_start, sub_end)
+}
+
+fn gw_diagonalize_two_by_two(diag: &mut [f64], off: &mut [f64], z0: &mut [f64], start: usize) {
+    let o = off[start];
+    if o == 0.0 {
+        return;
+    }
+    let left = diag[start];
+    let right = diag[start + 1];
+    let tau = (right - left) / (2.0 * o);
+    let tangent = if tau == 0.0 {
+        1.0
+    } else {
+        tau.signum() / (tau.abs() + (1.0 + tau * tau).sqrt())
+    };
+    let c = 1.0 / (1.0 + tangent * tangent).sqrt();
+    let s = tangent * c;
+
+    diag[start] = left - tangent * o;
+    diag[start + 1] = right + tangent * o;
+    off[start] = 0.0;
+
+    let zl = z0[start];
+    let zr = z0[start + 1];
+    z0[start] = c * zl - s * zr;
+    z0[start + 1] = s * zl + c * zr;
 }
 
 fn symmetrize_pairs(nodes: &mut [f64], weights: &mut [f64]) {
