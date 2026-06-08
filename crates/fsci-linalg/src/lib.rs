@@ -6389,15 +6389,20 @@ fn apply_householder_left(
         return;
     }
 
-    for col in col_start..matrix.ncols() {
+    let rows = matrix.nrows();
+    let cols = matrix.ncols();
+    let start = reflector.start;
+    let data = matrix.as_mut_slice();
+    for col in col_start..cols {
+        let col_base = col * rows;
         let mut dot = 0.0;
         for (offset, value) in reflector.values.iter().enumerate() {
-            dot += value * matrix[(reflector.start + offset, col)];
+            dot += value * data[col_base + start + offset];
         }
         let scale = reflector.tau * dot;
         if scale != 0.0 {
             for (offset, value) in reflector.values.iter().enumerate() {
-                matrix[(reflector.start + offset, col)] -= scale * value;
+                data[col_base + start + offset] -= scale * value;
             }
         }
     }
@@ -6483,6 +6488,8 @@ fn apply_householder_right_with_workspace(
         return;
     }
     debug_assert!(dot_workspace.len() >= rows);
+    let start = reflector.start;
+    let data = matrix.as_mut_slice();
 
     for dot in &mut dot_workspace[row_start..rows] {
         *dot = 0.0;
@@ -6491,9 +6498,10 @@ fn apply_householder_right_with_workspace(
     // DMatrix is column-major. This preserves each row's summation order while
     // streaming down contiguous columns instead of striding across rows.
     for (offset, value) in reflector.values.iter().enumerate() {
-        let col = reflector.start + offset;
+        let col = start + offset;
+        let col_base = col * rows;
         for row in row_start..rows {
-            dot_workspace[row] += matrix[(row, col)] * value;
+            dot_workspace[row] += data[col_base + row] * value;
         }
     }
 
@@ -6502,11 +6510,12 @@ fn apply_householder_right_with_workspace(
     }
 
     for (offset, value) in reflector.values.iter().enumerate() {
-        let col = reflector.start + offset;
+        let col = start + offset;
+        let col_base = col * rows;
         for row in row_start..rows {
             let scale = dot_workspace[row];
             if scale != 0.0 {
-                matrix[(row, col)] -= scale * value;
+                data[col_base + row] -= scale * value;
             }
         }
     }
