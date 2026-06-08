@@ -1,0 +1,14 @@
+# eigsh: power-iteration-with-deflation -> shared Lanczos/Arnoldi Krylov solver.
+# Symmetric sparse, planted well-separated top spectrum (100,88,76,...). Both
+# methods converge to the SAME true top-k (tolerance-parity); Lanczos is far more
+# accurate (residual ~1e-11 vs 7e-4) with far fewer matvecs.
+#                    time      nmatvec  converged  top3                              max_resid
+# NEW (Lanczos):
+n=2000  k=6   1.164ms   26   true  [100.000172,88.000448,76.000187]  5.91e-12
+n=8000  k=6   5.385ms   26   true  [100.000323,88.000000,76.000354]  1.51e-11
+n=20000 k=8  13.793ms   28   true  [100.000140,88.000613,76.000247]  1.43e-11
+# BASELINE (power iteration):
+n=2000  k=6  10.025ms  350   true  [100.000172,88.000448,76.000187]  7.02e-4
+n=8000  k=6  42.256ms  350   true  [100.000323,88.000000,76.000354]  7.02e-4
+n=20000 k=8 130.360ms  481   true  [100.000140,88.000613,76.000247]  8.16e-4
+# speedup: 8.6x / 7.85x / 9.45x ; eigenvalues identical between methods.

@@ -7627,95 +7627,44 @@ pub fn eigsh(a: &CsrMatrix, k: usize, options: EigsOptions) -> SparseResult<Eigs
     }
     let options = normalize_eigs_options(options);
 
-    let mut eigenvalues = Vec::with_capacity(k);
-    let mut eigenvectors: Vec<Vec<f64>> = Vec::with_capacity(k);
-    let mut total_matvec = 0;
+    // Symmetric Lanczos via the shared Krylov/Arnoldi solver: for a symmetric A
+    // the Arnoldi projection is tridiagonal with real Ritz values, so an
+    // m-dimensional Krylov subspace yields the top-k eigenpairs in O(m) matvecs —
+    // versus power-iteration-with-deflation's O(k·max_iter). A single subspace of
+    // max(2k+1, 20) (scipy's ncv default) resolves the extreme eigenpairs of a
+    // well-separated spectrum; `converged` is set from the actual Ritz residuals
+    // (pathologically-clustered spectra would need implicit restarts, as in
+    // ARPACK — reported honestly via `converged = false` rather than looping).
+    let m = (2 * k + 1).max(20).min(n);
+    let mut result = krylov_arnoldi_eigs(a, k, &options, m);
+    let (converged, resid_matvec) = eigsh_residual_check(a, &result, options.tol.max(1e-8));
+    result.nmatvec += resid_matvec;
+    result.converged = converged;
+    Ok(result)
+}
 
-    for _eig_idx in 0..k {
-        // br-oyy7: Power iteration is mathematically guaranteed to find
-        // the dominant eigenvalue only when the initial vector has a
-        // nonzero projection onto its eigenvector. The constant vector
-        // [1/√n, …, 1/√n] is orthogonal to every alternating-sign mode
-        // (e.g. the dominant eigenvector of a path Laplacian), so on
-        // structured matrices the iteration silently converges to the
-        // wrong eigenvalue. Seed instead with a deterministic LCG-based
-        // pseudo-random vector — orthogonal to no eigenmode in general.
-        let mut v = vec![0.0f64; n];
-        let mut rng_state: u64 = 0x9e3779b97f4a7c15;
-        for vi in v.iter_mut() {
-            rng_state = rng_state
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1442695040888963407);
-            let u = ((rng_state >> 11) as f64) / (1u64 << 53) as f64;
-            *vi = u - 0.5;
-        }
-        let v_norm = vec_norm(&v);
-        if v_norm > 0.0 {
-            for vi in &mut v {
-                *vi /= v_norm;
-            }
-        }
-
-        let mut lambda = 0.0;
-        let mut converged_this = false;
-
-        for _iter in 0..options.max_iter {
-            // w = A * v
-            let mut w = csr_matvec(a, &v);
-            total_matvec += 1;
-
-            // Deflate: project out components along previously found eigenvectors
-            // w = w - Σ (v_i^T w) v_i * λ_i (Wielandt deflation variant)
-            // Simpler: just orthogonalize w against previous eigenvectors
-            for prev_vec in &eigenvectors {
-                let proj: f64 = w.iter().zip(prev_vec.iter()).map(|(a, b)| a * b).sum();
-                for (wi, &pi) in w.iter_mut().zip(prev_vec.iter()) {
-                    *wi -= proj * pi;
-                }
-            }
-
-            // Rayleigh quotient: λ = v^T w
-            let new_lambda: f64 = v.iter().zip(w.iter()).map(|(a, b)| a * b).sum();
-
-            // Normalize w -> v
-            let w_norm = vec_norm(&w);
-            if w_norm < f64::EPSILON * 100.0 {
-                break;
-            }
-            for wi in &mut w {
-                *wi /= w_norm;
-            }
-
-            if (new_lambda - lambda).abs() < options.tol * new_lambda.abs().max(1.0) {
-                converged_this = true;
-                lambda = new_lambda;
-                v = w;
-                break;
-            }
-
-            lambda = new_lambda;
-            v = w;
-        }
-
-        eigenvalues.push(lambda);
-        eigenvectors.push(v);
-
-        if !converged_this {
-            return Ok(EigsResult {
-                eigenvalues,
-                eigenvectors,
-                nmatvec: total_matvec,
-                converged: false,
-            });
+/// Returns `(all_top_k_converged, matvecs_used)` for an eigsh result by checking
+/// every returned Ritz pair's residual `‖A x − λ x‖ ≤ tol·max(|λ|, 1)`.
+fn eigsh_residual_check(a: &CsrMatrix, result: &EigsResult, tol: f64) -> (bool, usize) {
+    if result.eigenvalues.is_empty() {
+        return (false, 0);
+    }
+    let mut converged = true;
+    let mut matvecs = 0;
+    for (&lambda, x) in result.eigenvalues.iter().zip(result.eigenvectors.iter()) {
+        let ax = csr_matvec(a, x);
+        matvecs += 1;
+        let resid: f64 = ax
+            .iter()
+            .zip(x.iter())
+            .map(|(&axi, &xi)| (axi - lambda * xi).powi(2))
+            .sum::<f64>()
+            .sqrt();
+        if resid > tol * lambda.abs().max(1.0) {
+            converged = false;
         }
     }
-
-    Ok(EigsResult {
-        eigenvalues,
-        eigenvectors,
-        nmatvec: total_matvec,
-        converged: true,
-    })
+    (converged, matvecs)
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -7742,8 +7691,19 @@ pub fn eigs(a: &CsrMatrix, k: usize, options: EigsOptions) -> SparseResult<EigsR
     }
     let options = normalize_eigs_options(options);
 
-    // Krylov subspace dimension (larger than k for better convergence)
+    // Krylov subspace dimension (larger than k for better convergence).
     let m = (2 * k + 1).min(n);
+    Ok(krylov_arnoldi_eigs(a, k, &options, m))
+}
+
+/// Shared Arnoldi/Lanczos Krylov eigensolver used by both [`eigs`] (general) and
+/// [`eigsh`] (symmetric). Builds an `m`-dimensional Krylov subspace with full
+/// modified-Gram-Schmidt re-orthogonalization (no ghost eigenvalues), extracts
+/// Ritz values from the projected upper-Hessenberg matrix `H` (tridiagonal, with
+/// real Ritz values, when `A` is symmetric), and back-transforms the top-`k`-by-
+/// magnitude Ritz vectors into the original space. O(m) matvecs total.
+fn krylov_arnoldi_eigs(a: &CsrMatrix, k: usize, options: &EigsOptions, m: usize) -> EigsResult {
+    let n = a.shape().rows;
     let mut total_matvec = 0;
 
     // Arnoldi iteration: build orthonormal basis V and upper Hessenberg H
@@ -7832,12 +7792,12 @@ pub fn eigs(a: &CsrMatrix, k: usize, options: EigsOptions) -> SparseResult<EigsR
         eigenvectors.push(evec);
     }
 
-    Ok(EigsResult {
+    EigsResult {
         eigenvalues,
         eigenvectors,
         nmatvec: total_matvec,
         converged: true,
-    })
+    }
 }
 
 /// Compute an eigenvector of the upper Hessenberg matrix `H[0..m, 0..m]` for
