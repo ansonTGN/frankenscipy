@@ -840,7 +840,14 @@ fn select_hyp0f1_branch(problem: HyperCaspProblem) -> HyperCaspDecision {
 }
 
 fn select_hyp1f1_branch(problem: HyperCaspProblem) -> HyperCaspDecision {
-    if problem.z < -20.0 {
+    // The direct series M(a,b,z) for z<0 is alternating and loses ≳0.43·|z|
+    // digits to cancellation — MORE for larger a (the (a)_k growth) — so the old
+    // z<-20 cutoff left it catastrophically wrong across z∈[-20,~-7] for a>b
+    // (hyp1f1(10,1,-18) was ~3e4× off scipy; hyp1f1(15,2,-7) ~8e-5). Hand off to
+    // the (cancellation-controlled) Kummer transform / asymptotic for essentially
+    // all negative z; Kummer terminates when b-a is a nonpositive integer and is
+    // well-conditioned at moderate |z| otherwise. frankenscipy-…
+    if problem.z < -1.0 {
         // A nonpositive-integer a makes 1F1 a finite polynomial; the direct
         // series is exact and cheap, whereas Kummer would map it onto a
         // non-terminating inner series that overruns the 500-term cap.
@@ -3951,6 +3958,29 @@ mod tests {
             let v = get_scalar(&r).expect("finite hyp1f1");
             let rel = ((v - expected) / expected).abs();
             assert!(rel < 1e-12, "hyp1f1({a},{b},{z}) = {v:e}, scipy {expected:e}, rel={rel:e}");
+        }
+    }
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
+    fn hyp1f1_moderate_negative_z_matches_scipy() {
+        // frankenscipy-…: moderate negative z (≈ -10 .. -25) with a>b. The old
+        // z<-20 direct-series cutoff cancelled catastrophically here
+        // (hyp1f1(10,1,-18) was ~3e4× off). Now handed to Kummer/asymptotic from
+        // z<-1. scipy.special.hyp1f1 1.17.1.
+        let cases = [
+            (5.0, 0.5, -20.0, -8.421183522420745e-05),
+            (10.0, 1.0, -20.0, 4.496393904179204e-06),
+            (3.0, 0.5, -25.0, -0.00019995614727926067),
+            (5.0, 2.0, -15.0, -1.5180402654903105e-05),
+            (15.0, 2.0, -10.0, -1.7579603988852404e-05),
+            (8.0, 0.5, -18.0, -9.579410351509854e-05),
+        ];
+        for (a, b, z, expected) in cases {
+            let r = hyp1f1(&scalar(a), &scalar(b), &scalar(z), RuntimeMode::Strict);
+            let v = get_scalar(&r).expect("finite hyp1f1");
+            let rel = ((v - expected) / expected).abs();
+            assert!(rel < 1e-8, "hyp1f1({a},{b},{z}) = {v:e}, scipy {expected:e}, rel={rel:e}");
         }
     }
 
