@@ -410,28 +410,28 @@ fn gammainc_dispatch(
                 complex_gammaincc_scalar(*a_val, *x_val, mode).map(SpecialTensor::ComplexScalar)
             }
         }
-        (SpecialTensor::RealScalar(a_val), SpecialTensor::ComplexVec(x_vec)) => x_vec
-            .iter()
-            .map(|&x_val| {
+        (SpecialTensor::RealScalar(a_val), SpecialTensor::ComplexVec(x_vec)) => {
+            let a_val = *a_val;
+            par_map_indices(x_vec.len(), |i| {
                 if lower {
-                    complex_gammainc_scalar(*a_val, x_val, mode)
+                    complex_gammainc_scalar(a_val, x_vec[i], mode)
                 } else {
-                    complex_gammaincc_scalar(*a_val, x_val, mode)
+                    complex_gammaincc_scalar(a_val, x_vec[i], mode)
                 }
             })
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
-        (SpecialTensor::RealVec(a_vec), SpecialTensor::ComplexScalar(x_val)) => a_vec
-            .iter()
-            .map(|&a_val| {
+            .map(SpecialTensor::ComplexVec)
+        }
+        (SpecialTensor::RealVec(a_vec), SpecialTensor::ComplexScalar(x_val)) => {
+            let x_val = *x_val;
+            par_map_indices(a_vec.len(), |i| {
                 if lower {
-                    complex_gammainc_scalar(a_val, *x_val, mode)
+                    complex_gammainc_scalar(a_vec[i], x_val, mode)
                 } else {
-                    complex_gammaincc_scalar(a_val, *x_val, mode)
+                    complex_gammaincc_scalar(a_vec[i], x_val, mode)
                 }
             })
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
+            .map(SpecialTensor::ComplexVec)
+        }
         (SpecialTensor::RealVec(a_vec), SpecialTensor::ComplexVec(x_vec)) => {
             if a_vec.len() != x_vec.len() {
                 return Err(SpecialError {
@@ -441,38 +441,34 @@ fn gammainc_dispatch(
                     detail: "vector inputs must have matching lengths",
                 });
             }
-            a_vec
-                .iter()
-                .zip(x_vec.iter())
-                .map(|(&a_val, &x_val)| {
-                    if lower {
-                        complex_gammainc_scalar(a_val, x_val, mode)
-                    } else {
-                        complex_gammaincc_scalar(a_val, x_val, mode)
-                    }
-                })
-                .collect::<Result<Vec<_>, _>>()
-                .map(SpecialTensor::ComplexVec)
+            par_map_indices(a_vec.len(), |i| {
+                if lower {
+                    complex_gammainc_scalar(a_vec[i], x_vec[i], mode)
+                } else {
+                    complex_gammaincc_scalar(a_vec[i], x_vec[i], mode)
+                }
+            })
+            .map(SpecialTensor::ComplexVec)
         }
         // Complex a cases
         (SpecialTensor::ComplexScalar(a_val), SpecialTensor::RealScalar(x_val)) => {
             gammainc_complex_parameter_scalar(*a_val, Complex64::new(*x_val, 0.0), mode, lower)
                 .map(SpecialTensor::ComplexScalar)
         }
-        (SpecialTensor::ComplexScalar(a_val), SpecialTensor::RealVec(x_vec)) => x_vec
-            .iter()
-            .map(|&x_val| {
-                gammainc_complex_parameter_scalar(*a_val, Complex64::new(x_val, 0.0), mode, lower)
+        (SpecialTensor::ComplexScalar(a_val), SpecialTensor::RealVec(x_vec)) => {
+            let a_val = *a_val;
+            par_map_indices(x_vec.len(), |i| {
+                gammainc_complex_parameter_scalar(a_val, Complex64::new(x_vec[i], 0.0), mode, lower)
             })
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
-        (SpecialTensor::ComplexVec(a_vec), SpecialTensor::RealScalar(x_val)) => a_vec
-            .iter()
-            .map(|&a_val| {
-                gammainc_complex_parameter_scalar(a_val, Complex64::new(*x_val, 0.0), mode, lower)
+            .map(SpecialTensor::ComplexVec)
+        }
+        (SpecialTensor::ComplexVec(a_vec), SpecialTensor::RealScalar(x_val)) => {
+            let x_val = *x_val;
+            par_map_indices(a_vec.len(), |i| {
+                gammainc_complex_parameter_scalar(a_vec[i], Complex64::new(x_val, 0.0), mode, lower)
             })
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
+            .map(SpecialTensor::ComplexVec)
+        }
         (SpecialTensor::ComplexVec(a_vec), SpecialTensor::RealVec(x_vec)) => {
             if a_vec.len() != x_vec.len() {
                 return Err(SpecialError {
@@ -482,34 +478,34 @@ fn gammainc_dispatch(
                     detail: "vector inputs must have matching lengths",
                 });
             }
-            a_vec
-                .iter()
-                .zip(x_vec.iter())
-                .map(|(&a_val, &x_val)| {
-                    gammainc_complex_parameter_scalar(
-                        a_val,
-                        Complex64::new(x_val, 0.0),
-                        mode,
-                        lower,
-                    )
-                })
-                .collect::<Result<Vec<_>, _>>()
-                .map(SpecialTensor::ComplexVec)
+            par_map_indices(a_vec.len(), |i| {
+                gammainc_complex_parameter_scalar(
+                    a_vec[i],
+                    Complex64::new(x_vec[i], 0.0),
+                    mode,
+                    lower,
+                )
+            })
+            .map(SpecialTensor::ComplexVec)
         }
         (SpecialTensor::ComplexScalar(a_val), SpecialTensor::ComplexScalar(x_val)) => {
             gammainc_complex_parameter_scalar(*a_val, *x_val, mode, lower)
                 .map(SpecialTensor::ComplexScalar)
         }
-        (SpecialTensor::ComplexScalar(a_val), SpecialTensor::ComplexVec(x_vec)) => x_vec
-            .iter()
-            .map(|&x_val| gammainc_complex_parameter_scalar(*a_val, x_val, mode, lower))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
-        (SpecialTensor::ComplexVec(a_vec), SpecialTensor::ComplexScalar(x_val)) => a_vec
-            .iter()
-            .map(|&a_val| gammainc_complex_parameter_scalar(a_val, *x_val, mode, lower))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
+        (SpecialTensor::ComplexScalar(a_val), SpecialTensor::ComplexVec(x_vec)) => {
+            let a_val = *a_val;
+            par_map_indices(x_vec.len(), |i| {
+                gammainc_complex_parameter_scalar(a_val, x_vec[i], mode, lower)
+            })
+            .map(SpecialTensor::ComplexVec)
+        }
+        (SpecialTensor::ComplexVec(a_vec), SpecialTensor::ComplexScalar(x_val)) => {
+            let x_val = *x_val;
+            par_map_indices(a_vec.len(), |i| {
+                gammainc_complex_parameter_scalar(a_vec[i], x_val, mode, lower)
+            })
+            .map(SpecialTensor::ComplexVec)
+        }
         (SpecialTensor::ComplexVec(a_vec), SpecialTensor::ComplexVec(x_vec)) => {
             if a_vec.len() != x_vec.len() {
                 return Err(SpecialError {
@@ -519,14 +515,10 @@ fn gammainc_dispatch(
                     detail: "vector inputs must have matching lengths",
                 });
             }
-            a_vec
-                .iter()
-                .zip(x_vec.iter())
-                .map(|(&a_val, &x_val)| {
-                    gammainc_complex_parameter_scalar(a_val, x_val, mode, lower)
-                })
-                .collect::<Result<Vec<_>, _>>()
-                .map(SpecialTensor::ComplexVec)
+            par_map_indices(a_vec.len(), |i| {
+                gammainc_complex_parameter_scalar(a_vec[i], x_vec[i], mode, lower)
+            })
+            .map(SpecialTensor::ComplexVec)
         }
         // Empty tensor cases
         (SpecialTensor::Empty, _) | (_, SpecialTensor::Empty) => Err(SpecialError {
@@ -759,16 +751,13 @@ fn map_real_input<F>(
     kernel: F,
 ) -> SpecialResult
 where
-    F: Fn(f64) -> Result<f64, SpecialError>,
+    F: Fn(f64) -> Result<f64, SpecialError> + Sync,
 {
     match input {
         SpecialTensor::RealScalar(x) => kernel(*x).map(SpecialTensor::RealScalar),
-        SpecialTensor::RealVec(values) => values
-            .iter()
-            .copied()
-            .map(kernel)
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::RealVec),
+        SpecialTensor::RealVec(values) => {
+            par_map_indices(values.len(), |i| kernel(values[i])).map(SpecialTensor::RealVec)
+        }
         SpecialTensor::ComplexScalar(_) | SpecialTensor::ComplexVec(_) => {
             not_yet_implemented(function, mode, "complex-valued path pending")
         }

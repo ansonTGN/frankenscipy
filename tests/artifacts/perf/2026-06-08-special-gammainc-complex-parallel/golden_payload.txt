@@ -1,0 +1,6 @@
+===GOLDEN_PAYLOAD_BEGIN===
+n=100 gammainc(len=100,xor=32afa993bc4232bb) gammaincc(len=100,xor=0e0e1be1de989180) multigammaln(len=100,xor=f6b0ed54e4b9b1e1)
+n=5000 gammainc(len=5000,xor=9fd894c9702ce028) gammaincc(len=5000,xor=214cac68bb60021d) multigammaln(len=5000,xor=f10e5a159e653f37)
+n=50000 gammainc(len=50000,xor=210ade10dbf450fa) gammaincc(len=50000,xor=4d841a7ee19f5d27) multigammaln(len=50000,xor=ad4374db4e604312)
+===GOLDEN_PAYLOAD_END===
+timing acc: gammainc 300k=7ceae9dd6bfd22fb  gammaincc 300k=0281d6cec965e56d  multigammaln 1M=de56e4fa3ecdccda
