@@ -1947,6 +1947,15 @@ impl ContinuousDistribution for Uniform {
         }
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // −ln(scale) on support, −inf outside. frankenscipy-p82v7
+        if x >= self.loc && x <= self.loc + self.scale {
+            -self.scale.ln()
+        } else {
+            f64::NEG_INFINITY
+        }
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         if x < self.loc {
             0.0
@@ -2216,6 +2225,18 @@ impl ContinuousDistribution for GeneralizedExponential {
         term1 * exponent.exp()
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln(a + b(1−e^{−cx})) + exponent; the prefactor is O(1), exponent
+        // carries the tail decay, so logpdf stays finite. frankenscipy-p82v7
+        if x < 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        let ecx = (-self.c * x).exp();
+        let term1 = self.a + self.b * (1.0 - ecx);
+        let exponent = -self.a * x - self.b * x + (self.b / self.c) * (1.0 - ecx);
+        term1.ln() + exponent
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         if x <= 0.0 {
             return 0.0;
@@ -2413,6 +2434,18 @@ impl ContinuousDistribution for FDistribution {
             - 0.5 * (d1 + d2) * (1.0 + d1 * x / d2).ln()
             - ln_beta(0.5 * d1, 0.5 * d2);
         ln_pdf.exp()
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // log of the F density; finite in the tail where pdf underflows. frankenscipy-p82v7
+        if x <= 0.0 {
+            return self.pdf(x).ln();
+        }
+        let d1 = self.dfn;
+        let d2 = self.dfd;
+        0.5 * d1 * (d1 / d2).ln() + (0.5 * d1 - 1.0) * x.ln()
+            - 0.5 * (d1 + d2) * (1.0 + d1 * x / d2).ln()
+            - ln_beta(0.5 * d1, 0.5 * d2)
     }
 
     fn cdf(&self, x: f64) -> f64 {
@@ -2926,6 +2959,15 @@ impl ContinuousDistribution for BetaDist {
         ln_pdf.exp()
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // (a−1)·ln(x) + (b−1)·ln(1−x) − lnB(a,b); the shape-dependent
+        // boundaries (x∉(0,1), x=0, x=1) delegate to pdf. frankenscipy-p82v7
+        if !(0.0..1.0).contains(&x) || x == 0.0 {
+            return self.pdf(x).ln();
+        }
+        (self.a - 1.0) * x.ln() + (self.b - 1.0) * (1.0 - x).ln() - ln_beta(self.a, self.b)
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         if x <= 0.0 {
             return 0.0;
@@ -3427,6 +3469,16 @@ impl ContinuousDistribution for GenGamma {
         ln_pdf.exp()
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // |c|·... log of the generalized-gamma density; finite in the tail. frankenscipy-p82v7
+        if x <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        let a = self.a;
+        let c = self.c;
+        c.abs().ln() + (c * a - 1.0) * x.ln() - x.powf(c) - ln_gamma(a)
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         if x <= 0.0 {
             return 0.0;
@@ -3845,6 +3897,15 @@ impl ContinuousDistribution for WeibullMax {
         let c = self.c;
         let neg = -x;
         c * neg.powf(c - 1.0) * (-neg.powf(c)).exp()
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // Support x<0; ln(c) + (c−1)·ln(−x) − (−x)^c. x≥0 delegates to pdf. frankenscipy-p82v7
+        if x >= 0.0 || !x.is_finite() {
+            return self.pdf(x).ln();
+        }
+        let neg = -x;
+        self.c.ln() + (self.c - 1.0) * neg.ln() - neg.powf(self.c)
     }
 
     fn cdf(&self, x: f64) -> f64 {
@@ -9945,6 +10006,20 @@ impl ContinuousDistribution for GenExtreme {
         }
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // −(x+e^{-x}) (c→0) or −(c+1)/c·ln(1+c·x) − (1+c·x)^{−1/c}; finite tail. frankenscipy-p82v7
+        let c = self.c;
+        if c.abs() < 1e-15 {
+            -x - (-x).exp()
+        } else {
+            let t = 1.0 + c * x;
+            if t <= 0.0 {
+                return f64::NEG_INFINITY;
+            }
+            -(c + 1.0) / c * t.ln() - t.powf(-1.0 / c)
+        }
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         let c = self.c;
         if c.abs() < 1e-15 {
@@ -10156,6 +10231,23 @@ impl ContinuousDistribution for GenPareto {
                 return 0.0;
             }
             t.powf(-1.0 / c - 1.0)
+        }
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // −x (c→0) or (−1/c−1)·ln(1+c·x); finite in the tail. frankenscipy-p82v7
+        if x < 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        let c = self.c;
+        if c.abs() < 1e-15 {
+            -x
+        } else {
+            let t = 1.0 + c * x;
+            if t <= 0.0 {
+                return f64::NEG_INFINITY;
+            }
+            (-1.0 / c - 1.0) * t.ln()
         }
     }
 
@@ -14488,6 +14580,15 @@ impl ContinuousDistribution for Loglogistic {
         c * x.powf(c - 1.0) / ((1.0 + xc) * (1.0 + xc))
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln(c) + (c−1)·ln(x) − 2·ln1p(x^c); finite in the power-law tail. frankenscipy-p82v7
+        if x <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        let c = self.c;
+        c.ln() + (c - 1.0) * x.ln() - 2.0 * x.powf(c).ln_1p()
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         if x <= 0.0 {
             return 0.0;
@@ -15205,6 +15306,18 @@ impl ContinuousDistribution for GenLogistic {
         c * (-x).exp() / (1.0 + (-x).exp()).powf(c + 1.0)
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln(c) − x − (c+1)·softplus(−x); stable softplus keeps both tails
+        // finite where pdf underflows. frankenscipy-p82v7
+        let c = self.c;
+        let softplus_neg_x = if x <= 0.0 {
+            -x + x.exp().ln_1p()
+        } else {
+            (-x).exp().ln_1p()
+        };
+        c.ln() - x - (c + 1.0) * softplus_neg_x
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         1.0 / (1.0 + (-x).exp()).powf(self.c)
     }
@@ -15332,6 +15445,16 @@ impl ContinuousDistribution for FrechetR {
         }
         let ax = (-x).abs();
         self.c * ax.powf(self.c - 1.0) * (-ax.powf(self.c)).exp()
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // Support x≤0; ln(c) + (c−1)·ln|x| − |x|^c. x≥0 (incl. shape-dependent
+        // x=0 limit) delegates to pdf. frankenscipy-p82v7
+        if x >= 0.0 {
+            return self.pdf(x).ln();
+        }
+        let ax = (-x).abs();
+        self.c.ln() + (self.c - 1.0) * ax.ln() - ax.powf(self.c)
     }
 
     fn cdf(&self, x: f64) -> f64 {
@@ -17011,6 +17134,14 @@ impl ContinuousDistribution for InvWeibull {
             return 0.0;
         }
         self.c * x.powf(-self.c - 1.0) * (-x.powf(-self.c)).exp()
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln(c) + (−c−1)·ln(x) − x^{−c}; finite in the tail. frankenscipy-p82v7
+        if x <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        self.c.ln() + (-self.c - 1.0) * x.ln() - x.powf(-self.c)
     }
 
     fn cdf(&self, x: f64) -> f64 {
@@ -39713,6 +39844,53 @@ mod tests {
         tail!(Gompertz::new(1.0), 8.0); // −(e^8−1) ≈ −2980
         tail!(HalfLogistic, 800.0); // ≈ −800
         tail!(GumbelLeft::new(0.0, 1.0), -800.0); // z=−800 → ≈ −800
+    }
+
+    #[test]
+    fn logpdf_overrides_batch3_consistent_and_finite() {
+        macro_rules! mid {
+            ($d:expr, $xs:expr) => {{
+                let d = $d;
+                for &x in $xs {
+                    let lp = d.logpdf(x);
+                    let r = d.pdf(x).ln();
+                    assert!(
+                        (lp - r).abs() <= 1e-9 * r.abs().max(1.0),
+                        "{}: logpdf({x})={lp} vs ln(pdf)={r}",
+                        stringify!($d)
+                    );
+                }
+            }};
+        }
+        mid!(BetaDist::new(2.0, 5.0), &[0.1, 0.4, 0.9]);
+        mid!(FDistribution::new(5.0, 10.0), &[0.3, 1.0, 4.0]);
+        mid!(GenGamma::new(2.0, 1.5), &[0.3, 1.0, 3.0]);
+        mid!(GenPareto::new(0.25), &[0.5, 2.0, 6.0]);
+        mid!(GenPareto::new(0.0), &[0.5, 2.0, 6.0]);
+        mid!(GenExtreme::new(0.3), &[-1.0, 0.5, 2.0]);
+        mid!(GenExtreme::new(0.0), &[-1.0, 0.5, 2.0]);
+        mid!(Loglogistic::new(3.0), &[0.5, 1.0, 3.0]);
+        mid!(InvWeibull::new(2.0), &[0.5, 1.0, 3.0]);
+        mid!(GenLogistic::new(2.0), &[-3.0, 0.5, 3.0]);
+        mid!(WeibullMax::new(2.0), &[-3.0, -1.0, -0.3]);
+        mid!(FrechetR::new(2.0), &[-3.0, -1.0, -0.3]);
+        mid!(Uniform::new(0.0, 2.0), &[0.5, 1.0, 1.5]);
+        mid!(GeneralizedExponential::new(1.0, 0.5, 0.8), &[0.3, 1.0, 3.0]);
+
+        // Deep tail: pdf underflows to 0; logpdf finite & large-negative.
+        macro_rules! tail {
+            ($d:expr, $x:expr) => {{
+                let d = $d;
+                assert_eq!(d.pdf($x), 0.0, "precondition: pdf underflowed at {}", $x);
+                let lp = d.logpdf($x);
+                assert!(lp.is_finite() && lp < -300.0, "{}: logpdf={lp}", stringify!($d));
+            }};
+        }
+        tail!(GenGamma::new(2.0, 1.5), 200.0); // −x^1.5 = −2828
+        tail!(InvWeibull::new(2.0), 1e-8); // x^{−2}=1e16 → −1e16… actually left tail
+        tail!(GenExtreme::new(0.0), 800.0); // −x − e^{−x} ≈ −800
+        tail!(GenLogistic::new(2.0), 800.0); // ≈ −x
+        tail!(GeneralizedExponential::new(1.0, 0.5, 0.8), 800.0); // exponent → −1200
     }
 
     // ── Exponential distribution ────────────────────────────────────
