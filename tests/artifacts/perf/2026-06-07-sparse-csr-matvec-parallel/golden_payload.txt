@@ -1,0 +1,10 @@
+# csr_matvec: same-process A/B (serial vs parallel kernel) — byte-identical
+# (identical=true) across all sizes; parallel scales with nnz.
+n=  20000 nnz=   200000 identical=true  serial=257.962µs parallel=234.978µs ratio=1.1x (serial gate)
+n=  50000 nnz=  1000000 identical=true  serial=  1.435ms parallel=677.655µs ratio=2.1x
+n= 200000 nnz=  4000000 identical=true  serial=  6.998ms parallel=  2.584ms ratio=2.7x
+n= 500000 nnz= 10000000 identical=true  serial= 18.706ms parallel=  4.965ms ratio=3.8x
+
+# End-to-end (public eigsh, power iteration, uses lib csr_matvec): baseline serial vs new parallel
+eigsh n=100000 nnz=1500000  314.39ms -> 137.10ms  (2.29x)
+eigsh n=300000 nnz=4500000  937.30ms -> 349.98ms  (2.68x)

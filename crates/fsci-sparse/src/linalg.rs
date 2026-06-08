@@ -1063,14 +1063,52 @@ fn csr_matvec(a: &CsrMatrix, x: &[f64]) -> Vec<f64> {
     let indptr = a.indptr();
     let indices = a.indices();
     let data = a.data();
+    let nnz = data.len();
+
+    // Each output row is an independent dot product accumulated in CSR index
+    // order, so splitting the rows across threads is byte-identical to the serial
+    // sweep. Workers are scaled by WORK (≈128K nnz/thread) and gated above ~256K
+    // nnz so medium/small matvecs don't pay unamortized spawn overhead. This is
+    // the inner kernel of every Krylov solver (cg/gmres/bicgstab/…), eigsh/eigs/
+    // svds, and onenormest, so the win compounds across their iterations.
+    let nthreads = if nnz < 1 << 18 || n < 256 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(|c| c.get())
+            .unwrap_or(1)
+            .min(nnz >> 17)
+            .max(1)
+    };
+
     let mut result = vec![0.0; n];
-    for i in 0..n {
-        let mut sum = 0.0;
-        for idx in indptr[i]..indptr[i + 1] {
-            sum += data[idx] * x[indices[idx]];
+    if nthreads <= 1 {
+        for i in 0..n {
+            let mut sum = 0.0;
+            for idx in indptr[i]..indptr[i + 1] {
+                sum += data[idx] * x[indices[idx]];
+            }
+            result[i] = sum;
         }
-        result[i] = sum;
+        return result;
     }
+
+    let chunk = n.div_ceil(nthreads);
+    std::thread::scope(|scope| {
+        for (t, slot) in result.chunks_mut(chunk).enumerate() {
+            let base = t * chunk;
+            scope.spawn(move || {
+                for (r, out) in slot.iter_mut().enumerate() {
+                    let i = base + r;
+                    let mut sum = 0.0;
+                    for idx in indptr[i]..indptr[i + 1] {
+                        sum += data[idx] * x[indices[idx]];
+                    }
+                    *out = sum;
+                }
+            });
+        }
+    });
     result
 }
 
