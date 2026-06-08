@@ -422,6 +422,56 @@ pub fn ive_scalar(v: f64, x: f64) -> f64 {
     iv_scalar(v, x) * (-x.abs()).exp()
 }
 
+/// Scalar: ln of the exponentially-scaled modified Bessel function of the
+/// first kind, `ln(ive(v, x)) = ln(I_v(x)) - |x|`.
+///
+/// `ive_scalar` forms `iv_scalar(v, x) * exp(-|x|)`, but `iv_scalar` overflows
+/// to +inf for `|x| > ~709`, making `ive` itself `NaN` there. This routine
+/// stays finite for all `x` by switching to the DLMF 10.40.1 large-argument
+/// asymptotic for `|x| >= 100`:
+///
+/// `I_v(x) ~ e^x/sqrt(2*pi*x) * sum_{k>=0} (-1)^k a_k(v)/x^k`,
+/// `a_k(v) = (4v^2-1^2)(4v^2-3^2)...(4v^2-(2k-1)^2)/(k! 8^k)`,
+///
+/// so `ln(ive) = -0.5*ln(2*pi*x) + ln(sum)`. Below the threshold it returns the
+/// exact `ive_scalar(v, x).ln()` (where `iv` does not overflow). Verified to
+/// agree with `ive_scalar(v, x).ln()` across their overlap.
+///
+/// Returns `NaN` for NaN inputs; for `x = 0`, `ln(ive(0,0)) = 0` and
+/// `-inf` for `v > 0`.
+#[must_use]
+pub fn log_ive_scalar(v: f64, x: f64) -> f64 {
+    if v.is_nan() || x.is_nan() {
+        return f64::NAN;
+    }
+    let z = x.abs();
+    if z == 0.0 {
+        return if v == 0.0 { 0.0 } else { f64::NEG_INFINITY };
+    }
+
+    const Z_ASYMP: f64 = 100.0;
+    if z < Z_ASYMP {
+        // iv does not overflow below ~709, so the scaled value is exact here.
+        let ive = ive_scalar(v, x);
+        if ive <= 0.0 || !ive.is_finite() {
+            return f64::NEG_INFINITY;
+        }
+        return ive.ln();
+    }
+
+    // DLMF 10.40.1 asymptotic series for the scaled Bessel function.
+    let mu = 4.0 * v * v;
+    let mut a_k = 1.0;
+    let mut series = 1.0;
+    for k in 1..=6 {
+        let kf = k as f64;
+        a_k *= (mu - (2.0 * kf - 1.0).powi(2)) / (kf * 8.0);
+        let term = a_k / z.powi(k as i32);
+        series += if k % 2 == 0 { term } else { -term };
+    }
+    -0.5 * (2.0 * PI * z).ln() + series.ln()
+}
+
 /// Scalar: k0e(x) = K_0(x) * exp(x).
 #[must_use]
 pub fn k0e_scalar(x: f64) -> f64 {
@@ -4516,6 +4566,33 @@ pub fn jn_zeros(n: u32, k: usize) -> Vec<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn log_ive_matches_ive_in_overlap_and_finite_beyond() {
+        // In the range where iv does not overflow, log_ive == ln(ive) exactly /
+        // to asymptotic precision.
+        for &v in &[0.0, 0.5, 1.0, 2.5] {
+            for &z in &[1.0, 5.0, 20.0, 60.0, 99.0, 150.0, 400.0, 650.0] {
+                let li = log_ive_scalar(v, z);
+                let direct = ive_scalar(v, z);
+                if direct > 0.0 && direct.is_finite() {
+                    let rel = (li - direct.ln()).abs() / direct.ln().abs().max(1.0);
+                    assert!(rel <= 1e-6, "log_ive({v},{z})={li} vs ln(ive)={}", direct.ln());
+                }
+            }
+        }
+        // Beyond the iv overflow threshold (z > 709): ive is NaN/0, but log_ive
+        // stays finite (asymptotic ≈ −½ln(2πz)).
+        for &z in &[800.0, 5000.0, 1.0e6] {
+            let li = log_ive_scalar(1.0, z);
+            let approx = -0.5 * (2.0 * PI * z).ln();
+            assert!(li.is_finite(), "log_ive(1,{z}) not finite");
+            assert!((li - approx).abs() < 0.05, "log_ive(1,{z})={li} vs ~{approx}");
+        }
+        assert_eq!(log_ive_scalar(0.0, 0.0), 0.0);
+        assert_eq!(log_ive_scalar(1.0, 0.0), f64::NEG_INFINITY);
+        assert!(log_ive_scalar(f64::NAN, 1.0).is_nan());
+    }
 
     #[test]
     #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
