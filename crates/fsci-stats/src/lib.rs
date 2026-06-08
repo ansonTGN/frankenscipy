@@ -2155,6 +2155,17 @@ impl ContinuousDistribution for GeneralizedExponential {
         1.0 - exponent.exp()
     }
 
+    fn sf(&self, x: f64) -> f64 {
+        // cdf = 1 − e^{exponent}, so sf = e^{exponent} directly — keeps the right
+        // tail accurate where the default 1−cdf collapses to 0. frankenscipy-w3f6m
+        if x <= 0.0 {
+            return 1.0;
+        }
+        let ecx = (-self.c * x).exp();
+        let exponent = -self.a * x - self.b * x + (self.b / self.c) * (1.0 - ecx);
+        exponent.exp()
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
@@ -3689,6 +3700,18 @@ impl ContinuousDistribution for WeibullMax {
         (-((-x).powf(c))).exp()
     }
 
+    fn sf(&self, x: f64) -> f64 {
+        // Support x≤0; sf = 1 − exp(−(−x)^c) = −expm1(−(−x)^c), stable as x→0⁻
+        // where cdf→1 and the default 1−cdf collapses. frankenscipy-w3f6m
+        if x >= 0.0 {
+            return 0.0;
+        }
+        if !x.is_finite() {
+            return 1.0;
+        }
+        -(-((-x).powf(self.c))).exp_m1()
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
@@ -3956,6 +3979,15 @@ impl ContinuousDistribution for Gibrat {
             return 0.0;
         }
         standard_normal_cdf(x.ln())
+    }
+
+    fn sf(&self, x: f64) -> f64 {
+        // sf = Φ(−ln x) = ½·erfc(ln x/√2); direct so the right tail does not
+        // collapse like the default 1−cdf. frankenscipy-w3f6m
+        if x <= 0.0 {
+            return 1.0;
+        }
+        0.5 * fsci_special::erfc_scalar(x.ln() * FRAC_1_SQRT_2)
     }
 
     fn ppf(&self, q: f64) -> f64 {
@@ -5157,6 +5189,16 @@ impl ContinuousDistribution for HypSecant {
             1.0 - 2.0 / PI * (-x).exp().atan()
         } else {
             2.0 / PI * x.exp().atan()
+        }
+    }
+
+    fn sf(&self, x: f64) -> f64 {
+        // Complement of the atan cdf: x≥0 → (2/π)·atan(e^{-x}) (exp tail, the
+        // default 1−cdf collapses); x<0 → 1 − (2/π)·atan(e^x). frankenscipy-w3f6m
+        if x >= 0.0 {
+            2.0 / PI * (-x).exp().atan()
+        } else {
+            1.0 - 2.0 / PI * x.exp().atan()
         }
     }
 
@@ -8715,6 +8757,15 @@ impl ContinuousDistribution for ExponNorm {
         standard_normal_cdf(x) - (exp_arg + fsci_special::log_ndtr_scalar(x - inv_k)).exp()
     }
 
+    fn sf(&self, x: f64) -> f64 {
+        // sf = 1 − [Φ(x) − e^{exp_arg}Φ(x−1/k)] = Φ(−x) + e^{exp_arg}Φ(x−1/k);
+        // the exponential-component term keeps the right tail accurate where
+        // the default 1−cdf collapses to 0. frankenscipy-w3f6m
+        let inv_k = 1.0 / self.k;
+        let exp_arg = inv_k * (0.5 * inv_k - x);
+        standard_normal_cdf(-x) + (exp_arg + fsci_special::log_ndtr_scalar(x - inv_k)).exp()
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
@@ -11808,6 +11859,18 @@ impl ContinuousDistribution for DoubleGamma {
         }
     }
 
+    fn sf(&self, x: f64) -> f64 {
+        // x>0: sf = ½·Q(a,x) directly (default 1−cdf collapses); x<0:
+        // 1 − ½·Q(a,−x) by symmetry. frankenscipy-w3f6m
+        if x < 0.0 {
+            1.0 - 0.5 * upper_regularized_gamma(self.a, -x)
+        } else if x > 0.0 {
+            0.5 * upper_regularized_gamma(self.a, x)
+        } else {
+            0.5
+        }
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
@@ -14651,6 +14714,15 @@ impl ContinuousDistribution for FrechetR {
             return 1.0;
         }
         (-(-x).powf(self.c)).exp()
+    }
+
+    fn sf(&self, x: f64) -> f64 {
+        // Support x≤0; sf = 1 − exp(−(−x)^c) = −expm1(−(−x)^c), stable as x→0⁻
+        // where cdf→1 and the default 1−cdf collapses. frankenscipy-w3f6m
+        if x >= 0.0 {
+            return 0.0;
+        }
+        -(-((-x).powf(self.c))).exp_m1()
     }
 
     fn ppf(&self, q: f64) -> f64 {
@@ -38528,6 +38600,56 @@ mod tests {
         tail!(Kappa3::new(2.0), 1e8, 1e-14); // (1/2)·2·x^-2 ≈ x^-2 = 1e-16
         tail!(LaplaceAsymmetric::new(1.5), 60.0, 1e-30); // e^-90/(1+2.25)
         tail!(DoubleWeibull::new(2.0), 9.0, 1e-30); // ½ e^-81
+    }
+
+    #[test]
+    fn sf_overrides_batch5_consistent_with_one_minus_cdf() {
+        // sf == 1 − cdf wherever cdf is not pinned at 1 (frankenscipy-w3f6m).
+        macro_rules! chk {
+            ($d:expr, $xs:expr) => {{
+                let d = $d;
+                for &x in $xs {
+                    let s = d.sf(x);
+                    let oc = 1.0 - d.cdf(x);
+                    assert!(
+                        (s - oc).abs() <= 1e-11 * oc.abs().max(1e-11) + 1e-13,
+                        "{}: sf({x})={s} vs 1-cdf={oc}",
+                        stringify!($d)
+                    );
+                }
+            }};
+        }
+        chk!(WeibullMax::new(2.0), &[-3.0, -1.0, -0.3]);
+        chk!(Gibrat, &[0.3, 1.0, 3.0]);
+        chk!(HypSecant, &[-2.0, 0.5, 2.0]);
+        chk!(ExponNorm::new(1.5), &[-1.0, 0.5, 2.0]);
+        chk!(FrechetR::new(2.0), &[-3.0, -1.0, -0.3]);
+        chk!(GeneralizedExponential::new(1.0, 0.5, 0.8), &[0.3, 1.0, 3.0]);
+        chk!(DoubleGamma::new(1.5), &[-2.0, -0.5, 0.5, 2.0]);
+    }
+
+    #[test]
+    fn sf_overrides_batch5_tail_does_not_collapse() {
+        // Positive, correctly-scaled sf where the default 1 − cdf returns 0
+        // (frankenscipy-w3f6m).
+        macro_rules! tail {
+            ($d:expr, $x:expr, $upper:expr) => {{
+                let s = ($d).sf($x);
+                assert!(
+                    s > 0.0 && s < $upper,
+                    "{}: tail sf({})={s} (collapsed or too large)",
+                    stringify!($d),
+                    $x
+                );
+            }};
+        }
+        tail!(WeibullMax::new(2.0), -1e-8, 1e-15); // ≈ (1e-8)^2 = 1e-16
+        tail!(Gibrat, 1e8, 1e-30); // Φ(−ln 1e8) = Φ(−18.4)
+        tail!(HypSecant, 42.0, 1e-17); // (2/π)e^-42 ≈ 9e-19
+        tail!(ExponNorm::new(1.5), 60.0, 1e-15); // exp-tail ≈ e^-40
+        tail!(FrechetR::new(2.0), -1e-8, 1e-15); // ≈ 1e-16
+        tail!(GeneralizedExponential::new(1.0, 0.5, 0.8), 40.0, 1e-15); // e^{exponent}
+        tail!(DoubleGamma::new(1.5), 60.0, 1e-20); // ½·Q(1.5, 60)
     }
 
     // ── Exponential distribution ────────────────────────────────────
