@@ -1,0 +1,5 @@
+GOLDEN (serial == parallel, bit-identical):
+n=100 hankel1=f8ec94bfb1c6fe4f hankel2=071368bfb1c6fe70
+n=5000 hankel1=c8dcc766e7863a4d hankel2=c8dcc766e786058d
+n=50000 hankel1=3eb698b05f5d21b1 hankel2=c149674fa09d218e
+timing acc (serial==parallel): hankel1 500k=c387d102a145d8c5 hankel2 500k=c387d13d5eba2705

@@ -3922,16 +3922,16 @@ fn hankel_dispatch(
         (SpecialTensor::RealScalar(order), SpecialTensor::RealScalar(x)) => {
             hankel_real_scalar(function, *order, *x, mode, kind).map(SpecialTensor::ComplexScalar)
         }
-        (SpecialTensor::RealVec(orders), SpecialTensor::RealScalar(x)) => orders
-            .iter()
-            .map(|&order| hankel_real_scalar(function, order, *x, mode, kind))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
-        (SpecialTensor::RealScalar(order), SpecialTensor::RealVec(xs)) => xs
-            .iter()
-            .map(|&x| hankel_real_scalar(function, *order, x, mode, kind))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
+        (SpecialTensor::RealVec(orders), SpecialTensor::RealScalar(x)) => {
+            let x = *x;
+            par_map_indices(orders.len(), |i| hankel_real_scalar(function, orders[i], x, mode, kind))
+                .map(SpecialTensor::ComplexVec)
+        }
+        (SpecialTensor::RealScalar(order), SpecialTensor::RealVec(xs)) => {
+            let order = *order;
+            par_map_indices(xs.len(), |i| hankel_real_scalar(function, order, xs[i], mode, kind))
+                .map(SpecialTensor::ComplexVec)
+        }
         (SpecialTensor::RealVec(orders), SpecialTensor::RealVec(xs)) => {
             if orders.len() != xs.len() {
                 return Err(SpecialError {
@@ -3941,27 +3941,27 @@ fn hankel_dispatch(
                     detail: "vector inputs must have matching lengths",
                 });
             }
-            orders
-                .iter()
-                .zip(xs.iter())
-                .map(|(&order, &x)| hankel_real_scalar(function, order, x, mode, kind))
-                .collect::<Result<Vec<_>, _>>()
-                .map(SpecialTensor::ComplexVec)
+            par_map_indices(orders.len(), |i| {
+                hankel_real_scalar(function, orders[i], xs[i], mode, kind)
+            })
+            .map(SpecialTensor::ComplexVec)
         }
         (SpecialTensor::RealScalar(order), SpecialTensor::ComplexScalar(z_val)) => {
             hankel_complex_scalar(function, *order, *z_val, mode, kind)
                 .map(SpecialTensor::ComplexScalar)
         }
-        (SpecialTensor::RealScalar(order), SpecialTensor::ComplexVec(zs)) => zs
-            .iter()
-            .map(|&z_val| hankel_complex_scalar(function, *order, z_val, mode, kind))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
-        (SpecialTensor::RealVec(orders), SpecialTensor::ComplexScalar(z_val)) => orders
-            .iter()
-            .map(|&order| hankel_complex_scalar(function, order, *z_val, mode, kind))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
+        (SpecialTensor::RealScalar(order), SpecialTensor::ComplexVec(zs)) => {
+            let order = *order;
+            par_map_indices(zs.len(), |i| hankel_complex_scalar(function, order, zs[i], mode, kind))
+                .map(SpecialTensor::ComplexVec)
+        }
+        (SpecialTensor::RealVec(orders), SpecialTensor::ComplexScalar(z_val)) => {
+            let z_val = *z_val;
+            par_map_indices(orders.len(), |i| {
+                hankel_complex_scalar(function, orders[i], z_val, mode, kind)
+            })
+            .map(SpecialTensor::ComplexVec)
+        }
         (SpecialTensor::RealVec(orders), SpecialTensor::ComplexVec(zs)) => {
             if orders.len() != zs.len() {
                 return Err(SpecialError {
@@ -3971,12 +3971,10 @@ fn hankel_dispatch(
                     detail: "vector inputs must have matching lengths",
                 });
             }
-            orders
-                .iter()
-                .zip(zs.iter())
-                .map(|(&order, &z_val)| hankel_complex_scalar(function, order, z_val, mode, kind))
-                .collect::<Result<Vec<_>, _>>()
-                .map(SpecialTensor::ComplexVec)
+            par_map_indices(orders.len(), |i| {
+                hankel_complex_scalar(function, orders[i], zs[i], mode, kind)
+            })
+            .map(SpecialTensor::ComplexVec)
         }
         (SpecialTensor::ComplexScalar(_), _) | (SpecialTensor::ComplexVec(_), _) => {
             not_yet_implemented(function, mode, "complex-valued order not supported")
