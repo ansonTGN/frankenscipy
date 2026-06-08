@@ -119,11 +119,16 @@ fn main() {
         let t0 = Instant::now();
         let mut acc = 0.0;
         for _ in 0..reps {
-            let x = solve_continuous_lyapunov(black_box(&a), black_box(&q), DecompOptions::default())
-                .unwrap();
+            let x =
+                solve_continuous_lyapunov(black_box(&a), black_box(&q), DecompOptions::default())
+                    .unwrap();
             acc += x[0][0];
         }
-        let res = residual_max(&a, &solve_continuous_lyapunov(&a, &q, DecompOptions::default()).unwrap(), &q);
+        let res = residual_max(
+            &a,
+            &solve_continuous_lyapunov(&a, &q, DecompOptions::default()).unwrap(),
+            &q,
+        );
         println!(
             "n={n:>4}  {:>10.3?}/solve  residual_max={res:.2e} (acc={acc:.6})",
             t0.elapsed() / reps

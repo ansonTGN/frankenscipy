@@ -121,8 +121,11 @@ fn main() {
                 .unwrap();
             acc += x[0][0];
         }
-        let res =
-            residual_max(&a, &solve_discrete_lyapunov(&a, &q, DecompOptions::default()).unwrap(), &q);
+        let res = residual_max(
+            &a,
+            &solve_discrete_lyapunov(&a, &q, DecompOptions::default()).unwrap(),
+            &q,
+        );
         println!(
             "n={n:>4}  {:>10.3?}/solve  residual_max={res:.2e} (acc={acc:.6})",
             t0.elapsed() / reps
