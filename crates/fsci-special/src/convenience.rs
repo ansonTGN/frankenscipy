@@ -1167,7 +1167,43 @@ pub fn modstruve(v: f64, x: f64) -> f64 {
         }
         return f64::NAN;
     }
+    // modstruve_series caps at BESSEL_SERIES_MAX_TERMS (96); its peak term is at
+    // k≈x/2, so for x≳190 it truncates BEFORE the dominant terms and grossly
+    // underestimates (modstruve(0,300) gave 2.2e119 vs scipy 4.5e128). For large
+    // x use the asymptotic L_v(x) = I_v(x) − correction instead (frankenscipy-kjtmn).
+    if x.abs() > 40.0 && v.abs() < x.abs() / 2.0 {
+        return modstruve_asymptotic(v, x);
+    }
     modstruve_series(v, x)
+}
+
+/// Modified Struve L_v(x) large-x asymptotic (DLMF 11.6.2):
+/// `L_v(x) = I_v(x) − (1/π) Σ_{k≥0} Γ(k+1/2)/Γ(v+1/2−k) (x/2)^{v−2k−1}`.
+/// I_v from the (accurate large-x) Bessel routine; the correction is the same
+/// asymptotic series as [`struve_asymptotic`] but SUBTRACTED from I_v. The
+/// correction is exponentially small relative to I_v for large x, so its
+/// asymptotic-truncation error is negligible in L_v.
+fn modstruve_asymptotic(v: f64, x: f64) -> f64 {
+    let iv = crate::bessel::iv_scalar(v, x);
+    let half_x = 0.5 * x;
+    let mut term = gamma_fn(0.5) / gamma_fn(v + 0.5) * half_x.powf(v - 1.0);
+    let mut sum = term;
+    let mut prev_abs = term.abs();
+    let two_over_x_sq = (2.0 / x) * (2.0 / x);
+    for k in 0..200 {
+        let kf = k as f64;
+        term *= (kf + 0.5) * (v - 0.5 - kf) * two_over_x_sq;
+        let abs_term = term.abs();
+        if abs_term > prev_abs {
+            break; // past the smallest term of the asymptotic series
+        }
+        sum += term;
+        prev_abs = abs_term;
+        if abs_term <= 1.0e-18 * sum.abs() {
+            break;
+        }
+    }
+    iv - sum / PI
 }
 
 /// Integral of the Struve function H_0 from 0 to x.
@@ -10595,6 +10631,26 @@ mod tests {
             "modstruve(-1, 0) = {l_minus_one}, expected {expected}"
         );
         assert!(modstruve(-2.0, 0.0).is_nan());
+    }
+
+    #[test]
+    fn modstruve_large_x_matches_scipy() {
+        // frankenscipy-kjtmn: modstruve_series caps at 96 terms, so for x≳190
+        // it truncated before the dominant terms (modstruve(0,300) gave 2.2e119
+        // vs scipy 4.5e128). Large x now via L_v = I_v − correction (DLMF 11.6.2).
+        // scipy.special.modstruve 1.17.1.
+        let cases = [
+            (0.0, 50.0, 2.9325537838493355e20),
+            (0.0, 100.0, 1.0737517071310736e42),
+            (1.0, 300.0, 4.468381385036954e128),
+            (2.0, 200.0, 2.019341357916405e85),
+            (0.5, 80.0, 2.4712895036230834e33),
+        ];
+        for (v, x, expected) in cases {
+            let got = modstruve(v, x);
+            let rel = ((got - expected) / expected).abs();
+            assert!(rel < 1e-11, "modstruve({v},{x}) = {got:e}, scipy {expected:e}, rel={rel:e}");
+        }
     }
 
     #[test]

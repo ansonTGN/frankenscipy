@@ -1410,7 +1410,7 @@ pub(crate) fn yv_scalar(v: f64, z: f64, mode: RuntimeMode) -> Result<f64, Specia
 }
 
 /// I_v(z) for real order v via power series.
-fn iv_scalar(v: f64, z: f64) -> f64 {
+pub(crate) fn iv_scalar(v: f64, z: f64) -> f64 {
     if z.is_nan() || v.is_nan() {
         return f64::NAN;
     }
