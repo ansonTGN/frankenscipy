@@ -598,28 +598,21 @@ pub fn hyp0f1(b: &SpecialTensor, z: &SpecialTensor, mode: RuntimeMode) -> Specia
             Ok(SpecialTensor::RealScalar(result))
         }
         (SpecialTensor::RealScalar(b_val), SpecialTensor::RealVec(z_vec)) => {
-            let mut results = Vec::with_capacity(z_vec.len());
-            for &zi in z_vec {
-                results.push(hyp0f1_scalar(*b_val, zi, mode)?);
-            }
-            Ok(SpecialTensor::RealVec(results))
+            let b_val = *b_val;
+            par_map_indices(z_vec.len(), |i| hyp0f1_scalar(b_val, z_vec[i], mode))
+                .map(SpecialTensor::RealVec)
         }
         (SpecialTensor::RealVec(b_vec), SpecialTensor::RealScalar(z_val)) => {
-            let mut results = Vec::with_capacity(b_vec.len());
-            for &bi in b_vec {
-                results.push(hyp0f1_scalar(bi, *z_val, mode)?);
-            }
-            Ok(SpecialTensor::RealVec(results))
+            let z_val = *z_val;
+            par_map_indices(b_vec.len(), |i| hyp0f1_scalar(b_vec[i], z_val, mode))
+                .map(SpecialTensor::RealVec)
         }
         (SpecialTensor::RealVec(b_vec), SpecialTensor::RealVec(z_vec)) => {
             if b_vec.len() != z_vec.len() {
                 return Err(broadcast_shape_error("hyp0f1", mode));
             }
-            let mut results = Vec::with_capacity(b_vec.len());
-            for (&bi, &zi) in b_vec.iter().zip(z_vec.iter()) {
-                results.push(hyp0f1_scalar(bi, zi, mode)?);
-            }
-            Ok(SpecialTensor::RealVec(results))
+            par_map_indices(b_vec.len(), |i| hyp0f1_scalar(b_vec[i], z_vec[i], mode))
+                .map(SpecialTensor::RealVec)
         }
         (SpecialTensor::ComplexScalar(b_val), SpecialTensor::RealScalar(z_val)) => {
             let result = hyp0f1_complex_scalar(*b_val, Complex64::from_real(*z_val), mode)?;

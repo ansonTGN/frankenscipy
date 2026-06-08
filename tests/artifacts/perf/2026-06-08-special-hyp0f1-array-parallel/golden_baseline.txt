@@ -1,0 +1,5 @@
+GOLDEN (serial == parallel, bit-identical):
+n=100 hyp0f1=af46979cd98058fb
+n=5000 hyp0f1=f84838d803a24e7b
+n=50000 hyp0f1=92473008848f6bce
+timing acc (serial==parallel): hyp0f1 500k=2b6fd590d9099a3b 1M=c550088beabc5a06
