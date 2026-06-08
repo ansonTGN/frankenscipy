@@ -2294,6 +2294,20 @@ impl ContinuousDistribution for FDistribution {
         regularized_incomplete_beta(0.5 * d1, 0.5 * d2, w)
     }
 
+    fn sf(&self, x: f64) -> f64 {
+        // Closed-form survival: 1 − I_w(d1/2, d2/2) = I_{1−w}(d2/2, d1/2), with
+        // 1−w = d2/(d1·x+d2). Computing it directly avoids the catastrophic loss
+        // of the default 1−cdf in the right tail (F.sf returned 0 where scipy
+        // gives e.g. 9.8e-18 — ANOVA tail p-values). frankenscipy-…
+        if x <= 0.0 {
+            return 1.0;
+        }
+        let d1 = self.dfn;
+        let d2 = self.dfd;
+        let w_comp = d2 / (d1 * x + d2);
+        regularized_incomplete_beta(0.5 * d2, 0.5 * d1, w_comp)
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
@@ -38033,6 +38047,25 @@ mod tests {
         let f = FDistribution::new(4.0, 8.0);
         for x in [0.5, 1.0, 2.0, 5.0] {
             assert_close(f.sf(x) + f.cdf(x), 1.0, 1e-6, &format!("F sf+cdf at {x}"));
+        }
+    }
+
+    #[test]
+    fn f_dist_sf_tail_matches_scipy() {
+        // frankenscipy-…: F.sf inherited the lossy 1−cdf default and returned 0
+        // in the right tail (scipy.stats.f.sf(155,20,20) = 1.03e-17). Closed-form
+        // survival via the complementary regularized incomplete beta. scipy 1.17.1.
+        let cases = [
+            (20.0, 20.0, 155.0, 1.0267926396420116e-17),
+            (3.0, 30.0, 150.0, 3.768865624162301e-18),
+            (5.0, 10.0, 200.0, 1.1023299105708095e-09),
+            (10.0, 10.0, 100.0, 1.1597816316815971e-08),
+            (2.0, 5.0, 300.0, 6.209213230591552e-06),
+        ];
+        for (dfn, dfd, x, expected) in cases {
+            let got = FDistribution::new(dfn, dfd).sf(x);
+            let rel = ((got - expected) / expected).abs();
+            assert!(rel < 1e-6, "F({dfn},{dfd}).sf({x}) = {got:e}, scipy {expected:e}, rel={rel:e}");
         }
     }
 
