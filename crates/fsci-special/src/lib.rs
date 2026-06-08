@@ -28,7 +28,8 @@ pub use bessel::{
 };
 pub use beta::{
     BETA_DISPATCH_PLAN, bdtr, bdtrc, bdtri, bdtrik, bdtrin, beta, betainc, betainc_scalar,
-    betaincc, betaincc_scalar, betainccinv, betainccinv_scalar, betaln, betaln_scalar, btdtr,
+    betaincc, betaincc_scalar, betainccinv, betainccinv_scalar, betaln, betaln_scalar,
+    log_betainc_scalar, btdtr,
     btdtrc, btdtri, btdtria, btdtrib, fdtr, fdtrc, fdtri, fdtridfd, nbdtr, nbdtrc, nbdtri, nbdtrik,
     nbdtrin, stdtr, stdtrc, stdtridf, stdtrit,
 };

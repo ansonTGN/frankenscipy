@@ -1466,6 +1466,54 @@ pub fn betainc_scalar(a: f64, b: f64, x: f64, mode: RuntimeMode) -> Result<f64, 
     }
 }
 
+/// Natural log of the regularized incomplete beta function `I_x(a, b)`.
+///
+/// `ln I_x(a, b)` stays finite deep in the tail where `I` itself underflows to
+/// 0 (so `betainc_scalar(a, b, x).ln()` would be `-inf`). The shared front
+/// factor `front = exp(a*ln x + b*ln(1-x) - lnB(a,b))` underflows but the
+/// Lentz continued fraction `betacf` is `O(1)`. In the small-`I` region
+/// (`x < (a+1)/(a+b+2)`) `I = front * betacf(a,b,x)/a`, so
+/// `ln I = (a*ln x + b*ln(1-x) - lnB(a,b)) + ln(betacf(a,b,x)/a)` keeps full
+/// precision; in the large-`I` region `I = 1 - complement` and
+/// `ln I = ln1p(-complement)`. Matches `betainc_scalar(a, b, x).ln()` wherever
+/// the latter is representable.
+///
+/// For the complementary log use the reflection `ln(1 - I_x(a,b)) =
+/// log_betainc_scalar(b, a, 1 - x)`.
+///
+/// Domain: `a > 0`, `b > 0`, `x in [0, 1]`. Returns `NaN` for invalid inputs,
+/// `-inf` at `x = 0` (`I = 0`), and `0.0` at `x = 1` (`I = 1`).
+#[must_use]
+pub fn log_betainc_scalar(a: f64, b: f64, x: f64) -> f64 {
+    if a.is_nan() || b.is_nan() || x.is_nan() {
+        return f64::NAN;
+    }
+    if !(0.0..=1.0).contains(&x) || a <= 0.0 || b <= 0.0 {
+        return f64::NAN;
+    }
+    if x == 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    if x == 1.0 {
+        return 0.0;
+    }
+
+    let ln_beta = match betaln_scalar(a, b, RuntimeMode::Strict) {
+        Ok(v) => v,
+        Err(_) => return f64::NAN,
+    };
+    let log_front = a * x.ln() + b * (1.0 - x).ln() - ln_beta;
+
+    if x < (a + 1.0) / (a + b + 2.0) {
+        // Small-I region: log form is finite even when front underflows.
+        log_front + (betacf(a, b, x) / a).ln()
+    } else {
+        // Large-I region: I = 1 - complement; complement is small & representable.
+        let complement = log_front.exp() * betacf(b, a, 1.0 - x) / b;
+        (-complement).ln_1p()
+    }
+}
+
 pub fn betaincc_scalar(a: f64, b: f64, x: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
     if a.is_nan() || b.is_nan() || x.is_nan() {
         return Ok(f64::NAN);
@@ -1718,6 +1766,64 @@ mod tests {
     use super::*;
 
     type DistributionInverseCase = (fn(f64, f64, f64) -> f64, f64, f64, f64, f64);
+
+    #[test]
+    fn log_betainc_matches_betainc_where_representable() {
+        // exp(log I) == I wherever I is representable (betainc_scalar is the
+        // scipy-validated reference). Covers both branches and the symmetry.
+        let cases = [
+            (0.5, 0.5, 0.2),
+            (2.0, 3.0, 0.25),
+            (2.0, 3.0, 0.75),
+            (5.0, 1.0, 0.5),
+            (1.0, 5.0, 0.5),
+            (10.0, 10.0, 0.3),
+            (0.5, 2.0, 0.001),
+        ];
+        for (a, b, x) in cases {
+            let i = betainc_scalar(a, b, x, RuntimeMode::Strict).unwrap();
+            let li = log_betainc_scalar(a, b, x);
+            assert!(i > 0.0, "precondition: I representable for ({a},{b},{x})");
+            let rel = (li - i.ln()).abs() / i.ln().abs().max(1.0);
+            assert!(rel <= 1e-11, "log_betainc({a},{b},{x})={li} vs ln(I)={}", i.ln());
+        }
+    }
+
+    #[test]
+    fn log_betainc_finite_in_underflowed_tail() {
+        // Deep tail: I underflows to 0 (ln I < ~-745) but log I stays finite and
+        // matches the leading a*ln x - ln(a) - lnB(a,b) for tiny x.
+        for (a, b, x) in [(2.0, 3.0, 1e-170), (5.0, 2.0, 1e-70), (3.0, 3.0, 1e-130)] {
+            assert_eq!(
+                betainc_scalar(a, b, x, RuntimeMode::Strict).unwrap(),
+                0.0,
+                "precondition: I underflows for ({a},{b},{x})"
+            );
+            let li = log_betainc_scalar(a, b, x);
+            assert!(li.is_finite() && li < -100.0, "log I({a},{b},{x})={li} not finite");
+            // I ≈ x^a/(a·B(a,b)) for tiny x ⇒ ln I ≈ a·ln x − ln a − lnB(a,b).
+            let asymp =
+                a * x.ln() - a.ln() - betaln_scalar(a, b, RuntimeMode::Strict).unwrap();
+            assert!(
+                (li - asymp).abs() / asymp.abs() < 1e-2,
+                "log I({a},{b},{x})={li} vs asymptotic {asymp}"
+            );
+        }
+    }
+
+    #[test]
+    fn log_betainc_edge_and_reflection() {
+        assert_eq!(log_betainc_scalar(2.0, 3.0, 0.0), f64::NEG_INFINITY);
+        assert_eq!(log_betainc_scalar(2.0, 3.0, 1.0), 0.0);
+        assert!(log_betainc_scalar(-1.0, 2.0, 0.5).is_nan());
+        assert!(log_betainc_scalar(2.0, 3.0, 1.5).is_nan());
+        // ln(1 - I_x(a,b)) == log_betainc(b, a, 1-x).
+        for (a, b, x) in [(2.0, 3.0, 0.7), (5.0, 1.5, 0.9)] {
+            let icc = betaincc_scalar(a, b, x, RuntimeMode::Strict).unwrap();
+            let lcc = log_betainc_scalar(b, a, 1.0 - x);
+            assert!((lcc - icc.ln()).abs() / icc.ln().abs().max(1.0) <= 1e-11);
+        }
+    }
 
     #[test]
     fn betaincc_complements_betainc_and_preserves_endpoints() {
