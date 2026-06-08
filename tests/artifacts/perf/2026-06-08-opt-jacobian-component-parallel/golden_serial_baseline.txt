@@ -1,0 +1,8 @@
+===GOLDEN_PAYLOAD_BEGIN===
+n=4 df_xor_bits=897e4f875ffee6fb nfev=165 nit=6 success=true status=Converged
+n=12 df_xor_bits=6adc68fb85ea5b87 nfev=1437 nit=7 success=false status=ErrorIncreased
+n=30 df_xor_bits=7c835fc303d742f8 nfev=8939 nit=7 success=false status=ErrorIncreased
+===GOLDEN_PAYLOAD_END===
+n=40   774.514ms/call (acc=-3.746592)
+n=70      6.605s/call (acc=-8.132402)
+n=100     27.970s/call (acc=-7.899524)

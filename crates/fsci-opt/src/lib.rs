@@ -3257,7 +3257,7 @@ pub fn jacobian<F>(
     options: DifferentiateOptions,
 ) -> Result<JacobianResult, OptError>
 where
-    F: Fn(&[f64]) -> Vec<f64>,
+    F: Fn(&[f64]) -> Vec<f64> + Sync,
 {
     validate_differentiate_input(x)?;
     validate_differentiate_options(options)?;
@@ -3283,26 +3283,83 @@ where
     let mut nit = 0;
     let mut nfev = 1;
 
-    for row in 0..rows {
-        for column in 0..columns {
-            let component = |value: f64| {
-                let mut shifted = x.to_vec();
-                shifted[column] = value;
-                let values = f(&shifted);
-                if values.len() == rows {
-                    values[row]
-                } else {
-                    f64::NAN
-                }
-            };
-            let result = adaptive_first_derivative(&component, x[column], options)?;
-            df[row][column] = result.df;
-            error[row][column] = result.error;
-            success &= result.success;
-            status = merge_differentiate_status(status, result.status);
-            nit = nit.max(result.nit);
-            nfev += result.nfev;
-        }
+    // Each (row, column) partial is an independent adaptive first-derivative estimate:
+    // it perturbs only x[column] and reads f(...)[row], sharing no mutable state. So the
+    // grid of partials runs on disjoint cores in a single thread::scope batch and the
+    // results are folded back in the original row-major order — `df`/`error` land in
+    // disjoint cells, `nfev` is an exact integer sum, `nit`/`success`/`status` are
+    // max / AND / precedence-merge (all commutative). Bit-identical to the serial double
+    // loop, and an error is propagated from the first failing pair in the same order.
+    let pairs: Vec<(usize, usize)> = (0..rows)
+        .flat_map(|row| (0..columns).map(move |column| (row, column)))
+        .collect();
+    let compute = |&(row, column): &(usize, usize)| -> Result<DerivativeResult, OptError> {
+        // Reuse a single scratch vector per component: set the perturbed coordinate,
+        // evaluate, then restore it so the buffer stays equal to `x` everywhere except
+        // `column`. This is the same vector the per-eval `x.to_vec()` produced, so f sees
+        // bit-identical inputs — but it allocates once per component instead of once per
+        // evaluation, which is what makes the parallel path scale (concurrent per-eval
+        // allocation otherwise serializes on the global allocator). RefCell keeps the
+        // closure `Fn` (adaptive_first_derivative wants `Fn`); the cell is thread-local.
+        let scratch = std::cell::RefCell::new(x.to_vec());
+        let base = x[column];
+        let component = |value: f64| {
+            let mut shifted = scratch.borrow_mut();
+            shifted[column] = value;
+            let values = f(&shifted);
+            shifted[column] = base;
+            if values.len() == rows {
+                values[row]
+            } else {
+                f64::NAN
+            }
+        };
+        adaptive_first_derivative(&component, x[column], options)
+    };
+
+    let nthreads = if pairs.len() < 16 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(1)
+            .min(pairs.len() / 2)
+            .max(1)
+    };
+    let results: Vec<Result<DerivativeResult, OptError>> = if nthreads <= 1 {
+        pairs.iter().map(compute).collect()
+    } else {
+        let chunk = pairs.len().div_ceil(nthreads);
+        let compute = &compute;
+        let pairs_ref = &pairs;
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..nthreads)
+                .filter_map(|t| {
+                    let i0 = t * chunk;
+                    if i0 >= pairs_ref.len() {
+                        return None;
+                    }
+                    let i1 = (i0 + chunk).min(pairs_ref.len());
+                    Some(scope.spawn(move || {
+                        pairs_ref[i0..i1].iter().map(compute).collect::<Vec<_>>()
+                    }))
+                })
+                .collect();
+            handles
+                .into_iter()
+                .flat_map(|h| h.join().expect("jacobian worker panicked"))
+                .collect()
+        })
+    };
+
+    for (&(row, column), res) in pairs.iter().zip(results) {
+        let result = res?;
+        df[row][column] = result.df;
+        error[row][column] = result.error;
+        success &= result.success;
+        status = merge_differentiate_status(status, result.status);
+        nit = nit.max(result.nit);
+        nfev += result.nfev;
     }
 
     Ok(JacobianResult {
