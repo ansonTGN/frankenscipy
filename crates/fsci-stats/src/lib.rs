@@ -8245,6 +8245,16 @@ impl ContinuousDistribution for InverseGamma {
         upper_regularized_gamma(self.a, 1.0 / x)
     }
 
+    fn sf(&self, x: f64) -> f64 {
+        // sf = 1 − gammaincc(a, 1/x) = gammainc(a, 1/x) = P(a, 1/x). The lower
+        // regularized form →0 accurately as x→∞ instead of 1−cdf collapsing
+        // (invgamma(2).sf(1e8) scipy 5e-17). frankenscipy-w3f6m
+        if x <= 0.0 {
+            return 1.0;
+        }
+        lower_regularized_gamma(self.a, 1.0 / x)
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
@@ -9662,6 +9672,25 @@ impl ContinuousDistribution for GenPareto {
         }
     }
 
+    fn sf(&self, x: f64) -> f64 {
+        // Closed-form survival (1 + c·x)^(-1/c), or e^(-x) for c→0 — the default
+        // 1−cdf collapses to 0 in the right tail (genpareto(0).sf(40) scipy
+        // 4.2e-18). frankenscipy-w3f6m
+        if x < 0.0 {
+            return 1.0;
+        }
+        let c = self.c;
+        if c.abs() < 1e-15 {
+            (-x).exp()
+        } else {
+            let t = 1.0 + c * x;
+            if t <= 0.0 {
+                return if c > 0.0 { 0.0 } else { 1.0 };
+            }
+            t.powf(-1.0 / c)
+        }
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
@@ -10033,6 +10062,16 @@ impl ContinuousDistribution for HalfLogistic {
         (1.0 - exp_neg_x) / (1.0 + exp_neg_x)
     }
 
+    fn sf(&self, x: f64) -> f64 {
+        // sf = 2·e^{-x}/(1 + e^{-x}); the default 1−cdf collapses to 0 for
+        // x ≳ 37 (halflogistic.sf(40) scipy 8.5e-18). frankenscipy-w3f6m
+        if x <= 0.0 {
+            return 1.0;
+        }
+        let e = (-x).exp();
+        2.0 * e / (1.0 + e)
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
@@ -10230,6 +10269,17 @@ impl ContinuousDistribution for FatigueLife {
         let root_x = x.sqrt();
         let z = (root_x - 1.0 / root_x) / self.c;
         standard_normal_cdf(z)
+    }
+
+    fn sf(&self, x: f64) -> f64 {
+        // sf = Φ(−z) = ½·erfc(z/√2), z = (√x − 1/√x)/c; direct so the deep
+        // right tail (z→+∞, cdf→1) doesn't collapse to 0. frankenscipy-w3f6m
+        if x <= 0.0 {
+            return 1.0;
+        }
+        let root_x = x.sqrt();
+        let z = (root_x - 1.0 / root_x) / self.c;
+        0.5 * fsci_special::erfc_scalar(z * FRAC_1_SQRT_2)
     }
 
     fn ppf(&self, q: f64) -> f64 {
@@ -10950,6 +11000,15 @@ impl ContinuousDistribution for Fisk {
         } else {
             1.0 / (1.0 + x.powf(-self.c))
         }
+    }
+
+    fn sf(&self, x: f64) -> f64 {
+        // sf = 1/(1 + x^c); algebraically equal to 1−cdf but its power-law
+        // tail no longer underflows to 0 for large x. frankenscipy-w3f6m
+        if x <= 0.0 {
+            return 1.0;
+        }
+        1.0 / (1.0 + x.powf(self.c))
     }
 
     fn ppf(&self, q: f64) -> f64 {
@@ -13642,6 +13701,14 @@ impl ContinuousDistribution for Loglogistic {
         xc / (1.0 + xc)
     }
 
+    fn sf(&self, x: f64) -> f64 {
+        // sf = 1/(1 + x^c); direct form avoids the 1−cdf tail collapse. frankenscipy-w3f6m
+        if x <= 0.0 {
+            return 1.0;
+        }
+        1.0 / (1.0 + x.powf(self.c))
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
@@ -13949,6 +14016,13 @@ impl ContinuousDistribution for Moyal {
     fn cdf(&self, x: f64) -> f64 {
         // F(x) = erfc(exp(-x/2) / √2) = erfc(√(exp(-x)/2))
         fsci_special::erfc_scalar(((-x).exp() / 2.0).sqrt())
+    }
+
+    fn sf(&self, x: f64) -> f64 {
+        // sf = 1 − erfc(u) = erf(u), u = √(e^{-x}/2). The direct erf keeps the
+        // right tail from collapsing (1 − erfc rounds to 0 for x ≳ 37,
+        // moyal.sf(40) scipy ~1.1e-9). frankenscipy-w3f6m
+        fsci_special::erf_scalar(((-x).exp() / 2.0).sqrt())
     }
 
     fn ppf(&self, q: f64) -> f64 {
@@ -15775,6 +15849,20 @@ impl ContinuousDistribution for GenHalfLogistic {
         1.0 - 2.0 * t / (1.0 + t)
     }
 
+    fn sf(&self, x: f64) -> f64 {
+        // sf = 2t/(1+t), t=(1−c·x)^{1/c}; direct form keeps precision near the
+        // upper support limit 1/c where 1−cdf collapses. frankenscipy-w3f6m
+        if x <= 0.0 {
+            return 1.0;
+        }
+        let limit = 1.0 / self.c;
+        if x >= limit {
+            return 0.0;
+        }
+        let t = (1.0 - self.c * x).powf(1.0 / self.c);
+        2.0 * t / (1.0 + t)
+    }
+
     fn mean(&self) -> f64 {
         // The earlier (ψ(1/c + 1) + γ)/c formula matched a different
         // distribution — scipy.stats.genhalflogistic(c=0.5).mean() is
@@ -16093,6 +16181,15 @@ impl ContinuousDistribution for InvWeibull {
         } else {
             (-x.powf(-self.c)).exp()
         }
+    }
+
+    fn sf(&self, x: f64) -> f64 {
+        // sf = 1 − exp(−x^{−c}) = −expm1(−x^{−c}); the default collapses to 0
+        // as x→∞ where cdf→1 (invweibull.sf(1e8,1) scipy 1e-8). frankenscipy-w3f6m
+        if x <= 0.0 {
+            return 1.0;
+        }
+        -(-x.powf(-self.c)).exp_m1()
     }
 
     fn ppf(&self, q: f64) -> f64 {
@@ -34346,6 +34443,16 @@ impl ContinuousDistribution for ExponWeibull {
         (1.0 - (-x.powf(self.c)).exp()).powf(self.a)
     }
 
+    fn sf(&self, x: f64) -> f64 {
+        // sf = 1 − (1 − e^{−x^c})^a = −expm1(a·ln1p(−e^{−x^c})); stable in the
+        // right tail where (1 − tiny)^a → 1 and 1−cdf collapses. frankenscipy-w3f6m
+        if x <= 0.0 {
+            return 1.0;
+        }
+        let w = (-x.powf(self.c)).exp(); // e^{−x^c}, small in the tail
+        -(self.a * (-w).ln_1p()).exp_m1()
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
@@ -38048,6 +38155,63 @@ mod tests {
         assert!(s2 > 0.0 && s2 < 1e-12, "noncentral tail sf collapsed: {s2}");
         // Monotone decreasing into the tail.
         assert!(nc.sf(20.0) > nc.sf(50.0) && nc.sf(50.0) > s2);
+    }
+
+    #[test]
+    fn sf_overrides_consistent_with_one_minus_cdf() {
+        // Each new sf() must equal 1 − cdf() wherever cdf is not pinned at 1,
+        // i.e. it is an exact algebraic rearrangement (frankenscipy-w3f6m).
+        macro_rules! chk {
+            ($d:expr, $xs:expr) => {{
+                let d = $d;
+                for &x in $xs {
+                    let s = d.sf(x);
+                    let oc = 1.0 - d.cdf(x);
+                    assert!(
+                        (s - oc).abs() <= 1e-12 * oc.abs().max(1e-12) + 1e-15,
+                        "{}: sf({x})={s} vs 1-cdf={oc}",
+                        stringify!($d)
+                    );
+                }
+            }};
+        }
+        chk!(GenPareto::new(0.25), &[0.5, 1.0, 2.5]);
+        chk!(GenPareto::new(0.0), &[0.5, 2.0, 5.0]);
+        chk!(HalfLogistic, &[0.5, 1.0, 3.0]);
+        chk!(GenHalfLogistic::new(0.5), &[0.2, 0.8, 1.5]);
+        chk!(Fisk::new(3.0), &[0.5, 1.0, 2.0]);
+        chk!(Loglogistic::new(3.0), &[0.5, 1.0, 2.0]);
+        chk!(InvWeibull::new(2.0), &[0.5, 1.0, 3.0]);
+        chk!(Moyal, &[-1.0, 0.5, 2.0]);
+        chk!(ExponWeibull::new(1.5, 2.0), &[0.5, 1.0, 2.0]);
+        chk!(FatigueLife::new(0.5), &[0.5, 1.0, 2.0]);
+        chk!(InverseGamma::new(2.0), &[0.5, 1.0, 3.0]);
+    }
+
+    #[test]
+    fn sf_overrides_tail_does_not_collapse() {
+        // Deep in the right tail the default 1 − cdf returns exactly 0; the
+        // closed-form sf must stay positive and decreasing (frankenscipy-w3f6m).
+        macro_rules! tail {
+            ($d:expr, $x:expr, $upper:expr) => {{
+                let d = $d;
+                let s = d.sf($x);
+                // sf stays positive (no collapse) and at the right magnitude.
+                assert!(
+                    s > 0.0 && s < $upper,
+                    "{}: tail sf({})={s} (collapsed or too large)",
+                    stringify!($d),
+                    $x
+                );
+            }};
+        }
+        tail!(GenPareto::new(0.0), 45.0, 1e-18); // e^-45 ≈ 2.9e-20
+        tail!(HalfLogistic, 42.0, 1e-17); // 2e^-42 ≈ 1.1e-18
+        tail!(InvWeibull::new(1.0), 1e9, 1e-8); // ≈ 1e-9
+        tail!(Moyal, 90.0, 1e-15); // erf(√(e^-90/2)) ≈ 2.3e-20; cdf rounds to 1
+        tail!(FatigueLife::new(0.5), 50.0, 1e-30); // ½erfc(13.9/√2) ≈ 5e-44
+        tail!(InverseGamma::new(2.0), 1e8, 1e-14); // P(2,1e-8) ≈ 5e-17
+        tail!(ExponWeibull::new(1.0, 1.0), 45.0, 1e-18); // ≈ e^-45
     }
 
     // ── Exponential distribution ────────────────────────────────────
