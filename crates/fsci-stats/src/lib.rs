@@ -6056,6 +6056,13 @@ impl ContinuousDistribution for VonMises {
         (self.kappa * (x - self.loc).cos()).exp() / (2.0 * PI * i0)
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // κ·cos(x−loc) − ln(2π) − ln I₀(κ); ln I₀(κ) = log_ive(0,κ) + κ stays
+        // finite for large κ where the pdf's I₀(κ) overflows. frankenscipy-7m3xk
+        let ln_i0 = fsci_special::log_ive_scalar(0.0, self.kappa) + self.kappa;
+        self.kappa * (x - self.loc).cos() - (2.0 * PI).ln() - ln_i0
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         let start = self.period_start();
         let period = 2.0 * PI;
@@ -16229,6 +16236,16 @@ impl ContinuousDistribution for RecipInvGauss {
         let mu = self.mu;
         let log_pdf = -((1.0 - mu * x).powi(2)) / (2.0 * x * mu * mu) - 0.5 * (2.0 * PI * x).ln();
         log_pdf.exp()
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // The pdf already forms this log expression then exp's it; expose it so
+        // the tail stays finite where pdf underflows. frankenscipy-7m3xk
+        if x <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        let mu = self.mu;
+        -((1.0 - mu * x).powi(2)) / (2.0 * x * mu * mu) - 0.5 * (2.0 * PI * x).ln()
     }
 
     fn cdf(&self, x: f64) -> f64 {
@@ -40693,6 +40710,37 @@ mod tests {
         assert_eq!(big.pdf(1.0e60), 0.0);
         let lp = big.logpdf(1.0e60);
         assert!(lp.is_finite() && lp < -100.0, "ncf deep-tail logpdf={lp}");
+    }
+
+    #[test]
+    fn bessel_density_logpdf_consistent_and_finite() {
+        // VonMises (I₀ via log_ive) and RecipInvGauss (exposed log-intermediate):
+        // logpdf == ln(pdf) where representable, finite where the special
+        // function over/underflows. frankenscipy-7m3xk
+        macro_rules! mid {
+            ($d:expr, $xs:expr) => {{
+                let d = $d;
+                for &x in $xs {
+                    let lp = d.logpdf(x);
+                    let p = d.pdf(x);
+                    if p > 0.0 && p.is_finite() {
+                        assert!(
+                            (lp - p.ln()).abs() <= 1e-7,
+                            "{}: logpdf({x})={lp} vs ln(pdf)={}",
+                            stringify!($d),
+                            p.ln()
+                        );
+                    }
+                }
+            }};
+        }
+        mid!(VonMises::new(2.0, 0.0), &[-1.0, 0.0, 1.5]);
+        mid!(RecipInvGauss::new(1.0), &[0.3, 1.0, 3.0]);
+
+        // VonMises large κ: pdf's I₀(κ) overflows → pdf NaN/inf; logpdf finite.
+        let vm = VonMises::new(800.0, 0.0);
+        assert!(!(vm.pdf(0.5) > 0.0 && vm.pdf(0.5).is_finite()));
+        assert!(vm.logpdf(0.5).is_finite(), "vonmises large-κ logpdf");
     }
 
     // ── Exponential distribution ────────────────────────────────────
