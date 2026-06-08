@@ -688,6 +688,19 @@ pub enum ConvolveMode {
     Valid,
 }
 
+/// Boundary handling for 2-D convolution / correlation, matching the `boundary`
+/// parameter of `scipy.signal.convolve2d` / `correlate2d`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Boundary2d {
+    /// Pad with a constant `fillvalue` (SciPy default, `cval = 0`).
+    #[default]
+    Fill,
+    /// Circular / periodic extension (`wrap`).
+    Wrap,
+    /// Symmetric reflection with the edge sample duplicated (`symm`).
+    Symm,
+}
+
 /// Cost-model crossover for 1D FFT convolution: FFT only wins once the direct
 /// `O(na·nb)` work dominates the FFT work `L·log2(L)` (L = next_pow2(na+nb-1)).
 ///
@@ -1177,6 +1190,167 @@ pub fn convolve2d(
         }
     }
     Ok(out)
+}
+
+/// Reflect index `k` into `[0, n)` with edge duplication (SciPy `symm`):
+/// the extension to the left of index 0 is `a0, a1, …` and to the right of
+/// `n-1` is `a_{n-1}, a_{n-2}, …`.
+fn reflect_symm(k: isize, n: isize) -> usize {
+    let period = 2 * n;
+    let mut m = k.rem_euclid(period);
+    if m >= n {
+        m = period - 1 - m;
+    }
+    m as usize
+}
+
+/// Pad `a` (shape `ar×ac`) by `mr` rows / `mc` cols on every side using the
+/// boundary rule, returning the padded buffer and its shape.
+fn pad2d_boundary(
+    a: &[f64],
+    ar: usize,
+    ac: usize,
+    mr: usize,
+    mc: usize,
+    boundary: Boundary2d,
+    cval: f64,
+) -> (Vec<f64>, usize, usize) {
+    let pr = ar + 2 * mr;
+    let pc = ac + 2 * mc;
+    let mut p = vec![cval; pr * pc];
+    let (ari, aci) = (ar as isize, ac as isize);
+    for i in 0..pr {
+        for j in 0..pc {
+            let si = i as isize - mr as isize;
+            let sj = j as isize - mc as isize;
+            let val = match boundary {
+                Boundary2d::Fill => {
+                    if si >= 0 && si < ari && sj >= 0 && sj < aci {
+                        a[si as usize * ac + sj as usize]
+                    } else {
+                        cval
+                    }
+                }
+                Boundary2d::Wrap => {
+                    let ri = si.rem_euclid(ari) as usize;
+                    let rj = sj.rem_euclid(aci) as usize;
+                    a[ri * ac + rj]
+                }
+                Boundary2d::Symm => {
+                    let ri = reflect_symm(si, ari);
+                    let rj = reflect_symm(sj, aci);
+                    a[ri * ac + rj]
+                }
+            };
+            p[i * pc + j] = val;
+        }
+    }
+    (p, pr, pc)
+}
+
+/// Crop the boundary-aware full output `full_bnd` (shape `(ar+vr-1)×(ac+vc-1)`)
+/// to the requested `mode` using the centering offset `(sr, sc)` for `Same`.
+fn crop2d(
+    full_bnd: &[f64],
+    ar: usize,
+    ac: usize,
+    vr: usize,
+    vc: usize,
+    mode: ConvolveMode,
+    sr_same: usize,
+    sc_same: usize,
+) -> Vec<f64> {
+    let full_c = ac + vc - 1;
+    let (out_r, out_c, sr, sc) = match mode {
+        ConvolveMode::Full => (ar + vr - 1, ac + vc - 1, 0, 0),
+        ConvolveMode::Same => (ar, ac, sr_same, sc_same),
+        ConvolveMode::Valid => (ar - vr + 1, ac - vc + 1, vr - 1, vc - 1),
+    };
+    let mut out = vec![0.0; out_r * out_c];
+    for i in 0..out_r {
+        for j in 0..out_c {
+            out[i * out_c + j] = full_bnd[(i + sr) * full_c + (j + sc)];
+        }
+    }
+    out
+}
+
+/// 2-D correlation with an explicit `boundary` and `fillvalue`.
+///
+/// Matches `scipy.signal.correlate2d(a, v, mode, boundary, fillvalue)`. The
+/// `Fill`/`cval=0` case delegates to the (verified, FFT-accelerated)
+/// [`correlate2d`]; other boundaries pad `a` by `(vr-1, vc-1)` per the rule and
+/// take the `Valid` correlation of the padded array (== the boundary-aware full
+/// output), then crop to `mode` (Same centred at `vr/2, vc/2`, as SciPy does).
+pub fn correlate2d_with_boundary(
+    a: &[f64],
+    a_shape: (usize, usize),
+    v: &[f64],
+    v_shape: (usize, usize),
+    mode: ConvolveMode,
+    boundary: Boundary2d,
+    cval: f64,
+) -> Result<Vec<f64>, SignalError> {
+    if boundary == Boundary2d::Fill && cval == 0.0 {
+        return correlate2d(a, a_shape, v, v_shape, mode);
+    }
+    let (ar, ac) = a_shape;
+    let (vr, vc) = v_shape;
+    if a.len() != ar * ac || v.len() != vr * vc {
+        return Err(SignalError::InvalidArgument(
+            "array length must match shape".to_string(),
+        ));
+    }
+    if matches!(mode, ConvolveMode::Valid) && (ar < vr || ac < vc) {
+        return Err(SignalError::InvalidArgument(
+            "in valid mode, a must be at least as large as v".to_string(),
+        ));
+    }
+    let (apad, pr, pc) = pad2d_boundary(a, ar, ac, vr - 1, vc - 1, boundary, cval);
+    let full_bnd = correlate2d(&apad, (pr, pc), v, v_shape, ConvolveMode::Valid)?;
+    Ok(crop2d(&full_bnd, ar, ac, vr, vc, mode, vr / 2, vc / 2))
+}
+
+/// 2-D convolution with an explicit `boundary` and `fillvalue`.
+///
+/// Matches `scipy.signal.convolve2d(a, v, mode, boundary, fillvalue)`. Like
+/// [`convolve2d`], convolution is correlation with a flipped kernel, and `Same`
+/// is centred at `((vr-1)/2, (vc-1)/2)` (differs from correlation for even
+/// kernels). `Fill`/`cval=0` delegates to [`convolve2d`].
+pub fn convolve2d_with_boundary(
+    a: &[f64],
+    a_shape: (usize, usize),
+    v: &[f64],
+    v_shape: (usize, usize),
+    mode: ConvolveMode,
+    boundary: Boundary2d,
+    cval: f64,
+) -> Result<Vec<f64>, SignalError> {
+    if boundary == Boundary2d::Fill && cval == 0.0 {
+        return convolve2d(a, a_shape, v, v_shape, mode);
+    }
+    let (ar, ac) = a_shape;
+    let (vr, vc) = v_shape;
+    if a.len() != ar * ac || v.len() != vr * vc {
+        return Err(SignalError::InvalidArgument(
+            "array length must match shape".to_string(),
+        ));
+    }
+    if matches!(mode, ConvolveMode::Valid) && (ar < vr || ac < vc) {
+        return Err(SignalError::InvalidArgument(
+            "in valid mode, a must be at least as large as v".to_string(),
+        ));
+    }
+    // Flip the kernel (correlate2d flips again internally → net convolution).
+    let mut v_flip = vec![0.0; vr * vc];
+    for i in 0..vr {
+        for j in 0..vc {
+            v_flip[i * vc + j] = v[(vr - 1 - i) * vc + (vc - 1 - j)];
+        }
+    }
+    let (apad, pr, pc) = pad2d_boundary(a, ar, ac, vr - 1, vc - 1, boundary, cval);
+    let full_bnd = correlate2d(&apad, (pr, pc), &v_flip, v_shape, ConvolveMode::Valid)?;
+    Ok(crop2d(&full_bnd, ar, ac, vr, vc, mode, (vr - 1) / 2, (vc - 1) / 2))
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -16784,6 +16958,41 @@ mod tests {
         assert_eq!(
             convolve2d(&a4, (4, 4), &v3, (3, 3), ConvolveMode::Same).unwrap(),
             vec![16.0, 24.0, 28.0, 23.0, 24.0, 32.0, 32.0, 24.0, 24.0, 32.0, 32.0, 24.0, -28.0, -40.0, -44.0, -35.0]
+        );
+    }
+
+    #[test]
+    fn convolve2d_boundary_matches_scipy() {
+        // scipy.signal.convolve2d/correlate2d(a, v, mode, boundary, fillvalue),
+        // asymmetric 3x3 kernel. frankenscipy-gi42x.
+        let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let v = vec![1.0, 0.0, 2.0, 0.0, 1.0, 0.0, 3.0, 0.0, 1.0];
+        // convolve2d same, boundary=wrap
+        assert_eq!(
+            convolve2d_with_boundary(&a, (3, 3), &v, (3, 3), ConvolveMode::Same, Boundary2d::Wrap, 0.0)
+                .unwrap(),
+            vec![51.0, 50.0, 46.0, 39.0, 38.0, 34.0, 36.0, 35.0, 31.0]
+        );
+        // correlate2d same, boundary=symm
+        assert_eq!(
+            correlate2d_with_boundary(&a, (3, 3), &v, (3, 3), ConvolveMode::Same, Boundary2d::Symm, 0.0)
+                .unwrap(),
+            vec![23.0, 27.0, 32.0, 38.0, 42.0, 47.0, 50.0, 54.0, 59.0]
+        );
+        // convolve2d full, boundary=symm
+        assert_eq!(
+            convolve2d_with_boundary(&a, (3, 3), &v, (3, 3), ConvolveMode::Full, Boundary2d::Symm, 0.0)
+                .unwrap(),
+            vec![
+                23.0, 24.0, 29.0, 33.0, 32.0, 20.0, 21.0, 26.0, 30.0, 29.0, 32.0, 33.0, 38.0, 42.0,
+                41.0, 47.0, 48.0, 53.0, 57.0, 56.0, 50.0, 51.0, 56.0, 60.0, 59.0
+            ]
+        );
+        // boundary=fill with non-zero cval
+        assert_eq!(
+            convolve2d_with_boundary(&a, (3, 3), &v, (3, 3), ConvolveMode::Same, Boundary2d::Fill, 10.0)
+                .unwrap(),
+            vec![66.0, 56.0, 63.0, 48.0, 38.0, 64.0, 62.0, 60.0, 74.0]
         );
     }
 
