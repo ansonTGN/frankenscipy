@@ -1101,9 +1101,13 @@ fn jv_scalar(v: f64, z: f64) -> f64 {
     // term is ~e^z while |J_v| ~ z^{-1/2}, so it loses ~0.43·z digits to
     // cancellation once z grows — catastrophic for large z (the old z < 20+|v|
     // cutoff gave jv(30.5,50)=1.48 vs scipy -0.0084, and jv(200.5,198.5) ~1e29
-    // off). Keep it only for small argument (z < 20, ≲9 digits lost); larger z
-    // is covered by the recurrences/asymptotic below for any order.
-    if az < 20.0 {
+    // off). The z < 20 cutoff still left ~6-9 digits lost in z ∈ [14, 20)
+    // (jv(1.5,17.2) was 6.5e-9 vs scipy ~1e-15). Crossover the series ↔
+    // asymptotic/Miller at z = 14: below it the series keeps ≳10 digits, above
+    // it the asymptotic/Miller path below is more accurate. Verified vs scipy
+    // 1.17.1: |error| < 1e-10 for v ∈ [0.5, 50], z ∈ [0.25, 60]
+    // (frankenscipy-…); was up to 6.5e-9.
+    if az < 14.0 {
         return jv_series(v, z);
     }
 
