@@ -1,0 +1,5 @@
+GOLDEN (serial == parallel, bit-identical):
+n=100 ellipk xor=1962ea31009d71d5 ellipe xor=f068ac6c6f0eba7c
+n=5000 ellipk xor=ea5d3cf3c7b96b07 ellipe xor=7a6f3022413883fe
+n=50000 ellipk xor=627cb3fb58e655dd ellipe xor=e13d8dfecc8e7244
+timing acc (serial==parallel): ellipk 1M=07ac5f3fc59675f4 2M=b49658fe68341cf0
