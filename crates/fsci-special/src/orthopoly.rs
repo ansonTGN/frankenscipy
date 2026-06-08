@@ -23,7 +23,7 @@
 
 use std::f64::consts::PI;
 
-use fsci_linalg::{DecompOptions, eigh};
+use fsci_linalg::{DecompOptions, eigh_tridiagonal};
 
 /// Evaluate the Legendre polynomial P_n(x) of degree n at point x.
 ///
@@ -1075,23 +1075,17 @@ where
         return (Vec::new(), Vec::new());
     }
 
-    let mut jacobi = vec![vec![0.0; n]; n];
-    for (i, row) in jacobi.iter_mut().enumerate() {
-        row[i] = diag(i);
-    }
-    for k in 1..n {
-        let beta = offdiag(k);
-        jacobi[k - 1][k] = beta;
-        jacobi[k][k - 1] = beta;
-    }
-
-    let eig = eigh(&jacobi, DecompOptions::default()).unwrap_or(fsci_linalg::EighResult {
-        eigenvalues: vec![0.0; n],
-        eigenvectors: vec![vec![0.0; n]; n],
-    });
-    let mut nodes = eig.eigenvalues;
+    // The Golub-Welsch Jacobi matrix is symmetric TRIDIAGONAL; solve it with the
+    // dedicated tridiagonal eigensolver instead of densifying to n×n + a general
+    // symmetric eigensolver. `d` is the diagonal, `e` the n-1 off-diagonals.
+    let d: Vec<f64> = (0..n).map(&diag).collect();
+    let e: Vec<f64> = (1..n).map(&offdiag).collect();
+    let (eigenvalues, eigenvectors) = eigh_tridiagonal(&d, &e, false, DecompOptions::default())
+        .unwrap_or_else(|_| (vec![0.0; n], Some(vec![vec![0.0; n]; n])));
+    let eigenvectors = eigenvectors.unwrap_or_else(|| vec![vec![0.0; n]; n]);
+    let mut nodes = eigenvalues;
     let mut weights: Vec<f64> = (0..n)
-        .map(|col| mu0 * eig.eigenvectors[0][col] * eig.eigenvectors[0][col])
+        .map(|col| mu0 * eigenvectors[0][col] * eigenvectors[0][col])
         .collect();
 
     if symmetrize {

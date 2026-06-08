@@ -1,0 +1,14 @@
+# Gauss-quadrature roots via golub_welsch: dense build+eigh -> tridiagonal eigh.
+# Correctness proven by quad-exactness (Gauss-Legendre integrates x^(2n-2) exactly).
+# Tolerance-parity vs the dense path (~1 ULP; same algorithm class SciPy uses).
+
+# NEW (eigh_tridiagonal): quad_exactness_err (should be ~machine eps)
+legendre n=8   quad_exactness_err=3.053e-16   node[0]=-9.602898564975364e-1 w[0]=1.012285362903761e-1
+legendre n=32  quad_exactness_err=2.505e-15
+legendre n=100 quad_exactness_err=6.471e-16
+# BASELINE (dense eigh): node[0]=-9.602898564975366e-1 w[0]=1.012285362903762e-1 (match to ~1 ULP)
+
+# Timing roots_legendre (rch, 64 cores, release-perf):
+n=200   6.728ms -> 4.279ms  (1.57x)
+n=500   94.175ms -> 44.383ms (2.12x)
+n=1000  740.256ms -> 339.788ms (2.18x)
