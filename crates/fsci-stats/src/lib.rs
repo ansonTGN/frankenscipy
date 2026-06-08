@@ -6139,6 +6139,12 @@ pub trait DiscreteDistribution {
     fn logsf(&self, k: u64) -> f64 {
         log_probability(self.sf(k))
     }
+    /// Log probability mass function. Default `ln(pmf)` loses precision (returns
+    /// `-inf`) where the pmf underflows; override with a closed log-space form
+    /// (the workhorse of count-data GLM log-likelihoods).
+    fn logpmf(&self, k: u64) -> f64 {
+        log_probability(self.pmf(k))
+    }
     /// Mean of the distribution.
     fn mean(&self) -> f64;
     /// Variance of the distribution.
@@ -6199,6 +6205,14 @@ impl DiscreteDistribution for Poisson {
     fn logsf(&self, k: u64) -> f64 {
         // log P(X>k) = log P(k+1, mu); finite in the right tail. frankenscipy-r4933
         fsci_special::log_gammainc_scalar(k as f64 + 1.0, self.mu)
+    }
+    fn logpmf(&self, k: u64) -> f64 {
+        // k·ln(mu) − mu − lnΓ(k+1); finite where pmf underflows (Poisson-GLM
+        // log-likelihood term). frankenscipy-7m3xk
+        if self.mu == 0.0 {
+            return if k == 0 { 0.0 } else { f64::NEG_INFINITY };
+        }
+        k as f64 * self.mu.ln() - self.mu - ln_gamma(k as f64 + 1.0)
     }
     fn mean(&self) -> f64 {
         Poisson::mean(self)
@@ -6372,6 +6386,23 @@ impl DiscreteDistribution for Binomial {
             return 1.0;
         }
         regularized_incomplete_beta((self.n - k) as f64, k as f64 + 1.0, 1.0 - self.p)
+    }
+    fn logpmf(&self, k: u64) -> f64 {
+        // ln C(n,k) + k·ln(p) + (n−k)·ln(1−p); finite where pmf underflows
+        // (binomial/logistic-GLM log-likelihood term). frankenscipy-7m3xk
+        if k > self.n {
+            return f64::NEG_INFINITY;
+        }
+        if self.p == 0.0 {
+            return if k == 0 { 0.0 } else { f64::NEG_INFINITY };
+        }
+        if self.p == 1.0 {
+            return if k == self.n { 0.0 } else { f64::NEG_INFINITY };
+        }
+        let ln_comb = ln_gamma(self.n as f64 + 1.0)
+            - ln_gamma(k as f64 + 1.0)
+            - ln_gamma((self.n - k) as f64 + 1.0);
+        ln_comb + k as f64 * self.p.ln() + (self.n - k) as f64 * (1.0 - self.p).ln()
     }
     fn sf(&self, k: u64) -> f64 {
         // P(X>k) = I_p(k+1, n-k); direct so the right tail does not collapse
@@ -6626,6 +6657,14 @@ impl DiscreteDistribution for Bernoulli {
             0 => 1.0 - self.p,
             1 => self.p,
             _ => 0.0,
+        }
+    }
+    fn logpmf(&self, k: u64) -> f64 {
+        // ln(1−p) / ln(p); finite where pmf underflows. frankenscipy-7m3xk
+        match k {
+            0 => (1.0 - self.p).ln(),
+            1 => self.p.ln(),
+            _ => f64::NEG_INFINITY,
         }
     }
 
@@ -7187,6 +7226,16 @@ impl DiscreteDistribution for NegBinomial {
         // Closed form P(X<=k) = I_p(n, k+1), matching scipy's nbdtr. O(1) vs the
         // old O(k) pmf summation. frankenscipy-7kq9d
         regularized_incomplete_beta(self.n, k as f64 + 1.0, self.p)
+    }
+    fn logpmf(&self, k: u64) -> f64 {
+        // ln C(k+n−1,k) + n·ln(p) + k·ln(1−p); finite where pmf underflows
+        // (negative-binomial-GLM log-likelihood term). frankenscipy-7m3xk
+        if self.p == 1.0 {
+            return if k == 0 { 0.0 } else { f64::NEG_INFINITY };
+        }
+        let kf = k as f64;
+        let ln_comb = ln_gamma(kf + self.n) - ln_gamma(kf + 1.0) - ln_gamma(self.n);
+        ln_comb + self.n * self.p.ln() + kf * (1.0 - self.p).ln()
     }
     fn sf(&self, k: u64) -> f64 {
         // P(X>k) = I_{1-p}(k+1, n); direct so the right tail does not collapse
@@ -40466,6 +40515,41 @@ mod tests {
         inv!(LaplaceAsymmetric::new(1.5));
         inv!(GenHalfLogistic::new(0.5));
         inv!(Mielke::new(3.0, 2.0));
+    }
+
+    #[test]
+    fn discrete_logpmf_consistent_and_finite() {
+        // logpmf == ln(pmf) where pmf is representable; finite where pmf
+        // underflows to 0 (count-GLM log-likelihood term). frankenscipy-7m3xk
+        macro_rules! mid {
+            ($d:expr, $ks:expr) => {{
+                let d = $d;
+                for &k in $ks {
+                    let lp = d.logpmf(k);
+                    let p = d.pmf(k);
+                    if p > 0.0 {
+                        assert!(
+                            (lp - p.ln()).abs() <= 1e-9 * p.ln().abs().max(1.0),
+                            "{}: logpmf({k})={lp} vs ln(pmf)={}",
+                            stringify!($d),
+                            p.ln()
+                        );
+                    }
+                }
+            }};
+        }
+        mid!(Poisson::new(10.0), &[0, 5, 10, 20]);
+        mid!(Binomial::new(20, 0.3), &[0, 5, 10, 20]);
+        mid!(NegBinomial::new(5.0, 0.5), &[0, 5, 15, 30]);
+        mid!(Bernoulli::new(0.3), &[0, 1]);
+
+        // Deep tail / large support: pmf underflows to 0 but logpmf stays finite.
+        let p = Poisson::new(10.0);
+        assert_eq!(p.pmf(400), 0.0);
+        assert!(p.logpmf(400).is_finite() && p.logpmf(400) < -300.0);
+        let b = Binomial::new(2000, 0.01);
+        assert_eq!(b.pmf(1500), 0.0);
+        assert!(b.logpmf(1500).is_finite() && b.logpmf(1500) < -300.0);
     }
 
     // ── Exponential distribution ────────────────────────────────────
