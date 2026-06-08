@@ -5910,6 +5910,17 @@ pub trait DiscreteDistribution {
     fn sf(&self, k: u64) -> f64 {
         1.0 - self.cdf(k)
     }
+    /// Log CDF. Default `ln(cdf)` loses precision in the left tail; override
+    /// with a log-space closed form (e.g. `log_gammaincc`/`log_betainc`) for
+    /// distributions whose CDF underflows.
+    fn logcdf(&self, k: u64) -> f64 {
+        log_probability(self.cdf(k))
+    }
+    /// Log survival function. Default `ln(sf)` loses precision in the right
+    /// tail; override with a log-space closed form where `sf` underflows.
+    fn logsf(&self, k: u64) -> f64 {
+        log_probability(self.sf(k))
+    }
     /// Mean of the distribution.
     fn mean(&self) -> f64;
     /// Variance of the distribution.
@@ -5957,6 +5968,19 @@ impl DiscreteDistribution for Poisson {
     }
     fn cdf(&self, k: u64) -> f64 {
         Poisson::cdf(self, k)
+    }
+    fn sf(&self, k: u64) -> f64 {
+        // P(X>k) = P(k+1, mu) (lower regularized gamma); direct so the right
+        // tail does not collapse like the default 1-cdf. frankenscipy-r4933
+        lower_regularized_gamma(k as f64 + 1.0, self.mu)
+    }
+    fn logcdf(&self, k: u64) -> f64 {
+        // log P(X<=k) = log Q(k+1, mu); finite in the left tail. frankenscipy-r4933
+        fsci_special::log_gammaincc_scalar(k as f64 + 1.0, self.mu)
+    }
+    fn logsf(&self, k: u64) -> f64 {
+        // log P(X>k) = log P(k+1, mu); finite in the right tail. frankenscipy-r4933
+        fsci_special::log_gammainc_scalar(k as f64 + 1.0, self.mu)
     }
     fn mean(&self) -> f64 {
         Poisson::mean(self)
@@ -6121,6 +6145,29 @@ impl DiscreteDistribution for Binomial {
             - ln_gamma((self.n - k) as f64 + 1.0);
         let ln_pmf = ln_comb + k as f64 * self.p.ln() + (self.n - k) as f64 * (1.0 - self.p).ln();
         ln_pmf.exp()
+    }
+
+    fn sf(&self, k: u64) -> f64 {
+        // P(X>k) = I_p(k+1, n-k); direct so the right tail does not collapse
+        // like the default 1-cdf. frankenscipy-r4933
+        if k >= self.n {
+            return 0.0;
+        }
+        regularized_incomplete_beta(k as f64 + 1.0, (self.n - k) as f64, self.p)
+    }
+    fn logcdf(&self, k: u64) -> f64 {
+        // log P(X<=k) = log I_{1-p}(n-k, k+1); finite in the left tail. frankenscipy-r4933
+        if k >= self.n {
+            return 0.0;
+        }
+        fsci_special::log_betainc_scalar((self.n - k) as f64, k as f64 + 1.0, 1.0 - self.p)
+    }
+    fn logsf(&self, k: u64) -> f64 {
+        // log P(X>k) = log I_p(k+1, n-k); finite in the right tail. frankenscipy-r4933
+        if k >= self.n {
+            return f64::NEG_INFINITY;
+        }
+        fsci_special::log_betainc_scalar(k as f64 + 1.0, (self.n - k) as f64, self.p)
     }
 
     fn mean(&self) -> f64 {
@@ -6908,6 +6955,20 @@ impl DiscreteDistribution for NegBinomial {
         let ln_comb = ln_gamma(kf + self.n) - ln_gamma(kf + 1.0) - ln_gamma(self.n);
         let ln_pmf = ln_comb + self.n * self.p.ln() + kf * (1.0 - self.p).ln();
         ln_pmf.exp()
+    }
+
+    fn sf(&self, k: u64) -> f64 {
+        // P(X>k) = I_{1-p}(k+1, n); direct so the right tail does not collapse
+        // like the default 1-cdf. frankenscipy-r4933
+        regularized_incomplete_beta(k as f64 + 1.0, self.n, 1.0 - self.p)
+    }
+    fn logcdf(&self, k: u64) -> f64 {
+        // log P(X<=k) = log I_p(n, k+1); finite in the left tail. frankenscipy-r4933
+        fsci_special::log_betainc_scalar(self.n, k as f64 + 1.0, self.p)
+    }
+    fn logsf(&self, k: u64) -> f64 {
+        // log P(X>k) = log I_{1-p}(k+1, n); finite in the right tail. frankenscipy-r4933
+        fsci_special::log_betainc_scalar(k as f64 + 1.0, self.n, 1.0 - self.p)
     }
 
     fn mean(&self) -> f64 {
@@ -39179,6 +39240,61 @@ mod tests {
         let fd = FDistribution::new(5.0, 10.0);
         assert_eq!(fd.sf(1e80), 0.0);
         assert!(fd.logsf(1e80).is_finite() && fd.logsf(1e80) < -300.0);
+    }
+
+    #[test]
+    fn discrete_closed_form_sf_logcdf_logsf_consistent_and_finite() {
+        // Closed-form sf/logcdf/logsf for Poisson (gamma) and Binomial/NegBinomial
+        // (beta) must agree with the pmf-sum cdf in the bulk and stay finite in
+        // the underflowed tail (frankenscipy-r4933).
+        macro_rules! cc {
+            ($d:expr, $ks:expr) => {{
+                let d = $d;
+                for &k in $ks {
+                    // sf == 1 - cdf (cdf is the scipy-validated pmf-sum).
+                    assert!(
+                        (d.sf(k) - (1.0 - d.cdf(k))).abs() <= 1e-9,
+                        "{}: sf({k})={} vs 1-cdf={}",
+                        stringify!($d),
+                        d.sf(k),
+                        1.0 - d.cdf(k)
+                    );
+                    // logcdf == ln(cdf), logsf == ln(sf) where representable.
+                    let c = d.cdf(k);
+                    if c > 0.0 {
+                        assert!(
+                            (d.logcdf(k) - c.ln()).abs() <= 1e-8 * c.ln().abs().max(1.0),
+                            "{}: logcdf({k})={} vs ln(cdf)={}",
+                            stringify!($d),
+                            d.logcdf(k),
+                            c.ln()
+                        );
+                    }
+                    let s = d.sf(k);
+                    if s > 0.0 {
+                        assert!(
+                            (d.logsf(k) - s.ln()).abs() <= 1e-8 * s.ln().abs().max(1.0),
+                            "{}: logsf({k})={} vs ln(sf)={}",
+                            stringify!($d),
+                            d.logsf(k),
+                            s.ln()
+                        );
+                    }
+                }
+            }};
+        }
+        cc!(Poisson::new(10.0), &[2, 8, 10, 15, 25]);
+        cc!(Binomial::new(20, 0.3), &[1, 5, 10, 15]);
+        cc!(NegBinomial::new(5.0, 0.5), &[1, 5, 10, 20]);
+
+        // Deep right tail: the closed-form sf stays accurate (≈3e-181) where the
+        // default 1-cdf has lost all precision (cdf rounds to ~1), and logsf is
+        // finite and large-negative.
+        let p = Poisson::new(10.0);
+        let s = p.sf(200);
+        assert!(s > 0.0 && s < 1e-100, "closed sf accurate in deep tail: {s}");
+        assert!(p.logsf(200).is_finite() && p.logsf(200) < -300.0);
+        assert!(1.0 - p.cdf(200) < 1e-15, "default 1-cdf collapsed");
     }
 
     // ── Exponential distribution ────────────────────────────────────
