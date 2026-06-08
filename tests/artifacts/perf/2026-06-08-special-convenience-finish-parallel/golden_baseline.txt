@@ -1,0 +1,5 @@
+GOLDEN (serial == parallel, bit-identical):
+n=100 wofz=f22bd2203ceb737c erfi=f3e3d738cf69607c betaincinv=5bc49169ccc8eccc
+n=5000 wofz=2b2b28144cd62827 erfi=83e2f27fd0759be5 betaincinv=efa7f9d587e2df5f
+n=50000 wofz=f3bd90a151e27607 erfi=56f7415d83f2bef1 betaincinv=3b79e5d6334fc8f6
+timing acc (serial==parallel): wofz 1M=6c75ea3ef4cef851 betaincinv 500k=65da0bceb5884971

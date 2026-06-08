@@ -1621,9 +1621,10 @@ fn comb_f64(n: u64, k: u64) -> f64 {
 /// activations, ...) are non-trivial per element and each index writes its own slot, so
 /// chunking across cores and concatenating in index order is bit-identical to
 /// `(0..n).map(f).collect()` — including returning the first failing index's error in order.
-fn par_map_indices<H>(n: usize, f: H) -> Result<Vec<f64>, SpecialError>
+fn par_map_indices<T, H>(n: usize, f: H) -> Result<Vec<T>, SpecialError>
 where
-    H: Fn(usize) -> Result<f64, SpecialError> + Sync,
+    T: Send,
+    H: Fn(usize) -> Result<T, SpecialError> + Sync,
 {
     let nthreads = if n < 256 {
         1
@@ -1639,7 +1640,7 @@ where
     }
     let chunk = n.div_ceil(nthreads);
     let f = &f;
-    let chunk_results: Vec<Result<Vec<f64>, SpecialError>> = std::thread::scope(|scope| {
+    let chunk_results: Vec<Result<Vec<T>, SpecialError>> = std::thread::scope(|scope| {
         (0..nthreads)
             .filter_map(|t| {
                 let i0 = t * chunk;
@@ -1647,7 +1648,7 @@ where
                     return None;
                 }
                 let i1 = (i0 + chunk).min(n);
-                Some(scope.spawn(move || (i0..i1).map(f).collect::<Result<Vec<f64>, _>>()))
+                Some(scope.spawn(move || (i0..i1).map(f).collect::<Result<Vec<T>, _>>()))
             })
             .collect::<Vec<_>>()
             .into_iter()
@@ -1703,26 +1704,21 @@ fn map_real_or_complex<F, G>(
     complex_kernel: G,
 ) -> SpecialResult
 where
-    F: Fn(f64) -> Result<f64, SpecialError>,
-    G: Fn(Complex64) -> Result<Complex64, SpecialError>,
+    F: Fn(f64) -> Result<f64, SpecialError> + Sync,
+    G: Fn(Complex64) -> Result<Complex64, SpecialError> + Sync,
 {
     match input {
         SpecialTensor::RealScalar(x) => real_kernel(*x).map(SpecialTensor::RealScalar),
-        SpecialTensor::RealVec(values) => values
-            .iter()
-            .copied()
-            .map(real_kernel)
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::RealVec),
+        SpecialTensor::RealVec(values) => {
+            par_map_indices(values.len(), |i| real_kernel(values[i])).map(SpecialTensor::RealVec)
+        }
         SpecialTensor::ComplexScalar(value) => {
             complex_kernel(*value).map(SpecialTensor::ComplexScalar)
         }
-        SpecialTensor::ComplexVec(values) => values
-            .iter()
-            .copied()
-            .map(complex_kernel)
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
+        SpecialTensor::ComplexVec(values) => {
+            par_map_indices(values.len(), |i| complex_kernel(values[i]))
+                .map(SpecialTensor::ComplexVec)
+        }
         SpecialTensor::Empty => {
             record_special_trace(
                 function,
@@ -1814,7 +1810,7 @@ fn map_real_ternary<F>(
     kernel: F,
 ) -> SpecialResult
 where
-    F: Fn(f64, f64, f64) -> Result<f64, SpecialError>,
+    F: Fn(f64, f64, f64) -> Result<f64, SpecialError> + Sync,
 {
     fn broadcast_len(tensor: &SpecialTensor) -> Option<usize> {
         match tensor {
@@ -1936,30 +1932,28 @@ where
         return kernel(first_value, second_value, third_value).map(SpecialTensor::RealScalar);
     }
 
-    (0..target_len)
-        .map(|idx| {
-            let first_value = broadcast_value(first, idx).ok_or(SpecialError {
-                function,
-                kind: SpecialErrorKind::DomainError,
-                mode,
-                detail: "unsupported input type",
-            })?;
-            let second_value = broadcast_value(second, idx).ok_or(SpecialError {
-                function,
-                kind: SpecialErrorKind::DomainError,
-                mode,
-                detail: "unsupported input type",
-            })?;
-            let third_value = broadcast_value(third, idx).ok_or(SpecialError {
-                function,
-                kind: SpecialErrorKind::DomainError,
-                mode,
-                detail: "unsupported input type",
-            })?;
-            kernel(first_value, second_value, third_value)
-        })
-        .collect::<Result<Vec<_>, _>>()
-        .map(SpecialTensor::RealVec)
+    par_map_indices(target_len, |idx| {
+        let first_value = broadcast_value(first, idx).ok_or(SpecialError {
+            function,
+            kind: SpecialErrorKind::DomainError,
+            mode,
+            detail: "unsupported input type",
+        })?;
+        let second_value = broadcast_value(second, idx).ok_or(SpecialError {
+            function,
+            kind: SpecialErrorKind::DomainError,
+            mode,
+            detail: "unsupported input type",
+        })?;
+        let third_value = broadcast_value(third, idx).ok_or(SpecialError {
+            function,
+            kind: SpecialErrorKind::DomainError,
+            mode,
+            detail: "unsupported input type",
+        })?;
+        kernel(first_value, second_value, third_value)
+    })
+    .map(SpecialTensor::RealVec)
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -3870,19 +3864,15 @@ pub fn wofz(z_tensor: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
             Complex64::from_real(*x),
             mode,
         )?)),
-        SpecialTensor::RealVec(values) => values
-            .iter()
-            .copied()
-            .map(|x| wofz_scalar(Complex64::from_real(x), mode))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
+        SpecialTensor::RealVec(values) => {
+            par_map_indices(values.len(), |i| wofz_scalar(Complex64::from_real(values[i]), mode))
+                .map(SpecialTensor::ComplexVec)
+        }
         SpecialTensor::ComplexScalar(z) => wofz_scalar(*z, mode).map(SpecialTensor::ComplexScalar),
-        SpecialTensor::ComplexVec(values) => values
-            .iter()
-            .copied()
-            .map(|z| wofz_scalar(z, mode))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
+        SpecialTensor::ComplexVec(values) => {
+            par_map_indices(values.len(), |i| wofz_scalar(values[i], mode))
+                .map(SpecialTensor::ComplexVec)
+        }
         SpecialTensor::Empty => {
             record_special_trace(
                 "wofz",
