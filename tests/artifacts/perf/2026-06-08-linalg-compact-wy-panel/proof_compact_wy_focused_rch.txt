@@ -1,0 +1,17 @@
+This placeholder was created by the first RCH `tee` command and was emptied
+during RCH artifact retrieval. The canonical focused proof artifact for the
+trial helper is:
+
+`proof_compact_wy_left_panel_rch.txt`
+
+That run was remote on `vmi1153651` and passed:
+
+- `compact_wy_left_panel_is_deterministic_for_fixed_input`
+- `compact_wy_left_panel_matches_sequential_left_reflectors`
+
+Result block:
+
+```text
+test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 396 filtered out
+[RCH] remote vmi1153651
+```

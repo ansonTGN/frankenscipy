@@ -1,0 +1,25 @@
+RCH restored-source reprofile after rejecting the compact-WY left-panel helper.
+
+Command:
+
+```text
+rch exec -- cargo test -p fsci-linalg --release --lib --locked bidiag_large_reduction_perf_probe -- --ignored --nocapture
+```
+
+Observed remote stdout:
+
+```text
+[RCH] remote vmi1167313
+BIDIAG_LARGE_REDUCTION_PERF_BEGIN
+shape=1024x512
+elapsed_ms=415.060721
+digest=0x90cdd3f8f71ed2c1
+first_diagonal=-1.00455335940616146e3
+last_diagonal=-6.45492359226604862e1
+BIDIAG_LARGE_REDUCTION_PERF_END
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 395 filtered out
+```
+
+Interpretation: source was restored before this run, and the reduction digest
+matches the established current-route anchor `0x90cdd3f8f71ed2c1`. The active
+hotspot remains the 1024x512 Golub-Kahan reduction lane.

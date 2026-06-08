@@ -1,0 +1,47 @@
+command=RCH_FORCE_REMOTE=1 RCH_WORKER=vmi1153651 rch exec -- cargo test -p fsci-linalg --release --lib --locked bidiag_large_reduction_perf_probe -- --ignored --nocapture
+started_at=2026-06-08T09:35:21-04:00
+[RCH] local (no admissible workers: critical_pressure=2,insufficient_slots=3,hard_preflight=4,active_project_exclusion=1)
+    Blocking waiting for file lock on build directory
+   Compiling serde_json v1.0.149
+   Compiling bytemuck v1.25.0
+   Compiling paste v1.0.15
+   Compiling num-traits v0.2.19
+   Compiling matrixmultiply v0.3.10
+   Compiling rawpointer v0.2.1
+   Compiling blake3 v1.8.4
+   Compiling nalgebra-macros v0.3.0
+   Compiling half v2.7.1
+   Compiling safe_arch v0.7.4
+   Compiling ciborium-ll v0.2.2
+   Compiling ciborium v0.2.2
+   Compiling wide v0.7.33
+   Compiling num-integer v0.1.46
+   Compiling approx v0.5.1
+   Compiling num-complex v0.4.6
+   Compiling plotters v0.3.7
+   Compiling proptest v1.11.0
+   Compiling tinytemplate v1.2.1
+   Compiling fsci-runtime v0.1.0 (/data/projects/frankenscipy/crates/fsci-runtime)
+   Compiling num-rational v0.4.2
+   Compiling fsci-fft v0.1.0 (/data/projects/frankenscipy/crates/fsci-fft)
+   Compiling simba v0.9.1
+   Compiling criterion v0.8.2
+   Compiling nalgebra v0.34.2
+   Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
+    Finished `release` profile [optimized] target(s) in 22.60s
+     Running unittests src/lib.rs (/data/tmp/cargo-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+BIDIAG_LARGE_REDUCTION_PERF_BEGIN
+shape=1024x512
+elapsed_ms=245.760722
+digest=0x90cdd3f8f71ed2c1
+first_diagonal=-1.00455335940616146e3
+last_diagonal=-6.45492359226604862e1
+BIDIAG_LARGE_REDUCTION_PERF_END
+test tests::bidiag_large_reduction_perf_probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 395 filtered out; finished in 0.26s
+
+finished_at=2026-06-08T09:35:44-04:00
+exit_status=0

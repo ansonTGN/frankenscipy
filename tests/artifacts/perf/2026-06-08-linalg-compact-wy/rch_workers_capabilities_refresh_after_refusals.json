@@ -1,0 +1,101 @@
+
+Worker Capabilities
+-------------------
+
+Local Capabilities
+    ✓ Rust : rustc 1.98.0-nightly (14210df0e 2026-05-31)
+    ✓ Bun  : 1.3.14
+    ✓ Node : v24.14.0
+    ✓ npm  : 11.9.0
+
+  ● vmi1149989 ubuntu@212.90.121.76
+    ✓ Rust : 1.96.0-nightly
+    ✓ Bun  : 1.3.11
+    ✓ Node : 20.19.4
+    ✓ npm  : 9.2.0
+    ⚠ Refresh : cached after failed refresh
+
+  ● vmi1293453 ubuntu@149.102.137.103
+    ✓ Rust : 1.95.0-nightly
+    ✓ Bun  : 1.3.9
+    ✓ Node : 20.19.4
+    ✓ npm  : 9.2.0
+    ⚠ Refresh : cached after failed refresh
+
+  ● vmi1264463 ubuntu@38.242.209.154
+    ✓ Rust : 1.97.0-nightly
+    ✓ Bun  : 1.3.9
+    ✓ Node : 20.19.4
+    ✓ npm  : 9.2.0
+    ⚠ Refresh : cached after failed refresh
+
+  ● vmi1152480 ubuntu@109.205.181.92
+    ✓ Rust : 1.97.0-nightly
+    ✓ Bun  : 1.3.11
+    ✓ Node : 20.19.4
+    ✓ npm  : 9.2.0
+    ⚠ Refresh : cached after failed refresh
+
+  ● fmd ubuntu@51.222.245.56
+    ✓ Rust : 1.96.0
+    ✓ Bun  : 1.3.3
+    ✓ Node : 25.2.0
+    ✓ npm  : 11.6.2
+    ✓ Refresh : live refresh
+
+  ● vmi1227854 ubuntu@109.123.245.77
+    ✓ Rust : 1.97.0-nightly
+    ✓ Bun  : 1.3.9
+    ✓ Node : 20.19.4
+    ✓ npm  : 9.2.0
+    ⚠ Refresh : cached after failed refresh
+
+  ● yto ubuntu@37.187.75.150
+    ✓ Rust : 1.96.0
+    ✓ Bun  : 1.3.5
+    ✓ Node : 25.2.1
+    ✓ npm  : 11.6.2
+    ✓ Refresh : live refresh
+
+  ● vmi1156319 ubuntu@178.18.254.243
+    ✓ Rust : 1.97.0-nightly
+    ✓ Bun  : 1.3.9
+    ✓ Node : 20.19.4
+    ✓ npm  : 9.2.0
+    ✓ Refresh : live refresh
+
+  ● ts2 ubuntu@192.168.1.124
+    ✓ Rust : 1.98.0-nightly
+    ✓ Bun  : 1.3.14
+    ✓ Node : 20.19.4
+    ⚠ npm  : unknown
+    ✓ Refresh : live refresh
+
+  ● vmi1153651 ubuntu@38.242.134.66
+    ✓ Rust : 1.97.0-nightly
+    ✓ Bun  : 1.3.9
+    ✓ Node : 20.19.4
+    ✓ npm  : 9.2.0
+    ⚠ Refresh : cached after failed refresh
+
+  ● vmi1167313 ubuntu@154.12.232.219
+    ✓ Rust : 1.95.0-nightly
+    ✓ Bun  : 1.3.9
+    ✓ Node : 20.19.4
+    ✓ npm  : 9.2.0
+    ⚠ Refresh : cached after failed refresh
+
+
+Warnings
+--------
+  ⚠ Rust version mismatch vs local rustc 1.98.0-nightly (14210df0e 2026-05-31): vmi1149989 (1.96.0-nightly), vmi1293453 (1.95.0-nightly), vmi1264463 (1.97.0-nightly), vmi1152480 (1.97.0-nightly), fmd (1.96.0), vmi1227854 (1.97.0-nightly), yto (1.96.0), vmi1156319 (1.97.0-nightly), vmi1153651 (1.97.0-nightly), vmi1167313 (1.95.0-nightly)
+  ⚠ Node major version mismatch vs local v24.14.0: vmi1149989 (20.19.4), vmi1293453 (20.19.4), vmi1264463 (20.19.4), vmi1152480 (20.19.4), fmd (25.2.0), vmi1227854 (20.19.4), yto (25.2.1), vmi1156319 (20.19.4), ts2 (20.19.4), vmi1153651 (20.19.4), vmi1167313 (20.19.4)
+  ⚠ Workers missing npm runtime (local: 11.9.0): ts2
+  ⚠ npm major version mismatch vs local 11.9.0: vmi1149989 (9.2.0), vmi1293453 (9.2.0), vmi1264463 (9.2.0), vmi1152480 (9.2.0), vmi1227854 (9.2.0), vmi1156319 (9.2.0), vmi1153651 (9.2.0), vmi1167313 (9.2.0)
+  ⚠ Worker vmi1149989 capabilities are cached after refresh attempt: capabilities probe failed; returning cached capability snapshot
+  ⚠ Worker vmi1293453 capabilities are cached after refresh attempt: capabilities probe failed; returning cached capability snapshot
+  ⚠ Worker vmi1264463 capabilities are cached after refresh attempt: capabilities probe failed; returning cached capability snapshot
+  ⚠ Worker vmi1152480 capabilities are cached after refresh attempt: capabilities probe failed; returning cached capability snapshot
+  ⚠ Worker vmi1227854 capabilities are cached after refresh attempt: capabilities probe failed; returning cached capability snapshot
+  ⚠ Worker vmi1153651 capabilities are cached after refresh attempt: capabilities probe failed; returning cached capability snapshot
+  ⚠ Worker vmi1167313 capabilities are cached after refresh attempt: capabilities probe failed; returning cached capability snapshot
