@@ -1,0 +1,12 @@
+# correlate2d direct 2D convolution: serial scatter -> output-row-partitioned
+# parallel. BYTE-IDENTICAL (each thread owns disjoint output rows, iterates the
+# same (i,j,ki,kj) order -> identical per-cell accumulation). Full-output FNV
+# hash matches between parallel and serial builds:
+ar=1200 ac=1200 vr=9 vc=9 len=1459264 hash=fa275c81209068dc
+ar=2000 ac=2000 vr=7 vc=7 len=4024036 hash=a4a5ed73fc9051ad
+# (identical for both serial baseline and parallel build)
+
+# Timing (rch, 64 cores, release-perf), correlate2d Same mode:
+ar=1500 ac=1500 kernel=11x11  166.499ms -> 20.990ms  (7.93x)
+ar=2000 ac=2000 kernel=15x15  456.856ms -> 50.094ms  (9.12x)
+ar=3000 ac=3000 kernel=9x9    534.774ms -> 108.705ms (4.92x)

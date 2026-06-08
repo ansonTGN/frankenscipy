@@ -1003,15 +1003,62 @@ pub fn correlate2d(
         for value in full.iter_mut() {
             *value = 0.0;
         }
-        for i in 0..ar {
-            for j in 0..ac {
-                let aval = a[i * ac + j];
-                for ki in 0..vr {
-                    for kj in 0..vc {
-                        full[(i + ki) * full_c + (j + kj)] += aval * v_rev[ki * vc + kj];
+        // Direct full 2D convolution. Output row `o` receives contributions only
+        // from input rows `i` with `i ≤ o ≤ i+vr-1`, so the output rows are
+        // independent — partition them across threads. Each thread iterates the
+        // SAME (i,j,ki,kj) nesting restricted to the input rows feeding its output
+        // rows, so every output cell accumulates its contributions in exactly the
+        // serial order ⇒ byte-identical. Gated on work so small inputs (and every
+        // conformance case) stay on the serial loop.
+        let nthreads = if direct_ops < (1 << 20) || full_r < 64 {
+            1
+        } else {
+            std::thread::available_parallelism()
+                .map(|c| c.get())
+                .unwrap_or(1)
+                .min(full_r)
+                .max(1)
+        };
+        if nthreads <= 1 {
+            for i in 0..ar {
+                for j in 0..ac {
+                    let aval = a[i * ac + j];
+                    for ki in 0..vr {
+                        for kj in 0..vc {
+                            full[(i + ki) * full_c + (j + kj)] += aval * v_rev[ki * vc + kj];
+                        }
                     }
                 }
             }
+        } else {
+            let rows_per = full_r.div_ceil(nthreads);
+            let v_rev = &v_rev;
+            std::thread::scope(|scope| {
+                for (t, chunk) in full.chunks_mut(rows_per * full_c).enumerate() {
+                    let or0 = t * rows_per;
+                    let or1 = (or0 + rows_per).min(full_r);
+                    scope.spawn(move || {
+                        // Input rows that can feed output rows [or0, or1).
+                        let i_lo = or0.saturating_sub(vr - 1);
+                        let i_hi = or1.min(ar);
+                        for i in i_lo..i_hi {
+                            // Kernel rows ki with o = i+ki in [or0, or1).
+                            let ki_lo = or0.saturating_sub(i);
+                            let ki_hi = or1.saturating_sub(i).min(vr);
+                            for j in 0..ac {
+                                let aval = a[i * ac + j];
+                                for ki in ki_lo..ki_hi {
+                                    let row_base = (i + ki - or0) * full_c + j;
+                                    let krow = ki * vc;
+                                    for kj in 0..vc {
+                                        chunk[row_base + kj] += aval * v_rev[krow + kj];
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            });
         }
     }
 
