@@ -1,0 +1,5 @@
+GOLDEN (serial == parallel, bit-identical):
+n=100 j0(len=100,xor=ee31de14d4581733) k0(len=100,xor=76a5e5b3aed7b214)
+n=5000 j0(len=5000,xor=04d99a116d8831d5) k0(len=5000,xor=bee3afaba078fffe)
+n=50000 j0(len=50000,xor=075b241a624c0288) k0(len=50000,xor=985bd4ec07ecfbde)
+timing acc (serial==parallel): k0 300k=70789cfb60243cbe 600k=b6b485edbbc61854

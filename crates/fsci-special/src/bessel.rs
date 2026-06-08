@@ -2620,16 +2620,55 @@ fn map_real_input<F>(
     kernel: F,
 ) -> SpecialResult
 where
-    F: Fn(f64) -> Result<f64, SpecialError>,
+    F: Fn(f64) -> Result<f64, SpecialError> + Sync,
 {
     match input {
         SpecialTensor::RealScalar(x) => kernel(*x).map(SpecialTensor::RealScalar),
-        SpecialTensor::RealVec(values) => values
-            .iter()
-            .copied()
-            .map(kernel)
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::RealVec),
+        SpecialTensor::RealVec(values) => {
+            // Each element is an independent (and, for Bessel kernels, expensive) scalar
+            // evaluation written to its own output slot, so a large array fans out across
+            // cores. Chunks are concatenated in element order and the first failing chunk's
+            // error is returned in element order, so the result (value and first error) is
+            // bit-identical to the sequential `values.iter().map(kernel).collect()`.
+            let n = values.len();
+            let nthreads = if n < 512 {
+                1
+            } else {
+                std::thread::available_parallelism()
+                    .map(std::num::NonZero::get)
+                    .unwrap_or(1)
+                    .min(n / 256)
+                    .max(1)
+            };
+            if nthreads <= 1 {
+                return values
+                    .iter()
+                    .copied()
+                    .map(&kernel)
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(SpecialTensor::RealVec);
+            }
+            let chunk = n.div_ceil(nthreads);
+            let kernel = &kernel;
+            let chunk_results: Vec<Result<Vec<f64>, SpecialError>> = std::thread::scope(|scope| {
+                values
+                    .chunks(chunk)
+                    .map(|c| {
+                        scope.spawn(move || {
+                            c.iter().copied().map(kernel).collect::<Result<Vec<f64>, _>>()
+                        })
+                    })
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .map(|h| h.join().expect("bessel array worker panicked"))
+                    .collect()
+            });
+            let mut out = Vec::with_capacity(n);
+            for cr in chunk_results {
+                out.extend(cr?);
+            }
+            Ok(SpecialTensor::RealVec(out))
+        }
         SpecialTensor::ComplexScalar(_) | SpecialTensor::ComplexVec(_) => {
             not_yet_implemented(function, mode, "complex-valued path pending")
         }
