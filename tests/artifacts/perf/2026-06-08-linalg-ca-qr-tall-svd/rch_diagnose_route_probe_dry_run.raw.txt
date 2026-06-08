@@ -1,0 +1,24 @@
+
+RCH Dry Run
+-----------
+
+Would offload: ✓ YES (compilation command meets threshold, worker available)
+
+Pipeline Steps
+  [RUN] 1. Classification
+     Command classified as compilation
+     Est: ~1ms
+  [RUN] 2. Daemon query
+     Request worker selection from daemon
+     Est: ~5ms
+  [RUN] 3. Worker selection
+     Worker vmi1167313 selected
+     Est: ~2ms
+  [RUN] 4. Transfer
+     Sync project files to worker via rsync+zstd
+  [RUN] 5. Remote execution
+     Execute compilation command on worker
+  [RUN] 6. Artifact retrieval
+     Retrieve build artifacts from remote worker
+
+  ℹ This is a dry run. No network calls were made.

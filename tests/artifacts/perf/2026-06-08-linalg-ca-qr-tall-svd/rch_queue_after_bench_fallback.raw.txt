@@ -1,0 +1,33 @@
+Build Queue (10:13:53)
+────────────────────────────────────────
+
+  ● 11 Active Build(s)
+
+  #29878602124231272 on ts2 | env cargo bench -p fj-lax --bench lax_baseline ... [15m 35s]
+      project: frankenjax-dbd8aaf1
+  #29878602124231310 on vmi1156319 | cargo check -p frankenlibc-core [30s]
+      project: frankenlibc-440efffc
+  #29878602124231313 on ts2 | cargo run -q -p fsci-signal --bin check_convolve2d [1s]
+      project: frankenscipy-2564eff9
+  #29878602124231282 on vmi1153651 | env 'CARGO_BUILD_JOBS=2' 'RUSTFLAGS=-Cforce-fra... [10m 32s]
+      project: ...as-orangepeak-perf-29a2f75b
+  #29878602124231296 on ts2 | cargo bench -p ft-kernel-cpu --bench gemm_bench... [4m 24s]
+      project: frankentorch-d4be8c47
+  #29878602124231307 on vmi1167313 | cargo bench --profile release-perf -p ffs-block... [1m 8s]
+      project: ...-baseline-12cf1167-0a54c9ab
+  #29878602124231309 on vmi1156319 | cargo check -p fnx-python --all-targets --featu... [44s]
+      project: ...-mexh6-v2-20260608-6527435b
+  #29878602124231311 on vmi1167313 | env 'AGENT_NAME=BoldFalcon' cargo clippy -p fra... [18s]
+      project: ...file-20260608-1052-e2129ac3
+  #29878602124231306 on vmi1156319 | cargo test -p fp-join ordered_unique_utf8 --lib [1m 13s]
+      project: ...11-20260608T100430-39fef7dc
+  #29878602124231305 on vmi1153651 | cargo test -p fj-lax --release --lib gather -- ... [1m 19s]
+      project: frankenjax-dbd8aaf1
+  #29878602124231312 on vmi1153651 | env cargo build --profile release-perf -p fr-se... [4s]
+      project: frankenredis-29a95ab5
+
+Worker Availability
+
+  ● 5 available  ● 2 busy  ● 4 offline
+
+  → 34 / 102 slots free

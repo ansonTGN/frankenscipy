@@ -1,0 +1,28 @@
+
+RCH Dry Run
+-----------
+
+Would offload: ⚠ NO (compilation command meets threshold, but no worker selected: no admissible workers: critical_pressure=2,insufficient_slots=3,hard_preflight=4,active_project_exclusion=1)
+
+Pipeline Steps
+  [RUN] 1. Classification
+     Command classified as compilation
+     Est: ~1ms
+  [RUN] 2. Daemon query
+     Request worker selection from daemon
+     Est: ~5ms
+  [SKIP] 3. Worker selection
+     Select best available worker
+     Skip: no admissible workers: critical_pressure=2,insufficient_slots=3,hard_preflight=4,active_project_exclusion=1
+     Est: ~2ms
+  [SKIP] 4. Transfer
+     Sync project files to worker via rsync+zstd
+     Skip: no admissible workers: critical_pressure=2,insufficient_slots=3,hard_preflight=4,active_project_exclusion=1
+  [SKIP] 5. Remote execution
+     Execute compilation command on worker
+     Skip: no admissible workers: critical_pressure=2,insufficient_slots=3,hard_preflight=4,active_project_exclusion=1
+  [SKIP] 6. Artifact retrieval
+     Retrieve build artifacts from remote worker
+     Skip: no admissible workers: critical_pressure=2,insufficient_slots=3,hard_preflight=4,active_project_exclusion=1
+
+  ℹ This is a dry run. No network calls were made.

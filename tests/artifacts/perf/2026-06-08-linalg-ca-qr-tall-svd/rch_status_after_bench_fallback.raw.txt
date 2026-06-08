@@ -1,0 +1,174 @@
+
+RCH Status
+----------
+
+  Daemon : Running (PID 3109805)
+  Uptime : 6h 49m
+  Version : 1.0.39
+  Posture : degraded (Some workers unhealthy, partial remote capability)
+  Workers : 6/11 healthy, 34/102 slots available
+  Builds : 100 total, 83% success rate
+  Tests : 50609 total, 76% pass rate, avg 38s
+  Hook : Installed
+  Saved : 3h 47m saved (2.0x speedup, 72 builds)
+           3h 47m today, 3h 47m this week
+
+
+Alerts
+------
+  ● [error] Worker 'vmi1227854' is offline: Connection failed: Failed to connect to ubuntu@109.123.245.77 (vmi1227854)
+  ● [error] Worker 'vmi1152480' is offline: Connection failed: Failed to connect to ubuntu@109.205.181.92 (vmi1152480)
+  ● [error] Worker 'vmi1264463' is offline: Connection failed: Failed to connect to ubuntu@38.242.209.154 (vmi1264463)
+  ● [error] Worker 'vmi1293453' is offline: Connection failed: Failed to connect to ubuntu@149.102.137.103 (vmi1293453)
+  ● [warning] Worker 'vmi1149989' is degraded (vmi1149989)
+  ● [warning] Circuit opened for worker 'vmi1227854' (vmi1227854)
+  ● [warning] Circuit opened for worker 'vmi1152480' (vmi1152480)
+  ● [warning] Circuit opened for worker 'vmi1264463' (vmi1264463)
+  ● [warning] Circuit opened for worker 'vmi1293453' (vmi1293453)
+  ● [error (cleared)] Worker 'vmi1149989' is offline: Connection failed: Failed to connect to ubuntu@212.90.121.76 (vmi1149989)
+  ● [warning (cleared)] Circuit opened for worker 'vmi1149989' (vmi1149989)
+  ● [warning (cleared)] Worker 'vmi1227854' is degraded (vmi1227854)
+  ● [warning (cleared)] Worker 'vmi1152480' is degraded (vmi1152480)
+  ● [warning (cleared)] Worker 'vmi1264463' is degraded (vmi1264463)
+  ● [warning (cleared)] Worker 'vmi1293453' is degraded (vmi1293453)
+
+
+Issues
+------
+  ● [warning] Worker 'vmi1149989' has stale/missing pressure telemetry (telemetry_unavailable)
+    Fix: telemetry ingest is daemon-driven; wait for next poll (~poll-interval) or run `rch daemon restart` to force a fresh poll cycle
+  ● [warning] Worker 'vmi1293453' has stale/missing pressure telemetry (telemetry_unavailable)
+    Fix: telemetry ingest is daemon-driven; wait for next poll (~poll-interval) or run `rch daemon restart` to force a fresh poll cycle
+  ● [warning] Worker 'vmi1264463' has stale/missing pressure telemetry (telemetry_unavailable)
+    Fix: telemetry ingest is daemon-driven; wait for next poll (~poll-interval) or run `rch daemon restart` to force a fresh poll cycle
+  ● [warning] Worker 'vmi1152480' has stale/missing pressure telemetry (telemetry_unavailable)
+    Fix: telemetry ingest is daemon-driven; wait for next poll (~poll-interval) or run `rch daemon restart` to force a fresh poll cycle
+  ● [error] Worker 'fmd' in critical pressure state (disk_free_below_critical_gb)
+    Fix: rch workers capabilities --refresh (inspect pressure metrics and ballast policy)
+  ● [warning] Worker 'vmi1227854' has stale/missing pressure telemetry (telemetry_unavailable)
+    Fix: telemetry ingest is daemon-driven; wait for next poll (~poll-interval) or run `rch daemon restart` to force a fresh poll cycle
+  ● [error] Worker 'yto' in critical pressure state (disk_critical_without_fresh_telemetry)
+    Fix: rch workers capabilities --refresh (inspect pressure metrics and ballast policy)
+  ● [info] 3 recent cancellation(s) completed cleanly with deterministic cleanup.
+    Fix: No action required. Use `rch status --json` to inspect cancellation metadata if debugging build interruptions.
+
+
+Repo Convergence
+----------------
+  State : ready (0 ready, 0 drifting, 0 failed, 0 stale)
+
+
+Remediation
+-----------
+  ! Worker vmi1149989 storage telemetry stale or missing [vmi1149989]
+    Fix: wait for next telemetry poll, or run `rch daemon restart` to force a fresh poll cycle
+  ! Worker vmi1293453 storage telemetry stale or missing [vmi1293453]
+    Fix: wait for next telemetry poll, or run `rch daemon restart` to force a fresh poll cycle
+  !! Worker vmi1293453 is unreachable [vmi1293453]
+    Fix: ssh ubuntu@149.102.137.103 'echo ok' to verify connectivity
+  ! Worker vmi1264463 storage telemetry stale or missing [vmi1264463]
+    Fix: wait for next telemetry poll, or run `rch daemon restart` to force a fresh poll cycle
+  !! Worker vmi1264463 is unreachable: build cancelled by stuck_detector [vmi1264463]
+    Fix: ssh ubuntu@38.242.209.154 'echo ok' to verify connectivity
+  ! Worker vmi1152480 storage telemetry stale or missing [vmi1152480]
+    Fix: wait for next telemetry poll, or run `rch daemon restart` to force a fresh poll cycle
+  !! Worker vmi1152480 is unreachable: build cancelled by stuck_detector [vmi1152480]
+    Fix: ssh ubuntu@109.205.181.92 'echo ok' to verify connectivity
+  !! Worker fmd under critical storage pressure (5.8 GB free) [fmd]
+    Fix: ssh ubuntu@51.222.245.56 'df -h / /tmp && du -sh /tmp/rch-* /tmp/rch_target_* /data/projects/*/target* 2>/dev/null'
+  ! Worker vmi1227854 storage telemetry stale or missing [vmi1227854]
+    Fix: wait for next telemetry poll, or run `rch daemon restart` to force a fresh poll cycle
+  !! Worker vmi1227854 is unreachable: build cancelled by stuck_detector [vmi1227854]
+    Fix: ssh ubuntu@109.123.245.77 'echo ok' to verify connectivity
+  !! Worker yto under critical storage pressure (0.0 GB free) [yto]
+    Fix: ssh ubuntu@37.187.75.150 'df -h / /tmp && du -sh /tmp/rch-* /tmp/rch_target_* /data/projects/*/target* 2>/dev/null'
+  ! Worker ts2 storage pressure elevated (362.9 GB free) [ts2]
+    Fix: ssh ubuntu@192.168.1.124 'df -h / /tmp && du -sh /tmp/rch-* /tmp/rch_target_* 2>/dev/null'
+  ! Operating at reduced capacity: 6/11 workers healthy
+    Fix: rch workers probe --all
+
+
+Workers
+-------
+  ID           Status   Circuit    Slots  Speed      Host
+  ──────────── ──────── ────────── ────── ────────── ────────
+  vmi1149989   degraded closed     0/10   50.0       ubuntu@212.90.121.76
+    Pressure: TELEMETRY GAP — 262.3/773.9 GB free (34%)
+      reason: telemetry_unavailable
+  vmi1293453   unreachable closed     0/8    50.0       ubuntu@149.102.137.103
+    Pressure: TELEMETRY GAP — 82.1/386.4 GB free (21%)
+      reason: telemetry_unavailable
+  vmi1264463   unreachable closed     0/8    50.0       ubuntu@38.242.209.154
+    Pressure: TELEMETRY GAP — 435.2/1161.4 GB free (37%)
+      reason: telemetry_unavailable
+  vmi1152480   unreachable closed     0/10   50.0       ubuntu@109.205.181.92
+    Pressure: TELEMETRY GAP — 281.7/773.9 GB free (36%)
+      reason: telemetry_unavailable
+  fmd          healthy  closed     0/12   50.0       ubuntu@51.222.245.56
+    Pressure: CRITICAL — 5.8/877.0 GB free (1%)
+      reason: disk_free_below_critical_gb
+  vmi1227854   unreachable closed     0/10   50.0       ubuntu@109.123.245.77
+    Pressure: TELEMETRY GAP — 233.1/773.9 GB free (30%)
+      reason: telemetry_unavailable
+  yto          healthy  closed     0/8    50.0       ubuntu@37.187.75.150
+    Pressure: CRITICAL — 0.0/437.4 GB free (0%)
+      reason: disk_critical_without_fresh_telemetry
+  vmi1156319   healthy  closed     8/8    50.0       ubuntu@178.18.254.243
+  ts2          healthy  closed     10/12  50.0       ubuntu@192.168.1.124
+    Pressure: WARNING — 362.9/3723.0 GB free (10%)
+      reason: disk_ratio_below_warning
+  vmi1153651   healthy  closed     10/10  50.0       ubuntu@38.242.134.66
+  vmi1167313   healthy  closed     4/6    50.0       ubuntu@154.12.232.219
+
+
+Active Builds
+-------------
+  ● #29878602124231272 on ts2 - env cargo bench -p fj-lax --bench lax_baseline ...
+    heartbeat: phase=execute | hb_age=4s | progress_age=4s | counter=162 | pct=n/a | slots=2 | detail=remote_exec_start
+    detector: confidence=0.10 | hook_alive=true | hb_stale=false | progress_stale=false | build_age=15m 33s | slots=2
+  ● #29878602124231310 on vmi1156319 - cargo check -p frankenlibc-core
+    heartbeat: phase=sync_up | hb_age=4s | progress_age=29s | counter=1 | pct=n/a | slots=2 | detail=sync_start
+    detector: confidence=0.00 | hook_alive=true | hb_stale=false | progress_stale=false | build_age=28s | slots=2
+  ● #29878602124231313 on ts2 - cargo run -q -p fsci-signal --bin check_convolve2d
+    heartbeat: phase=sync_up | hb_age=1s | progress_age=1s | counter=1 | pct=n/a | slots=4 | detail=sync_start
+    detector: confidence=0.00 | hook_alive=true | hb_stale=false | progress_stale=false | build_age=0s | slots=4
+  ● #29878602124231282 on vmi1153651 - env 'CARGO_BUILD_JOBS=2' 'RUSTFLAGS=-Cforce-fra...
+    heartbeat: phase=execute | hb_age=2s | progress_age=7s | counter=467 | pct=n/a | slots=2 | detail=remote_exec_start
+    detector: confidence=0.10 | hook_alive=true | hb_stale=false | progress_stale=false | build_age=10m 30s | slots=2
+  ● #29878602124231296 on ts2 - cargo bench -p ft-kernel-cpu --bench gemm_bench...
+    heartbeat: phase=execute | hb_age=4s | progress_age=4s | counter=49 | pct=n/a | slots=4 | detail=remote_exec_start
+    detector: confidence=0.10 | hook_alive=true | hb_stale=false | progress_stale=false | build_age=4m 23s | slots=4
+  ● #29878602124231307 on vmi1167313 - cargo bench --profile release-perf -p ffs-block...
+    heartbeat: phase=execute | hb_age=3s | progress_age=3s | counter=353 | pct=n/a | slots=2 | detail=remote_exec_start
+    detector: confidence=0.10 | hook_alive=true | hb_stale=false | progress_stale=false | build_age=1m 6s | slots=2
+  ● #29878602124231309 on vmi1156319 - cargo check -p fnx-python --all-targets --featu...
+    heartbeat: phase=execute | hb_age=3s | progress_age=3s | counter=2 | pct=n/a | slots=2 | detail=remote_exec_start
+    detector: confidence=0.10 | hook_alive=true | hb_stale=false | progress_stale=false | build_age=42s | slots=2
+  ● #29878602124231311 on vmi1167313 - env 'AGENT_NAME=BoldFalcon' cargo clippy -p fra...
+    heartbeat: phase=execute | hb_age=2s | progress_age=10s | counter=2 | pct=n/a | slots=2 | detail=remote_exec_start
+    detector: confidence=0.00 | hook_alive=true | hb_stale=false | progress_stale=false | build_age=16s | slots=2
+  ● #29878602124231306 on vmi1156319 - cargo test -p fp-join ordered_unique_utf8 --lib
+    heartbeat: phase=execute | hb_age=3s | progress_age=13s | counter=149 | pct=n/a | slots=4 | detail=remote_exec_start
+    detector: confidence=0.10 | hook_alive=true | hb_stale=false | progress_stale=false | build_age=1m 11s | slots=4
+  ● #29878602124231305 on vmi1153651 - cargo test -p fj-lax --release --lib gather -- ...
+    heartbeat: phase=execute | hb_age=4s | progress_age=4s | counter=138 | pct=n/a | slots=4 | detail=remote_exec_start
+    detector: confidence=0.10 | hook_alive=true | hb_stale=false | progress_stale=false | build_age=1m 17s | slots=4
+  ● #29878602124231312 on vmi1153651 - env cargo build --profile release-perf -p fr-se...
+    heartbeat: phase=sync_up | hb_age=3s | progress_age=3s | counter=1 | pct=n/a | slots=4 | detail=sync_start
+    detector: confidence=0.00 | hook_alive=true | hb_stale=false | progress_stale=false | build_age=2s | slots=4
+
+
+Recent Builds
+-------------
+  ✓ 149.9s remote   vmi1153651 cargo check -p fnx-python --all-targe...
+  ✓ 44.2s remote   vmi1167313 cargo build --release --example bench...
+  ✗ 113.1s remote   ts2 env cargo build --profile release-per...
+    cancellation: origin=user | stage=term | cleanup=ok | operation=cancel-29878602124231301
+    details: decision=requested -> term_sent -> completed | worker=healthy / pressure=warning (disk_ratio_below_warning) | final_state=completed
+  ✗ 50.5s remote   vmi1156319 cargo test -p fj-lax --release --lib ...
+  ✓ 84.8s remote   vmi1153651 cargo check -p ft-kernel-cpu --lib
+  ✓ 140.7s remote   vmi1153651 cargo test -p fr-runtime config_set
+  ✓ 207.3s remote   vmi1156319 env cargo bench -p fj-lax --bench lax...
+  ✓ 61.2s remote   vmi1156319 cargo check -p fp-index
+  ✗ 122.7s remote   vmi1156319 env 'AGENT_NAME=BoldFalcon' cargo cli...
+  ✓ 78.3s remote   vmi1167313 cargo run -q -p fsci-signal --bin che...

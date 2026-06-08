@@ -1,0 +1,15 @@
+[RCH] local (no admissible workers: critical_pressure=2,insufficient_slots=3,active_project_exclusion=1)
+    Finished `release` profile [optimized] target(s) in 0.15s
+     Running unittests src/lib.rs (/data/tmp/cargo-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+BIDIAG_LARGE_REDUCTION_PERF_BEGIN
+shape=1024x512
+elapsed_ms=225.686852
+digest=0x90cdd3f8f71ed2c1
+first_diagonal=-1.00455335940616146e3
+last_diagonal=-6.45492359226604862e1
+BIDIAG_LARGE_REDUCTION_PERF_END
+test tests::bidiag_large_reduction_perf_probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 395 filtered out; finished in 0.24s

@@ -1,0 +1,98 @@
+
+Effective RCH Configuration
+---------------------------
+
+[general]
+  enabled = true # from user:/home/ubuntu/.config/rch/config.toml
+  force_local = false # from user:/home/ubuntu/.config/rch/config.toml
+  force_remote = false # from user:/home/ubuntu/.config/rch/config.toml
+  log_level = "info" # from user:/home/ubuntu/.config/rch/config.toml
+  socket_path = "/run/user/1000/rch.sock" # from user:/home/ubuntu/.config/rch/config.toml
+
+[compilation]
+  confidence_threshold = 0.85 # from user:/home/ubuntu/.config/rch/config.toml
+  min_local_time_ms = 2000 # from user:/home/ubuntu/.config/rch/config.toml
+  remote_speedup_threshold = 1.2 # from user:/home/ubuntu/.config/rch/config.toml
+  build_slots = 4 # from user:/home/ubuntu/.config/rch/config.toml
+  test_slots = 8 # from user:/home/ubuntu/.config/rch/config.toml
+  check_slots = 2 # from user:/home/ubuntu/.config/rch/config.toml
+  build_timeout_sec = 1800 # from user:/home/ubuntu/.config/rch/config.toml
+  test_timeout_sec = 1800 # from user:/home/ubuntu/.config/rch/config.toml
+  bun_timeout_sec = 600 # from user:/home/ubuntu/.config/rch/config.toml
+  external_timeout_enabled = false # from user:/home/ubuntu/.config/rch/config.toml
+
+[transfer]
+  compression_level = 3 # from user:/home/ubuntu/.config/rch/config.toml
+  exclude_patterns = [ # from user:/home/ubuntu/.config/rch/config.toml
+    "*.rlib",
+    "*.rmeta",
+    ".beads/",
+    ".bun/",
+    ".rch-target-*/",
+    ".rch-target*/",
+    ".cargo-target-*/",
+    ".cargo-target-rusticmill/",
+    ".cargo-target/",
+    ".core.*",
+    ".git/",
+    ".git/objects/",
+    ".next/",
+    ".npm/",
+    ".nuxt/",
+    ".nyc_output/",
+    ".parcel-cache/",
+    ".pnpm-store/",
+    ".turbo/",
+    "build/",
+    "core.*",
+    "coverage/",
+    "dist/",
+    "legacy_python_mcp_agent_mail_code/mcp_agent_mail/.venv/",
+    "node_modules/",
+    "perf.data",
+    "perf.data.old",
+    "perf_hsmm.data",
+    "perf_hsmm.data.old",
+    "process_triage/",
+    "sample_sqlite_db_files/",
+    "target-*/",
+    "target/",
+    "target_*/",
+    "tests/artifacts/",
+    "baselines/hyperfine/",
+  ]
+  remote_base = "/tmp/rch"
+
+[environment]
+  allowlist = [ # from project:.rch/config.toml
+    "CARGO_TARGET_DIR",
+    "FSCI_REQUIRE_SCIPY_ORACLE",
+  ]
+
+[circuit]
+  failure_threshold = 3 # from user:/home/ubuntu/.config/rch/config.toml
+  success_threshold = 2 # from user:/home/ubuntu/.config/rch/config.toml
+  error_rate_threshold = 0.5 # from user:/home/ubuntu/.config/rch/config.toml
+  window_secs = 60 # from user:/home/ubuntu/.config/rch/config.toml
+  open_cooldown_secs = 30 # from user:/home/ubuntu/.config/rch/config.toml
+  half_open_max_probes = 1 # from user:/home/ubuntu/.config/rch/config.toml
+
+[output]
+  visibility = summary # from user:/home/ubuntu/.config/rch/config.toml
+  first_run_complete = true # from user:/home/ubuntu/.config/rch/config.toml
+
+[self_healing]
+  hook_starts_daemon = true # from user:/home/ubuntu/.config/rch/config.toml
+  daemon_installs_hooks = true # from user:/home/ubuntu/.config/rch/config.toml
+  auto_start_cooldown_secs = 30 # from user:/home/ubuntu/.config/rch/config.toml
+  auto_start_timeout_secs = 3 # from user:/home/ubuntu/.config/rch/config.toml
+
+[path_topology]
+  canonical_root = "/data/projects" # from default
+  alias_root = "/dp" # from default
+
+# Configuration sources (in priority order):
+# 1. Environment variables (RCH_*)
+# 2. Project config: .rch/config.toml
+# 3. User config: /home/ubuntu/.config/rch/config.toml
+# 4. Built-in defaults

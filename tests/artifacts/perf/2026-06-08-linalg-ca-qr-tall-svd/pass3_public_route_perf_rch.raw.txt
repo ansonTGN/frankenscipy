@@ -1,0 +1,18 @@
+
+running 1 test
+PUBLIC_BIDIAG_SVD_ROUTE_PERF_BEGIN
+shape=512x256
+reference_lstsq_ms=97.515361
+routed_lstsq_ms=78.035587
+lstsq_speedup=1.249627
+reference_pinv_ms=106.321913
+routed_pinv_ms=73.768144
+pinv_speedup=1.441298
+lstsq_rank=256
+pinv_rank=256
+lstsq_max_abs_diff=2.07434069920964248e-12
+pinv_max_abs_diff=1.95329863394988479e-13
+PUBLIC_BIDIAG_SVD_ROUTE_PERF_END
+test tests::public_bidiag_svd_route_perf_probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 396 filtered out; finished in 0.36s
