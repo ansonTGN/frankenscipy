@@ -1,0 +1,9 @@
+# siegelslopes repeated-median: serial O(n^2) anchor loop -> parallel over anchors.
+# BYTE-IDENTICAL (slope/intercept bits match serial exactly):
+n=50   slope_bits=40035d99fc1ea25d intercept_bits=3fd9d271a568e900
+n=500  slope_bits=4003fbd2c4f95130 intercept_bits=3fbac7cd47987000
+n=2000 slope_bits=4003ff8c72623f52 intercept_bits=bfed930a14cf3400
+# Timing (rch, 64 cores, release-perf):
+n=2000  12.858ms -> 3.283ms  (3.92x)
+n=4000  49.731ms -> 5.183ms  (9.59x)
+n=8000  201.662ms -> 14.087ms (14.3x)

@@ -37055,9 +37055,12 @@ pub fn siegelslopes(x: &[f64], y: &[f64]) -> SiegelslopesResult {
         };
     }
 
-    // For each point j, compute median of slopes to all other points
-    let mut median_slopes = Vec::with_capacity(n);
-    for j in 0..n {
+    // For each anchor j, the median of slopes to all other points. Anchors are
+    // independent (read-only x/y), so compute the per-anchor medians in parallel
+    // into ordered slots; collecting the Some values in j order is byte-identical
+    // to the sequential push (same per-anchor median, same skip of empty-slope
+    // anchors). This is the O(n²) compute core of the repeated-median estimator.
+    let anchor_median = |j: usize| -> Option<f64> {
         let mut slopes_from_j = Vec::with_capacity(n - 1);
         for i in 0..n {
             if i != j {
@@ -37067,10 +37070,40 @@ pub fn siegelslopes(x: &[f64], y: &[f64]) -> SiegelslopesResult {
                 }
             }
         }
-        if !slopes_from_j.is_empty() {
-            median_slopes.push(median(&slopes_from_j));
+        if slopes_from_j.is_empty() {
+            None
+        } else {
+            Some(median(&slopes_from_j))
         }
-    }
+    };
+    let nthreads = if (n as u64).saturating_mul(n as u64) < (1 << 16) || n < 64 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(|c| c.get())
+            .unwrap_or(1)
+            .min(n)
+            .max(1)
+    };
+    let per_anchor: Vec<Option<f64>> = if nthreads <= 1 {
+        (0..n).map(anchor_median).collect()
+    } else {
+        let mut out = vec![None; n];
+        let chunk = n.div_ceil(nthreads);
+        let am = &anchor_median;
+        std::thread::scope(|scope| {
+            for (t, slot) in out.chunks_mut(chunk).enumerate() {
+                let base = t * chunk;
+                scope.spawn(move || {
+                    for (li, s) in slot.iter_mut().enumerate() {
+                        *s = am(base + li);
+                    }
+                });
+            }
+        });
+        out
+    };
+    let median_slopes: Vec<f64> = per_anchor.into_iter().flatten().collect();
 
     if median_slopes.is_empty() {
         return SiegelslopesResult {
