@@ -26,7 +26,9 @@ def _run_case(case: Dict[str, Any], np: Any, signal: Any, windows: Any) -> Dict[
             x = np.asarray(args[0], dtype=float)
             window_length = int(args[1])
             polyorder = int(args[2])
-            result = signal.savgol_filter(x, window_length, polyorder)
+            mode = str(args[3]) if len(args) > 3 else "interp"
+            cval = float(args[4]) if len(args) > 4 else 0.0
+            result = signal.savgol_filter(x, window_length, polyorder, mode=mode, cval=cval)
             return _ok(case_id, "array", {"values": [float(v) for v in result.tolist()]})
 
         if function in {"hann", "hamming", "blackman"}:

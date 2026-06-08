@@ -41,6 +41,162 @@
       }
     },
     {
+      "case_id": "savgol_filter_9pt_w5_p2_nearest",
+      "category": "differential",
+      "mode": "Strict",
+      "function": "savgol_filter",
+      "args": [
+        [
+          1.0,
+          2.0,
+          4.0,
+          7.0,
+          11.0,
+          16.0,
+          22.0,
+          29.0,
+          37.0
+        ],
+        5,
+        2,
+        "nearest"
+      ],
+      "expected": {
+        "kind": "array",
+        "value": [
+          1.0857142857142847,
+          1.9999999999999984,
+          3.9999999999999973,
+          6.9999999999999964,
+          10.999999999999993,
+          15.999999999999991,
+          21.999999999999986,
+          29.77142857142855,
+          35.54285714285713
+        ],
+        "atol": 1e-09,
+        "rtol": 1e-09,
+        "contract_ref": "fsci_signal::savgol_filter (mode=nearest)"
+      }
+    },
+    {
+      "case_id": "savgol_filter_9pt_w5_p2_constant",
+      "category": "differential",
+      "mode": "Strict",
+      "function": "savgol_filter",
+      "args": [
+        [
+          1.0,
+          2.0,
+          4.0,
+          7.0,
+          11.0,
+          16.0,
+          22.0,
+          29.0,
+          37.0
+        ],
+        5,
+        2,
+        "constant"
+      ],
+      "expected": {
+        "kind": "array",
+        "value": [
+          0.8285714285714278,
+          2.085714285714284,
+          3.9999999999999973,
+          6.9999999999999964,
+          10.999999999999993,
+          15.999999999999991,
+          21.999999999999986,
+          32.94285714285713,
+          26.028571428571418
+        ],
+        "atol": 1e-09,
+        "rtol": 1e-09,
+        "contract_ref": "fsci_signal::savgol_filter (mode=constant)"
+      }
+    },
+    {
+      "case_id": "savgol_filter_9pt_w5_p2_mirror",
+      "category": "differential",
+      "mode": "Strict",
+      "function": "savgol_filter",
+      "args": [
+        [
+          1.0,
+          2.0,
+          4.0,
+          7.0,
+          11.0,
+          16.0,
+          22.0,
+          29.0,
+          37.0
+        ],
+        5,
+        2,
+        "mirror"
+      ],
+      "expected": {
+        "kind": "array",
+        "value": [
+          1.1714285714285702,
+          1.9142857142857128,
+          3.9999999999999973,
+          6.9999999999999964,
+          10.999999999999993,
+          15.999999999999991,
+          21.999999999999986,
+          30.457142857142838,
+          34.08571428571427
+        ],
+        "atol": 1e-09,
+        "rtol": 1e-09,
+        "contract_ref": "fsci_signal::savgol_filter (mode=mirror)"
+      }
+    },
+    {
+      "case_id": "savgol_filter_9pt_w5_p2_wrap",
+      "category": "differential",
+      "mode": "Strict",
+      "function": "savgol_filter",
+      "args": [
+        [
+          1.0,
+          2.0,
+          4.0,
+          7.0,
+          11.0,
+          16.0,
+          22.0,
+          29.0,
+          37.0
+        ],
+        5,
+        2,
+        "wrap"
+      ],
+      "expected": {
+        "kind": "array",
+        "value": [
+          11.028571428571421,
+          -1.0857142857142896,
+          3.9999999999999973,
+          6.9999999999999964,
+          10.999999999999993,
+          15.999999999999991,
+          21.999999999999986,
+          32.85714285714284,
+          26.19999999999999
+        ],
+        "atol": 1e-09,
+        "rtol": 1e-09,
+        "contract_ref": "fsci_signal::savgol_filter (mode=wrap)"
+      }
+    },
+    {
       "case_id": "window_hann_8pt",
       "category": "differential",
       "mode": "Strict",

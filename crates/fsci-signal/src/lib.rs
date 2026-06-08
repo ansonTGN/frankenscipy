@@ -269,17 +269,52 @@ pub fn savgol_coeffs(
     Ok(coeffs)
 }
 
-/// Apply a Savitzky-Golay filter to a signal.
+/// Boundary handling for [`savgol_filter_mode`], matching the `mode` parameter
+/// of `scipy.signal.savgol_filter`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SavgolMode {
+    /// Fit a degree-`polyorder` polynomial to the boundary window and evaluate
+    /// it at the edge positions (SciPy default).
+    Interp,
+    /// Repeat the nearest edge sample (`a a | a b c d | d d`).
+    Nearest,
+    /// Pad with a constant `cval` (`k k | a b c d | k k`).
+    Constant,
+    /// Reflect about the edge sample without repeating it (`c b | a b c d | c b`).
+    Mirror,
+    /// Wrap around / periodic (`c d | a b c d | a b`).
+    Wrap,
+}
+
+/// Apply a Savitzky-Golay filter to a signal with `mode='interp'` (SciPy default).
 ///
-/// Matches `scipy.signal.savgol_filter(x, window_length, polyorder)` with the
-/// default `mode='interp'`: interior samples are filtered with the centered
-/// Savitzky-Golay coefficients, and the first/last `window_length / 2` samples
-/// are replaced by evaluating a degree-`polyorder` polynomial fit to the first
-/// (respectively last) `window_length` samples — exactly as SciPy does.
+/// Matches `scipy.signal.savgol_filter(x, window_length, polyorder)`: interior
+/// samples are filtered with the centered Savitzky-Golay coefficients, and the
+/// first/last `window_length / 2` samples are replaced by evaluating a
+/// degree-`polyorder` polynomial fit to the first (respectively last)
+/// `window_length` samples.
 pub fn savgol_filter(
     x: &[f64],
     window_length: usize,
     polyorder: usize,
+) -> Result<Vec<f64>, SignalError> {
+    savgol_filter_mode(x, window_length, polyorder, SavgolMode::Interp, 0.0)
+}
+
+/// Apply a Savitzky-Golay filter with an explicit boundary `mode`.
+///
+/// Matches `scipy.signal.savgol_filter(x, window_length, polyorder, mode=mode,
+/// cval=cval)` (deriv=0, delta=1.0). For `mode == Interp` the boundary samples
+/// use the polynomial edge fit; for the other modes the signal is padded by
+/// `window_length / 2` per the boundary rule and the centered SG correlation is
+/// applied throughout — identical to SciPy's `convolve1d(x, coeffs, mode, cval)`
+/// (the deriv=0 SG coefficients are symmetric, so correlation == convolution).
+pub fn savgol_filter_mode(
+    x: &[f64],
+    window_length: usize,
+    polyorder: usize,
+    mode: SavgolMode,
+    cval: f64,
 ) -> Result<Vec<f64>, SignalError> {
     if x.is_empty() {
         return Err(SignalError::InvalidArgument(
@@ -296,38 +331,59 @@ pub fn savgol_filter(
     let half = window_length / 2;
     let n = x.len();
 
-    // Interior: centered correlation with the SG coefficients. Out-of-range
-    // taps contribute nothing here because the boundary regions are overwritten
-    // by the polynomial edge fit below (matching SciPy's `mode='interp'`).
+    if mode == SavgolMode::Interp {
+        // Interior: centered correlation; boundary regions overwritten by the
+        // polynomial edge fit below (SciPy's `mode='interp'`).
+        let mut result = vec![0.0; n];
+        for (i, slot) in result.iter_mut().enumerate() {
+            let mut val = 0.0;
+            for (j, &c) in coeffs.iter().enumerate() {
+                let idx = i as i64 + j as i64 - half as i64;
+                if idx >= 0 && idx < n as i64 {
+                    val += c * x[idx as usize];
+                }
+            }
+            *slot = val;
+        }
+        if half > 0 {
+            let positions: Vec<f64> = (0..window_length).map(|k| k as f64).collect();
+            let left = polyfit(&positions, &x[0..window_length], polyorder)?;
+            for (i, slot) in result.iter_mut().take(half).enumerate() {
+                *slot = poly_eval(&left, i as f64);
+            }
+            let right = polyfit(&positions, &x[n - window_length..n], polyorder)?;
+            for i in (window_length - half)..window_length {
+                result[n - window_length + i] = poly_eval(&right, i as f64);
+            }
+        }
+        return Ok(result);
+    }
+
+    // Padded modes: build `padded` = [left half | x | right half] per the
+    // boundary rule, then output[i] = Σ_j coeffs[j] · padded[i + j].
+    let mut padded = vec![0.0_f64; n + 2 * half];
+    padded[half..half + n].copy_from_slice(x);
+    for d in 1..=half {
+        // Position `d` samples beyond each edge.
+        let (lv, rv) = match mode {
+            SavgolMode::Nearest => (x[0], x[n - 1]),
+            SavgolMode::Constant => (cval, cval),
+            SavgolMode::Mirror => (x[d], x[n - 1 - d]),
+            SavgolMode::Wrap => (x[n - d], x[d - 1]),
+            SavgolMode::Interp => unreachable!(),
+        };
+        padded[half - d] = lv;
+        padded[half + n + d - 1] = rv;
+    }
+
     let mut result = vec![0.0; n];
     for (i, slot) in result.iter_mut().enumerate() {
         let mut val = 0.0;
         for (j, &c) in coeffs.iter().enumerate() {
-            let idx = i as i64 + j as i64 - half as i64;
-            if idx >= 0 && idx < n as i64 {
-                val += c * x[idx as usize];
-            }
+            val += c * padded[i + j];
         }
         *slot = val;
     }
-
-    // Edge handling: replace the first and last `half` samples with values from
-    // a degree-`polyorder` least-squares polynomial fit over the boundary
-    // window, evaluated at the sample positions (SciPy's `_fit_edges_polyfit`).
-    if half > 0 {
-        let positions: Vec<f64> = (0..window_length).map(|k| k as f64).collect();
-
-        let left = polyfit(&positions, &x[0..window_length], polyorder)?;
-        for (i, slot) in result.iter_mut().take(half).enumerate() {
-            *slot = poly_eval(&left, i as f64);
-        }
-
-        let right = polyfit(&positions, &x[n - window_length..n], polyorder)?;
-        for i in (window_length - half)..window_length {
-            result[n - window_length + i] = poly_eval(&right, i as f64);
-        }
-    }
-
     Ok(result)
 }
 
@@ -11408,6 +11464,41 @@ mod tests {
                 "filtered[{i}] = {got}, expected {want}"
             );
         }
+    }
+
+    #[test]
+    fn savgol_filter_modes_match_scipy() {
+        // scipy.signal.savgol_filter([1,2,4,7,11,16,22,29,37], 5, 2, mode=m).
+        // frankenscipy-ckrdw: nearest/constant/mirror/wrap boundary parity.
+        let x = vec![1.0, 2.0, 4.0, 7.0, 11.0, 16.0, 22.0, 29.0, 37.0];
+        let want_nearest = [
+            1.0857142857142847, 1.9999999999999984, 3.9999999999999973, 6.9999999999999964,
+            10.999999999999993, 15.999999999999991, 21.999999999999986, 29.77142857142855,
+            35.54285714285713,
+        ];
+        let want_mirror = [
+            1.1714285714285702, 1.9142857142857128, 3.9999999999999973, 6.9999999999999964,
+            10.999999999999993, 15.999999999999991, 21.999999999999986, 30.457142857142838,
+            34.08571428571427,
+        ];
+        let want_wrap = [
+            11.028571428571421, -1.0857142857142896, 3.9999999999999973, 6.9999999999999964,
+            10.999999999999993, 15.999999999999991, 21.999999999999986, 32.85714285714284,
+            26.19999999999999,
+        ];
+        for (mode, want) in [
+            (SavgolMode::Nearest, &want_nearest),
+            (SavgolMode::Mirror, &want_mirror),
+            (SavgolMode::Wrap, &want_wrap),
+        ] {
+            let got = savgol_filter_mode(&x, 5, 2, mode, 0.0).expect("filter");
+            for (i, (&g, &w)) in got.iter().zip(want.iter()).enumerate() {
+                assert!((g - w).abs() < 1e-9, "{mode:?}[{i}] = {g} != {w}");
+            }
+        }
+        // constant mode honours cval (default 0.0 padding).
+        let got_const = savgol_filter_mode(&x, 5, 2, SavgolMode::Constant, 0.0).expect("filter");
+        assert!((got_const[0] - 0.8285714285714278).abs() < 1e-9);
     }
 
     #[test]

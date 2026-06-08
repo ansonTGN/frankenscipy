@@ -6330,7 +6330,17 @@ fn execute_savgol_filter(case: &SignalCase) -> SignalObserved {
         Ok(v) => v,
         Err(e) => return SignalObserved::Error(format!("parse polyorder: {e}")),
     };
-    match fsci_signal::savgol_filter(&x, window_length, polyorder) {
+    // Optional 4th arg = boundary mode (scipy default 'interp'), 5th = cval.
+    let mode = match case.args.get(3).and_then(|v| v.as_str()) {
+        None | Some("interp") => fsci_signal::SavgolMode::Interp,
+        Some("nearest") => fsci_signal::SavgolMode::Nearest,
+        Some("constant") => fsci_signal::SavgolMode::Constant,
+        Some("mirror") => fsci_signal::SavgolMode::Mirror,
+        Some("wrap") => fsci_signal::SavgolMode::Wrap,
+        Some(other) => return SignalObserved::Error(format!("unknown savgol mode: {other}")),
+    };
+    let cval = case.args.get(4).and_then(serde_json::Value::as_f64).unwrap_or(0.0);
+    match fsci_signal::savgol_filter_mode(&x, window_length, polyorder, mode, cval) {
         Ok(result) => SignalObserved::Array(result),
         Err(e) => SignalObserved::Error(format!("{e:?}")),
     }
