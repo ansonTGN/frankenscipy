@@ -3089,16 +3089,10 @@ fn j1_core(x: f64) -> f64 {
 
     let ax = x.abs();
     let ans = if ax < 8.0 {
-        let y = ax * ax;
-        let numer = ax
-            * (72_362_614_232.0
-                + y * (-7_895_059_235.0
-                    + y * (242_396_853.1
-                        + y * (-2_972_611.439 + y * (15_704.482_60 + y * (-30.160_366_06))))));
-        let denom = 144_725_228_442.0
-            + y * (2_300_535_178.0
-                + y * (18_583_304.74 + y * (99_447.433_94 + y * (376.999_139_7 + y))));
-        numer / denom
+        // High-precision power series (machine accuracy), matching the small-x
+        // treatment of j0/y0. The previous Numerical-Recipes rational
+        // approximation here was only ~1e-7/1e-8 accurate (frankenscipy-…).
+        j1_series_small(ax)
     } else {
         let z = 8.0 / ax;
         let y = z * z;
@@ -3155,19 +3149,56 @@ fn y0_series_small(x: f64) -> f64 {
     FRAC_2_PI * ((x.ln() - LN_2 + EULER_MASCHERONI) * j0 + correction)
 }
 
+/// `J1(x)` via its power series, accurate to machine precision for |x| < 8:
+/// `J1(x) = (x/2) Σ_{k≥0} (-x²/4)^k / (k! (k+1)!)`.
+fn j1_series_small(x: f64) -> f64 {
+    let z = x * x * 0.25;
+    let mut term = 1.0;
+    let mut sum = 1.0;
+    for k in 1..=BESSEL_SERIES_MAX_TERMS {
+        let kf = k as f64;
+        term *= -z / (kf * (kf + 1.0));
+        sum += term;
+        if term.abs() <= f64::EPSILON * sum.abs().max(1.0) {
+            break;
+        }
+    }
+    0.5 * x * sum
+}
+
+/// `Y1(x)` via its power series (DLMF 10.8.1), accurate to machine precision for
+/// small `x > 0`:
+/// `Y1 = (2/π) ln(x/2) J1(x) − 2/(π x) − (1/π)(x/2) Σ_{k≥0}
+///       (ψ(k+1)+ψ(k+2)) (−x²/4)^k / (k!(k+1)!)`, with `ψ(k+1) = −γ + H_k`.
+fn y1_series_small(x: f64) -> f64 {
+    let w = x * x * 0.25;
+    let j1 = j1_series_small(x);
+    let mut term = 1.0; // (-w)^k / (k!(k+1)!), k = 0
+    let mut hk = 0.0; // H_0
+    let mut hk1 = 1.0; // H_1
+    let mut sum = 0.0;
+    for k in 0..=BESSEL_SERIES_MAX_TERMS {
+        if k > 0 {
+            let kf = k as f64;
+            term *= -w / (kf * (kf + 1.0));
+            hk += 1.0 / kf; // H_k
+            hk1 += 1.0 / (kf + 1.0); // H_{k+1}
+        }
+        let psi_sum = -2.0 * EULER_MASCHERONI + hk + hk1; // ψ(k+1)+ψ(k+2)
+        let addend = term * psi_sum;
+        sum += addend;
+        if k > 2 && addend.abs() <= f64::EPSILON * sum.abs().max(1.0) {
+            break;
+        }
+    }
+    FRAC_2_PI * (x.ln() - LN_2) * j1 - FRAC_2_PI / x - FRAC_2_PI * 0.25 * x * sum
+}
+
 fn y1_core_positive(x: f64) -> f64 {
     if x < 8.0 {
-        let y = x * x;
-        let numer = x
-            * (-4.900_604_943e12
-                + y * (1.275_274_39e12
-                    + y * (-5.153_438_139e10
-                        + y * (7.349_264_551e8 + y * (-4.237_922_726e6 + y * 8_511.937_935)))));
-        let denom = 2.499_580_57e13
-            + y * (4.244_419_664e11
-                + y * (3.733_650_367e9
-                    + y * (2.245_904_002e7 + y * (1.020_426_05e5 + y * (354.963_288_5 + y)))));
-        numer / denom + FRAC_2_PI * (j1_core(x) * x.ln() - 1.0 / x)
+        // High-precision power series (DLMF 10.8.1), replacing the ~1e-7
+        // Numerical-Recipes rational approximation.
+        y1_series_small(x)
     } else {
         let z = 8.0 / x;
         let y = z * z;
@@ -6792,7 +6823,7 @@ mod tests {
         for (x, expected) in cases {
             let result = super::jn_scalar(1.0, x, RuntimeMode::Strict).unwrap();
             assert!(
-                (result - expected).abs() < 1e-6,
+                (result - expected).abs() < 1e-12,
                 "j1({x}) = {result}, expected {expected}"
             );
         }
@@ -6810,7 +6841,7 @@ mod tests {
         for (x, expected) in cases {
             let result = super::yn_scalar(1.0, x, RuntimeMode::Strict).unwrap();
             assert!(
-                (result - expected).abs() < 1e-6,
+                (result - expected).abs() < 1e-12,
                 "y1({x}) = {result}, expected {expected}"
             );
         }
