@@ -1,0 +1,5 @@
+GOLDEN (serial == parallel, bit-identical):
+n=100 ai xor=d728b993034a2431 bi xor=cd319fb621130cc7
+n=5000 ai xor=1816138c700fbaf7 bi xor=080c1215b2d97336
+n=50000 ai xor=1019ea7afe698033 bi xor=12c75258d3508837
+timing acc (serial==parallel): ai 300k=aeea8fddaf9053f5 600k=bf02cee99b8f798e

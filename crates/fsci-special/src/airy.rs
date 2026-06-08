@@ -819,6 +819,53 @@ fn oscillatory_coefficients(zeta: f64) -> (f64, f64, f64, f64) {
     (l, m, n, o)
 }
 
+/// Evaluate `f(0..n)` into a `Vec<T>`, parallel over index chunks for large `n`.
+/// Airy kernels (`airy_scalar` / `airy_complex_scalar`, Bessel-form across the complex
+/// plane) are expensive per element and each index writes its own slot, so chunking across
+/// cores and concatenating in index order is bit-identical to `(0..n).map(f).collect()` —
+/// including returning the first failing index's error in index order. Generic over the
+/// output type (f64 or Complex64).
+fn par_map_indices<T, H>(n: usize, f: H) -> Result<Vec<T>, SpecialError>
+where
+    T: Send,
+    H: Fn(usize) -> Result<T, SpecialError> + Sync,
+{
+    let nthreads = if n < 256 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(1)
+            .min(n / 128)
+            .max(1)
+    };
+    if nthreads <= 1 {
+        return (0..n).map(&f).collect();
+    }
+    let chunk = n.div_ceil(nthreads);
+    let f = &f;
+    let chunk_results: Vec<Result<Vec<T>, SpecialError>> = std::thread::scope(|scope| {
+        (0..nthreads)
+            .filter_map(|t| {
+                let i0 = t * chunk;
+                if i0 >= n {
+                    return None;
+                }
+                let i1 = (i0 + chunk).min(n);
+                Some(scope.spawn(move || (i0..i1).map(f).collect::<Result<Vec<T>, _>>()))
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|h| h.join().expect("airy array worker panicked"))
+            .collect()
+    });
+    let mut out = Vec::with_capacity(n);
+    for cr in chunk_results {
+        out.extend(cr?);
+    }
+    Ok(out)
+}
+
 fn map_airy_component<F, G>(
     function: &'static str,
     input: &SpecialTensor,
@@ -827,28 +874,24 @@ fn map_airy_component<F, G>(
     complex_kernel: G,
 ) -> SpecialResult
 where
-    F: Fn(AiryResult) -> f64,
-    G: Fn(ComplexAiryResult) -> Complex64,
+    F: Fn(AiryResult) -> f64 + Sync,
+    G: Fn(ComplexAiryResult) -> Complex64 + Sync,
 {
     match input {
         SpecialTensor::RealScalar(x) => airy_scalar(*x, mode)
             .map(real_kernel)
             .map(SpecialTensor::RealScalar),
-        SpecialTensor::RealVec(values) => values
-            .iter()
-            .copied()
-            .map(|x| airy_scalar(x, mode).map(&real_kernel))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::RealVec),
+        SpecialTensor::RealVec(values) => {
+            par_map_indices(values.len(), |i| airy_scalar(values[i], mode).map(&real_kernel))
+                .map(SpecialTensor::RealVec)
+        }
         SpecialTensor::ComplexScalar(value) => airy_complex_scalar(*value, mode)
             .map(complex_kernel)
             .map(SpecialTensor::ComplexScalar),
-        SpecialTensor::ComplexVec(values) => values
-            .iter()
-            .copied()
-            .map(|x| airy_complex_scalar(x, mode).map(&complex_kernel))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
+        SpecialTensor::ComplexVec(values) => par_map_indices(values.len(), |i| {
+            airy_complex_scalar(values[i], mode).map(&complex_kernel)
+        })
+        .map(SpecialTensor::ComplexVec),
         SpecialTensor::Empty => {
             record_special_trace(
                 function,
