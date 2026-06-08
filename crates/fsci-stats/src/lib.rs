@@ -4743,6 +4743,25 @@ impl ContinuousDistribution for NormInvGauss {
         (a / std::f64::consts::PI) * k1_val * (b * x + gamma).exp() / q
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln(a) − ln(π) + ln K₁(a·q) + (b·x+γ) − ln(q), q=√(1+x²); ln K₁(z) =
+        // ln(kve(1,z)) − z (kve is properly exp-scaled, finite past z≈745 where
+        // K₁ underflows and the pdf collapses to NaN/0). frankenscipy-7m3xk
+        if !x.is_finite() {
+            return f64::NEG_INFINITY;
+        }
+        let a = self.a;
+        let b = self.b;
+        let gamma = self.gamma();
+        let q = (1.0 + x * x).sqrt();
+        let aq = a * q;
+        let kve = fsci_special::bessel::kve_scalar(1.0, aq);
+        if kve <= 0.0 || !kve.is_finite() {
+            return f64::NEG_INFINITY;
+        }
+        a.ln() - std::f64::consts::PI.ln() + (kve.ln() - aq) + (b * x + gamma) - q.ln()
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         if x == f64::NEG_INFINITY {
             return 0.0;
@@ -40736,11 +40755,17 @@ mod tests {
         }
         mid!(VonMises::new(2.0, 0.0), &[-1.0, 0.0, 1.5]);
         mid!(RecipInvGauss::new(1.0), &[0.3, 1.0, 3.0]);
+        mid!(NormInvGauss::new(1.5, 0.5), &[-2.0, 0.0, 2.0, 5.0]);
 
         // VonMises large κ: pdf's I₀(κ) overflows → pdf NaN/inf; logpdf finite.
         let vm = VonMises::new(800.0, 0.0);
         assert!(!(vm.pdf(0.5) > 0.0 && vm.pdf(0.5).is_finite()));
         assert!(vm.logpdf(0.5).is_finite(), "vonmises large-κ logpdf");
+        // NormInvGauss far tail: K₁(a·q) underflows → pdf NaN/0; the kve-based
+        // logpdf (kve properly scaled) stays finite & large-negative.
+        let nig = NormInvGauss::new(1.5, 0.5);
+        assert!(!(nig.pdf(1.0e6) > 0.0 && nig.pdf(1.0e6).is_finite()));
+        assert!(nig.logpdf(1.0e6).is_finite() && nig.logpdf(1.0e6) < -100.0);
     }
 
     // ── Exponential distribution ────────────────────────────────────
