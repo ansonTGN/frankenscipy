@@ -1,0 +1,5 @@
+GOLDEN (serial == parallel, bit-identical):
+n=100 gammaincinv=abebab28ceaf3557 owens_t=6ee89ce4f34176ba
+n=5000 gammaincinv=225afa0bf9b94990 owens_t=3b42d950108bdab3
+n=50000 gammaincinv=8f38b0a20998d2fd owens_t=78172e6ac7e079c8
+timing acc (serial==parallel): gammaincinv 500k=ab06af22c212e000 owens_t 1M=7b4c1f7662e171a7

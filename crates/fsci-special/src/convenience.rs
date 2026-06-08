@@ -1751,24 +1751,20 @@ fn map_real_binary<F>(
     kernel: F,
 ) -> SpecialResult
 where
-    F: Fn(f64, f64) -> Result<f64, SpecialError>,
+    F: Fn(f64, f64) -> Result<f64, SpecialError> + Sync,
 {
     match (lhs, rhs) {
         (SpecialTensor::RealScalar(left), SpecialTensor::RealScalar(right)) => {
             kernel(*left, *right).map(SpecialTensor::RealScalar)
         }
-        (SpecialTensor::RealVec(left), SpecialTensor::RealScalar(right)) => left
-            .iter()
-            .copied()
-            .map(|value| kernel(value, *right))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::RealVec),
-        (SpecialTensor::RealScalar(left), SpecialTensor::RealVec(right)) => right
-            .iter()
-            .copied()
-            .map(|value| kernel(*left, value))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::RealVec),
+        (SpecialTensor::RealVec(left), SpecialTensor::RealScalar(right)) => {
+            let right = *right;
+            par_map_indices(left.len(), |i| kernel(left[i], right)).map(SpecialTensor::RealVec)
+        }
+        (SpecialTensor::RealScalar(left), SpecialTensor::RealVec(right)) => {
+            let left = *left;
+            par_map_indices(right.len(), |i| kernel(left, right[i])).map(SpecialTensor::RealVec)
+        }
         (SpecialTensor::RealVec(left), SpecialTensor::RealVec(right)) => {
             if left.len() != right.len() {
                 record_special_trace(
@@ -1787,12 +1783,7 @@ where
                     detail: "vector inputs must have matching lengths",
                 });
             }
-            left.iter()
-                .copied()
-                .zip(right.iter().copied())
-                .map(|(l, r)| kernel(l, r))
-                .collect::<Result<Vec<_>, _>>()
-                .map(SpecialTensor::RealVec)
+            par_map_indices(left.len(), |i| kernel(left[i], right[i])).map(SpecialTensor::RealVec)
         }
         _ => {
             record_special_trace(
