@@ -1,0 +1,14 @@
+Attempted focused one-sided Jacobi candidate proof via:
+
+RCH_REQUIRE_REMOTE=1 rch exec -- cargo test -p fsci-linalg --release --lib --locked public_one_sided_jacobi_thin_svd_candidate_matches_safe_svd_reference -- --nocapture
+
+This first RCH attempt selected `ts2` and failed before compiling with:
+
+Remote execution failed on ts2 with SSH timeout; refusing local fallback: SSH command timed out after 20s
+
+This file is not used as proof evidence. The retained proof evidence for the rejected route is:
+
+- `proof_public_route_one_sided_jacobi_rch.txt`
+- `public_svd_lstsq_pinv_golden_payload_rch.txt`
+- `public_svd_lstsq_pinv_golden_payload.sha256`
+- `after_one_sided_jacobi_public_route_perf_probe_rch.txt`
