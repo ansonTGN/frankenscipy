@@ -1,0 +1,5 @@
+GOLDEN (serial == parallel, bit-identical):
+n=100 gamma=f360fee0b21b3129 gammaln=a527edeb0272cad8 digamma=3f5fb951f90af0d9
+n=5000 gamma=4a29c703711d4481 gammaln=f0fa3910602d607c digamma=f74c96336f68c873
+n=50000 gamma=36b12fcd487bf449 gammaln=0c647528ab6e610a digamma=f13c00a608c13176
+timing acc (serial==parallel): gammaln 2M=2d8b62775409c310 4M=708f23a725ac0400

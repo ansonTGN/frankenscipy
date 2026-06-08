@@ -187,23 +187,67 @@ pub fn loggamma(z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
     loggamma_dispatch("loggamma", z, mode)
 }
 
+/// Evaluate `f(0..n)` into a `Vec<T>`, parallel over index chunks for large `n`.
+/// Gamma-family kernels (Lanczos gamma / log-gamma / digamma series) are non-trivial per
+/// element and each index writes its own slot, so chunking across cores and concatenating
+/// in index order is bit-identical to `(0..n).map(f).collect()` — including returning the
+/// first failing index's error in index order. Generic over the output type (f64 or
+/// Complex64); infallible complex kernels wrap their result in `Ok`.
+fn par_map_indices<T, H>(n: usize, f: H) -> Result<Vec<T>, SpecialError>
+where
+    T: Send,
+    H: Fn(usize) -> Result<T, SpecialError> + Sync,
+{
+    let nthreads = if n < 256 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(1)
+            .min(n / 128)
+            .max(1)
+    };
+    if nthreads <= 1 {
+        return (0..n).map(&f).collect();
+    }
+    let chunk = n.div_ceil(nthreads);
+    let f = &f;
+    let chunk_results: Vec<Result<Vec<T>, SpecialError>> = std::thread::scope(|scope| {
+        (0..nthreads)
+            .filter_map(|t| {
+                let i0 = t * chunk;
+                if i0 >= n {
+                    return None;
+                }
+                let i1 = (i0 + chunk).min(n);
+                Some(scope.spawn(move || (i0..i1).map(f).collect::<Result<Vec<T>, _>>()))
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|h| h.join().expect("gamma array worker panicked"))
+            .collect()
+    });
+    let mut out = Vec::with_capacity(n);
+    for cr in chunk_results {
+        out.extend(cr?);
+    }
+    Ok(out)
+}
+
 fn gamma_dispatch(function: &'static str, z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
     match z {
         SpecialTensor::RealScalar(x) => gamma_scalar(*x, mode).map(SpecialTensor::RealScalar),
-        SpecialTensor::RealVec(values) => values
-            .iter()
-            .map(|&x| gamma_scalar(x, mode))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::RealVec),
+        SpecialTensor::RealVec(values) => {
+            par_map_indices(values.len(), |i| gamma_scalar(values[i], mode))
+                .map(SpecialTensor::RealVec)
+        }
         SpecialTensor::ComplexScalar(z_val) => {
             Ok(SpecialTensor::ComplexScalar(complex_gammaln(*z_val).exp()))
         }
-        SpecialTensor::ComplexVec(values) => Ok(SpecialTensor::ComplexVec(
-            values
-                .iter()
-                .map(|&z_val| complex_gammaln(z_val).exp())
-                .collect(),
-        )),
+        SpecialTensor::ComplexVec(values) => {
+            par_map_indices(values.len(), |i| Ok(complex_gammaln(values[i]).exp()))
+                .map(SpecialTensor::ComplexVec)
+        }
         SpecialTensor::Empty => Err(SpecialError {
             function,
             kind: SpecialErrorKind::DomainError,
@@ -216,17 +260,17 @@ fn gamma_dispatch(function: &'static str, z: &SpecialTensor, mode: RuntimeMode) 
 fn gammaln_dispatch(function: &'static str, z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
     match z {
         SpecialTensor::RealScalar(x) => gammaln_scalar(*x, mode).map(SpecialTensor::RealScalar),
-        SpecialTensor::RealVec(values) => values
-            .iter()
-            .map(|&x| gammaln_scalar(x, mode))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::RealVec),
+        SpecialTensor::RealVec(values) => {
+            par_map_indices(values.len(), |i| gammaln_scalar(values[i], mode))
+                .map(SpecialTensor::RealVec)
+        }
         SpecialTensor::ComplexScalar(z_val) => {
             Ok(SpecialTensor::ComplexScalar(complex_gammaln(*z_val)))
         }
-        SpecialTensor::ComplexVec(values) => Ok(SpecialTensor::ComplexVec(
-            values.iter().map(|&z_val| complex_gammaln(z_val)).collect(),
-        )),
+        SpecialTensor::ComplexVec(values) => {
+            par_map_indices(values.len(), |i| Ok(complex_gammaln(values[i])))
+                .map(SpecialTensor::ComplexVec)
+        }
         SpecialTensor::Empty => Err(SpecialError {
             function,
             kind: SpecialErrorKind::DomainError,
@@ -243,17 +287,17 @@ fn loggamma_dispatch(
 ) -> SpecialResult {
     match z {
         SpecialTensor::RealScalar(x) => loggamma_scalar(*x, mode).map(SpecialTensor::RealScalar),
-        SpecialTensor::RealVec(values) => values
-            .iter()
-            .map(|&x| loggamma_scalar(x, mode))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::RealVec),
+        SpecialTensor::RealVec(values) => {
+            par_map_indices(values.len(), |i| loggamma_scalar(values[i], mode))
+                .map(SpecialTensor::RealVec)
+        }
         SpecialTensor::ComplexScalar(z_val) => {
             Ok(SpecialTensor::ComplexScalar(complex_gammaln(*z_val)))
         }
-        SpecialTensor::ComplexVec(values) => Ok(SpecialTensor::ComplexVec(
-            values.iter().map(|&z_val| complex_gammaln(z_val)).collect(),
-        )),
+        SpecialTensor::ComplexVec(values) => {
+            par_map_indices(values.len(), |i| Ok(complex_gammaln(values[i])))
+                .map(SpecialTensor::ComplexVec)
+        }
         SpecialTensor::Empty => Err(SpecialError {
             function,
             kind: SpecialErrorKind::DomainError,
@@ -274,20 +318,17 @@ pub fn psi(z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
 fn digamma_dispatch(function: &'static str, z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
     match z {
         SpecialTensor::RealScalar(x) => digamma_scalar(*x, mode).map(SpecialTensor::RealScalar),
-        SpecialTensor::RealVec(values) => values
-            .iter()
-            .map(|&x| digamma_scalar(x, mode))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::RealVec),
+        SpecialTensor::RealVec(values) => {
+            par_map_indices(values.len(), |i| digamma_scalar(values[i], mode))
+                .map(SpecialTensor::RealVec)
+        }
         SpecialTensor::ComplexScalar(z_val) => {
             Ok(SpecialTensor::ComplexScalar(complex_digamma_scalar(*z_val)))
         }
-        SpecialTensor::ComplexVec(values) => Ok(SpecialTensor::ComplexVec(
-            values
-                .iter()
-                .map(|&z_val| complex_digamma_scalar(z_val))
-                .collect(),
-        )),
+        SpecialTensor::ComplexVec(values) => {
+            par_map_indices(values.len(), |i| Ok(complex_digamma_scalar(values[i])))
+                .map(SpecialTensor::ComplexVec)
+        }
         SpecialTensor::Empty => Err(SpecialError {
             function,
             kind: SpecialErrorKind::DomainError,
