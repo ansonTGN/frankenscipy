@@ -722,41 +722,25 @@ fn bessel_derivative_dispatch(
     kind: BesselKind,
     rule: DerivativeRule,
 ) -> SpecialResult {
+    let eval_real = |order: f64, x: f64| {
+        bessel_derivative_real_scalar(function, order, x, derivative_order, mode, kind, rule)
+    };
+    let eval_complex = |order: f64, z_val: Complex64| {
+        bessel_derivative_complex_scalar(function, order, z_val, derivative_order, mode, kind, rule)
+    };
     match (v, z) {
         (SpecialTensor::RealScalar(order), SpecialTensor::RealScalar(x)) => {
-            bessel_derivative_real_scalar(function, *order, *x, derivative_order, mode, kind, rule)
-                .map(SpecialTensor::RealScalar)
+            eval_real(*order, *x).map(SpecialTensor::RealScalar)
         }
-        (SpecialTensor::RealVec(orders), SpecialTensor::RealScalar(x)) => orders
-            .iter()
-            .map(|&order| {
-                bessel_derivative_real_scalar(
-                    function,
-                    order,
-                    *x,
-                    derivative_order,
-                    mode,
-                    kind,
-                    rule,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::RealVec),
-        (SpecialTensor::RealScalar(order), SpecialTensor::RealVec(xs)) => xs
-            .iter()
-            .map(|&x| {
-                bessel_derivative_real_scalar(
-                    function,
-                    *order,
-                    x,
-                    derivative_order,
-                    mode,
-                    kind,
-                    rule,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::RealVec),
+        (SpecialTensor::RealVec(orders), SpecialTensor::RealScalar(x)) => {
+            let x = *x;
+            par_map_indices(orders.len(), |i| eval_real(orders[i], x))
+                .map(SpecialTensor::RealVec)
+        }
+        (SpecialTensor::RealScalar(order), SpecialTensor::RealVec(xs)) => {
+            let order = *order;
+            par_map_indices(xs.len(), |i| eval_real(order, xs[i])).map(SpecialTensor::RealVec)
+        }
         (SpecialTensor::RealVec(orders), SpecialTensor::RealVec(xs)) => {
             if orders.len() != xs.len() {
                 return Err(SpecialError {
@@ -766,65 +750,22 @@ fn bessel_derivative_dispatch(
                     detail: "vector inputs must have matching lengths",
                 });
             }
-            orders
-                .iter()
-                .zip(xs.iter())
-                .map(|(&order, &x)| {
-                    bessel_derivative_real_scalar(
-                        function,
-                        order,
-                        x,
-                        derivative_order,
-                        mode,
-                        kind,
-                        rule,
-                    )
-                })
-                .collect::<Result<Vec<_>, _>>()
+            par_map_indices(orders.len(), |i| eval_real(orders[i], xs[i]))
                 .map(SpecialTensor::RealVec)
         }
         (SpecialTensor::RealScalar(order), SpecialTensor::ComplexScalar(z_val)) => {
-            bessel_derivative_complex_scalar(
-                function,
-                *order,
-                *z_val,
-                derivative_order,
-                mode,
-                kind,
-                rule,
-            )
-            .map(SpecialTensor::ComplexScalar)
+            eval_complex(*order, *z_val).map(SpecialTensor::ComplexScalar)
         }
-        (SpecialTensor::RealScalar(order), SpecialTensor::ComplexVec(zs)) => zs
-            .iter()
-            .map(|&z_val| {
-                bessel_derivative_complex_scalar(
-                    function,
-                    *order,
-                    z_val,
-                    derivative_order,
-                    mode,
-                    kind,
-                    rule,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
-        (SpecialTensor::RealVec(orders), SpecialTensor::ComplexScalar(z_val)) => orders
-            .iter()
-            .map(|&order| {
-                bessel_derivative_complex_scalar(
-                    function,
-                    order,
-                    *z_val,
-                    derivative_order,
-                    mode,
-                    kind,
-                    rule,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
+        (SpecialTensor::RealScalar(order), SpecialTensor::ComplexVec(zs)) => {
+            let order = *order;
+            par_map_indices(zs.len(), |i| eval_complex(order, zs[i]))
+                .map(SpecialTensor::ComplexVec)
+        }
+        (SpecialTensor::RealVec(orders), SpecialTensor::ComplexScalar(z_val)) => {
+            let z_val = *z_val;
+            par_map_indices(orders.len(), |i| eval_complex(orders[i], z_val))
+                .map(SpecialTensor::ComplexVec)
+        }
         (SpecialTensor::RealVec(orders), SpecialTensor::ComplexVec(zs)) => {
             if orders.len() != zs.len() {
                 return Err(SpecialError {
@@ -834,21 +775,7 @@ fn bessel_derivative_dispatch(
                     detail: "vector inputs must have matching lengths",
                 });
             }
-            orders
-                .iter()
-                .zip(zs.iter())
-                .map(|(&order, &z_val)| {
-                    bessel_derivative_complex_scalar(
-                        function,
-                        order,
-                        z_val,
-                        derivative_order,
-                        mode,
-                        kind,
-                        rule,
-                    )
-                })
-                .collect::<Result<Vec<_>, _>>()
+            par_map_indices(orders.len(), |i| eval_complex(orders[i], zs[i]))
                 .map(SpecialTensor::ComplexVec)
         }
         (SpecialTensor::ComplexScalar(_), _) | (SpecialTensor::ComplexVec(_), _) => {
@@ -1006,25 +933,25 @@ fn hankel_derivative_dispatch(
     mode: RuntimeMode,
     kind: HankelKind,
 ) -> SpecialResult {
+    let eval_real = |order: f64, x: f64| {
+        hankel_derivative_real_scalar(function, order, x, derivative_order, mode, kind)
+    };
+    let eval_complex = |order: f64, z_val: Complex64| {
+        hankel_derivative_complex_scalar(function, order, z_val, derivative_order, mode, kind)
+    };
     match (v, z) {
         (SpecialTensor::RealScalar(order), SpecialTensor::RealScalar(x)) => {
-            hankel_derivative_real_scalar(function, *order, *x, derivative_order, mode, kind)
-                .map(SpecialTensor::ComplexScalar)
+            eval_real(*order, *x).map(SpecialTensor::ComplexScalar)
         }
-        (SpecialTensor::RealVec(orders), SpecialTensor::RealScalar(x)) => orders
-            .iter()
-            .map(|&order| {
-                hankel_derivative_real_scalar(function, order, *x, derivative_order, mode, kind)
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
-        (SpecialTensor::RealScalar(order), SpecialTensor::RealVec(xs)) => xs
-            .iter()
-            .map(|&x| {
-                hankel_derivative_real_scalar(function, *order, x, derivative_order, mode, kind)
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
+        (SpecialTensor::RealVec(orders), SpecialTensor::RealScalar(x)) => {
+            let x = *x;
+            par_map_indices(orders.len(), |i| eval_real(orders[i], x))
+                .map(SpecialTensor::ComplexVec)
+        }
+        (SpecialTensor::RealScalar(order), SpecialTensor::RealVec(xs)) => {
+            let order = *order;
+            par_map_indices(xs.len(), |i| eval_real(order, xs[i])).map(SpecialTensor::ComplexVec)
+        }
         (SpecialTensor::RealVec(orders), SpecialTensor::RealVec(xs)) => {
             if orders.len() != xs.len() {
                 return Err(SpecialError {
@@ -1034,47 +961,22 @@ fn hankel_derivative_dispatch(
                     detail: "vector inputs must have matching lengths",
                 });
             }
-            orders
-                .iter()
-                .zip(xs.iter())
-                .map(|(&order, &x)| {
-                    hankel_derivative_real_scalar(function, order, x, derivative_order, mode, kind)
-                })
-                .collect::<Result<Vec<_>, _>>()
+            par_map_indices(orders.len(), |i| eval_real(orders[i], xs[i]))
                 .map(SpecialTensor::ComplexVec)
         }
         (SpecialTensor::RealScalar(order), SpecialTensor::ComplexScalar(z_val)) => {
-            hankel_derivative_complex_scalar(function, *order, *z_val, derivative_order, mode, kind)
-                .map(SpecialTensor::ComplexScalar)
+            eval_complex(*order, *z_val).map(SpecialTensor::ComplexScalar)
         }
-        (SpecialTensor::RealScalar(order), SpecialTensor::ComplexVec(zs)) => zs
-            .iter()
-            .map(|&z_val| {
-                hankel_derivative_complex_scalar(
-                    function,
-                    *order,
-                    z_val,
-                    derivative_order,
-                    mode,
-                    kind,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
-        (SpecialTensor::RealVec(orders), SpecialTensor::ComplexScalar(z_val)) => orders
-            .iter()
-            .map(|&order| {
-                hankel_derivative_complex_scalar(
-                    function,
-                    order,
-                    *z_val,
-                    derivative_order,
-                    mode,
-                    kind,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
+        (SpecialTensor::RealScalar(order), SpecialTensor::ComplexVec(zs)) => {
+            let order = *order;
+            par_map_indices(zs.len(), |i| eval_complex(order, zs[i]))
+                .map(SpecialTensor::ComplexVec)
+        }
+        (SpecialTensor::RealVec(orders), SpecialTensor::ComplexScalar(z_val)) => {
+            let z_val = *z_val;
+            par_map_indices(orders.len(), |i| eval_complex(orders[i], z_val))
+                .map(SpecialTensor::ComplexVec)
+        }
         (SpecialTensor::RealVec(orders), SpecialTensor::ComplexVec(zs)) => {
             if orders.len() != zs.len() {
                 return Err(SpecialError {
@@ -1084,20 +986,7 @@ fn hankel_derivative_dispatch(
                     detail: "vector inputs must have matching lengths",
                 });
             }
-            orders
-                .iter()
-                .zip(zs.iter())
-                .map(|(&order, &z_val)| {
-                    hankel_derivative_complex_scalar(
-                        function,
-                        order,
-                        z_val,
-                        derivative_order,
-                        mode,
-                        kind,
-                    )
-                })
-                .collect::<Result<Vec<_>, _>>()
+            par_map_indices(orders.len(), |i| eval_complex(orders[i], zs[i]))
                 .map(SpecialTensor::ComplexVec)
         }
         (SpecialTensor::ComplexScalar(_), _) | (SpecialTensor::ComplexVec(_), _) => {
@@ -1890,16 +1779,20 @@ fn spherical_bessel_dispatch(
             spherical_bessel_complex_scalar(function, *order, *z_val, mode, kind)
                 .map(SpecialTensor::ComplexScalar)
         }
-        (SpecialTensor::RealScalar(order), SpecialTensor::ComplexVec(zs)) => zs
-            .iter()
-            .map(|&z_val| spherical_bessel_complex_scalar(function, *order, z_val, mode, kind))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
-        (SpecialTensor::RealVec(orders), SpecialTensor::ComplexScalar(z_val)) => orders
-            .iter()
-            .map(|&order| spherical_bessel_complex_scalar(function, order, *z_val, mode, kind))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
+        (SpecialTensor::RealScalar(order), SpecialTensor::ComplexVec(zs)) => {
+            let order = *order;
+            par_map_indices(zs.len(), |i| {
+                spherical_bessel_complex_scalar(function, order, zs[i], mode, kind)
+            })
+            .map(SpecialTensor::ComplexVec)
+        }
+        (SpecialTensor::RealVec(orders), SpecialTensor::ComplexScalar(z_val)) => {
+            let z_val = *z_val;
+            par_map_indices(orders.len(), |i| {
+                spherical_bessel_complex_scalar(function, orders[i], z_val, mode, kind)
+            })
+            .map(SpecialTensor::ComplexVec)
+        }
         (SpecialTensor::RealVec(orders), SpecialTensor::ComplexVec(zs)) => {
             if orders.len() != zs.len() {
                 return Err(SpecialError {
@@ -1909,14 +1802,10 @@ fn spherical_bessel_dispatch(
                     detail: "vector inputs must have matching lengths",
                 });
             }
-            orders
-                .iter()
-                .zip(zs.iter())
-                .map(|(&order, &z_val)| {
-                    spherical_bessel_complex_scalar(function, order, z_val, mode, kind)
-                })
-                .collect::<Result<Vec<_>, _>>()
-                .map(SpecialTensor::ComplexVec)
+            par_map_indices(orders.len(), |i| {
+                spherical_bessel_complex_scalar(function, orders[i], zs[i], mode, kind)
+            })
+            .map(SpecialTensor::ComplexVec)
         }
         // Complex n - not supported
         (SpecialTensor::ComplexScalar(_), _) | (SpecialTensor::ComplexVec(_), _) => {

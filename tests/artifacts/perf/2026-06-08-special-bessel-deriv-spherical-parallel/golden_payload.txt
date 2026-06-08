@@ -1,0 +1,14 @@
+=== release-perf profile (parallel; serial 300k timing-acc matched serial run) ===
+n=100 jvp(xor=9c8d6e7a43c92503) h1vp(xor=29517700d46f478e) sph_jn(xor=b518ad1345e233aa)
+n=5000 jvp(xor=c1207c13933fbdfa) h1vp(xor=b574a60bc240d18e) sph_jn(xor=8c1e2eb37a766b4b)
+n=50000 jvp(xor=50980f6d5f7d345c) h1vp(xor=a9afd56004bcc0f7) sph_jn(xor=9580a7fa31a43b00)
+timing acc 300k: jvp=de5bc7fb125d7fe9  h1vp=3838b1851db21ada  spherical_jn=f9f764e81b273571
+  (serial release-perf run produced the SAME three 300k accs -> byte-identical)
+
+=== dev profile (serial vs parallel BOTH captured, ALL 9 hashes identical) ===
+n=100 jvp(xor=9c8d6e7a43c92503) h1vp(xor=29517700d46f478e) sph_jn(xor=b518ad1345e233aa)
+n=5000 jvp(xor=c1207c13933fbdfa) h1vp(xor=b574a60bc240d18f) sph_jn(xor=8c1e2eb37a766b4b)
+n=50000 jvp(xor=50980f6d5f7d345c) h1vp(xor=f35a3a0935bceabd) sph_jn(xor=9580a7fa31a43b00)
+  (the dev h1vp xor differs from release-perf in the last ULP — that is a dev-vs-release
+   fma/optimization difference of the kernel itself, NOT the parallelization: within EACH
+   profile, serial and parallel are bit-for-bit identical.)
