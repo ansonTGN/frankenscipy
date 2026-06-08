@@ -7527,6 +7527,29 @@ impl DiscreteDistribution for Hypergeometric {
         ln_pmf.exp()
     }
 
+    fn logpmf(&self, k: u64) -> f64 {
+        // log of the hypergeometric pmf (the pmf forms this then exp's it);
+        // finite where pmf underflows. frankenscipy-7m3xk
+        let m = self.big_m as f64;
+        let n = self.n as f64;
+        let big_n = self.big_n as f64;
+        let kf = k as f64;
+        let k_min = if self.big_n.saturating_add(self.n) > self.big_m {
+            (self.big_n + self.n - self.big_m) as f64
+        } else {
+            0.0
+        };
+        if kf < k_min || kf > n.min(big_n) {
+            return f64::NEG_INFINITY;
+        }
+        ln_gamma(n + 1.0) - ln_gamma(kf + 1.0) - ln_gamma(n - kf + 1.0) + ln_gamma(m - n + 1.0)
+            - ln_gamma(big_n - kf + 1.0)
+            - ln_gamma(m - n - big_n + kf + 1.0)
+            - ln_gamma(m + 1.0)
+            + ln_gamma(big_n + 1.0)
+            + ln_gamma(m - big_n + 1.0)
+    }
+
     fn mean(&self) -> f64 {
         self.big_n as f64 * self.n as f64 / self.big_m as f64
     }
@@ -7655,6 +7678,21 @@ impl DiscreteDistribution for NegHypergeometric {
         let ln_num2 = Self::ln_comb(m - r - k, n - r);
         let ln_den = Self::ln_comb(m, n);
         (ln_num1 + ln_num2 - ln_den).exp()
+    }
+
+    fn logpmf(&self, k: u64) -> f64 {
+        // log of the negative-hypergeometric pmf (pmf forms this then exp's it);
+        // finite where pmf underflows. frankenscipy-7m3xk
+        let m = self.big_m;
+        let n = self.n;
+        let r = self.r;
+        if r == 0 {
+            return if k == 0 { 0.0 } else { f64::NEG_INFINITY };
+        }
+        if k > m - n {
+            return f64::NEG_INFINITY;
+        }
+        Self::ln_comb(k + r - 1, k) + Self::ln_comb(m - r - k, n - r) - Self::ln_comb(m, n)
     }
 
     fn cdf(&self, k: u64) -> f64 {
@@ -12424,6 +12462,14 @@ impl DiscreteDistribution for Zipfian {
             return 0.0;
         }
         (k as f64).powf(-self.a) / self.z()
+    }
+
+    fn logpmf(&self, k: u64) -> f64 {
+        // −a·ln(k) − ln(Z); finite where pmf underflows. frankenscipy-7m3xk
+        if k == 0 || k > self.n as u64 {
+            return f64::NEG_INFINITY;
+        }
+        -self.a * (k as f64).ln() - self.z().ln()
     }
 
     fn cdf(&self, k: u64) -> f64 {
@@ -40750,6 +40796,9 @@ mod tests {
         mid!(Boltzmann::new(0.5, 20), &[0, 3, 10]);
         mid!(BetaNegativeBinomial::new(5, 2.0, 3.0), &[0, 3, 10, 25]);
         mid!(Skellam::new(3.0, 2.0), &[0, 2, 5, 9]);
+        mid!(Hypergeometric::new(50, 20, 12), &[2, 5, 8, 11]);
+        mid!(NegHypergeometric::new(50, 20, 5), &[0, 5, 15, 29]);
+        mid!(Zipfian::new(1.3, 100), &[1, 5, 50, 100]);
 
         // Skellam large μ1·μ2: pmf's I_k overflows → NaN; logpmf (log_ive) finite.
         let sk = Skellam::new(400.0, 400.0);
