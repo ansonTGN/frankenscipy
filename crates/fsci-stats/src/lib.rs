@@ -4220,6 +4220,15 @@ impl ContinuousDistribution for Gibrat {
         (-0.5 * lnx * lnx).exp() / (x * (2.0 * PI).sqrt())
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // −½·(ln x)² − ln(x) − ½ln(2π); finite in the tail. frankenscipy-p82v7
+        if x <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        let lnx = x.ln();
+        -0.5 * lnx * lnx - lnx - 0.5 * (2.0 * PI).ln()
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         if x <= 0.0 {
             return 0.0;
@@ -10452,6 +10461,14 @@ impl ContinuousDistribution for PowerLaw {
         }
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln(a) + (a−1)·ln(x) on (0,1]; boundary/shape limits delegate to pdf. frankenscipy-p82v7
+        if !(0.0..=1.0).contains(&x) || x == 0.0 {
+            return self.pdf(x).ln();
+        }
+        self.a.ln() + (self.a - 1.0) * x.ln()
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         if x <= 0.0 {
             0.0
@@ -12364,6 +12381,16 @@ impl ContinuousDistribution for DoubleWeibull {
         0.5 * c * x.abs().powf(c - 1.0) * (-x.abs().powf(c)).exp()
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln(½c) + (c−1)·ln|x| − |x|^c; shape-dependent x=0 limit delegates. frankenscipy-p82v7
+        if x == 0.0 {
+            return self.pdf(x).ln();
+        }
+        let c = self.c;
+        let ax = x.abs();
+        (0.5 * c).ln() + (c - 1.0) * ax.ln() - ax.powf(c)
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         let c = self.c;
         if x < 0.0 {
@@ -12489,6 +12516,15 @@ impl DoubleGamma {
 impl ContinuousDistribution for DoubleGamma {
     fn pdf(&self, x: f64) -> f64 {
         0.5 * x.abs().powf(self.a - 1.0) * (-x.abs()).exp() / ln_gamma(self.a).exp()
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln(½) + (a−1)·ln|x| − |x| − lnΓ(a); shape-dependent x=0 limit delegates. frankenscipy-p82v7
+        if x == 0.0 {
+            return self.pdf(x).ln();
+        }
+        let ax = x.abs();
+        0.5_f64.ln() + (self.a - 1.0) * ax.ln() - ax - ln_gamma(self.a)
     }
 
     fn cdf(&self, x: f64) -> f64 {
@@ -13199,6 +13235,16 @@ impl ContinuousDistribution for Erlang {
         lambda.powf(k) * x.powf(k - 1.0) * (-lambda * x).exp() / ln_gamma(k).exp()
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // k·ln(λ) + (k−1)·ln(x) − λx − lnΓ(k); finite in the tail; x≤0 delegates. frankenscipy-p82v7
+        if x <= 0.0 {
+            return self.pdf(x).ln();
+        }
+        let k = self.k as f64;
+        let lambda = self.rate;
+        k * lambda.ln() + (k - 1.0) * x.ln() - lambda * x - ln_gamma(k)
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         if x <= 0.0 {
             return 0.0;
@@ -13640,6 +13686,15 @@ impl ContinuousDistribution for Gilbrat {
         }
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // −½·(ln x)² − ln(x) − ½ln(2π); finite in the tail. frankenscipy-p82v7
+        if x <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        let lnx = x.ln();
+        -0.5 * lnx * lnx - lnx - 0.5 * (2.0 * PI).ln()
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         if x <= 0.0 {
             0.0
@@ -13771,6 +13826,15 @@ impl ContinuousDistribution for Levy {
             return 0.0;
         }
         (self.scale / (2.0 * PI)).sqrt() * (-self.scale / (2.0 * z)).exp() / z.powf(1.5)
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // ½·ln(scale/2π) − scale/(2z) − 1.5·ln(z), z = x−loc. frankenscipy-p82v7
+        let z = x - self.loc;
+        if z <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        0.5 * (self.scale / (2.0 * PI)).ln() - self.scale / (2.0 * z) - 1.5 * z.ln()
     }
 
     fn cdf(&self, x: f64) -> f64 {
@@ -13918,6 +13982,15 @@ impl ContinuousDistribution for LevyLeft {
             return 0.0;
         }
         (self.scale / (2.0 * PI)).sqrt() * (-self.scale / (2.0 * z)).exp() / z.powf(1.5)
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // ½·ln(scale/2π) − scale/(2z) − 1.5·ln(z), z = loc−x. frankenscipy-p82v7
+        let z = self.loc - x;
+        if z <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        0.5 * (self.scale / (2.0 * PI)).ln() - self.scale / (2.0 * z) - 1.5 * z.ln()
     }
 
     fn cdf(&self, x: f64) -> f64 {
@@ -14235,6 +14308,17 @@ impl ContinuousDistribution for Burr12 {
         c * d * x.powf(c - 1.0) / (1.0 + x.powf(c)).powf(d + 1.0)
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln(c)+ln(d)+(c−1)·ln(x) − (d+1)·ln1p(x^c); shape-dependent x=0 limit
+        // delegates to pdf. frankenscipy-p82v7
+        if x <= 0.0 {
+            return self.pdf(x).ln();
+        }
+        let c = self.c;
+        let d = self.d;
+        c.ln() + d.ln() + (c - 1.0) * x.ln() - (d + 1.0) * x.powf(c).ln_1p()
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         if x <= 0.0 {
             return 0.0;
@@ -14400,6 +14484,20 @@ impl ContinuousDistribution for LogLaplace {
             c / 2.0 * x.powf(c - 1.0)
         } else {
             c / 2.0 * x.powf(-c - 1.0)
+        }
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln(c/2) + (c−1)·ln(x) for x<1, + (−c−1)·ln(x) for x≥1; shape-dependent
+        // x=0 limit delegates to pdf. frankenscipy-p82v7
+        if x <= 0.0 {
+            return self.pdf(x).ln();
+        }
+        let c = self.c;
+        if x < 1.0 {
+            (c / 2.0).ln() + (c - 1.0) * x.ln()
+        } else {
+            (c / 2.0).ln() + (-c - 1.0) * x.ln()
         }
     }
 
@@ -14926,6 +15024,11 @@ impl ContinuousDistribution for Moyal {
     fn pdf(&self, x: f64) -> f64 {
         let inv_sqrt_2pi = 1.0 / (2.0 * PI).sqrt();
         inv_sqrt_2pi * (-0.5 * (x + (-x).exp())).exp()
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // −½·ln(2π) − ½·(x + e^{−x}); finite in the right tail. frankenscipy-p82v7
+        -0.5 * (2.0 * PI).ln() - 0.5 * (x + (-x).exp())
     }
 
     fn cdf(&self, x: f64) -> f64 {
@@ -17625,6 +17728,11 @@ impl LogGamma {
 impl ContinuousDistribution for LogGamma {
     fn pdf(&self, x: f64) -> f64 {
         (self.c * x - x.exp() - ln_gamma(self.c)).exp()
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // c·x − e^x − lnΓ(c); finite in both tails where pdf underflows. frankenscipy-p82v7
+        self.c * x - x.exp() - ln_gamma(self.c)
     }
 
     fn cdf(&self, x: f64) -> f64 {
@@ -39891,6 +39999,51 @@ mod tests {
         tail!(GenExtreme::new(0.0), 800.0); // −x − e^{−x} ≈ −800
         tail!(GenLogistic::new(2.0), 800.0); // ≈ −x
         tail!(GeneralizedExponential::new(1.0, 0.5, 0.8), 800.0); // exponent → −1200
+    }
+
+    #[test]
+    fn logpdf_overrides_batch4_consistent_and_finite() {
+        macro_rules! mid {
+            ($d:expr, $xs:expr) => {{
+                let d = $d;
+                for &x in $xs {
+                    let lp = d.logpdf(x);
+                    let r = d.pdf(x).ln();
+                    assert!(
+                        (lp - r).abs() <= 1e-9 * r.abs().max(1.0),
+                        "{}: logpdf({x})={lp} vs ln(pdf)={r}",
+                        stringify!($d)
+                    );
+                }
+            }};
+        }
+        mid!(Gibrat, &[0.3, 1.0, 3.0]);
+        mid!(Gilbrat, &[0.3, 1.0, 3.0]);
+        mid!(PowerLaw::new(2.5), &[0.2, 0.5, 1.0]);
+        mid!(Erlang::new(3, 1.0), &[0.5, 2.0, 6.0]);
+        mid!(Levy::new(0.0, 1.0), &[0.5, 1.0, 4.0]);
+        mid!(LevyLeft::new(0.0, 1.0), &[-4.0, -1.0, -0.5]);
+        mid!(Burr12::new(2.0, 1.5), &[0.3, 1.0, 3.0]);
+        mid!(LogLaplace::new(2.0), &[0.5, 0.9, 1.5, 3.0]);
+        mid!(Moyal, &[-1.0, 0.5, 3.0]);
+        mid!(DoubleWeibull::new(2.0), &[-2.0, 0.5, 2.0]);
+        mid!(DoubleGamma::new(1.5), &[-2.0, 0.5, 2.0]);
+        mid!(LogGamma::new(2.0), &[-2.0, 0.5, 3.0]);
+
+        // Deep tail: pdf underflows to 0; logpdf finite & large-negative.
+        macro_rules! tail {
+            ($d:expr, $x:expr) => {{
+                let d = $d;
+                assert_eq!(d.pdf($x), 0.0, "precondition: pdf underflowed at {}", $x);
+                let lp = d.logpdf($x);
+                assert!(lp.is_finite() && lp < -300.0, "{}: logpdf={lp}", stringify!($d));
+            }};
+        }
+        tail!(Gibrat, 1e30); // −½·(ln x)² ≈ −2386
+        tail!(Erlang::new(3, 1.0), 2000.0); // −λx = −2000
+        tail!(Moyal, 1600.0); // −½·x ≈ −800
+        tail!(DoubleGamma::new(1.5), 800.0); // −|x| = −800
+        tail!(LogGamma::new(2.0), 7.0); // −e^7 ≈ −1097
     }
 
     // ── Exponential distribution ────────────────────────────────────
