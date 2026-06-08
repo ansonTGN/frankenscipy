@@ -2107,10 +2107,15 @@ fn rank_filter_index_usize_axes_with_origins(
     let kernel_shape: Vec<usize> = vec![size; axes.len()];
     let kernel_strides = compute_strides(&kernel_shape);
 
-    for flat_out in 0..input.size() {
+    // Independent per-output neighbourhood gather + rank-select, reusing the
+    // thread-local scratch as the neighbourhood buffer. Byte-identical to the
+    // sequential loop (same gather order + `select_total_rank`), parallelized
+    // across the disjoint output pixels. Handles arbitrary axes subsets (unlike
+    // the full-ndim `rank_filter_pixel` path), so rank/median/percentile filters
+    // over an axes subset get the same parallel speedup.
+    fill_pixels_parallel(&mut output, kernel_total, |flat_out, neighborhood| {
         let out_idx = input.unravel(flat_out);
-        let mut neighborhood = Vec::with_capacity(kernel_total);
-
+        neighborhood.clear();
         for flat_k in 0..kernel_total {
             let mut k_idx = vec![0usize; axes.len()];
             let mut rem = flat_k;
@@ -2125,9 +2130,8 @@ fn rank_filter_index_usize_axes_with_origins(
             }
             neighborhood.push(input.get_boundary(&in_idx, mode, cval));
         }
-
-        output.data[flat_out] = select_total_rank(&mut neighborhood, rank);
-    }
+        select_total_rank(neighborhood.as_mut_slice(), rank)
+    });
 
     Ok(output)
 }

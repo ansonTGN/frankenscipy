@@ -1,0 +1,14 @@
+# Axes-subset rank/median/percentile/min/max filter core
+# (rank_filter_index_usize_axes_with_origins): serial per-pixel loop ->
+# fill_pixels_parallel. BYTE-IDENTICAL: perf_rank_filter golden digests match
+# exactly between serial and parallel builds (incl. axis-subset + NaN/Inf cases):
+median_axis_last_wrap_size9        digest=486d6e777ccbe8a8
+rank_axis_first_nearest_size9_rank3 digest=9bb1ae777ccbe8a8
+median_all_reflect_size7           digest=ad3d6e777ccbe8a8
+rank_all_constant_size15_rank56    digest=3e1dae777ccbe8a8
+# (all 6 golden cases identical serial vs parallel)
+
+# Timing rank_filter_axes (axis-0 median, rch 64 cores, release-perf):
+r=1500 c=1500 size=31  2.246s   -> 101.281ms (22.2x)
+r=2000 c=2000 size=41  5.115s   -> 222.338ms (23.0x)
+r=3000 c=3000 size=21  6.557s   -> 266.674ms (24.6x)
