@@ -2697,9 +2697,10 @@ where
 /// per element and each index writes its own slot, so chunking across cores and
 /// concatenating in index order is bit-identical to `(0..n).map(f).collect()` — including
 /// returning the first failing index's error in index order.
-fn par_map_indices<H>(n: usize, f: H) -> Result<Vec<f64>, SpecialError>
+fn par_map_indices<T, H>(n: usize, f: H) -> Result<Vec<T>, SpecialError>
 where
-    H: Fn(usize) -> Result<f64, SpecialError> + Sync,
+    T: Send,
+    H: Fn(usize) -> Result<T, SpecialError> + Sync,
 {
     let nthreads = if n < 256 {
         1
@@ -2715,7 +2716,7 @@ where
     }
     let chunk = n.div_ceil(nthreads);
     let f = &f;
-    let chunk_results: Vec<Result<Vec<f64>, SpecialError>> = std::thread::scope(|scope| {
+    let chunk_results: Vec<Result<Vec<T>, SpecialError>> = std::thread::scope(|scope| {
         (0..nthreads)
             .filter_map(|t| {
                 let i0 = t * chunk;
@@ -2723,7 +2724,7 @@ where
                     return None;
                 }
                 let i1 = (i0 + chunk).min(n);
-                Some(scope.spawn(move || (i0..i1).map(f).collect::<Result<Vec<f64>, _>>()))
+                Some(scope.spawn(move || (i0..i1).map(f).collect::<Result<Vec<T>, _>>()))
             })
             .collect::<Vec<_>>()
             .into_iter()
@@ -4227,16 +4228,18 @@ fn bessel_dispatch(
             bessel_complex_scalar(function, *order, *z_val, mode, kind)
                 .map(SpecialTensor::ComplexScalar)
         }
-        (SpecialTensor::RealScalar(order), SpecialTensor::ComplexVec(zs)) => zs
-            .iter()
-            .map(|&z_val| bessel_complex_scalar(function, *order, z_val, mode, kind))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
-        (SpecialTensor::RealVec(orders), SpecialTensor::ComplexScalar(z_val)) => orders
-            .iter()
-            .map(|&order| bessel_complex_scalar(function, order, *z_val, mode, kind))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
+        (SpecialTensor::RealScalar(order), SpecialTensor::ComplexVec(zs)) => {
+            let order = *order;
+            par_map_indices(zs.len(), |i| bessel_complex_scalar(function, order, zs[i], mode, kind))
+                .map(SpecialTensor::ComplexVec)
+        }
+        (SpecialTensor::RealVec(orders), SpecialTensor::ComplexScalar(z_val)) => {
+            let z_val = *z_val;
+            par_map_indices(orders.len(), |i| {
+                bessel_complex_scalar(function, orders[i], z_val, mode, kind)
+            })
+            .map(SpecialTensor::ComplexVec)
+        }
         (SpecialTensor::RealVec(orders), SpecialTensor::ComplexVec(zs)) => {
             if orders.len() != zs.len() {
                 return Err(SpecialError {
@@ -4246,12 +4249,10 @@ fn bessel_dispatch(
                     detail: "vector inputs must have matching lengths",
                 });
             }
-            orders
-                .iter()
-                .zip(zs.iter())
-                .map(|(&order, &z_val)| bessel_complex_scalar(function, order, z_val, mode, kind))
-                .collect::<Result<Vec<_>, _>>()
-                .map(SpecialTensor::ComplexVec)
+            par_map_indices(orders.len(), |i| {
+                bessel_complex_scalar(function, orders[i], zs[i], mode, kind)
+            })
+            .map(SpecialTensor::ComplexVec)
         }
         // Complex order not supported
         (SpecialTensor::ComplexScalar(_), _) | (SpecialTensor::ComplexVec(_), _) => {
