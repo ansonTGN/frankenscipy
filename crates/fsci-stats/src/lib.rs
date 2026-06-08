@@ -5328,6 +5328,14 @@ impl ContinuousDistribution for Maxwell {
         upper_regularized_gamma(1.5, x * x / (2.0 * self.scale * self.scale))
     }
 
+    fn logsf(&self, x: f64) -> f64 {
+        // log Q(3/2, x²/(2σ²)); finite in the ultra-extreme tail. frankenscipy-pkaua
+        if x <= 0.0 {
+            return 0.0;
+        }
+        fsci_special::log_gammaincc_scalar(1.5, x * x / (2.0 * self.scale * self.scale))
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
@@ -10683,6 +10691,14 @@ impl ContinuousDistribution for Chi {
         upper_regularized_gamma(self.df / 2.0, x * x / 2.0)
     }
 
+    fn logsf(&self, x: f64) -> f64 {
+        // log Q(k/2, x²/2); finite in the ultra-extreme tail where Q underflows. frankenscipy-pkaua
+        if x <= 0.0 {
+            return 0.0;
+        }
+        fsci_special::log_gammaincc_scalar(self.df / 2.0, x * x / 2.0)
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
@@ -11002,6 +11018,14 @@ impl ContinuousDistribution for Nakagami {
             return 1.0;
         }
         upper_regularized_gamma(self.nu, self.nu * x * x)
+    }
+
+    fn logsf(&self, x: f64) -> f64 {
+        // log Q(nu, nu·x²); finite in the ultra-extreme tail. frankenscipy-pkaua
+        if x <= 0.0 {
+            return 0.0;
+        }
+        fsci_special::log_gammaincc_scalar(self.nu, self.nu * x * x)
     }
 
     fn mean(&self) -> f64 {
@@ -11952,6 +11976,16 @@ impl ContinuousDistribution for DoubleGamma {
         }
     }
 
+    fn logsf(&self, x: f64) -> f64 {
+        // x>0: log sf = −ln2 + log Q(a,x), finite where Q underflows; x≤0: sf is
+        // O(1), so ln(sf) is well-conditioned. frankenscipy-pkaua
+        if x > 0.0 {
+            -std::f64::consts::LN_2 + fsci_special::log_gammaincc_scalar(self.a, x)
+        } else {
+            self.sf(x).ln()
+        }
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
@@ -12641,6 +12675,14 @@ impl ContinuousDistribution for Erlang {
             return 1.0;
         }
         upper_regularized_gamma(self.k as f64, self.rate * x)
+    }
+
+    fn logsf(&self, x: f64) -> f64 {
+        // log Q(k, rate·x); finite in the ultra-extreme tail. frankenscipy-pkaua
+        if x <= 0.0 {
+            return 0.0;
+        }
+        fsci_special::log_gammaincc_scalar(self.k as f64, self.rate * x)
     }
 
     fn ppf(&self, q: f64) -> f64 {
@@ -16692,6 +16734,17 @@ impl ContinuousDistribution for GenNorm {
         }
     }
 
+    fn logsf(&self, x: f64) -> f64 {
+        // x≥0: log sf = −ln2 + log Q(1/β, x^β), finite where Q underflows; x<0:
+        // sf ≥ ½, so ln(sf) is well-conditioned. frankenscipy-pkaua
+        let b = self.beta;
+        if x >= 0.0 {
+            -std::f64::consts::LN_2 + fsci_special::log_gammaincc_scalar(1.0 / b, x.powf(b))
+        } else {
+            self.sf(x).ln()
+        }
+    }
+
     fn mean(&self) -> f64 {
         0.0
     }
@@ -16819,6 +16872,14 @@ impl ContinuousDistribution for HalfGenNorm {
             return 1.0;
         }
         upper_regularized_gamma(1.0 / self.beta, x.powf(self.beta))
+    }
+
+    fn logsf(&self, x: f64) -> f64 {
+        // log Q(1/β, x^β); finite in the ultra-extreme tail. frankenscipy-pkaua
+        if x <= 0.0 {
+            return 0.0;
+        }
+        fsci_special::log_gammaincc_scalar(1.0 / self.beta, x.powf(self.beta))
     }
 
     fn ppf(&self, q: f64) -> f64 {
@@ -16974,6 +17035,11 @@ impl ContinuousDistribution for LogGamma {
         // sf = Q(c, e^x) directly; the default 1−cdf collapses for large x where
         // the lower regularized gamma rounds to 1. frankenscipy-w3f6m
         upper_regularized_gamma(self.c, x.exp())
+    }
+
+    fn logsf(&self, x: f64) -> f64 {
+        // log Q(c, e^x); finite for large x where Q underflows. frankenscipy-pkaua
+        fsci_special::log_gammaincc_scalar(self.c, x.exp())
     }
 
     fn ppf(&self, q: f64) -> f64 {
@@ -38838,6 +38904,53 @@ mod tests {
         ext!(Gibrat, 1e120); // logΦ(-ln 1e120)
         ext!(Lognormal::new(1.0, 1.0), 1e150);
         ext!(JohnsonSU::new(0.5, 1.5), 1e260);
+    }
+
+    #[test]
+    fn gamma_tail_logsf_consistent_and_finite() {
+        // logsf == ln(sf) where sf is representable, and finite/large-negative
+        // deep in the tail where sf underflows to 0 (frankenscipy-pkaua).
+        macro_rules! mid {
+            ($d:expr, $xs:expr) => {{
+                let d = $d;
+                for &x in $xs {
+                    let ls = d.logsf(x);
+                    let r = d.sf(x).ln();
+                    assert!(
+                        (ls - r).abs() <= 1e-9 * r.abs().max(1.0),
+                        "{}: logsf({x})={ls} vs ln(sf)={r}",
+                        stringify!($d)
+                    );
+                }
+            }};
+        }
+        mid!(Chi::new(4.0), &[1.0, 3.0, 6.0]);
+        mid!(Nakagami::new(2.0), &[0.5, 1.5, 3.0]);
+        mid!(Erlang::new(3, 1.0), &[2.0, 6.0, 15.0]);
+        mid!(Maxwell::new(1.0), &[1.0, 3.0, 6.0]);
+        mid!(HalfGenNorm::new(1.5), &[0.5, 2.0, 5.0]);
+        mid!(LogGamma::new(2.0), &[-1.0, 0.5, 3.0]);
+        mid!(DoubleGamma::new(1.5), &[-2.0, 0.5, 3.0]);
+        mid!(GenNorm::new(1.5), &[-1.0, 0.5, 3.0]);
+
+        // Ultra-extreme tail: ln(sf) would be -inf (sf underflowed); logsf finite.
+        macro_rules! ext {
+            ($d:expr, $x:expr) => {{
+                let d = $d;
+                assert_eq!(d.sf($x), 0.0, "precondition: sf underflowed at {}", $x);
+                let ls = d.logsf($x);
+                assert!(
+                    ls.is_finite() && ls < -700.0,
+                    "{}: logsf({})={ls} not finite/large-negative",
+                    stringify!($d),
+                    $x
+                );
+            }};
+        }
+        ext!(Chi::new(4.0), 45.0); // Q(2, ~1012)
+        ext!(Maxwell::new(1.0), 45.0); // Q(1.5, ~1012)
+        ext!(LogGamma::new(2.0), 7.0); // Q(2, e^7≈1097)
+        ext!(HalfGenNorm::new(1.0), 800.0); // Q(1, 800)
     }
 
     // ── Exponential distribution ────────────────────────────────────
