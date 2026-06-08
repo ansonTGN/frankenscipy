@@ -4282,6 +4282,14 @@ impl ContinuousDistribution for Pareto {
         }
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln(b) + b·ln(scale) − (b+1)·ln(x); finite in the power-law tail. frankenscipy-p82v7
+        if x < self.scale {
+            return f64::NEG_INFINITY;
+        }
+        self.b.ln() + self.b * self.scale.ln() - (self.b + 1.0) * x.ln()
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         if x < self.scale {
             0.0
@@ -4428,6 +4436,14 @@ impl ContinuousDistribution for Lomax {
         } else {
             self.c / (1.0 + x).powf(self.c + 1.0)
         }
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln(c) − (c+1)·ln1p(x); finite in the power-law tail. frankenscipy-p82v7
+        if x < 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        self.c.ln() - (self.c + 1.0) * x.ln_1p()
     }
 
     fn cdf(&self, x: f64) -> f64 {
@@ -5166,6 +5182,12 @@ impl ContinuousDistribution for GumbelLeft {
     fn pdf(&self, x: f64) -> f64 {
         let z = (x - self.loc) / self.scale;
         (z - z.exp()).exp() / self.scale
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // z − e^z − ln(scale); finite in the left tail where pdf underflows. frankenscipy-p82v7
+        let z = (x - self.loc) / self.scale;
+        z - z.exp() - self.scale.ln()
     }
 
     fn cdf(&self, x: f64) -> f64 {
@@ -7979,6 +8001,12 @@ impl ContinuousDistribution for Cauchy {
         1.0 / (PI * self.scale * (1.0 + z * z))
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // −ln(π) − ln(scale) − ln(1+z²); finite in the heavy tail. frankenscipy-p82v7
+        let z = (x - self.loc) / self.scale;
+        -PI.ln() - self.scale.ln() - (1.0 + z * z).ln()
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         let z = (x - self.loc) / self.scale;
         0.5 + z.atan() / PI
@@ -10465,6 +10493,14 @@ impl ContinuousDistribution for HalfNormal {
         }
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // ½·ln(2/π) − x²/2; finite in the tail where pdf underflows. frankenscipy-p82v7
+        if x < 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        0.5 * (2.0 / PI).ln() - x * x / 2.0
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         if x < 0.0 {
             0.0
@@ -10557,6 +10593,14 @@ impl ContinuousDistribution for HalfLogistic {
         }
         let exp_neg_x = (-x).exp();
         2.0 * exp_neg_x / (1.0 + exp_neg_x).powi(2)
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln2 − x − 2·ln1p(e^{-x}); finite in the tail (support x≥0). frankenscipy-p82v7
+        if x < 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        2.0_f64.ln() - x - 2.0 * (-x).exp().ln_1p()
     }
 
     fn cdf(&self, x: f64) -> f64 {
@@ -10664,6 +10708,14 @@ impl ContinuousDistribution for HalfCauchy {
             return 0.0;
         }
         2.0 / (PI * (1.0 + x * x))
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln2 − ln(π) − ln(1+x²); finite in the heavy tail. frankenscipy-p82v7
+        if x < 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        2.0_f64.ln() - PI.ln() - (1.0 + x * x).ln()
     }
 
     fn cdf(&self, x: f64) -> f64 {
@@ -11023,6 +11075,15 @@ impl ContinuousDistribution for Chi {
             / ln_gamma(k / 2.0).exp()
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // (1−k/2)·ln2 + (k−1)·ln(x) − x²/2 − lnΓ(k/2); finite in the tail. frankenscipy-p82v7
+        if x <= 0.0 {
+            return self.pdf(x).ln();
+        }
+        let k = self.df;
+        (1.0 - k / 2.0) * 2.0_f64.ln() + (k - 1.0) * x.ln() - x * x / 2.0 - ln_gamma(k / 2.0)
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         if x <= 0.0 {
             return 0.0;
@@ -11362,6 +11423,15 @@ impl ContinuousDistribution for Nakagami {
         2.0 * nu.powf(nu) / ln_gamma(nu).exp() * x.powf(2.0 * nu - 1.0) * (-nu * x * x).exp()
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln2 + ν·ln(ν) − lnΓ(ν) + (2ν−1)·ln(x) − ν·x²; finite in the tail. frankenscipy-p82v7
+        if x <= 0.0 {
+            return self.pdf(x).ln();
+        }
+        let nu = self.nu;
+        2.0_f64.ln() + nu * nu.ln() - ln_gamma(nu) + (2.0 * nu - 1.0) * x.ln() - nu * x * x
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         if x <= 0.0 {
             return 0.0;
@@ -11556,6 +11626,16 @@ impl ContinuousDistribution for Fisk {
         }
         let c = self.c;
         c * x.powf(c - 1.0) / (1.0 + x.powf(c)).powi(2)
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln(c) + (c−1)·ln(x) − 2·ln1p(x^c); finite in the power-law tail. The
+        // shape-dependent x=0 limit is delegated to pdf. frankenscipy-p82v7
+        if x <= 0.0 {
+            return self.pdf(x).ln();
+        }
+        let c = self.c;
+        c.ln() + (c - 1.0) * x.ln() - 2.0 * x.powf(c).ln_1p()
     }
 
     fn cdf(&self, x: f64) -> f64 {
@@ -14876,6 +14956,14 @@ impl ContinuousDistribution for Gompertz {
         }
         // f(x; c) = c * exp(x) * exp(-c * (exp(x) - 1))
         self.c * x.exp() * (-self.c * (x.exp() - 1.0)).exp()
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln(c) + x − c·(e^x − 1); finite where pdf underflows. frankenscipy-p82v7
+        if x < 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        self.c.ln() + x - self.c * (x.exp() - 1.0)
     }
 
     fn cdf(&self, x: f64) -> f64 {
@@ -39580,6 +39668,51 @@ mod tests {
         tail!(Gumbel::new(0.0, 1.0), 800.0); // ≈ −z
         tail!(ChiSquared::new(4.0), 2000.0); // −x/2
         tail!(StudentT::new(2.0), 1e110); // power-law: −1.5·ln(1+x²/2), x² stays finite
+    }
+
+    #[test]
+    fn logpdf_overrides_batch2_consistent_and_finite() {
+        macro_rules! mid {
+            ($d:expr, $xs:expr) => {{
+                let d = $d;
+                for &x in $xs {
+                    let lp = d.logpdf(x);
+                    let r = d.pdf(x).ln();
+                    assert!(
+                        (lp - r).abs() <= 1e-9 * r.abs().max(1.0),
+                        "{}: logpdf({x})={lp} vs ln(pdf)={r}",
+                        stringify!($d)
+                    );
+                }
+            }};
+        }
+        mid!(Cauchy::new(0.0, 1.0), &[-3.0, 0.5, 3.0]);
+        mid!(Pareto::new(2.5, 1.0), &[1.0, 2.0, 5.0]);
+        mid!(Lomax::new(2.0), &[0.0, 1.0, 5.0]);
+        mid!(GumbelLeft::new(0.0, 1.0), &[-4.0, -0.5, 1.0]);
+        mid!(Chi::new(4.0), &[0.5, 2.0, 5.0]);
+        mid!(Nakagami::new(2.0), &[0.3, 1.0, 2.5]);
+        mid!(Gompertz::new(1.0), &[0.2, 1.0, 3.0]);
+        mid!(HalfNormal, &[0.5, 1.5, 3.0]);
+        mid!(HalfCauchy, &[0.5, 2.0, 5.0]);
+        mid!(HalfLogistic, &[0.5, 2.0, 5.0]);
+        mid!(Fisk::new(3.0), &[0.5, 1.0, 3.0]);
+
+        // Deep tail: pdf underflows to 0; logpdf finite & large-negative.
+        macro_rules! tail {
+            ($d:expr, $x:expr) => {{
+                let d = $d;
+                assert_eq!(d.pdf($x), 0.0, "precondition: pdf underflowed at {}", $x);
+                let lp = d.logpdf($x);
+                assert!(lp.is_finite() && lp < -300.0, "{}: logpdf={lp}", stringify!($d));
+            }};
+        }
+        tail!(HalfNormal, 40.0); // −x²/2 = −800
+        tail!(Chi::new(4.0), 45.0); // −x²/2 ≈ −1012
+        tail!(Nakagami::new(2.0), 25.0); // −ν·x² = −1250
+        tail!(Gompertz::new(1.0), 8.0); // −(e^8−1) ≈ −2980
+        tail!(HalfLogistic, 800.0); // ≈ −800
+        tail!(GumbelLeft::new(0.0, 1.0), -800.0); // z=−800 → ≈ −800
     }
 
     // ── Exponential distribution ────────────────────────────────────
