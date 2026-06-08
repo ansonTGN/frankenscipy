@@ -920,6 +920,35 @@ impl ContinuousDistribution for StudentT {
         if x > 0.0 { 0.5 * ib } else { 1.0 - 0.5 * ib }
     }
 
+    fn logcdf(&self, x: f64) -> f64 {
+        let v = self.df;
+        if x == 0.0 {
+            return -std::f64::consts::LN_2;
+        }
+        let w = v / (v + x * x);
+        if x > 0.0 {
+            // cdf = 1 − ½·I_w(v/2,1/2); near 1 → ln1p(−½·I_w).
+            (-0.5 * regularized_incomplete_beta(0.5 * v, 0.5, w)).ln_1p()
+        } else {
+            // cdf = ½·I_w; left tail → −ln2 + log I_w, finite where I underflows.
+            -std::f64::consts::LN_2 + fsci_special::log_betainc_scalar(0.5 * v, 0.5, w)
+        }
+    }
+
+    fn logsf(&self, x: f64) -> f64 {
+        let v = self.df;
+        if x == 0.0 {
+            return -std::f64::consts::LN_2;
+        }
+        let w = v / (v + x * x);
+        if x > 0.0 {
+            // sf = ½·I_w; right tail (t-test log p-value) → −ln2 + log I_w.
+            -std::f64::consts::LN_2 + fsci_special::log_betainc_scalar(0.5 * v, 0.5, w)
+        } else {
+            (-0.5 * regularized_incomplete_beta(0.5 * v, 0.5, w)).ln_1p()
+        }
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
@@ -2363,6 +2392,17 @@ impl ContinuousDistribution for FDistribution {
         regularized_incomplete_beta(0.5 * d1, 0.5 * d2, w)
     }
 
+    fn logcdf(&self, x: f64) -> f64 {
+        // log I_w(d1/2, d2/2), w = d1·x/(d1·x+d2); finite in the left tail. frankenscipy-r4933
+        if x <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        let d1 = self.dfn;
+        let d2 = self.dfd;
+        let w = d1 * x / (d1 * x + d2);
+        fsci_special::log_betainc_scalar(0.5 * d1, 0.5 * d2, w)
+    }
+
     fn sf(&self, x: f64) -> f64 {
         // Closed-form survival: 1 − I_w(d1/2, d2/2) = I_{1−w}(d2/2, d1/2), with
         // 1−w = d2/(d1·x+d2). Computing it directly avoids the catastrophic loss
@@ -2375,6 +2415,18 @@ impl ContinuousDistribution for FDistribution {
         let d2 = self.dfd;
         let w_comp = d2 / (d1 * x + d2);
         regularized_incomplete_beta(0.5 * d2, 0.5 * d1, w_comp)
+    }
+
+    fn logsf(&self, x: f64) -> f64 {
+        // log I_{w'}(d2/2, d1/2), w' = d2/(d1·x+d2); finite in the right tail
+        // (ANOVA log p-value) where the survival underflows. frankenscipy-r4933
+        if x <= 0.0 {
+            return 0.0;
+        }
+        let d1 = self.dfn;
+        let d2 = self.dfd;
+        let w_comp = d2 / (d1 * x + d2);
+        fsci_special::log_betainc_scalar(0.5 * d2, 0.5 * d1, w_comp)
     }
 
     fn ppf(&self, q: f64) -> f64 {
@@ -2851,6 +2903,17 @@ impl ContinuousDistribution for BetaDist {
         regularized_incomplete_beta(self.a, self.b, x)
     }
 
+    fn logcdf(&self, x: f64) -> f64 {
+        // log I_x(a,b); finite in the left tail where I underflows to 0. frankenscipy-r4933
+        if x <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        if x >= 1.0 {
+            return 0.0;
+        }
+        fsci_special::log_betainc_scalar(self.a, self.b, x)
+    }
+
     fn sf(&self, x: f64) -> f64 {
         // Closed-form survival: 1 − I_x(a,b) = I_{1−x}(b,a). Computing it directly
         // avoids the default 1−cdf collapsing to 0 as x→1 (beta(2,8).sf(0.999)
@@ -2862,6 +2925,17 @@ impl ContinuousDistribution for BetaDist {
             return 0.0;
         }
         regularized_incomplete_beta(self.b, self.a, 1.0 - x)
+    }
+
+    fn logsf(&self, x: f64) -> f64 {
+        // log I_{1-x}(b,a); finite as x→1 where the survival underflows. frankenscipy-r4933
+        if x <= 0.0 {
+            return 0.0;
+        }
+        if x >= 1.0 {
+            return f64::NEG_INFINITY;
+        }
+        fsci_special::log_betainc_scalar(self.b, self.a, 1.0 - x)
     }
 
     fn ppf(&self, q: f64) -> f64 {
@@ -34547,6 +34621,14 @@ impl ContinuousDistribution for BetaPrime {
         regularized_incomplete_beta(self.a, self.b, t)
     }
 
+    fn logcdf(&self, x: f64) -> f64 {
+        // log I_{x/(1+x)}(a,b); finite in the left tail where I underflows. frankenscipy-r4933
+        if x <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        fsci_special::log_betainc_scalar(self.a, self.b, x / (1.0 + x))
+    }
+
     fn sf(&self, x: f64) -> f64 {
         // sf = 1 − I_{x/(1+x)}(a,b) = I_{1/(1+x)}(b,a) by the incomplete-beta
         // reflection; evaluated at 1/(1+x)→0 it stays accurate in the right
@@ -34555,6 +34637,14 @@ impl ContinuousDistribution for BetaPrime {
             return 1.0;
         }
         regularized_incomplete_beta(self.b, self.a, 1.0 / (1.0 + x))
+    }
+
+    fn logsf(&self, x: f64) -> f64 {
+        // log I_{1/(1+x)}(b,a); finite in the right tail where I underflows. frankenscipy-r4933
+        if x <= 0.0 {
+            return 0.0;
+        }
+        fsci_special::log_betainc_scalar(self.b, self.a, 1.0 / (1.0 + x))
     }
 
     fn ppf(&self, q: f64) -> f64 {
@@ -39045,6 +39135,50 @@ mod tests {
         let ig2 = InverseGamma::new(50.0);
         assert_eq!(ig2.sf(1e15), 0.0);
         assert!(ig2.logsf(1e15).is_finite() && ig2.logsf(1e15) < -300.0);
+    }
+
+    #[test]
+    fn beta_family_logcdf_logsf_consistent_and_finite() {
+        // logcdf/logsf == ln(cdf)/ln(sf) where representable, finite where the
+        // incomplete beta underflows (frankenscipy-r4933).
+        macro_rules! cc {
+            ($d:expr, $xs:expr) => {{
+                let d = $d;
+                for &x in $xs {
+                    let lc = d.logcdf(x);
+                    let rc = d.cdf(x).ln();
+                    assert!(
+                        (lc - rc).abs() <= 1e-9 * rc.abs().max(1.0),
+                        "{}: logcdf({x})={lc} vs {rc}",
+                        stringify!($d)
+                    );
+                    let ls = d.logsf(x);
+                    let rs = d.sf(x).ln();
+                    assert!(
+                        (ls - rs).abs() <= 1e-9 * rs.abs().max(1.0),
+                        "{}: logsf({x})={ls} vs {rs}",
+                        stringify!($d)
+                    );
+                }
+            }};
+        }
+        cc!(BetaDist::new(2.0, 8.0), &[0.1, 0.4, 0.8]);
+        cc!(StudentT::new(5.0), &[-3.0, -0.5, 0.5, 3.0]);
+        cc!(FDistribution::new(5.0, 10.0), &[0.2, 1.0, 4.0]);
+        cc!(BetaPrime::new(2.0, 3.0), &[0.3, 1.0, 4.0]);
+
+        // Underflowed tails: ln(cdf/sf) would be -inf; the log forms stay finite.
+        let bt = BetaDist::new(2.0, 8.0);
+        assert_eq!(bt.cdf(1e-200), 0.0);
+        assert!(bt.logcdf(1e-200).is_finite() && bt.logcdf(1e-200) < -300.0);
+        // StudentT right-tail log p-value (sf underflows for huge t).
+        let st = StudentT::new(4.0);
+        assert_eq!(st.sf(1e90), 0.0);
+        assert!(st.logsf(1e90).is_finite() && st.logsf(1e90) < -300.0);
+        // F right-tail (ANOVA) log p-value.
+        let fd = FDistribution::new(5.0, 10.0);
+        assert_eq!(fd.sf(1e80), 0.0);
+        assert!(fd.logsf(1e80).is_finite() && fd.logsf(1e80) < -300.0);
     }
 
     // ── Exponential distribution ────────────────────────────────────
