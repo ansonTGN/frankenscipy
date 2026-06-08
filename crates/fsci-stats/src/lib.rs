@@ -3942,6 +3942,14 @@ impl ContinuousDistribution for Lognormal {
         standard_normal_cdf(z)
     }
 
+    fn logcdf(&self, x: f64) -> f64 {
+        // log Φ(z), z = ln(x/scale)/s; finite in the left tail. frankenscipy-osnge
+        if x <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        fsci_special::log_ndtr_scalar((x / self.scale).ln() / self.s)
+    }
+
     fn sf(&self, x: f64) -> f64 {
         // Survival Φ(−z) = ½·erfc(z/√2) directly — the default 1−cdf returned 0
         // in the deep right tail (lognorm.sf(1e4,1) scipy 1.6e-20). frankenscipy-8y248
@@ -4079,6 +4087,14 @@ impl ContinuousDistribution for Gibrat {
             return 0.0;
         }
         standard_normal_cdf(x.ln())
+    }
+
+    fn logcdf(&self, x: f64) -> f64 {
+        // log Φ(ln x); finite in the left tail where Φ underflows to 0. frankenscipy-osnge
+        if x <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        fsci_special::log_ndtr_scalar(x.ln())
     }
 
     fn sf(&self, x: f64) -> f64 {
@@ -8819,6 +8835,54 @@ impl ContinuousDistribution for Pearson3 {
         }
     }
 
+    fn logcdf(&self, x: f64) -> f64 {
+        // log of the gamma-tail cdf branches; finite where P/Q underflow. frankenscipy-osnge
+        const NORMAL_TRANSITION: f64 = 1.6e-5;
+        let skew = self.skew;
+        if skew.abs() < NORMAL_TRANSITION {
+            return fsci_special::log_ndtr_scalar(x);
+        }
+        let beta = 2.0 / skew;
+        let alpha = beta * beta;
+        let zeta = -beta;
+        let transx = beta * (x - zeta);
+        if skew > 0.0 {
+            if transx <= 0.0 {
+                f64::NEG_INFINITY
+            } else {
+                fsci_special::log_gammainc_scalar(alpha, transx)
+            }
+        } else if transx <= 0.0 {
+            0.0
+        } else {
+            fsci_special::log_gammaincc_scalar(alpha, transx)
+        }
+    }
+
+    fn logsf(&self, x: f64) -> f64 {
+        // log of the gamma-tail sf branches; finite where P/Q underflow. frankenscipy-osnge
+        const NORMAL_TRANSITION: f64 = 1.6e-5;
+        let skew = self.skew;
+        if skew.abs() < NORMAL_TRANSITION {
+            return fsci_special::log_ndtr_scalar(-x);
+        }
+        let beta = 2.0 / skew;
+        let alpha = beta * beta;
+        let zeta = -beta;
+        let transx = beta * (x - zeta);
+        if skew > 0.0 {
+            if transx <= 0.0 {
+                0.0
+            } else {
+                fsci_special::log_gammaincc_scalar(alpha, transx)
+            }
+        } else if transx <= 0.0 {
+            f64::NEG_INFINITY
+        } else {
+            fsci_special::log_gammainc_scalar(alpha, transx)
+        }
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         const NORMAL_TRANSITION: f64 = 1.6e-5;
         if !(0.0..=1.0).contains(&q) {
@@ -9456,6 +9520,11 @@ impl ContinuousDistribution for JohnsonSU {
 
     fn cdf(&self, x: f64) -> f64 {
         standard_normal_cdf(self.a + self.b * x.asinh())
+    }
+
+    fn logcdf(&self, x: f64) -> f64 {
+        // log Φ(a + b·asinh x); finite in the left tail. frankenscipy-osnge
+        fsci_special::log_ndtr_scalar(self.a + self.b * x.asinh())
     }
 
     fn sf(&self, x: f64) -> f64 {
@@ -10601,6 +10670,15 @@ impl ContinuousDistribution for FatigueLife {
         let root_x = x.sqrt();
         let z = (root_x - 1.0 / root_x) / self.c;
         standard_normal_cdf(z)
+    }
+
+    fn logcdf(&self, x: f64) -> f64 {
+        // log Φ(z), z = (√x − 1/√x)/c; finite in the left tail. frankenscipy-osnge
+        if x <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        let root_x = x.sqrt();
+        fsci_special::log_ndtr_scalar((root_x - 1.0 / root_x) / self.c)
     }
 
     fn sf(&self, x: f64) -> f64 {
@@ -13284,6 +13362,14 @@ impl ContinuousDistribution for Gilbrat {
         } else {
             standard_normal_cdf(x.ln())
         }
+    }
+
+    fn logcdf(&self, x: f64) -> f64 {
+        // log Φ(ln x); finite in the left tail where Φ underflows to 0. frankenscipy-osnge
+        if x <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        fsci_special::log_ndtr_scalar(x.ln())
     }
 
     fn sf(&self, x: f64) -> f64 {
@@ -39295,6 +39381,46 @@ mod tests {
         assert!(s > 0.0 && s < 1e-100, "closed sf accurate in deep tail: {s}");
         assert!(p.logsf(200).is_finite() && p.logsf(200) < -300.0);
         assert!(1.0 - p.cdf(200) < 1e-15, "default 1-cdf collapsed");
+    }
+
+    #[test]
+    fn logcdf_overrides_consistent_and_finite() {
+        // logcdf == ln(cdf) where representable; finite in the left tail where
+        // cdf underflows to 0 (frankenscipy-osnge).
+        macro_rules! mid {
+            ($d:expr, $xs:expr) => {{
+                let d = $d;
+                for &x in $xs {
+                    let lc = d.logcdf(x);
+                    let r = d.cdf(x).ln();
+                    assert!(
+                        (lc - r).abs() <= 1e-9 * r.abs().max(1.0),
+                        "{}: logcdf({x})={lc} vs ln(cdf)={r}",
+                        stringify!($d)
+                    );
+                }
+            }};
+        }
+        mid!(Gibrat, &[0.5, 1.0, 3.0]);
+        mid!(Gilbrat, &[0.5, 1.0, 3.0]);
+        mid!(Lognormal::new(1.0, 1.0), &[0.3, 1.0, 4.0]);
+        mid!(JohnsonSU::new(0.5, 1.5), &[-2.0, 0.5, 3.0]);
+        mid!(FatigueLife::new(0.5), &[0.5, 1.0, 3.0]);
+        mid!(Pearson3::new(0.8), &[-1.0, 0.5, 2.0]);
+        mid!(Pearson3::new(-0.8), &[-2.0, -0.5, 1.0]);
+        // Pearson3 logsf too.
+        for &x in &[-1.0, 0.5, 2.0] {
+            let d = Pearson3::new(0.8);
+            assert!((d.logsf(x) - d.sf(x).ln()).abs() <= 1e-9 * d.sf(x).ln().abs().max(1.0));
+        }
+
+        // Left-tail underflow: cdf == 0 but logcdf finite.
+        let ln = Lognormal::new(1.0, 1.0);
+        assert_eq!(ln.cdf(1e-150), 0.0);
+        assert!(ln.logcdf(1e-150).is_finite() && ln.logcdf(1e-150) < -300.0);
+        let gb = Gibrat;
+        assert_eq!(gb.cdf(1e-120), 0.0);
+        assert!(gb.logcdf(1e-120).is_finite() && gb.logcdf(1e-120) < -300.0);
     }
 
     // ── Exponential distribution ────────────────────────────────────
