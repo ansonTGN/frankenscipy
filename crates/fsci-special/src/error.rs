@@ -113,6 +113,53 @@ pub fn erfcinv(y: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
     )
 }
 
+/// Evaluate `f(0..n)` into a `Vec<T>`, parallel over index chunks for large `n`.
+/// Error-function kernels (erf series / erfc continued fraction / erfinv–erfcinv Newton
+/// refinement) are non-trivial per element and each index writes its own slot, so chunking
+/// across cores and concatenating in index order is bit-identical to `(0..n).map(f).collect()`
+/// — including returning the first failing index's error in index order. Generic over the
+/// output type (f64 or Complex64).
+fn par_map_indices<T, H>(n: usize, f: H) -> Result<Vec<T>, SpecialError>
+where
+    T: Send,
+    H: Fn(usize) -> Result<T, SpecialError> + Sync,
+{
+    let nthreads = if n < 256 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(1)
+            .min(n / 128)
+            .max(1)
+    };
+    if nthreads <= 1 {
+        return (0..n).map(&f).collect();
+    }
+    let chunk = n.div_ceil(nthreads);
+    let f = &f;
+    let chunk_results: Vec<Result<Vec<T>, SpecialError>> = std::thread::scope(|scope| {
+        (0..nthreads)
+            .filter_map(|t| {
+                let i0 = t * chunk;
+                if i0 >= n {
+                    return None;
+                }
+                let i1 = (i0 + chunk).min(n);
+                Some(scope.spawn(move || (i0..i1).map(f).collect::<Result<Vec<T>, _>>()))
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|h| h.join().expect("error-fn array worker panicked"))
+            .collect()
+    });
+    let mut out = Vec::with_capacity(n);
+    for cr in chunk_results {
+        out.extend(cr?);
+    }
+    Ok(out)
+}
+
 fn map_unary_input<F, G>(
     function: &'static str,
     input: &SpecialTensor,
@@ -121,26 +168,21 @@ fn map_unary_input<F, G>(
     complex_kernel: G,
 ) -> SpecialResult
 where
-    F: Fn(f64) -> Result<f64, SpecialError>,
-    G: Fn(Complex64) -> Result<Complex64, SpecialError>,
+    F: Fn(f64) -> Result<f64, SpecialError> + Sync,
+    G: Fn(Complex64) -> Result<Complex64, SpecialError> + Sync,
 {
     match input {
         SpecialTensor::RealScalar(x) => real_kernel(*x).map(SpecialTensor::RealScalar),
-        SpecialTensor::RealVec(values) => values
-            .iter()
-            .copied()
-            .map(real_kernel)
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::RealVec),
+        SpecialTensor::RealVec(values) => {
+            par_map_indices(values.len(), |i| real_kernel(values[i])).map(SpecialTensor::RealVec)
+        }
         SpecialTensor::ComplexScalar(value) => {
             complex_kernel(*value).map(SpecialTensor::ComplexScalar)
         }
-        SpecialTensor::ComplexVec(values) => values
-            .iter()
-            .copied()
-            .map(complex_kernel)
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::ComplexVec),
+        SpecialTensor::ComplexVec(values) => {
+            par_map_indices(values.len(), |i| complex_kernel(values[i]))
+                .map(SpecialTensor::ComplexVec)
+        }
         SpecialTensor::Empty => {
             record_special_trace(
                 function,

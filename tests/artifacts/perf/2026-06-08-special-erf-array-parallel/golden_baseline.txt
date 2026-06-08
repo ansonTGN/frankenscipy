@@ -1,0 +1,5 @@
+GOLDEN (serial == parallel, bit-identical):
+n=100 erf xor=e2ff4a2005e53032 erfinv xor=f673bdf697780454
+n=5000 erf xor=5152f5b58582f943 erfinv xor=624e9ec014d2c8cb
+n=50000 erf xor=75cdbff2d1474a15 erfinv xor=d38c1314a3179049
+timing acc (serial==parallel): erf 2M=35bfab90dc6265da erfinv 1M=5c659b5de55c8b46
