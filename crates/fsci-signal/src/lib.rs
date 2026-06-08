@@ -1129,6 +1129,56 @@ pub fn correlate2d(
     Ok(result)
 }
 
+/// 2-D convolution of `a` with kernel `v`.
+///
+/// Matches `scipy.signal.convolve2d(a, v, mode, boundary='fill', fillvalue=0)`
+/// (the SciPy default boundary). 2-D convolution is correlation with the kernel
+/// flipped in both axes — and [`correlate2d`] already flips its kernel internally
+/// — so `convolve2d(a, v) == correlate2d(a, flip(v))`, sharing its direct/FFT
+/// auto-dispatch and `mode` (Full/Same/Valid) cropping. Non-default `boundary`
+/// values (`wrap`/`symm`) are not yet supported (tracked as a follow-up; the same
+/// gap exists in `correlate2d`).
+pub fn convolve2d(
+    a: &[f64],
+    a_shape: (usize, usize),
+    v: &[f64],
+    v_shape: (usize, usize),
+    mode: ConvolveMode,
+) -> Result<Vec<f64>, SignalError> {
+    let (vr, vc) = v_shape;
+    if v.len() != vr * vc {
+        return Err(SignalError::InvalidArgument(
+            "array length must match shape".to_string(),
+        ));
+    }
+    // Flip the kernel in both axes; correlate2d flips again internally, so the
+    // net effect is a true convolution Σ a[i,j]·v[m-i, n-j].
+    let mut v_flip = vec![0.0; vr * vc];
+    for i in 0..vr {
+        for j in 0..vc {
+            v_flip[i * vc + j] = v[(vr - 1 - i) * vc + (vc - 1 - j)];
+        }
+    }
+    // Full and Valid crop identically for correlation and convolution. But
+    // SciPy centres 'same' at ((vr-1)/2, (vc-1)/2) of the full output for
+    // convolve2d, vs (vr/2, vc/2) for correlate2d — they differ for even-sized
+    // kernels — so crop 'same' explicitly here instead of delegating it.
+    if mode != ConvolveMode::Same {
+        return correlate2d(a, a_shape, &v_flip, v_shape, mode);
+    }
+    let (ar, ac) = a_shape;
+    let full = correlate2d(a, a_shape, &v_flip, v_shape, ConvolveMode::Full)?;
+    let full_c = ac + vc - 1;
+    let (sr, sc) = ((vr - 1) / 2, (vc - 1) / 2);
+    let mut out = vec![0.0; ar * ac];
+    for i in 0..ar {
+        for j in 0..ac {
+            out[i * ac + j] = full[(i + sr) * full_c + (j + sc)];
+        }
+    }
+    Ok(out)
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Hilbert Transform / Analytic Signal
 // ══════════════════════════════════════════════════════════════════════
@@ -16706,6 +16756,34 @@ mod tests {
         assert_eq!(
             result,
             vec![12.0, 16.0, 9.0, 24.0, 28.0, 15.0, 15.0, 17.0, 9.0]
+        );
+    }
+
+    #[test]
+    fn convolve2d_matches_scipy() {
+        // scipy.signal.convolve2d(a, v, mode) — full/same/valid, odd & even
+        // kernels. 'same' centres at ((vr-1)/2,(vc-1)/2), differing from
+        // correlate2d for the even (2x2) kernel.
+        let a3 = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let v2 = vec![1.0, 0.0, 0.0, -1.0];
+        assert_eq!(
+            convolve2d(&a3, (3, 3), &v2, (2, 2), ConvolveMode::Full).unwrap(),
+            vec![1.0, 2.0, 3.0, 0.0, 4.0, 4.0, 4.0, -3.0, 7.0, 4.0, 4.0, -6.0, 0.0, -7.0, -8.0, -9.0]
+        );
+        assert_eq!(
+            convolve2d(&a3, (3, 3), &v2, (2, 2), ConvolveMode::Same).unwrap(),
+            vec![1.0, 2.0, 3.0, 4.0, 4.0, 4.0, 7.0, 4.0, 4.0]
+        );
+        assert_eq!(
+            convolve2d(&a3, (3, 3), &v2, (2, 2), ConvolveMode::Valid).unwrap(),
+            vec![4.0, 4.0, 4.0, 4.0]
+        );
+        // 3x3 (odd) kernel 'same' on a 4x4 input.
+        let a4: Vec<f64> = (1..=16).map(|x| x as f64).collect();
+        let v3 = vec![1.0, 2.0, 1.0, 0.0, 0.0, 0.0, -1.0, -2.0, -1.0];
+        assert_eq!(
+            convolve2d(&a4, (4, 4), &v3, (3, 3), ConvolveMode::Same).unwrap(),
+            vec![16.0, 24.0, 28.0, 23.0, 24.0, 32.0, 32.0, 24.0, 24.0, 32.0, 32.0, 24.0, -28.0, -40.0, -44.0, -35.0]
         );
     }
 
