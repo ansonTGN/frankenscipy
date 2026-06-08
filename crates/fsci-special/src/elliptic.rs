@@ -1098,7 +1098,7 @@ fn map_real_or_complex_binary<F, G>(
     complex_kernel: G,
 ) -> SpecialResult
 where
-    F: Fn(f64, f64) -> Result<f64, SpecialError>,
+    F: Fn(f64, f64) -> Result<f64, SpecialError> + Sync,
     G: Fn(Complex64, Complex64) -> Result<Complex64, SpecialError>,
 {
     match (lhs, rhs) {
@@ -1122,27 +1122,19 @@ where
         (SpecialTensor::RealScalar(left), SpecialTensor::RealScalar(right)) => {
             real_kernel(*left, *right).map(SpecialTensor::RealScalar)
         }
-        (SpecialTensor::RealVec(left), SpecialTensor::RealScalar(right)) => left
-            .iter()
-            .copied()
-            .map(|value| real_kernel(value, *right))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::RealVec),
-        (SpecialTensor::RealScalar(left), SpecialTensor::RealVec(right)) => right
-            .iter()
-            .copied()
-            .map(|value| real_kernel(*left, value))
-            .collect::<Result<Vec<_>, _>>()
-            .map(SpecialTensor::RealVec),
+        (SpecialTensor::RealVec(left), SpecialTensor::RealScalar(right)) => {
+            let right = *right;
+            par_map_indices(left.len(), |i| real_kernel(left[i], right)).map(SpecialTensor::RealVec)
+        }
+        (SpecialTensor::RealScalar(left), SpecialTensor::RealVec(right)) => {
+            let left = *left;
+            par_map_indices(right.len(), |i| real_kernel(left, right[i])).map(SpecialTensor::RealVec)
+        }
         (SpecialTensor::RealVec(left), SpecialTensor::RealVec(right)) => {
             if left.len() != right.len() {
                 return vector_length_error(function, mode);
             }
-            left.iter()
-                .copied()
-                .zip(right.iter().copied())
-                .map(|(left_value, right_value)| real_kernel(left_value, right_value))
-                .collect::<Result<Vec<_>, _>>()
+            par_map_indices(left.len(), |i| real_kernel(left[i], right[i]))
                 .map(SpecialTensor::RealVec)
         }
         (SpecialTensor::ComplexScalar(left), SpecialTensor::ComplexScalar(right)) => {

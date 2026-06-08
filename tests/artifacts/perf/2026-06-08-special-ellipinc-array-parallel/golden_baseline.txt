@@ -1,0 +1,5 @@
+GOLDEN (serial == parallel, bit-identical):
+n=100 ellipkinc=889e5010624e624c ellipeinc=59cb4790182f8674
+n=5000 ellipkinc=4a3196ce93b179dc ellipeinc=9d9408bb29ca96cd
+n=50000 ellipkinc=cc7675d7873516de ellipeinc=abcba6e865ff4346
+timing acc (serial==parallel): ellipkinc 1M=0a1bda24a9efc28e 2M=568c5451f3c6a688
