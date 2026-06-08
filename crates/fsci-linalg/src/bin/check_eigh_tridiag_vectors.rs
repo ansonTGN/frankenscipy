@@ -30,11 +30,32 @@ fn worst_residual(d: &[f64], e: &[f64]) -> f64 {
     worst
 }
 
+fn pair_spectrum(n: usize) -> (Vec<f64>, Vec<f64>) {
+    let d = vec![0.0; n];
+    let e = (1..n).map(|k| ((k as f64) / 2.0).sqrt()).collect();
+    (d, e)
+}
+
+fn digest_eigvals_only(d: &[f64], e: &[f64]) -> u64 {
+    let (vals, vecs) = eigh_tridiagonal(d, e, true, DecompOptions::default()).unwrap();
+    assert!(vecs.is_none());
+    let mut h = 1469598103934665603u64;
+    for value in vals {
+        h = (h ^ value.to_bits()).wrapping_mul(1099511628211);
+    }
+    h
+}
+
 fn main() {
     let generic = worst_residual(&[2.0, 3.0, 4.0, 5.0, 6.0], &[1.0, 1.0, 1.0, 1.0]);
     let zero_diag = worst_residual(&[0.0; 6], &[0.5, 0.6, 0.7, 0.8, 0.9]);
+    let (large_d, large_e) = pair_spectrum(1000);
+    let large_residual = worst_residual(&large_d, &large_e);
+    let eigvals_digest = digest_eigvals_only(&large_d, &large_e);
     println!("generic-spectrum   worst eigenvector residual = {generic:.3e} (expect ~1e-13)");
     println!("zero-diag (±pairs) worst eigenvector residual = {zero_diag:.3e} (expect ~1e-13)");
+    println!("pair-spectrum n=1000 worst residual={large_residual:.3e}");
+    println!("eigvals_only n=1000 digest=0x{eigvals_digest:016x}");
     println!(
         "STATUS: {}",
         if zero_diag < 1e-9 {

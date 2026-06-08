@@ -4349,6 +4349,43 @@ pub fn eigh_tridiagonal(
         }
     }
 
+    if !eigvals_only {
+        let eigen = symmetric_tridiagonal_qr_eigen(d, e).ok_or_else(|| {
+            LinalgError::ConvergenceFailure {
+                detail: "symmetric tridiagonal QR failed to converge".to_string(),
+            }
+        })?;
+        let mut indices: Vec<usize> = (0..n).collect();
+        indices.sort_by(|&a, &b| {
+            eigen.eigenvalues[a]
+                .partial_cmp(&eigen.eigenvalues[b])
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        let sorted_eigenvalues: Vec<f64> = indices.iter().map(|&i| eigen.eigenvalues[i]).collect();
+        let sorted_eigenvectors = Some(
+            (0..n)
+                .map(|row| {
+                    indices
+                        .iter()
+                        .map(|&col| eigen.eigenvectors[(row, col)])
+                        .collect()
+                })
+                .collect(),
+        );
+
+        emit_trace(LinalgTrace {
+            operation: "eigh_tridiagonal",
+            matrix_size: (n, n),
+            mode: options.mode,
+            rcond: None,
+            warning: None,
+            error: None,
+        });
+
+        return Ok((sorted_eigenvalues, sorted_eigenvectors));
+    }
+
     // Use QL algorithm with implicit shifts for symmetric tridiagonal eigenvalues
     let mut diagonal = d.to_vec();
     let mut off_diag = e.to_vec();
@@ -18318,6 +18355,30 @@ mod proptest_tests {
         assert!((eigenvalues[0] - 1.0).abs() < 1e-10);
         assert!((eigenvalues[1] - 2.0).abs() < 1e-10);
         assert!((eigenvalues[2] - 3.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn eigh_tridiagonal_zero_diagonal_pair_spectrum_eigenvectors_residual() {
+        let d = vec![0.0; 6];
+        let e = vec![0.5, 0.6, 0.7, 0.8, 0.9];
+        let (eigenvalues, eigenvectors) =
+            eigh_tridiagonal(&d, &e, false, DecompOptions::default()).expect("eigenvectors");
+        let eigenvectors = eigenvectors.expect("vectors requested");
+
+        let mut worst = 0.0_f64;
+        for col in 0..d.len() {
+            for row in 0..d.len() {
+                let mut tv = d[row] * eigenvectors[row][col];
+                if row > 0 {
+                    tv += e[row - 1] * eigenvectors[row - 1][col];
+                }
+                if row + 1 < d.len() {
+                    tv += e[row] * eigenvectors[row + 1][col];
+                }
+                worst = worst.max((tv - eigenvalues[col] * eigenvectors[row][col]).abs());
+            }
+        }
+        assert!(worst < 1e-10, "worst residual {worst:.17e}");
     }
 
     #[test]
