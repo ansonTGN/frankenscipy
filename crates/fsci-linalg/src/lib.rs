@@ -3516,6 +3516,23 @@ pub fn svd(a: &[Vec<f64>], options: DecompOptions) -> Result<SvdResult, LinalgEr
         }
     }
 
+    if let Some((u_a, s, vt_a)) = public_wide_svd_via_transpose(&matrix) {
+        emit_trace(LinalgTrace {
+            operation: "svd",
+            matrix_size: (rows, cols),
+            mode: options.mode,
+            rcond: None,
+            warning: None,
+            error: None,
+        });
+
+        return Ok(SvdResult {
+            u: rows_from_dmatrix(&u_a),
+            s,
+            vt: rows_from_dmatrix(&vt_a),
+        });
+    }
+
     let svd_decomp = safe_svd(matrix, true, true)?;
 
     let u_mat = svd_decomp
@@ -3577,6 +3594,18 @@ pub fn svdvals(a: &[Vec<f64>], options: DecompOptions) -> Result<Vec<f64>, Linal
 
             return Ok(thin_svd.singular_values);
         }
+    }
+
+    if let Some((_, s, _)) = public_wide_svd_via_transpose(&matrix) {
+        emit_trace(LinalgTrace {
+            operation: "svdvals",
+            matrix_size: (rows, cols),
+            mode: options.mode,
+            rcond: None,
+            warning: None,
+            error: None,
+        });
+        return Ok(s);
     }
 
     let svd_decomp = safe_svd(matrix, false, false)?;
@@ -7593,7 +7622,7 @@ fn public_tall_thin_svd_candidate(matrix: &DMatrix<f64>) -> Option<Deterministic
 /// Thin-SVD candidate for the public `svd`/`svdvals` paths over any strictly
 /// square-or-tall matrix (`rows >= cols`), not just `rows >= 2*cols`. Our
 /// deterministic thin SVD is markedly faster than the nalgebra fallback on
-/// square and near-square matrices (≈7× at 512×512), and the public
+/// square and near-square matrices, and the public
 /// reconstruction/rank/tie gate (`public_bidiag_svd_accepts`) still validates
 /// every acceptance — an inaccurate factorization falls back to nalgebra. This
 /// is deliberately NOT used by the `lstsq`/`pinv` routes: those have cheaper
@@ -7606,6 +7635,30 @@ fn public_square_or_tall_thin_svd_candidate(matrix: &DMatrix<f64>) -> Option<Det
         return None;
     }
     deterministic_thin_svd(matrix).ok()
+}
+
+/// SVD of a strictly-wide matrix (`rows < cols`) via the transpose. `Aᵀ` is
+/// tall, so the fast deterministic thin SVD handles it; with `Aᵀ = Uₜ Σ Vₜᵀ`,
+/// `A = (Aᵀ)ᵀ = Vₜ Σ Uₜᵀ`, so `U_A = (Aᵀ.v_t)ᵀ`, the singular values are
+/// unchanged, and `Vᵀ_A = (Aᵀ.u)ᵀ`. The reconstruction/rank/tie acceptance gate
+/// runs on the tall `Aᵀ` (where its `rows >= cols` dimension checks are valid);
+/// on rejection the caller falls back to nalgebra. Returns `(U, s, Vᵀ)` for `A`.
+fn public_wide_svd_via_transpose(
+    matrix: &DMatrix<f64>,
+) -> Option<(DMatrix<f64>, Vec<f64>, DMatrix<f64>)> {
+    if matrix.nrows() >= matrix.ncols() {
+        return None;
+    }
+    let at = matrix.transpose();
+    let thin = public_square_or_tall_thin_svd_candidate(&at)?;
+    let (max_s, _) = public_bidiag_svd_stats(&thin.singular_values)?;
+    let threshold = public_bidiag_default_threshold(at.nrows(), at.ncols(), max_s);
+    if !public_bidiag_svd_accepts(&at, &thin, threshold) {
+        return None;
+    }
+    let u_a = thin.v_t.transpose();
+    let vt_a = thin.u.transpose();
+    Some((u_a, thin.singular_values, vt_a))
 }
 
 #[cfg(test)]
@@ -16052,6 +16105,52 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "perf probe: run with rch and --release for public wide svd routing"]
+    fn public_wide_svd_route_perf_probe() {
+        let original = bidiag_deterministic_matrix(256, 512);
+        let rows = original.nrows();
+        let cols = original.ncols();
+        let matrix_rows = rows_from_dmatrix(&original);
+
+        let previous_start = std::time::Instant::now();
+        let previous =
+            safe_svd(std::hint::black_box(original.clone()), true, true).expect("nalgebra svd");
+        let previous_s: Vec<f64> = previous.singular_values.iter().copied().collect();
+        let previous_ms = previous_start.elapsed().as_secs_f64() * 1e3;
+
+        let routed_start = std::time::Instant::now();
+        let routed =
+            svd(std::hint::black_box(&matrix_rows), DecompOptions::default()).expect("routed svd");
+        let routed_ms = routed_start.elapsed().as_secs_f64() * 1e3;
+
+        // Reconstruct A = U Σ Vᵀ (U is m×m, Vᵀ is m×n for wide A).
+        let u = dmatrix_from_rows(&routed.u).expect("u");
+        let vt = dmatrix_from_rows(&routed.vt).expect("vt");
+        let mut sigma = DMatrix::<f64>::zeros(u.ncols(), vt.nrows());
+        for (i, s) in routed.s.iter().enumerate() {
+            sigma[(i, i)] = *s;
+        }
+        let recon = &u * &sigma * &vt;
+        let recon_err = max_abs_dmatrix_diff(&recon, &original);
+        let mut s_diff = 0.0_f64;
+        for (a, b) in routed.s.iter().zip(previous_s.iter()) {
+            s_diff = s_diff.max((a - b).abs());
+        }
+
+        println!("PUBLIC_WIDE_SVD_ROUTE_PERF_BEGIN");
+        println!("shape={rows}x{cols}");
+        println!("previous_route_ms={previous_ms:.6}");
+        println!("routed_ms={routed_ms:.6}");
+        println!("speedup_vs_previous_route={:.6}", previous_ms / routed_ms);
+        println!("recon_err={recon_err:.17e}");
+        println!("singular_value_max_diff_vs_nalgebra={s_diff:.17e}");
+        println!("PUBLIC_WIDE_SVD_ROUTE_PERF_END");
+
+        assert!(recon_err <= 1e-7 * dmatrix_max_abs_value(&original).max(1.0));
+        assert!(s_diff <= 1e-7 * previous_s.first().copied().unwrap_or(1.0).max(1.0));
+    }
+
+    #[test]
     #[ignore = "perf probe: run with rch and --release for public square svd routing"]
     fn public_square_svd_route_perf_probe() {
         let original = bidiag_deterministic_matrix(512, 512);
@@ -16069,6 +16168,8 @@ mod tests {
         let routed =
             svd(std::hint::black_box(&matrix_rows), DecompOptions::default()).expect("routed svd");
         let routed_ms = routed_start.elapsed().as_secs_f64() * 1e3;
+        let routed_vals = svdvals(std::hint::black_box(&matrix_rows), DecompOptions::default())
+            .expect("routed svdvals");
 
         // Reconstruction error of the routed factors and singular-value agreement.
         let u = dmatrix_from_rows(&routed.u).expect("u");
@@ -16083,6 +16184,10 @@ mod tests {
         for (a, b) in routed.s.iter().zip(previous_s.iter()) {
             s_diff = s_diff.max((a - b).abs());
         }
+        let mut svdvals_diff = 0.0_f64;
+        for (a, b) in routed_vals.iter().zip(routed.s.iter()) {
+            svdvals_diff = svdvals_diff.max((a - b).abs());
+        }
 
         println!("PUBLIC_SQUARE_SVD_ROUTE_PERF_BEGIN");
         println!("shape={n}x{n}");
@@ -16091,10 +16196,12 @@ mod tests {
         println!("speedup_vs_previous_route={:.6}", previous_ms / routed_ms);
         println!("recon_err={recon_err:.17e}");
         println!("singular_value_max_diff_vs_nalgebra={s_diff:.17e}");
+        println!("svdvals_max_diff_vs_svd={svdvals_diff:.17e}");
         println!("PUBLIC_SQUARE_SVD_ROUTE_PERF_END");
 
         assert!(recon_err <= 1e-7 * dmatrix_max_abs_value(&original).max(1.0));
         assert!(s_diff <= 1e-7 * previous_s.first().copied().unwrap_or(1.0).max(1.0));
+        assert!(svdvals_diff <= 1e-12 * routed.s.first().copied().unwrap_or(1.0).max(1.0));
     }
 
     #[test]

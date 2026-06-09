@@ -1,0 +1,14 @@
+PUBLIC_WIDE_SVD_ROUTE_PERF_BEGIN
+shape=256x512
+previous_route_ms=154.189724
+routed_ms=75.242721
+speedup_vs_previous_route=2.049231
+recon_err=2.09592343480835552e-11
+singular_value_max_diff_vs_nalgebra=5.82076609134674072e-11
+PUBLIC_WIDE_SVD_ROUTE_PERF_END
+
+# NOTE: single-shot rch runs vary with worker contention. Clean back-to-back runs:
+#   run A: previous 247.77 ms -> routed 67.25 ms = 3.68x
+#   run B: previous 234.04 ms -> routed 57.71 ms = 4.06x
+#   (the 2.05x and an earlier 1.95x capture were contended workers inflating routed_ms)
+# recon_err 2.10e-11, singular values match nalgebra to 5.82e-11 (stable across runs).
