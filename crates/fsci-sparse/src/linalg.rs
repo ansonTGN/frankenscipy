@@ -3293,13 +3293,26 @@ pub fn reverse_cuthill_mckee(graph: &CsrMatrix) -> Vec<usize> {
         .map(|i| graph.indptr()[i + 1] - graph.indptr()[i])
         .collect();
 
+    // Node indices ordered by (degree, index). A stable sort keeps ascending
+    // index for equal degrees, so the first not-yet-visited entry is exactly the
+    // minimum-degree unvisited node with the lowest index — identical to the
+    // previous `(0..n).filter(!visited).min_by_key(degree)` selection, but the
+    // whole per-component start search is now O(V log V + V) instead of O(C·V).
+    let mut degree_order: Vec<usize> = (0..n).collect();
+    degree_order.sort_by_key(|&i| degrees[i]);
+    let mut order_cursor = 0usize;
+
     // Process all connected components
     while result.len() < n {
-        // Find unvisited node with minimum degree
-        let start = (0..n)
-            .filter(|&i| !visited[i])
-            .min_by_key(|&i| degrees[i])
-            .unwrap_or(0);
+        // Advance to the lowest-index minimum-degree unvisited node.
+        while order_cursor < n && visited[degree_order[order_cursor]] {
+            order_cursor += 1;
+        }
+        let start = if order_cursor < n {
+            degree_order[order_cursor]
+        } else {
+            0
+        };
 
         // BFS from start, visiting neighbors in order of increasing degree
         let mut queue = std::collections::VecDeque::new();
@@ -7386,6 +7399,135 @@ mod tests {
                 "PageRank[{i}] = {r}, expected ~{mean}"
             );
         }
+    }
+
+    // Reference: the previous O(C·V) start-selection (min_by_key per component)
+    // with the identical BFS. The production reverse_cuthill_mckee must match
+    // this bit-for-bit; only the start-search complexity changed.
+    #[cfg(test)]
+    fn rcm_min_scan_reference(graph: &crate::CsrMatrix) -> Vec<usize> {
+        let n = graph.shape().rows;
+        if n == 0 {
+            return vec![];
+        }
+        let mut visited = vec![false; n];
+        let mut result = Vec::with_capacity(n);
+        let degrees: Vec<usize> = (0..n)
+            .map(|i| graph.indptr()[i + 1] - graph.indptr()[i])
+            .collect();
+        while result.len() < n {
+            let start = (0..n)
+                .filter(|&i| !visited[i])
+                .min_by_key(|&i| degrees[i])
+                .unwrap_or(0);
+            let mut queue = std::collections::VecDeque::new();
+            queue.push_back(start);
+            visited[start] = true;
+            while let Some(u) = queue.pop_front() {
+                result.push(u);
+                let row_start = graph.indptr()[u];
+                let row_end = graph.indptr()[u + 1];
+                let mut neighbors: Vec<usize> = (row_start..row_end)
+                    .map(|idx| graph.indices()[idx])
+                    .filter(|&v| !visited[v])
+                    .collect();
+                neighbors.sort_by_key(|&v| degrees[v]);
+                for v in neighbors {
+                    if !visited[v] {
+                        visited[v] = true;
+                        queue.push_back(v);
+                    }
+                }
+            }
+        }
+        result.reverse();
+        result
+    }
+
+    // Build a fragmented graph: `pairs` disjoint 2-node components (0-1, 2-3, …),
+    // i.e. 2*pairs nodes and pairs components — the worst case for the old
+    // O(C·V) start scan.
+    #[cfg(test)]
+    fn fragmented_pairs_graph(pairs: usize) -> crate::CsrMatrix {
+        use crate::{CooMatrix, Shape2D};
+        let n = 2 * pairs;
+        let mut rows = Vec::with_capacity(2 * pairs);
+        let mut cols = Vec::with_capacity(2 * pairs);
+        let mut vals = Vec::with_capacity(2 * pairs);
+        for p in 0..pairs {
+            let (a, b) = (2 * p, 2 * p + 1);
+            rows.push(a);
+            cols.push(b);
+            vals.push(1.0);
+            rows.push(b);
+            cols.push(a);
+            vals.push(1.0);
+        }
+        CooMatrix::from_triplets(Shape2D::new(n, n), vals, rows, cols, false)
+            .expect("coo")
+            .to_csr()
+            .expect("csr")
+    }
+
+    #[test]
+    fn reverse_cuthill_mckee_matches_min_scan_reference_bit_for_bit() {
+        // Chain, fragmented pairs, and a mixed graph — all must match the
+        // previous min-scan implementation exactly.
+        let frag = fragmented_pairs_graph(64);
+        assert_eq!(
+            super::reverse_cuthill_mckee(&frag),
+            rcm_min_scan_reference(&frag),
+            "fragmented graph RCM ordering must be bit-identical to the min-scan reference"
+        );
+
+        use crate::{CooMatrix, Shape2D};
+        // A graph with three components of different sizes and degrees.
+        let (rows, cols): (Vec<usize>, Vec<usize>) = {
+            let edges = [(0, 1), (1, 2), (2, 0), (3, 4), (5, 6), (6, 7), (7, 8)];
+            let mut r = Vec::new();
+            let mut c = Vec::new();
+            for &(a, b) in &edges {
+                r.push(a);
+                c.push(b);
+                r.push(b);
+                c.push(a);
+            }
+            (r, c)
+        };
+        let vals = vec![1.0; rows.len()];
+        let mixed = CooMatrix::from_triplets(Shape2D::new(9, 9), vals, rows, cols, false)
+            .expect("coo")
+            .to_csr()
+            .expect("csr");
+        assert_eq!(
+            super::reverse_cuthill_mckee(&mixed),
+            rcm_min_scan_reference(&mixed),
+            "mixed-component RCM ordering must be bit-identical to the min-scan reference"
+        );
+    }
+
+    #[test]
+    #[ignore = "perf probe: run with rch and --release for RCM start-selection scaling"]
+    fn reverse_cuthill_mckee_fragmented_perf_probe() {
+        let frag = fragmented_pairs_graph(4000); // 8000 nodes, 4000 components
+
+        let ref_start = std::time::Instant::now();
+        let ref_perm = rcm_min_scan_reference(std::hint::black_box(&frag));
+        let ref_ms = ref_start.elapsed().as_secs_f64() * 1e3;
+
+        let new_start = std::time::Instant::now();
+        let new_perm = super::reverse_cuthill_mckee(std::hint::black_box(&frag));
+        let new_ms = new_start.elapsed().as_secs_f64() * 1e3;
+
+        println!("RCM_FRAGMENTED_PERF_BEGIN");
+        println!("nodes={} components=4000", 8000);
+        println!("min_scan_ref_ms={ref_ms:.3}");
+        println!("sorted_order_ms={new_ms:.3}");
+        println!("speedup={:.3}", ref_ms / new_ms);
+        println!("orderings_match={}", ref_perm == new_perm);
+        println!("RCM_FRAGMENTED_PERF_END");
+
+        assert_eq!(ref_perm, new_perm, "orderings must match bit-for-bit");
     }
 
     #[test]

@@ -1,0 +1,7 @@
+RCM_FRAGMENTED_PERF_BEGIN
+nodes=8000 components=4000
+min_scan_ref_ms=19.180
+sorted_order_ms=0.312
+speedup=61.431
+orderings_match=true
+RCM_FRAGMENTED_PERF_END
