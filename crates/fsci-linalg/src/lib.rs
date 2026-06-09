@@ -16127,6 +16127,45 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "perf probe: stage breakdown of the deterministic thin SVD"]
+    fn deterministic_thin_svd_stage_breakdown_probe() {
+        let original = bidiag_deterministic_matrix(512, 512);
+
+        let r_start = std::time::Instant::now();
+        let reduction =
+            golub_kahan_bidiagonal_reduction(std::hint::black_box(&original)).expect("reduction");
+        let r_ms = r_start.elapsed().as_secs_f64() * 1e3;
+
+        let b_start = std::time::Instant::now();
+        let bidiag_svd =
+            deterministic_bidiagonal_svd_from_reduction(&reduction).expect("bidiag svd");
+        let b_ms = b_start.elapsed().as_secs_f64() * 1e3;
+
+        // Back-transform: U (parallel column-chunks) vs V (sequential right reflectors).
+        let mut u = bidiag_svd.u.clone();
+        let wc = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+        let u_start = std::time::Instant::now();
+        apply_left_reflectors_column_chunks(&mut u, &reduction.left_reflectors, wc);
+        let u_ms = u_start.elapsed().as_secs_f64() * 1e3;
+
+        let mut v_t = bidiag_svd.v_t.clone();
+        let v_start = std::time::Instant::now();
+        for reflector in reduction.right_reflectors.iter().rev() {
+            apply_householder_right(&mut v_t, reflector, 0);
+        }
+        let v_ms = v_start.elapsed().as_secs_f64() * 1e3;
+
+        println!("THIN_SVD_STAGE_BREAKDOWN_BEGIN");
+        println!("reduction_ms={r_ms:.3}");
+        println!("bidiagonal_svd_ms={b_ms:.3}");
+        println!("back_transform_u_ms={u_ms:.3}");
+        println!("back_transform_v_ms={v_ms:.3}");
+        println!("n_left_reflectors={}", reduction.left_reflectors.len());
+        println!("n_right_reflectors={}", reduction.right_reflectors.len());
+        println!("THIN_SVD_STAGE_BREAKDOWN_END");
+    }
+
+    #[test]
     #[ignore = "perf probe: run with rch and --release for public wide svd routing"]
     fn public_wide_svd_route_perf_probe() {
         let original = bidiag_deterministic_matrix(256, 512);

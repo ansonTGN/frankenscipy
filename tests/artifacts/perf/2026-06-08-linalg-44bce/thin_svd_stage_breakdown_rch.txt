@@ -1,0 +1,18 @@
+# deterministic_thin_svd stage breakdown, 512x512, rch (--release)
+# (probe: deterministic_thin_svd_stage_breakdown_probe)
+THIN_SVD_STAGE_BREAKDOWN_BEGIN
+reduction_ms=88.465          # golub_kahan_bidiagonal_reduction (uses apply_bidiag_fused_step — qxuhx-contended)
+bidiagonal_svd_ms=54.377     # implicit-QR/Jacobi on the bidiagonal (inherently sequential)
+back_transform_u_ms=10.522   # apply_left_reflectors_column_chunks (ALREADY PARALLEL, column-major chunks)
+back_transform_v_ms=67.948   # sequential apply_householder_right loop (PARALLELIZABLE over rows, byte-identical via row-major scratch)
+n_left_reflectors=512
+n_right_reflectors=511
+THIN_SVD_STAGE_BREAKDOWN_END
+#
+# Total ~221ms vs nalgebra full SVD 1553ms (we already win 7x for svd() which needs vectors)
+# but ~4x off LAPACK (~50ms). nalgebra VALUES-ONLY is 45ms — our reduction alone (88ms) is the anomaly.
+#
+# Path to ~2.3x byte-identical (bead frankenscipy-44bce):
+#   V back-transform 68->~10ms (row-major scratch, parallel row chunks) — UNCONTENDED
+#   reduction trailing updates 88->~25ms (parallelize apply_bidiag_fused_step trailing apply) — CONTENDED (qxuhx)
+#   => 221 -> ~95ms = ~2.3x. Neither stage alone clears 2x (V alone ~1.36x), so they must land together.
