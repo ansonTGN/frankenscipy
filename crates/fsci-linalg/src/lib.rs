@@ -4143,34 +4143,42 @@ pub fn eig(a: &[Vec<f64>], options: DecompOptions) -> Result<EigResult, LinalgEr
             continue;
         }
         let lambda = t_mat[(block_col, block_col)];
-        // y has length `rows`. y[block_col] = 1, y[k>block_col] = 0,
-        // y[k<block_col] from upper-triangular back-substitution.
+        // Eigenvector in Schur coordinates: y[block_col] = 1, y[k>block_col] = 0,
+        // and y[0:block_col] solves the leading quasi-triangular system
+        //   (T[0:bc, 0:bc] − λI) · y[0:bc] = −T[0:bc, bc].
+        // A plain back-substitution would treat T as strictly upper-triangular and
+        // ignore the subdiagonal coupling inside any 2×2 (complex-pair) block sitting
+        // above this real eigenvalue, giving a wrong eigenvector. A full LU solve on
+        // the leading block accounts for those blocks. λ is not an eigenvalue of the
+        // leading block for a simple eigenvalue, so the system is nonsingular; if it
+        // is (defective/repeated), fall back to the Schur basis column.
+        let bc = block_col;
         let mut y = vec![0.0_f64; rows];
-        y[block_col] = 1.0;
-        let mut j = block_col;
-        while j > 0 {
-            j -= 1;
-            // (T − λI)[j][k] for k > j sums against y[k].
-            let mut s = 0.0_f64;
-            for k in (j + 1)..=block_col {
-                s += t_mat[(j, k)] * y[k];
-            }
-            let denom = t_mat[(j, j)] - lambda;
-            if denom.abs() < 1.0e-15 {
-                // Defective / repeated eigenvalue — back-sub fails.
-                // Fall back to the Schur basis column for this index.
-                let dest_col = q_mat.column(col_idx);
-                for r in 0..rows {
-                    eigvec_cols[col_idx][r] = dest_col[r];
+        y[bc] = 1.0;
+        if bc > 0 {
+            let mut m = DMatrix::<f64>::zeros(bc, bc);
+            let mut rhs = DVector::<f64>::zeros(bc);
+            for r in 0..bc {
+                for c in 0..bc {
+                    m[(r, c)] = t_mat[(r, c)];
                 }
-                y[block_col] = 0.0; // sentinel: skip Q multiplication below
-                break;
+                m[(r, r)] -= lambda;
+                rhs[r] = -t_mat[(r, bc)];
             }
-            y[j] = -s / denom;
-        }
-        if y[block_col] == 0.0 {
-            // Already filled with Schur fallback above.
-            continue;
+            match m.lu().solve(&rhs) {
+                Some(sol) => {
+                    for r in 0..bc {
+                        y[r] = sol[r];
+                    }
+                }
+                None => {
+                    let dest_col = q_mat.column(col_idx);
+                    for r in 0..rows {
+                        eigvec_cols[col_idx][r] = dest_col[r];
+                    }
+                    continue;
+                }
+            }
         }
         // v = Q · y; normalize to unit length so columns match scipy
         // (which returns unit-length eigenvectors by default).
