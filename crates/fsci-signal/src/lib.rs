@@ -3218,7 +3218,11 @@ pub fn buttap(
 /// lowpass design.
 ///
 /// Matches `scipy.signal.ellipord(wp, ws, gpass, gstop, analog=True)`
-/// for the lowpass case. Closed-form via complete elliptic integrals K:
+/// for the lowpass case. **This is the ANALOG form** (`wp`/`ws` are rad/s);
+/// SciPy's default and the digital `ellip` designer are *not* matched here — do
+/// not feed this `(N, Wn)` into a digital design. Tracked by frankenscipy-qjotp.
+///
+/// Closed-form via complete elliptic integrals K:
 ///   k    = wp / ws
 ///   k1   = √((10^(gpass/10) − 1) / (10^(gstop/10) − 1))
 ///   k'   = √(1 − k²),  k1' = √(1 − k1²)
@@ -3298,7 +3302,9 @@ fn ellipk_internal(m: f64) -> f64 {
 /// analog lowpass design.
 ///
 /// Matches `scipy.signal.cheb2ord(wp, ws, gpass, gstop, analog=True)`
-/// for the lowpass case. The order formula is identical to cheb1ord
+/// for the lowpass case. **This is the ANALOG form** (`wp`/`ws` are rad/s),
+/// *not* SciPy's default/digital `cheby2` pairing. Tracked by frankenscipy-qjotp.
+/// The order formula is identical to cheb1ord
 /// (both Chebyshev variants share the same order curve); the
 /// difference is the natural frequency:
 ///   Wn = wp · cosh(acosh(√((10^(gstop/10) − 1) / (10^(gpass/10) − 1))) / N)
@@ -3349,7 +3355,10 @@ pub fn cheb2ord(wp: f64, ws: f64, gpass: f64, gstop: f64) -> Result<(u32, f64), 
 /// lowpass design.
 ///
 /// Matches `scipy.signal.cheb1ord(wp, ws, gpass, gstop, analog=True)`
-/// for the lowpass case. Closed-form:
+/// for the lowpass case. **This is the ANALOG form** (`wp`/`ws` are rad/s),
+/// *not* SciPy's default/digital `cheby1` pairing. Tracked by frankenscipy-qjotp.
+///
+/// Closed-form:
 ///   N = ⌈ acosh(√((10^(gstop/10) − 1) / (10^(gpass/10) − 1))) / acosh(ws/wp) ⌉
 ///   Wn = wp
 /// Type-I Chebyshev concentrates ripple in the passband, so it
@@ -3394,7 +3403,11 @@ pub fn cheb1ord(wp: f64, ws: f64, gpass: f64, gstop: f64) -> Result<(u32, f64), 
 /// design.
 ///
 /// Matches `scipy.signal.buttord(wp, ws, gpass, gstop, analog=True)` for
-/// the lowpass case. Returns `(order, wn)` where:
+/// the lowpass case. **This is the ANALOG form** (`wp`/`ws` are rad/s); SciPy's
+/// default and the digital `butter` designer are *not* matched here — do not
+/// feed this `(N, Wn)` into a digital `butter`. Tracked by frankenscipy-qjotp.
+///
+/// Returns `(order, wn)` where:
 ///   order = ⌈ log10((10^(gstop/10) − 1) / (10^(gpass/10) − 1)) / (2·log10(ws/wp)) ⌉
 ///   wn = wp / (10^(gpass/10) − 1)^(1 / (2·order))
 ///
