@@ -5501,46 +5501,133 @@ pub fn signm(a: &[Vec<f64>], options: DecompOptions) -> Result<Vec<Vec<f64>>, Li
     funm(a, |x| if x >= 0.0 { 1.0 } else { -1.0 }, options)
 }
 
+/// Validate a square matrix and return it as an `nalgebra` `DMatrix`.
+fn validated_square_dmatrix(
+    a: &[Vec<f64>],
+    options: DecompOptions,
+) -> Result<DMatrix<f64>, LinalgError> {
+    let (rows, cols) = matrix_shape(a)?;
+    if rows != cols {
+        return Err(LinalgError::ExpectedSquareMatrix);
+    }
+    hardened_dimension_check(options.mode, rows, cols)?;
+    validate_finite_matrix(a, options.mode, options.check_finite)?;
+    dmatrix_from_rows(a)
+}
+
+/// Matrix cosine and sine together via the real `2n×2n` block exponential
+///
+/// ```text
+/// expm([[0, -A], [A, 0]]) = [[cos(A), -sin(A)], [sin(A), cos(A)]]
+/// ```
+///
+/// whose top-left and bottom-left blocks are `Re(expm(iA))` and `Im(expm(iA))`
+/// — exactly the identity SciPy evaluates with a complex matrix exponential.
+/// Routing through `expm` (Padé scaling-and-squaring) rather than a real-Schur
+/// scalar `funm` is essential for matrices with complex eigenvalues: the real
+/// Schur form then carries 2×2 diagonal blocks that a scalar `func(t[i,i])`
+/// cannot represent, so the old `funm(_, f64::cos)` path was silently wrong
+/// there (correct only for real spectra).
+fn cosm_sinm_blocks(m: &DMatrix<f64>) -> (DMatrix<f64>, DMatrix<f64>) {
+    let n = m.nrows();
+    let mut b = DMatrix::<f64>::zeros(2 * n, 2 * n);
+    for i in 0..n {
+        for j in 0..n {
+            b[(i, n + j)] = -m[(i, j)];
+            b[(n + i, j)] = m[(i, j)];
+        }
+    }
+    let e = expm_pade_scaling_squaring(&b);
+    let mut cos = DMatrix::<f64>::zeros(n, n);
+    let mut sin = DMatrix::<f64>::zeros(n, n);
+    for i in 0..n {
+        for j in 0..n {
+            cos[(i, j)] = e[(i, j)];
+            sin[(i, j)] = e[(n + i, j)];
+        }
+    }
+    (cos, sin)
+}
+
 /// Matrix sine.
 ///
-/// Matches `scipy.linalg.sinm(A)`.
+/// Matches `scipy.linalg.sinm(A) = Im(expm(iA))`.
 pub fn sinm(a: &[Vec<f64>], options: DecompOptions) -> Result<Vec<Vec<f64>>, LinalgError> {
-    funm(a, f64::sin, options)
+    let m = validated_square_dmatrix(a, options)?;
+    if m.nrows() == 0 {
+        return Ok(Vec::new());
+    }
+    let (_, sin) = cosm_sinm_blocks(&m);
+    Ok(rows_from_dmatrix(&sin))
 }
 
 /// Matrix cosine.
 ///
-/// Matches `scipy.linalg.cosm(A)`.
+/// Matches `scipy.linalg.cosm(A) = Re(expm(iA))`.
 pub fn cosm(a: &[Vec<f64>], options: DecompOptions) -> Result<Vec<Vec<f64>>, LinalgError> {
-    funm(a, f64::cos, options)
+    let m = validated_square_dmatrix(a, options)?;
+    if m.nrows() == 0 {
+        return Ok(Vec::new());
+    }
+    let (cos, _) = cosm_sinm_blocks(&m);
+    Ok(rows_from_dmatrix(&cos))
 }
 
 /// Matrix tangent.
 ///
-/// Matches `scipy.linalg.tanm(A)`.
+/// Matches `scipy.linalg.tanm(A) = solve(cosm(A), sinm(A))`.
 pub fn tanm(a: &[Vec<f64>], options: DecompOptions) -> Result<Vec<Vec<f64>>, LinalgError> {
-    funm(a, f64::tan, options)
+    let m = validated_square_dmatrix(a, options)?;
+    if m.nrows() == 0 {
+        return Ok(Vec::new());
+    }
+    let (cos, sin) = cosm_sinm_blocks(&m);
+    let x = cos.lu().solve(&sin).ok_or(LinalgError::SingularMatrix)?;
+    Ok(rows_from_dmatrix(&x))
 }
 
 /// Matrix hyperbolic sine.
 ///
-/// Matches `scipy.linalg.sinhm(A)`.
+/// Matches `scipy.linalg.sinhm(A) = (expm(A) - expm(-A)) / 2`.
 pub fn sinhm(a: &[Vec<f64>], options: DecompOptions) -> Result<Vec<Vec<f64>>, LinalgError> {
-    funm(a, f64::sinh, options)
+    let m = validated_square_dmatrix(a, options)?;
+    if m.nrows() == 0 {
+        return Ok(Vec::new());
+    }
+    let ep = expm_pade_scaling_squaring(&m);
+    let en = expm_pade_scaling_squaring(&(-&m));
+    let result = (ep - en) * 0.5;
+    Ok(rows_from_dmatrix(&result))
 }
 
 /// Matrix hyperbolic cosine.
 ///
-/// Matches `scipy.linalg.coshm(A)`.
+/// Matches `scipy.linalg.coshm(A) = (expm(A) + expm(-A)) / 2`.
 pub fn coshm(a: &[Vec<f64>], options: DecompOptions) -> Result<Vec<Vec<f64>>, LinalgError> {
-    funm(a, f64::cosh, options)
+    let m = validated_square_dmatrix(a, options)?;
+    if m.nrows() == 0 {
+        return Ok(Vec::new());
+    }
+    let ep = expm_pade_scaling_squaring(&m);
+    let en = expm_pade_scaling_squaring(&(-&m));
+    let result = (ep + en) * 0.5;
+    Ok(rows_from_dmatrix(&result))
 }
 
 /// Matrix hyperbolic tangent.
 ///
-/// Matches `scipy.linalg.tanhm(A)`.
+/// Matches `scipy.linalg.tanhm(A) = solve(coshm(A), sinhm(A))`.
 pub fn tanhm(a: &[Vec<f64>], options: DecompOptions) -> Result<Vec<Vec<f64>>, LinalgError> {
-    funm(a, f64::tanh, options)
+    let m = validated_square_dmatrix(a, options)?;
+    if m.nrows() == 0 {
+        return Ok(Vec::new());
+    }
+    let ep = expm_pade_scaling_squaring(&m);
+    let en = expm_pade_scaling_squaring(&(-&m));
+    let cosh = (&ep + &en) * 0.5;
+    let sinh = (&ep - &en) * 0.5;
+    let x = cosh.lu().solve(&sinh).ok_or(LinalgError::SingularMatrix)?;
+    Ok(rows_from_dmatrix(&x))
 }
 
 /// General matrix function via eigendecomposition.
