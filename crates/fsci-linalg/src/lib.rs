@@ -4136,9 +4136,101 @@ pub fn eig(a: &[Vec<f64>], options: DecompOptions) -> Result<EigResult, LinalgEr
     let mut eigvec_cols: Vec<Vec<f64>> = vec![vec![0.0; rows]; rows];
     for (col_idx, &(block_col, is_block)) in block_starts.iter().enumerate() {
         if is_block {
-            let dest_col = q_mat.column(col_idx);
+            // Complex-conjugate pair at columns (block_col, block_col+1). Compute the
+            // complex eigenvector for λ = re + i·im and store it in LAPACK dgeev real
+            // packing: column block_col = Re(v), column block_col+1 = Im(v), so the
+            // eigenvector for re+im is col[bc] + i·col[bc+1] and for re−im is its
+            // conjugate. Handled once, at the first column of the pair.
+            if col_idx != block_col {
+                continue;
+            }
+            let bc = block_col;
+            let lam = Complex::new(eigenvalues_re[bc], eigenvalues_im[bc]); // +im first
+            // Local 2×2 eigenvector: (T2 − λI) u = 0.
+            let (a, b) = (t_mat[(bc, bc)], t_mat[(bc, bc + 1)]);
+            let (c, d) = (t_mat[(bc + 1, bc)], t_mat[(bc + 1, bc + 1)]);
+            let cand = (Complex::new(b, 0.0), lam - Complex::new(a, 0.0));
+            let (u0, u1) = if cand.0.norm() + cand.1.norm() > 1e-30 {
+                cand
+            } else {
+                (lam - Complex::new(d, 0.0), Complex::new(c, 0.0))
+            };
+            let mut y = vec![Complex::new(0.0, 0.0); rows];
+            y[bc] = u0;
+            y[bc + 1] = u1;
+            // Back-fill y[0:bc] from the leading complex system (accounts for any 2×2
+            // blocks above this pair, like the real-eigenvalue path below).
+            let mut singular = false;
+            if bc > 0 {
+                let mut mm = DMatrix::<Complex<f64>>::zeros(bc, bc);
+                let mut rhs = DVector::<Complex<f64>>::zeros(bc);
+                for r in 0..bc {
+                    for cc in 0..bc {
+                        mm[(r, cc)] = Complex::new(t_mat[(r, cc)], 0.0);
+                    }
+                    mm[(r, r)] -= lam;
+                    rhs[r] = -(Complex::new(t_mat[(r, bc)], 0.0) * y[bc]
+                        + Complex::new(t_mat[(r, bc + 1)], 0.0) * y[bc + 1]);
+                }
+                match mm.lu().solve(&rhs) {
+                    Some(sol) => {
+                        for r in 0..bc {
+                            y[r] = sol[r];
+                        }
+                    }
+                    None => singular = true,
+                }
+            }
+            if singular {
+                for cc in [bc, bc + 1] {
+                    let dest = q_mat.column(cc);
+                    for r in 0..rows {
+                        eigvec_cols[cc][r] = dest[r];
+                    }
+                }
+                continue;
+            }
+            // v = Q · y (complex), then normalize to unit 2-norm and rotate the phase so
+            // the largest-magnitude component is real and positive (LAPACK convention).
+            let mut vre = vec![0.0_f64; rows];
+            let mut vim = vec![0.0_f64; rows];
             for r in 0..rows {
-                eigvec_cols[col_idx][r] = dest_col[r];
+                let mut s = Complex::new(0.0, 0.0);
+                for k in 0..rows {
+                    s += Complex::new(q_mat[(r, k)], 0.0) * y[k];
+                }
+                vre[r] = s.re;
+                vim[r] = s.im;
+            }
+            let mut piv = 0usize;
+            let mut best = -1.0_f64;
+            for r in 0..rows {
+                let mag = vre[r] * vre[r] + vim[r] * vim[r];
+                if mag > best {
+                    best = mag;
+                    piv = r;
+                }
+            }
+            let theta = vim[piv].atan2(vre[piv]);
+            let (ct, st) = (theta.cos(), theta.sin());
+            let mut nrm = 0.0_f64;
+            for r in 0..rows {
+                let nr = vre[r] * ct + vim[r] * st;
+                let ni = vim[r] * ct - vre[r] * st;
+                vre[r] = nr;
+                vim[r] = ni;
+                nrm += nr * nr + ni * ni;
+            }
+            let nrm = nrm.sqrt();
+            if nrm > 0.0 {
+                for r in 0..rows {
+                    vre[r] /= nrm;
+                    vim[r] /= nrm;
+                }
+            }
+            for r in 0..rows {
+                eigvec_cols[bc][r] = vre[r];
+                eigvec_cols[bc + 1][r] = vim[r];
             }
             continue;
         }
@@ -17636,6 +17728,49 @@ mod tests {
                 (norm - 1.0).abs() < 1e-10,
                 "v[col={col}] not unit-length: {norm}"
             );
+        }
+    }
+
+    #[test]
+    fn eig_complex_eigenvectors_satisfy_av_eq_lambda_v() {
+        // [frankenscipy-23gme follow-up] complex-conjugate eigenpairs previously
+        // returned the Schur basis columns (wrong: A·v ≠ λ·v). They are now stored
+        // in LAPACK dgeev real packing: for a pair at columns (j, j+1) with
+        // eigenvalues re±im, column j = Re(v) and column j+1 = Im(v), so the
+        // eigenvector for re+im is col[j] + i·col[j+1] and for re−im its conjugate.
+        let cases = vec![
+            vec![vec![0.0_f64, -1.0], vec![1.0, 0.0]], // eigenvalues ±i
+            vec![
+                vec![0.5_f64, -1.2, 0.3],
+                vec![1.1, 0.4, -0.2],
+                vec![0.0, 0.6, 0.9],
+            ], // one real + a complex pair
+        ];
+        for a in cases {
+            let n = a.len();
+            let r = eig(&a, DecompOptions::default()).unwrap();
+            let mut j = 0;
+            while j < n {
+                if r.eigenvalues_im[j].abs() > 1e-10 && j + 1 < n {
+                    let (lr, li) = (r.eigenvalues_re[j], r.eigenvalues_im[j]);
+                    let vr: Vec<f64> = (0..n).map(|i| r.eigenvectors[i][j]).collect();
+                    let vi: Vec<f64> = (0..n).map(|i| r.eigenvectors[i][j + 1]).collect();
+                    // Check A·(vr + i·vi) = (lr + i·li)·(vr + i·vi).
+                    for i in 0..n {
+                        let avr: f64 = (0..n).map(|k| a[i][k] * vr[k]).sum();
+                        let avi: f64 = (0..n).map(|k| a[i][k] * vi[k]).sum();
+                        let re = avr - (lr * vr[i] - li * vi[i]);
+                        let im = avi - (lr * vi[i] + li * vr[i]);
+                        assert!(
+                            (re * re + im * im).sqrt() < 1e-10,
+                            "complex eigenvector residual too large at i={i}"
+                        );
+                    }
+                    j += 2;
+                } else {
+                    j += 1;
+                }
+            }
         }
     }
 
