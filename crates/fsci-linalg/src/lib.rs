@@ -5595,7 +5595,33 @@ pub fn matrix_power(
 ///
 /// Matches `scipy.linalg.signm(A)`.
 pub fn signm(a: &[Vec<f64>], options: DecompOptions) -> Result<Vec<Vec<f64>>, LinalgError> {
-    funm(a, |x| if x >= 0.0 { 1.0 } else { -1.0 }, options)
+    let m = validated_square_dmatrix(a, options)?;
+    let n = m.nrows();
+    if n == 0 {
+        return Ok(Vec::new());
+    }
+    let is_symmetric = (0..n).all(|i| {
+        (0..n).all(|j| (m[(i, j)] - m[(j, i)]).abs() < 1e-12 * m[(i, j)].abs().max(1.0))
+    });
+    if is_symmetric {
+        return funm(a, |x| if x >= 0.0 { 1.0 } else { -1.0 }, options);
+    }
+
+    // The matrix sign function maps each eigenvalue to sign(Re λ). For a complex
+    // spectrum the real Schur form has 2×2 blocks whose individual diagonal
+    // entries can differ in sign from Re λ, so funm(_, sign) on the real diagonal
+    // is wrong; route those through the complex Schur–Parlett evaluator.
+    let schur = m.clone().schur();
+    let (q, t) = schur.unpack();
+    let has_complex_block = (0..n.saturating_sub(1)).any(|i| t[(i + 1, i)].abs() > 1e-300);
+    if has_complex_block {
+        let result = schur_parlett_complex(&q, &t, n, |z| {
+            Complex::new(if z.re >= 0.0 { 1.0 } else { -1.0 }, 0.0)
+        });
+        Ok(rows_from_dmatrix(&result))
+    } else {
+        funm(a, |x| if x >= 0.0 { 1.0 } else { -1.0 }, options)
+    }
 }
 
 /// Validate a square matrix and return it as an `nalgebra` `DMatrix`.
