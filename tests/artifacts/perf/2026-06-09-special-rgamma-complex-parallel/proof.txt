@@ -1,0 +1,26 @@
+[perf] Parallelize rgamma ComplexVec arm (complex reciprocal gamma) (frankenscipy-h8uge)
+Crate: fsci-special  File: crates/fsci-special/src/gamma.rs (pub fn rgamma, ComplexVec arm)
+Worker: rch remote (release-perf)
+
+LEVER: rgamma's ComplexVec arm mapped the expensive complex reciprocal-gamma kernel
+(complex_rgamma_scalar) with a serial values.iter().map(..).collect(), while its RealVec arm
+and every sibling complex arm (gammaln/loggamma/digamma/polygamma) already use the crate-local
+par_map_indices. Routed it through par_map_indices (Ok-wrap the infallible kernel), which fans
+index chunks across cores and concatenates in index order (gates n<256 -> sequential). Each
+element writes its own output slot; the kernel reads no shared mutable state => bit-identical.
+
+ISOMORPHISM / BYTE-IDENTITY (same-process golden xor of output re/im bits, unchanged across builds):
+  n=100    rgamma xor=bf000667b8de18a3   (serial == parallel)
+  n=5000   rgamma xor=e81e04300c19c6f3   (serial == parallel)
+  n=50000  rgamma xor=5e210a0198b91b2e   (serial == parallel)
+  timing-acc n=1e6 7c007abeca6ee01a, n=2e6 cca2b4c8d50079e6  (serial == parallel)
+
+TIMING (same worker, same-process A/B across the edit):
+  n=1,000,000:  serial 162.747 ms/call -> parallel 16.104 ms/call  = 10.11x  (repeat 16.160 ms)
+  n=2,000,000:  serial 317.021 ms/call -> parallel 24.045 ms/call  = 13.18x  (repeat 23.051 ms)
+  Score = 10.11 (min observed) >> 2.0
+
+TESTS: cargo test -p fsci-special --lib rgamma => 5 passed; 0 failed
+  (incl. complex_rgamma_vector_preserves_shape, complex_rgamma_real_inputs_match_real_path)
+CLIPPY: cargo clippy -p fsci-special --no-deps => only pre-existing warnings (gamma must_use dup,
+  bessel/beta cast/identical-blocks); none at the edited rgamma arm.

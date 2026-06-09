@@ -615,9 +615,14 @@ pub fn rgamma(z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
         SpecialTensor::ComplexScalar(z_val) => {
             Ok(SpecialTensor::ComplexScalar(complex_rgamma_scalar(*z_val)))
         }
-        SpecialTensor::ComplexVec(values) => Ok(SpecialTensor::ComplexVec(
-            values.iter().copied().map(complex_rgamma_scalar).collect(),
-        )),
+        SpecialTensor::ComplexVec(values) => {
+            // Each element is an independent, expensive complex reciprocal-gamma evaluation
+            // written to its own output slot; par_map_indices fans index chunks across cores
+            // and concatenates in index order (gating n<256 to the sequential path), so the
+            // result is bit-identical to the serial `values.iter().map(..).collect()`.
+            par_map_indices(values.len(), |i| Ok(complex_rgamma_scalar(values[i])))
+                .map(SpecialTensor::ComplexVec)
+        }
         SpecialTensor::Empty => Err(SpecialError {
             function: "rgamma",
             kind: SpecialErrorKind::DomainError,
