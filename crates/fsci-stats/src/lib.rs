@@ -5077,10 +5077,15 @@ impl ContinuousDistribution for NormInvGauss {
     }
 
     fn kurtosis(&self) -> f64 {
+        // Excess (Fisher) kurtosis of NIG: 3(1 + 4β²/α²)/(δγ) with δ=1. This
+        // closed form is ALREADY the excess kurtosis — scipy.stats.norminvgauss
+        // .stats('k') returns exactly this — so it must NOT have a further 3
+        // subtracted (the old `- 3.0` drove e.g. norminvgauss(1,0.5) to 3.928
+        // vs scipy 6.928, and even produced impossible negatives).
         let gamma = self.gamma();
         let a2 = self.a * self.a;
         let b2 = self.b * self.b;
-        3.0 * (1.0 + 4.0 * b2 / a2) / gamma - 3.0
+        3.0 * (1.0 + 4.0 * b2 / a2) / gamma
     }
 
     fn entropy(&self) -> f64 {
@@ -47268,6 +47273,28 @@ mod tests {
             fitted.left.is_nan() && fitted.mode.is_nan() && fitted.right.is_nan(),
             "Triangular::fit must fail closed on zero-width samples, got {fitted:?}"
         );
+    }
+
+    #[test]
+    fn norminvgauss_excess_kurtosis_matches_scipy() {
+        // Regression: NIG excess kurtosis 3(1+4β²/α²)/(δγ) is ALREADY Fisher
+        // excess; the old `- 3.0` made it 3 too low (even negative). Golden
+        // values from scipy.stats.norminvgauss(a, b).stats('k').
+        let cases: &[(f64, f64, f64)] = &[
+            (1.0, 0.5, 6.928_203_230_275_509),
+            (2.0, 0.5, 1.936_491_673_103_709),
+            (3.0, -1.5, 2.309_401_076_758_503),
+            (5.0, 0.0, 0.6),
+            (1.5, 1.0, 7.453_559_924_999_300),
+        ];
+        for &(a, b, golden) in cases {
+            let k = NormInvGauss::new(a, b).kurtosis();
+            assert!(
+                (k - golden).abs() < 1e-12,
+                "norminvgauss({a},{b}).kurtosis() = {k}, scipy {golden}"
+            );
+            assert!(k >= -2.0, "excess kurtosis cannot be below -2, got {k}");
+        }
     }
 
     #[test]
