@@ -7994,6 +7994,22 @@ fn dmatrix_max_abs_difference(left: &DMatrix<f64>, right: &DMatrix<f64>) -> Opti
     Some(max_abs)
 }
 
+fn reconstruct_thin_svd_with_scaled_u(thin: &DeterministicThinSvd) -> DMatrix<f64> {
+    debug_assert_eq!(thin.u.ncols(), thin.singular_values.len());
+    let rows = thin.u.nrows();
+    let cols = thin.u.ncols();
+    let mut scaled_u = thin.u.clone();
+    let data = scaled_u.as_mut_slice();
+    for col in 0..cols {
+        let singular_value = thin.singular_values[col];
+        let col_base = col * rows;
+        for value in &mut data[col_base..col_base + rows] {
+            *value *= singular_value;
+        }
+    }
+    scaled_u * &thin.v_t
+}
+
 fn public_bidiag_svd_accepts(
     matrix: &DMatrix<f64>,
     thin: &DeterministicThinSvd,
@@ -8026,7 +8042,7 @@ fn public_bidiag_svd_accepts(
         }
     }
 
-    let reconstructed = &thin.u * thin.sigma_matrix() * &thin.v_t;
+    let reconstructed = reconstruct_thin_svd_with_scaled_u(thin);
     let Some(reconstruction_error) = dmatrix_max_abs_difference(&reconstructed, matrix) else {
         return false;
     };
@@ -15861,6 +15877,34 @@ mod tests {
             1e-8,
             1e-8,
         );
+    }
+
+    #[test]
+    fn public_bidiag_scaled_reconstruction_matches_dense_acceptance_reference() {
+        for (rows, cols) in [(12, 6), (32, 16), (96, 48)] {
+            let original = bidiag_deterministic_matrix(rows, cols);
+            let thin = deterministic_thin_svd(&original).expect("deterministic thin SVD");
+            let dense_reconstructed = &thin.u * thin.sigma_matrix() * &thin.v_t;
+            let scaled_reconstructed = reconstruct_thin_svd_with_scaled_u(&thin);
+            let dense_error = max_abs_dmatrix_diff(&dense_reconstructed, &original);
+            let scaled_error = max_abs_dmatrix_diff(&scaled_reconstructed, &original);
+            let max_s = thin.singular_values.iter().copied().fold(0.0_f64, f64::max);
+            let threshold = public_bidiag_default_threshold(rows, cols, max_s);
+            let accept_limit = PUBLIC_BIDIAG_RECON_REL_TOL
+                * dmatrix_max_abs_value(&original).max(1.0)
+                * (cols as f64).sqrt();
+
+            assert_eq!(
+                dense_error <= accept_limit,
+                scaled_error <= accept_limit,
+                "scaled gate changed acceptance for shape {rows}x{cols}: dense={dense_error:.17e} scaled={scaled_error:.17e}"
+            );
+            assert_eq!(
+                public_bidiag_svd_accepts(&original, &thin, threshold),
+                dense_error <= accept_limit,
+                "public acceptance diverged from dense reference for shape {rows}x{cols}"
+            );
+        }
     }
 
     #[test]
