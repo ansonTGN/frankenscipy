@@ -6487,6 +6487,9 @@ const PUBLIC_BIDIAG_RECON_REL_TOL: f64 = 1e-8;
 const THIN_BIDIAG_LEFT_REPLAY_MIN_PAR_COLS: usize = 128;
 const THIN_BIDIAG_LEFT_REPLAY_MIN_COLS_PER_WORKER: usize = 32;
 const THIN_BIDIAG_LEFT_REPLAY_MAX_WORKERS: usize = 8;
+const THIN_BIDIAG_RIGHT_REPLAY_MIN_PAR_ROWS: usize = 128;
+const THIN_BIDIAG_RIGHT_REPLAY_MIN_ROWS_PER_WORKER: usize = 32;
+const THIN_BIDIAG_RIGHT_REPLAY_MAX_WORKERS: usize = 8;
 
 #[allow(dead_code)]
 impl BidiagonalReduction {
@@ -6690,6 +6693,83 @@ fn apply_left_reflectors_to_column_chunk(
             if scale != 0.0 {
                 for (offset, value) in reflector.values.iter().enumerate() {
                     chunk[col_base + reflector.start + offset] -= scale * value;
+                }
+            }
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn apply_right_reflectors_row_chunks(
+    matrix: &mut DMatrix<f64>,
+    reflectors: &[HouseholderReflector],
+    worker_count: usize,
+) {
+    let rows = matrix.nrows();
+    let cols = matrix.ncols();
+    let usable_workers = worker_count
+        .min(THIN_BIDIAG_RIGHT_REPLAY_MAX_WORKERS)
+        .min(rows / THIN_BIDIAG_RIGHT_REPLAY_MIN_ROWS_PER_WORKER);
+    if rows == 0 || cols == 0 || usable_workers <= 1 || rows < THIN_BIDIAG_RIGHT_REPLAY_MIN_PAR_ROWS
+    {
+        for reflector in reflectors.iter().rev() {
+            apply_householder_right(matrix, reflector, 0);
+        }
+        return;
+    }
+
+    let mut row_major = vec![0.0_f64; rows * cols];
+    {
+        let data = matrix.as_slice();
+        for col in 0..cols {
+            let col_base = col * rows;
+            for row in 0..rows {
+                row_major[row * cols + col] = data[col_base + row];
+            }
+        }
+    }
+
+    let rows_per_worker = rows.div_ceil(usable_workers);
+    let chunk_len = rows_per_worker * cols;
+    std::thread::scope(|scope| {
+        for chunk in row_major.chunks_mut(chunk_len) {
+            let chunk_rows = chunk.len() / cols;
+            scope.spawn(move || {
+                apply_right_reflectors_to_row_chunk(chunk, cols, chunk_rows, reflectors);
+            });
+        }
+    });
+
+    let data = matrix.as_mut_slice();
+    for col in 0..cols {
+        let col_base = col * rows;
+        for row in 0..rows {
+            data[col_base + row] = row_major[row * cols + col];
+        }
+    }
+}
+
+fn apply_right_reflectors_to_row_chunk(
+    chunk: &mut [f64],
+    cols: usize,
+    rows: usize,
+    reflectors: &[HouseholderReflector],
+) {
+    for reflector in reflectors.iter().rev() {
+        if reflector.tau == 0.0 || reflector.values.is_empty() {
+            continue;
+        }
+        let start = reflector.start;
+        for row in 0..rows {
+            let row_base = row * cols;
+            let mut dot = 0.0;
+            for (offset, value) in reflector.values.iter().enumerate() {
+                dot += chunk[row_base + start + offset] * value;
+            }
+            let scale = reflector.tau * dot;
+            if scale != 0.0 {
+                for (offset, value) in reflector.values.iter().enumerate() {
+                    chunk[row_base + start + offset] -= scale * value;
                 }
             }
         }
@@ -7555,9 +7635,7 @@ fn deterministic_thin_svd_from_reduction_parts(
     apply_left_reflectors_column_chunks(&mut u, &reduction.left_reflectors, worker_count);
 
     let mut v_t = bidiagonal_svd.v_t;
-    for reflector in reduction.right_reflectors.iter().rev() {
-        apply_householder_right(&mut v_t, reflector, 0);
-    }
+    apply_right_reflectors_row_chunks(&mut v_t, &reduction.right_reflectors, worker_count);
 
     canonicalize_svd_factor_signs(&mut u, &mut v_t);
 
@@ -15461,6 +15539,29 @@ mod tests {
         }
     }
 
+    fn deterministic_thin_svd_from_reduction_parts_forced_parallel_right(
+        reduction: &BidiagonalReduction,
+        bidiagonal_svd: BidiagonalSvd,
+        worker_count: usize,
+    ) -> DeterministicThinSvd {
+        let mut u = bidiagonal_svd.u;
+        for reflector in reduction.left_reflectors.iter().rev() {
+            apply_householder_left(&mut u, reflector, 0);
+        }
+
+        let mut v_t = bidiagonal_svd.v_t;
+        apply_right_reflectors_row_chunks(&mut v_t, &reduction.right_reflectors, worker_count);
+
+        canonicalize_svd_factor_signs(&mut u, &mut v_t);
+
+        DeterministicThinSvd {
+            singular_values: bidiagonal_svd.singular_values,
+            u,
+            v_t,
+            jacobi_sweeps: bidiagonal_svd.sweeps,
+        }
+    }
+
     #[test]
     fn thin_bidiag_parallel_left_replay_matches_serial_bits() {
         for (rows, cols) in [(256, 160), (384, 192)] {
@@ -15474,6 +15575,57 @@ mod tests {
                 bidiagonal_svd.clone(),
             );
             let parallel = deterministic_thin_svd_from_reduction_parts_forced_parallel_left(
+                &reduction,
+                bidiagonal_svd,
+                4,
+            );
+
+            assert_eq!(
+                thin_svd_bits_digest(&serial),
+                thin_svd_bits_digest(&parallel),
+                "thin-SVD digest drifted for shape {rows}x{cols}"
+            );
+            for idx in 0..serial.singular_values.len() {
+                assert_eq!(
+                    serial.singular_values[idx].to_bits(),
+                    parallel.singular_values[idx].to_bits(),
+                    "singular value {idx} changed for shape {rows}x{cols}"
+                );
+            }
+            for row in 0..serial.u.nrows() {
+                for col in 0..serial.u.ncols() {
+                    assert_eq!(
+                        serial.u[(row, col)].to_bits(),
+                        parallel.u[(row, col)].to_bits(),
+                        "U bit drift at ({row}, {col}) for shape {rows}x{cols}"
+                    );
+                }
+            }
+            for row in 0..serial.v_t.nrows() {
+                for col in 0..serial.v_t.ncols() {
+                    assert_eq!(
+                        serial.v_t[(row, col)].to_bits(),
+                        parallel.v_t[(row, col)].to_bits(),
+                        "Vt bit drift at ({row}, {col}) for shape {rows}x{cols}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn thin_bidiag_parallel_right_replay_matches_serial_bits() {
+        for (rows, cols) in [(256, 160), (384, 192), (512, 512)] {
+            let original = bidiag_deterministic_matrix(rows, cols);
+            let reduction =
+                golub_kahan_bidiagonal_reduction(&original).expect("bidiagonal reduction");
+            let bidiagonal_svd =
+                deterministic_bidiagonal_svd_from_reduction(&reduction).expect("bidiagonal SVD");
+            let serial = deterministic_thin_svd_from_reduction_parts_serial_left_reference(
+                &reduction,
+                bidiagonal_svd.clone(),
+            );
+            let parallel = deterministic_thin_svd_from_reduction_parts_forced_parallel_right(
                 &reduction,
                 bidiagonal_svd,
                 4,
@@ -16141,7 +16293,7 @@ mod tests {
             deterministic_bidiagonal_svd_from_reduction(&reduction).expect("bidiag svd");
         let b_ms = b_start.elapsed().as_secs_f64() * 1e3;
 
-        // Back-transform: U (parallel column-chunks) vs V (sequential right reflectors).
+        // Back-transform: U (column chunks) vs Vt (row-major scratch row chunks).
         let mut u = bidiag_svd.u.clone();
         let wc = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
         let u_start = std::time::Instant::now();
@@ -16150,12 +16302,11 @@ mod tests {
 
         let mut v_t = bidiag_svd.v_t.clone();
         let v_start = std::time::Instant::now();
-        for reflector in reduction.right_reflectors.iter().rev() {
-            apply_householder_right(&mut v_t, reflector, 0);
-        }
+        apply_right_reflectors_row_chunks(&mut v_t, &reduction.right_reflectors, wc);
         let v_ms = v_start.elapsed().as_secs_f64() * 1e3;
 
         println!("THIN_SVD_STAGE_BREAKDOWN_BEGIN");
+        println!("worker_count={wc}");
         println!("reduction_ms={r_ms:.3}");
         println!("bidiagonal_svd_ms={b_ms:.3}");
         println!("back_transform_u_ms={u_ms:.3}");

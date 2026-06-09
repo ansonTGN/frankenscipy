@@ -1,0 +1,1008 @@
+  [2m2026-06-09T03:13:34.081295Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSelected worker: ovh-a at ubuntu@51.222.245.56 (0 slots remaining after reservation, speed 50.0)[0m
+    [2;3mat[0m rch/src/hook.rs:514 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:34.414358Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mStarting remote compilation pipeline for frankenscipy (hash: d2200aa47ec6b64b)[0m
+    [2;3mat[0m rch/src/hook.rs:5994 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:34.414415Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mPrepared dependency sync manifest for 20 roots[0m
+    [2;3mat[0m rch/src/hook.rs:6016 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:35.731824Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSyncing project to worker ovh-a...[0m
+    [2;3mat[0m rch/src/hook.rs:6046 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:35.731916Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy -> /data/projects/frankenscipy on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:37.269565Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 1537ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:37.269712Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-arrayapi -> /data/projects/frankenscipy/crates/fsci-arrayapi on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:37.867785Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 598ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:37.867901Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-cluster -> /data/projects/frankenscipy/crates/fsci-cluster on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:38.408090Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 540ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:38.408243Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-conformance -> /data/projects/frankenscipy/crates/fsci-conformance on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:39.461882Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 1053ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:39.461981Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-constants -> /data/projects/frankenscipy/crates/fsci-constants on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:40.013331Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 551ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:40.013456Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-datasets -> /data/projects/frankenscipy/crates/fsci-datasets on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:40.583920Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 570ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:40.584086Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-fft -> /data/projects/frankenscipy/crates/fsci-fft on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:41.199006Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 614ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:41.199142Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-integrate -> /data/projects/frankenscipy/crates/fsci-integrate on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:41.801788Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 602ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:41.801937Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-interpolate -> /data/projects/frankenscipy/crates/fsci-interpolate on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:42.313969Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 512ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:42.314111Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-io -> /data/projects/frankenscipy/crates/fsci-io on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:42.818636Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 504ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:42.818794Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-linalg -> /data/projects/frankenscipy/crates/fsci-linalg on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:43.295041Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 476ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:43.295144Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-ndimage -> /data/projects/frankenscipy/crates/fsci-ndimage on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:43.760740Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 465ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:43.760881Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-odr -> /data/projects/frankenscipy/crates/fsci-odr on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:44.307625Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 546ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:44.307724Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-opt -> /data/projects/frankenscipy/crates/fsci-opt on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:44.778809Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 471ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:44.778930Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-runtime -> /data/projects/frankenscipy/crates/fsci-runtime on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:45.258259Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 479ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:45.258389Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-signal -> /data/projects/frankenscipy/crates/fsci-signal on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:45.775553Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 517ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:45.775719Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-sparse -> /data/projects/frankenscipy/crates/fsci-sparse on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:46.301895Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 526ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:46.302045Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-spatial -> /data/projects/frankenscipy/crates/fsci-spatial on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:46.787420Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 485ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:46.787595Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-special -> /data/projects/frankenscipy/crates/fsci-special on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:47.267506Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 479ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:47.267628Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-stats -> /data/projects/frankenscipy/crates/fsci-stats on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:47.781924Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 514ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:47.781964Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSync complete: 26344 files, 942382 bytes in 12039ms[0m
+    [2;3mat[0m rch/src/hook.rs:6209 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:57.836102Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mExecuting command remotely: cargo test -p fsci-linalg --release --lib --locked public_bidiag_svd_route_perf_probe public_wide_svd_route_perf_probe public_square_svd_route_perf_probe public_square_pinv_route_perf_probe public_band_tall_lstsq_route_perf_probe public_band_tall_pinv_route_perf_probe public_band_wide_lstsq_route_perf_probe public_wide_min_norm_lstsq_route_perf_probe -- --ignored --nocapture '--test-threads=1'[0m
+    [2;3mat[0m rch/src/hook.rs:6252 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:13:57.836176Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mRewriting CARGO_TARGET_DIR for remote execution (worker-scoped path): /data/tmp/cargo-target -> /data/projects/frankenscipy/.rch-target-ovh-a-job-29879662679163212-1780974815731816519-0[0m
+    [2;3mat[0m rch/src/transfer.rs:712 [2;3mon[0m ThreadId(1)
+
+error: unexpected argument 'public_wide_svd_route_perf_probe' found
+
+Usage: cargo test [OPTIONS] [TESTNAME] [-- [ARGS]...]
+
+For more information, try '--help'.
+  [2m2026-06-09T03:13:58.413623Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mRemote command finished: exit=1 in 577ms[0m
+    [2;3mat[0m rch/src/hook.rs:6376 [2;3mon[0m ThreadId(1)
+
+[RCH] remote ovh-a failed (exit 1)
+  [2m2026-06-09T03:14:43.526492Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSelected worker: ovh-a at ubuntu@51.222.245.56 (0 slots remaining after reservation, speed 50.0)[0m
+    [2;3mat[0m rch/src/hook.rs:514 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:43.895961Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mStarting remote compilation pipeline for frankenscipy (hash: d2200aa47ec6b64b)[0m
+    [2;3mat[0m rch/src/hook.rs:5994 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:43.896013Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mPrepared dependency sync manifest for 20 roots[0m
+    [2;3mat[0m rch/src/hook.rs:6016 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:44.926915Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSyncing project to worker ovh-a...[0m
+    [2;3mat[0m rch/src/hook.rs:6046 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:44.927022Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy -> /data/projects/frankenscipy on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:46.317840Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 1390ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:46.317999Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-arrayapi -> /data/projects/frankenscipy/crates/fsci-arrayapi on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:46.809299Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 491ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:46.809423Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-cluster -> /data/projects/frankenscipy/crates/fsci-cluster on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:47.350471Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 541ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:47.350605Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-conformance -> /data/projects/frankenscipy/crates/fsci-conformance on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:48.250816Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 900ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:48.250958Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-constants -> /data/projects/frankenscipy/crates/fsci-constants on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:48.728267Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 477ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:48.728396Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-datasets -> /data/projects/frankenscipy/crates/fsci-datasets on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:49.200841Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 472ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:49.200964Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-fft -> /data/projects/frankenscipy/crates/fsci-fft on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:49.725786Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 524ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:49.725917Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-integrate -> /data/projects/frankenscipy/crates/fsci-integrate on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:50.260044Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 534ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:50.260172Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-interpolate -> /data/projects/frankenscipy/crates/fsci-interpolate on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:50.765687Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 505ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:50.765881Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-io -> /data/projects/frankenscipy/crates/fsci-io on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:51.287452Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 521ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:51.287644Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-linalg -> /data/projects/frankenscipy/crates/fsci-linalg on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:51.768922Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 481ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:51.769056Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-ndimage -> /data/projects/frankenscipy/crates/fsci-ndimage on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:52.249432Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 480ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:52.249548Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-odr -> /data/projects/frankenscipy/crates/fsci-odr on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:52.719838Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 470ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:52.720003Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-opt -> /data/projects/frankenscipy/crates/fsci-opt on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:53.205155Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 485ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:53.205282Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-runtime -> /data/projects/frankenscipy/crates/fsci-runtime on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:53.748126Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 542ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:53.748308Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-signal -> /data/projects/frankenscipy/crates/fsci-signal on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:54.223590Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 475ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:54.223717Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-sparse -> /data/projects/frankenscipy/crates/fsci-sparse on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:54.705979Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 482ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:54.706132Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-spatial -> /data/projects/frankenscipy/crates/fsci-spatial on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:55.248621Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 542ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:55.248757Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-special -> /data/projects/frankenscipy/crates/fsci-special on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:55.724376Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 475ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:55.724502Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-stats -> /data/projects/frankenscipy/crates/fsci-stats on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:56.202792Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 478ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:14:56.202828Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSync complete: 26344 files, 942389 bytes in 11265ms[0m
+    [2;3mat[0m rch/src/hook.rs:6209 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:15:06.388827Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mExecuting command remotely: cargo test -p fsci-linalg --release --lib --locked public_bidiag_svd_route_perf_probe -- --ignored --nocapture '--test-threads=1'[0m
+    [2;3mat[0m rch/src/hook.rs:6252 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:15:06.388878Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mRewriting CARGO_TARGET_DIR for remote execution (worker-scoped path): /data/tmp/cargo-target -> /data/projects/frankenscipy/.rch-target-ovh-a-job-29879662679163215-1780974884926909084-0[0m
+    [2;3mat[0m rch/src/transfer.rs:712 [2;3mon[0m ThreadId(1)
+
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded arrayref v0.3.9
+  Downloaded approx v0.5.1
+  Downloaded cpufeatures v0.3.0
+  Downloaded arrayvec v0.7.6
+  Downloaded autocfg v1.5.0
+  Downloaded bit-vec v0.8.0
+  Downloaded bitflags v2.11.1
+  Downloaded unarray v0.1.4
+  Downloaded serde_derive v1.0.228
+  Downloaded tempfile v3.27.0
+  Downloaded walkdir v2.5.0
+  Downloaded aho-corasick v1.1.4
+  Downloaded glam v0.19.0
+  Downloaded wait-timeout v0.2.1
+  Downloaded nalgebra v0.34.2
+  Downloaded ciborium-io v0.2.2
+  Downloaded rustix v1.1.4
+  Downloaded clap_lex v1.1.0
+  Downloaded ciborium-ll v0.2.2
+  Downloaded constant_time_eq v0.4.2
+  Downloaded tinytemplate v1.2.1
+  Downloaded crossbeam-utils v0.8.21
+  Downloaded plotters-backend v0.3.7
+  Downloaded cc v1.2.60
+  Downloaded glam v0.31.1
+  Downloaded cast v0.3.0
+  Downloaded page_size v0.6.0
+  Downloaded equivalent v1.0.2
+  Downloaded cfg-if v1.0.4
+  Downloaded nalgebra-macros v0.3.0
+  Downloaded crossbeam-deque v0.8.6
+  Downloaded either v1.15.0
+  Downloaded ciborium v0.2.2
+  Downloaded itoa v1.0.18
+  Downloaded fnv v1.0.7
+  Downloaded criterion-plot v0.8.2
+  Downloaded num-integer v0.1.46
+  Downloaded wide v0.7.33
+  Downloaded memchr v2.8.0
+  Downloaded errno v0.3.14
+  Downloaded shlex v1.3.0
+  Downloaded zmij v1.0.21
+  Downloaded alloca v0.4.0
+  Downloaded same-file v1.0.6
+  Downloaded plotters-svg v0.3.7
+  Downloaded crossbeam-epoch v0.9.18
+  Downloaded anes v0.1.6
+  Downloaded find-msvc-tools v0.1.9
+  Downloaded num-rational v0.4.2
+  Downloaded fastrand v2.4.1
+  Downloaded paste v1.0.15
+  Downloaded quick-error v1.2.3
+  Downloaded rawpointer v0.2.1
+  Downloaded bit-set v0.8.0
+  Downloaded oorandom v11.1.5
+  Downloaded ppv-lite86 v0.2.21
+  Downloaded rusty-fork v0.3.1
+  Downloaded typenum v1.20.0
+  Downloaded matrixmultiply v0.3.10
+  Downloaded once_cell v1.21.4
+  Downloaded unicode-ident v1.0.24
+  Downloaded num-complex v0.4.6
+  Downloaded rand_xorshift v0.4.0
+  Downloaded rand_core v0.9.5
+  Downloaded anstyle v1.0.14
+  Downloaded simba v0.9.1
+  Downloaded rand_chacha v0.9.0
+  Downloaded quote v1.0.45
+  Downloaded getrandom v0.3.4
+  Downloaded zerocopy-derive v0.8.48
+  Downloaded half v2.7.1
+  Downloaded bytemuck v1.25.0
+  Downloaded clap v4.6.1
+  Downloaded num-traits v0.2.19
+  Downloaded glam v0.14.0
+  Downloaded serde_core v1.0.228
+  Downloaded rayon-core v1.13.0
+  Downloaded indexmap v2.14.0
+  Downloaded glam v0.16.0
+  Downloaded safe_arch v0.7.4
+  Downloaded syn v2.0.117
+  Downloaded zerocopy v0.8.48
+  Downloaded glam v0.17.3
+  Downloaded serde v1.0.228
+  Downloaded proc-macro2 v1.0.106
+  Downloaded criterion v0.8.2
+  Downloaded hashbrown v0.17.0
+  Downloaded rand v0.9.4
+  Downloaded num-bigint v0.4.6
+  Downloaded glam v0.20.5
+  Downloaded glam v0.18.0
+  Downloaded plotters v0.3.7
+  Downloaded itertools v0.13.0
+  Downloaded clap_builder v4.6.0
+  Downloaded regex v1.12.3
+  Downloaded glam v0.15.2
+  Downloaded serde_json v1.0.149
+  Downloaded rayon v1.12.0
+  Downloaded blake3 v1.8.4
+  Downloaded proptest v1.11.0
+  Downloaded glam v0.22.0
+  Downloaded glam v0.21.3
+  Downloaded glam v0.23.0
+  Downloaded glam v0.24.2
+  Downloaded glam v0.25.0
+  Downloaded regex-syntax v0.8.10
+  Downloaded glam v0.27.0
+  Downloaded glam v0.28.0
+  Downloaded glam v0.29.3
+  Downloaded regex-automata v0.4.14
+  Downloaded glam v0.30.10
+  Downloaded glam v0.32.1
+  Downloaded libc v0.2.185
+  Downloaded linux-raw-sys v0.12.1
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.45
+   Compiling autocfg v1.5.0
+   Compiling cfg-if v1.0.4
+   Compiling libc v0.2.185
+   Compiling shlex v1.3.0
+   Compiling find-msvc-tools v0.1.9
+   Compiling getrandom v0.3.4
+   Compiling zerocopy v0.8.48
+   Compiling serde_core v1.0.228
+   Compiling serde v1.0.228
+   Compiling crossbeam-utils v0.8.21
+   Compiling zmij v1.0.21
+   Compiling equivalent v1.0.2
+   Compiling hashbrown v0.17.0
+   Compiling serde_json v1.0.149
+   Compiling memchr v2.8.0
+   Compiling itoa v1.0.18
+   Compiling cc v1.2.60
+   Compiling rustix v1.1.4
+   Compiling bytemuck v1.25.0
+   Compiling regex-syntax v0.8.10
+   Compiling paste v1.0.15
+   Compiling bitflags v2.11.1
+   Compiling either v1.15.0
+   Compiling num-traits v0.2.19
+   Compiling rayon-core v1.13.0
+   Compiling linux-raw-sys v0.12.1
+   Compiling safe_arch v0.7.4
+   Compiling matrixmultiply v0.3.10
+   Compiling ciborium-io v0.2.2
+   Compiling fastrand v2.4.1
+   Compiling once_cell v1.21.4
+   Compiling plotters-backend v0.3.7
+   Compiling clap_lex v1.1.0
+   Compiling indexmap v2.14.0
+   Compiling crossbeam-epoch v0.9.18
+   Compiling anstyle v1.0.14
+   Compiling cpufeatures v0.3.0
+   Compiling syn v2.0.117
+   Compiling arrayref v0.3.9
+   Compiling constant_time_eq v0.4.2
+   Compiling arrayvec v0.7.6
+   Compiling clap_builder v4.6.0
+   Compiling wide v0.7.33
+   Compiling crossbeam-deque v0.8.6
+   Compiling plotters-svg v0.3.7
+   Compiling wait-timeout v0.2.1
+   Compiling itertools v0.13.0
+   Compiling rawpointer v0.2.1
+   Compiling cast v0.3.0
+   Compiling rand_core v0.9.5
+   Compiling num-complex v0.4.6
+   Compiling num-integer v0.1.46
+   Compiling approx v0.5.1
+   Compiling blake3 v1.8.4
+   Compiling alloca v0.4.0
+   Compiling quick-error v1.2.3
+   Compiling bit-vec v0.8.0
+   Compiling fnv v1.0.7
+   Compiling same-file v1.0.6
+   Compiling rayon v1.12.0
+   Compiling walkdir v2.5.0
+   Compiling rand v0.9.4
+   Compiling bit-set v0.8.0
+   Compiling num-rational v0.4.2
+   Compiling regex-automata v0.4.14
+   Compiling rand_xorshift v0.4.0
+   Compiling plotters v0.3.7
+   Compiling tempfile v3.27.0
+   Compiling page_size v0.6.0
+   Compiling unarray v0.1.4
+   Compiling anes v0.1.6
+   Compiling clap v4.6.1
+   Compiling simba v0.9.1
+   Compiling criterion-plot v0.8.2
+   Compiling rusty-fork v0.3.1
+   Compiling oorandom v11.1.5
+   Compiling typenum v1.20.0
+   Compiling regex v1.12.3
+   Compiling zerocopy-derive v0.8.48
+   Compiling serde_derive v1.0.228
+   Compiling nalgebra-macros v0.3.0
+   Compiling tinytemplate v1.2.1
+   Compiling fsci-runtime v0.1.0 (/data/projects/frankenscipy/crates/fsci-runtime)
+   Compiling fsci-fft v0.1.0 (/data/projects/frankenscipy/crates/fsci-fft)
+   Compiling nalgebra v0.34.2
+   Compiling half v2.7.1
+   Compiling ppv-lite86 v0.2.21
+   Compiling ciborium-ll v0.2.2
+   Compiling rand_chacha v0.9.0
+   Compiling ciborium v0.2.2
+   Compiling proptest v1.11.0
+   Compiling criterion v0.8.2
+   Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
+    Finished `release` profile [optimized] target(s) in 24.32s
+     Running unittests src/lib.rs (.rch-target-ovh-a-job-29879662679163215-1780974884926909084-0/release/deps/fsci_linalg-513bfd364b68d90d)
+
+running 1 test
+test tests::public_bidiag_svd_route_perf_probe ... PUBLIC_BIDIAG_SVD_ROUTE_PERF_BEGIN
+shape=512x256
+reference_lstsq_ms=89.292673
+routed_lstsq_ms=14.870532
+lstsq_speedup=6.004672
+reference_pinv_ms=89.810044
+previous_route_pinv_ms=49.346115
+routed_pinv_ms=11.727640
+pinv_speedup=7.657981
+pinv_speedup_vs_previous_route=4.207676
+lstsq_rank=256
+pinv_rank=256
+lstsq_max_abs_diff=1.49213974509621039e-13
+pinv_max_abs_diff=5.77285398303817310e-13
+previous_route_pinv_max_abs_diff=2.28428387316625958e-14
+routed_vs_previous_route_pinv_max_abs_diff=5.76128337745340779e-13
+PUBLIC_BIDIAG_SVD_ROUTE_PERF_END
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 410 filtered out; finished in 0.26s
+
+  [2m2026-06-09T03:15:31.786456Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mRemote command finished: exit=0 in 25397ms[0m
+    [2;3mat[0m rch/src/hook.rs:6376 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:15:31.786969Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mRetrieving build artifacts...[0m
+    [2;3mat[0m rch/src/hook.rs:6425 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:15:31.786988Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mRetrieving artifacts from /data/projects/frankenscipy on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:2106 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:15:32.293223Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mArtifacts retrieved in 506ms (1 files, 2327 bytes)[0m
+    [2;3mat[0m rch/src/transfer.rs:2145 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:15:32.293250Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mArtifacts retrieved: 1 files, 2327 bytes in 506ms[0m
+    [2;3mat[0m rch/src/hook.rs:6458 [2;3mon[0m ThreadId(1)
+
+[RCH] remote ovh-a (48.8s)
+  [2m2026-06-09T03:17:09.952309Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSelected worker: ovh-a at ubuntu@51.222.245.56 (0 slots remaining after reservation, speed 50.0)[0m
+    [2;3mat[0m rch/src/hook.rs:514 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:10.326046Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mStarting remote compilation pipeline for frankenscipy (hash: d2200aa47ec6b64b)[0m
+    [2;3mat[0m rch/src/hook.rs:5994 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:10.326123Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mPrepared dependency sync manifest for 20 roots[0m
+    [2;3mat[0m rch/src/hook.rs:6016 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:11.354653Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSyncing project to worker ovh-a...[0m
+    [2;3mat[0m rch/src/hook.rs:6046 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:11.354768Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy -> /data/projects/frankenscipy on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:12.399916Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 1045ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:12.400066Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-arrayapi -> /data/projects/frankenscipy/crates/fsci-arrayapi on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:12.862897Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 462ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:12.863023Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-cluster -> /data/projects/frankenscipy/crates/fsci-cluster on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:13.366315Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 503ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:13.366434Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-conformance -> /data/projects/frankenscipy/crates/fsci-conformance on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:14.234946Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 868ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:14.235060Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-constants -> /data/projects/frankenscipy/crates/fsci-constants on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:14.739943Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 504ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:14.740076Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-datasets -> /data/projects/frankenscipy/crates/fsci-datasets on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:15.281860Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 541ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:15.281997Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-fft -> /data/projects/frankenscipy/crates/fsci-fft on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:15.756132Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 474ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:15.756266Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-integrate -> /data/projects/frankenscipy/crates/fsci-integrate on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:16.222075Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 465ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:16.222216Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-interpolate -> /data/projects/frankenscipy/crates/fsci-interpolate on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:16.740002Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 517ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:16.740122Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-io -> /data/projects/frankenscipy/crates/fsci-io on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:17.280256Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 540ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:17.280380Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-linalg -> /data/projects/frankenscipy/crates/fsci-linalg on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:17.742345Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 461ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:17.742496Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-ndimage -> /data/projects/frankenscipy/crates/fsci-ndimage on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:18.266769Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 524ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:18.266886Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-odr -> /data/projects/frankenscipy/crates/fsci-odr on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:18.739309Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 472ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:18.739428Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-opt -> /data/projects/frankenscipy/crates/fsci-opt on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:19.252673Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 513ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:19.252827Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-runtime -> /data/projects/frankenscipy/crates/fsci-runtime on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:19.767181Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 514ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:19.767344Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-signal -> /data/projects/frankenscipy/crates/fsci-signal on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:20.226552Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 459ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:20.226701Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-sparse -> /data/projects/frankenscipy/crates/fsci-sparse on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:20.696954Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 470ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:20.697223Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-spatial -> /data/projects/frankenscipy/crates/fsci-spatial on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:21.164123Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 466ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:21.164251Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-special -> /data/projects/frankenscipy/crates/fsci-special on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:21.793097Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 628ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:21.793233Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-stats -> /data/projects/frankenscipy/crates/fsci-stats on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:22.263429Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 470ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:22.263476Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSync complete: 26344 files, 942383 bytes in 10896ms[0m
+    [2;3mat[0m rch/src/hook.rs:6209 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:32.583479Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mExecuting command remotely: cargo test -p fsci-linalg --release --lib --locked public_ -- --ignored --nocapture '--test-threads=1'[0m
+    [2;3mat[0m rch/src/hook.rs:6252 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:17:32.583546Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mRewriting CARGO_TARGET_DIR for remote execution (worker-scoped path): /data/tmp/cargo-target -> /data/projects/frankenscipy/.rch-target-ovh-a-job-29879662679163221-1780975031354645162-0[0m
+    [2;3mat[0m rch/src/transfer.rs:712 [2;3mon[0m ThreadId(1)
+
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded cast v0.3.0
+  Downloaded ciborium-io v0.2.2
+  Downloaded ciborium-ll v0.2.2
+  Downloaded alloca v0.4.0
+  Downloaded approx v0.5.1
+  Downloaded arrayref v0.3.9
+  Downloaded anstyle v1.0.14
+  Downloaded bitflags v2.11.1
+  Downloaded anes v0.1.6
+  Downloaded arrayvec v0.7.6
+  Downloaded cc v1.2.60
+  Downloaded aho-corasick v1.1.4
+  Downloaded tinytemplate v1.2.1
+  Downloaded nalgebra v0.34.2
+  Downloaded clap_lex v1.1.0
+  Downloaded getrandom v0.3.4
+  Downloaded crossbeam-deque v0.8.6
+  Downloaded clap_builder v4.6.0
+  Downloaded cpufeatures v0.3.0
+  Downloaded crossbeam-epoch v0.9.18
+  Downloaded find-msvc-tools v0.1.9
+  Downloaded wait-timeout v0.2.1
+  Downloaded walkdir v2.5.0
+  Downloaded itoa v1.0.18
+  Downloaded rand_chacha v0.9.0
+  Downloaded constant_time_eq v0.4.2
+  Downloaded zmij v1.0.21
+  Downloaded either v1.15.0
+  Downloaded serde_core v1.0.228
+  Downloaded syn v2.0.117
+  Downloaded tempfile v3.27.0
+  Downloaded glam v0.19.0
+  Downloaded proptest v1.11.0
+  Downloaded glam v0.17.3
+  Downloaded bit-set v0.8.0
+  Downloaded proc-macro2 v1.0.106
+  Downloaded quote v1.0.45
+  Downloaded serde_derive v1.0.228
+  Downloaded unarray v0.1.4
+  Downloaded nalgebra-macros v0.3.0
+  Downloaded cfg-if v1.0.4
+  Downloaded shlex v1.3.0
+  Downloaded matrixmultiply v0.3.10
+  Downloaded paste v1.0.15
+  Downloaded zerocopy-derive v0.8.48
+  Downloaded typenum v1.20.0
+  Downloaded plotters-svg v0.3.7
+  Downloaded glam v0.14.0
+  Downloaded plotters-backend v0.3.7
+  Downloaded ppv-lite86 v0.2.21
+  Downloaded errno v0.3.14
+  Downloaded same-file v1.0.6
+  Downloaded fastrand v2.4.1
+  Downloaded unicode-ident v1.0.24
+  Downloaded simba v0.9.1
+  Downloaded page_size v0.6.0
+  Downloaded wide v0.7.33
+  Downloaded equivalent v1.0.2
+  Downloaded bit-vec v0.8.0
+  Downloaded zerocopy v0.8.48
+  Downloaded rand_xorshift v0.4.0
+  Downloaded num-integer v0.1.46
+  Downloaded rawpointer v0.2.1
+  Downloaded quick-error v1.2.3
+  Downloaded fnv v1.0.7
+  Downloaded criterion-plot v0.8.2
+  Downloaded num-complex v0.4.6
+  Downloaded rusty-fork v0.3.1
+  Downloaded autocfg v1.5.0
+  Downloaded rand_core v0.9.5
+  Downloaded oorandom v11.1.5
+  Downloaded num-traits v0.2.19
+  Downloaded num-rational v0.4.2
+  Downloaded rayon-core v1.13.0
+  Downloaded once_cell v1.21.4
+  Downloaded ciborium v0.2.2
+  Downloaded clap v4.6.1
+  Downloaded crossbeam-utils v0.8.21
+  Downloaded indexmap v2.14.0
+  Downloaded rand v0.9.4
+  Downloaded safe_arch v0.7.4
+  Downloaded glam v0.24.2
+  Downloaded bytemuck v1.25.0
+  Downloaded half v2.7.1
+  Downloaded serde v1.0.228
+  Downloaded glam v0.16.0
+  Downloaded glam v0.18.0
+  Downloaded num-bigint v0.4.6
+  Downloaded memchr v2.8.0
+  Downloaded blake3 v1.8.4
+  Downloaded criterion v0.8.2
+  Downloaded itertools v0.13.0
+  Downloaded glam v0.20.5
+  Downloaded plotters v0.3.7
+  Downloaded glam v0.15.2
+  Downloaded regex v1.12.3
+  Downloaded hashbrown v0.17.0
+  Downloaded serde_json v1.0.149
+  Downloaded rayon v1.12.0
+  Downloaded glam v0.21.3
+  Downloaded glam v0.23.0
+  Downloaded glam v0.22.0
+  Downloaded rustix v1.1.4
+  Downloaded glam v0.25.0
+  Downloaded regex-syntax v0.8.10
+  Downloaded glam v0.27.0
+  Downloaded glam v0.28.0
+  Downloaded glam v0.29.3
+  Downloaded regex-automata v0.4.14
+  Downloaded glam v0.30.10
+  Downloaded libc v0.2.185
+  Downloaded glam v0.31.1
+  Downloaded glam v0.32.1
+  Downloaded linux-raw-sys v0.12.1
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.45
+   Compiling cfg-if v1.0.4
+   Compiling autocfg v1.5.0
+   Compiling libc v0.2.185
+   Compiling shlex v1.3.0
+   Compiling find-msvc-tools v0.1.9
+   Compiling getrandom v0.3.4
+   Compiling zerocopy v0.8.48
+   Compiling serde_core v1.0.228
+   Compiling crossbeam-utils v0.8.21
+   Compiling serde v1.0.228
+   Compiling zmij v1.0.21
+   Compiling hashbrown v0.17.0
+   Compiling serde_json v1.0.149
+   Compiling equivalent v1.0.2
+   Compiling itoa v1.0.18
+   Compiling rustix v1.1.4
+   Compiling cc v1.2.60
+   Compiling memchr v2.8.0
+   Compiling rayon-core v1.13.0
+   Compiling bytemuck v1.25.0
+   Compiling regex-syntax v0.8.10
+   Compiling either v1.15.0
+   Compiling paste v1.0.15
+   Compiling num-traits v0.2.19
+   Compiling bitflags v2.11.1
+   Compiling linux-raw-sys v0.12.1
+   Compiling safe_arch v0.7.4
+   Compiling matrixmultiply v0.3.10
+   Compiling constant_time_eq v0.4.2
+   Compiling once_cell v1.21.4
+   Compiling fastrand v2.4.1
+   Compiling arrayref v0.3.9
+   Compiling cpufeatures v0.3.0
+   Compiling arrayvec v0.7.6
+   Compiling indexmap v2.14.0
+   Compiling crossbeam-epoch v0.9.18
+   Compiling anstyle v1.0.14
+   Compiling syn v2.0.117
+   Compiling ciborium-io v0.2.2
+   Compiling plotters-backend v0.3.7
+   Compiling clap_lex v1.1.0
+   Compiling wide v0.7.33
+   Compiling crossbeam-deque v0.8.6
+   Compiling clap_builder v4.6.0
+   Compiling plotters-svg v0.3.7
+   Compiling wait-timeout v0.2.1
+   Compiling itertools v0.13.0
+   Compiling num-integer v0.1.46
+   Compiling rand_core v0.9.5
+   Compiling num-complex v0.4.6
+   Compiling approx v0.5.1
+   Compiling cast v0.3.0
+   Compiling blake3 v1.8.4
+   Compiling alloca v0.4.0
+   Compiling bit-vec v0.8.0
+   Compiling same-file v1.0.6
+   Compiling rawpointer v0.2.1
+   Compiling quick-error v1.2.3
+   Compiling fnv v1.0.7
+   Compiling rayon v1.12.0
+   Compiling walkdir v2.5.0
+   Compiling rand_xorshift v0.4.0
+   Compiling bit-set v0.8.0
+   Compiling rand v0.9.4
+   Compiling num-rational v0.4.2
+   Compiling plotters v0.3.7
+   Compiling page_size v0.6.0
+   Compiling oorandom v11.1.5
+   Compiling regex-automata v0.4.14
+   Compiling tempfile v3.27.0
+   Compiling anes v0.1.6
+   Compiling rusty-fork v0.3.1
+   Compiling criterion-plot v0.8.2
+   Compiling simba v0.9.1
+   Compiling typenum v1.20.0
+   Compiling unarray v0.1.4
+   Compiling clap v4.6.1
+   Compiling zerocopy-derive v0.8.48
+   Compiling serde_derive v1.0.228
+   Compiling nalgebra-macros v0.3.0
+   Compiling regex v1.12.3
+   Compiling fsci-runtime v0.1.0 (/data/projects/frankenscipy/crates/fsci-runtime)
+   Compiling tinytemplate v1.2.1
+   Compiling nalgebra v0.34.2
+   Compiling fsci-fft v0.1.0 (/data/projects/frankenscipy/crates/fsci-fft)
+   Compiling half v2.7.1
+   Compiling ppv-lite86 v0.2.21
+   Compiling ciborium-ll v0.2.2
+   Compiling rand_chacha v0.9.0
+   Compiling ciborium v0.2.2
+   Compiling proptest v1.11.0
+   Compiling criterion v0.8.2
+   Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
+    Finished `release` profile [optimized] target(s) in 24.38s
+     Running unittests src/lib.rs (.rch-target-ovh-a-job-29879662679163221-1780975031354645162-0/release/deps/fsci_linalg-513bfd364b68d90d)
+
+running 10 tests
+test tests::public_band_tall_lstsq_route_perf_probe ... PUBLIC_BAND_TALL_LSTSQ_ROUTE_PERF_BEGIN
+shape=320x256
+reference_lstsq_ms=76.478086
+routed_lstsq_ms=13.730649
+lstsq_speedup=5.569881
+lstsq_rank=256
+lstsq_max_abs_diff=1.92290627865077113e-13
+PUBLIC_BAND_TALL_LSTSQ_ROUTE_PERF_END
+ok
+test tests::public_band_tall_pinv_route_perf_probe ... PUBLIC_BAND_TALL_PINV_ROUTE_PERF_BEGIN
+shape=320x256
+reference_pinv_ms=79.959883
+routed_pinv_ms=7.861650
+pinv_speedup=10.170878
+pinv_rank=256
+pinv_max_abs_diff=8.44949110678783200e-14
+PUBLIC_BAND_TALL_PINV_ROUTE_PERF_END
+ok
+test tests::public_band_wide_lstsq_route_perf_probe ... PUBLIC_BAND_WIDE_LSTSQ_ROUTE_PERF_BEGIN
+shape=256x320
+reference_lstsq_ms=87.859134
+routed_lstsq_ms=13.101227
+lstsq_speedup=6.706176
+lstsq_rank=256
+lstsq_max_abs_diff=1.65678235020116915e-13
+routed_solution_norm=5.22035601626306800e0
+reference_solution_norm=5.22035601626307244e0
+PUBLIC_BAND_WIDE_LSTSQ_ROUTE_PERF_END
+ok
+test tests::public_bidiag_svd_route_perf_probe ... PUBLIC_BIDIAG_SVD_ROUTE_PERF_BEGIN
+shape=512x256
+reference_lstsq_ms=87.961626
+routed_lstsq_ms=15.268246
+lstsq_speedup=5.761083
+reference_pinv_ms=89.820497
+previous_route_pinv_ms=52.258003
+routed_pinv_ms=12.392707
+pinv_speedup=7.247851
+pinv_speedup_vs_previous_route=4.216835
+lstsq_rank=256
+pinv_rank=256
+lstsq_max_abs_diff=1.49213974509621039e-13
+pinv_max_abs_diff=5.77285398303817310e-13
+previous_route_pinv_max_abs_diff=2.28428387316625958e-14
+routed_vs_previous_route_pinv_max_abs_diff=5.76128337745340779e-13
+PUBLIC_BIDIAG_SVD_ROUTE_PERF_END
+ok
+test tests::public_bidiag_svd_tridiagonal_qr_backend_is_deterministic ... ok
+test tests::public_bidiag_svd_tridiagonal_qr_backend_matches_safe_svd_reference ... ok
+test tests::public_square_pinv_route_perf_probe ... PUBLIC_SQUARE_PINV_ROUTE_PERF_BEGIN
+shape=512x512
+reference_pinv_ms=1111.610516
+routed_pinv_ms=52.217537
+pinv_speedup=21.288069
+pinv_rank=512
+pinv_max_abs_diff=1.54659271500712237e-14
+PUBLIC_SQUARE_PINV_ROUTE_PERF_END
+ok
+test tests::public_square_svd_route_perf_probe ... PUBLIC_SQUARE_SVD_ROUTE_PERF_BEGIN
+shape=512x512
+previous_route_ms=1074.806967
+routed_ms=224.479806
+speedup_vs_previous_route=4.787990
+recon_err=9.88027437642813311e-11
+singular_value_max_diff_vs_nalgebra=4.07453626394271851e-10
+svdvals_max_diff_vs_svd=4.07453626394271851e-10
+PUBLIC_SQUARE_SVD_ROUTE_PERF_END
+ok
+test tests::public_wide_min_norm_lstsq_route_perf_probe ... PUBLIC_WIDE_MIN_NORM_LSTSQ_ROUTE_PERF_BEGIN
+shape=256x512
+reference_lstsq_ms=150.232678
+routed_lstsq_ms=14.206813
+lstsq_speedup=10.574692
+lstsq_rank=256
+lstsq_max_abs_diff=3.38840067115597776e-13
+routed_solution_norm=5.21900052307169471e0
+reference_solution_norm=5.21900052307145756e0
+PUBLIC_WIDE_MIN_NORM_LSTSQ_ROUTE_PERF_END
+ok
+test tests::public_wide_svd_route_perf_probe ... PUBLIC_WIDE_SVD_ROUTE_PERF_BEGIN
+shape=256x512
+previous_route_ms=146.867000
+routed_ms=48.178875
+speedup_vs_previous_route=3.048369
+recon_err=2.09592343480835552e-11
+singular_value_max_diff_vs_nalgebra=5.82076609134674072e-11
+PUBLIC_WIDE_SVD_ROUTE_PERF_END
+ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 401 filtered out; finished in 6.69s
+
+  [2m2026-06-09T03:18:04.471546Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mRemote command finished: exit=0 in 31887ms[0m
+    [2;3mat[0m rch/src/hook.rs:6376 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:18:04.471909Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mRetrieving build artifacts...[0m
+    [2;3mat[0m rch/src/hook.rs:6425 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:18:04.471929Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mRetrieving artifacts from /data/projects/frankenscipy on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:2106 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:18:04.926948Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mArtifacts retrieved in 454ms (1 files, 2327 bytes)[0m
+    [2;3mat[0m rch/src/transfer.rs:2145 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:18:04.926977Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mArtifacts retrieved: 1 files, 2327 bytes in 454ms[0m
+    [2;3mat[0m rch/src/hook.rs:6458 [2;3mon[0m ThreadId(1)
+
+[RCH] remote ovh-a (55.0s)

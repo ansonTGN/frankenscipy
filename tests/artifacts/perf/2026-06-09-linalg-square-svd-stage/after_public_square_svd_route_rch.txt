@@ -1,0 +1,37 @@
+[RCH] local (no admissible workers: insufficient_slots=1,active_project_exclusion=1)
+[RCH] remote required; refusing local fallback (no worker assigned)
+   Compiling criterion v0.8.2
+   Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
+    Finished `release` profile [optimized] target(s) in 22.97s
+     Running unittests src/lib.rs (.rch-target-ovh-a-job-29879662679163250-1780975739754432674-0/release/deps/fsci_linalg-513bfd364b68d90d)
+
+running 1 test
+test tests::public_square_svd_route_perf_probe ... PUBLIC_SQUARE_SVD_ROUTE_PERF_BEGIN
+shape=512x512
+previous_route_ms=1032.528330
+routed_ms=169.059034
+speedup_vs_previous_route=6.107502
+recon_err=9.88027437642813311e-11
+singular_value_max_diff_vs_nalgebra=4.07453626394271851e-10
+svdvals_max_diff_vs_svd=4.07453626394271851e-10
+PUBLIC_SQUARE_SVD_ROUTE_PERF_END
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 412 filtered out; finished in 1.27s
+
+  [2m2026-06-09T03:29:45.855824Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mRemote command finished: exit=0 in 25074ms[0m
+    [2;3mat[0m rch/src/hook.rs:6376 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:29:45.856152Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mRetrieving build artifacts...[0m
+    [2;3mat[0m rch/src/hook.rs:6425 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:29:45.856180Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mRetrieving artifacts from /data/projects/frankenscipy on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:2106 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:29:46.295444Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mArtifacts retrieved in 439ms (1 files, 2327 bytes)[0m
+    [2;3mat[0m rch/src/transfer.rs:2145 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-09T03:29:46.295465Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mArtifacts retrieved: 1 files, 2327 bytes in 439ms[0m
+    [2;3mat[0m rch/src/hook.rs:6458 [2;3mon[0m ThreadId(1)
+
+[RCH] remote ovh-a (48.0s)
