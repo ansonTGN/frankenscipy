@@ -648,6 +648,47 @@ fn bspline_reflect_coefficients(line: &[f64], order: usize) -> Vec<f64> {
     c
 }
 
+/// Exact B-spline prefilter coefficients for the whole-sample `mirror`
+/// boundary (period `2(n-1)`, edge not repeated), orders 2..=5.
+///
+/// Same Unser/Thévenaz recursive IIR filter as the reflect variant but with the
+/// mirror-symmetric initial conditions, verified against
+/// `scipy.ndimage.spline_filter1d(mode='mirror')`:
+/// causal `c[0] = (c[0] + c[n-1]·zⁿ⁻¹ + Σ_{1..n-2} c[k]·(zᵏ + z^{2n-2-k})) / (1 − z^{2n-2})`,
+/// anticausal `c[n-1] = z/(z²−1)·(c[n-1] + z·c[n-2])`.
+fn bspline_mirror_coefficients(line: &[f64], order: usize) -> Vec<f64> {
+    let n = line.len();
+    if n <= 1 {
+        return line.to_vec();
+    }
+    let poles = bspline_reflect_poles(order);
+    let mut gain = 1.0;
+    for &z in &poles {
+        gain *= (1.0 - z) * (1.0 - 1.0 / z);
+    }
+    let mut c: Vec<f64> = line.iter().map(|&v| v * gain).collect();
+    for &z in &poles {
+        let z_2n2 = z.powi(2 * n as i32 - 2);
+        // Exact causal initial coefficient for the mirror-extended signal.
+        let mut sum = c[0] + c[n - 1] * z.powi(n as i32 - 1);
+        let mut z_k = z;
+        for &ck in &c[1..n - 1] {
+            sum += ck * (z_k + z_2n2 / z_k);
+            z_k *= z;
+        }
+        c[0] = sum / (1.0 - z_2n2);
+        for i in 1..n {
+            c[i] += z * c[i - 1];
+        }
+        // Exact anticausal initial coefficient.
+        c[n - 1] = z / (z * z - 1.0) * (c[n - 1] + z * c[n - 2]);
+        for i in (0..n - 1).rev() {
+            c[i] = z * (c[i + 1] - c[i]);
+        }
+    }
+    c
+}
+
 fn pad_array_mode(
     input: &NdArray,
     pad: usize,
@@ -698,16 +739,6 @@ fn prefilter_spline_coefficients(
             coord_offsets: vec![0.0; ndim],
         });
     }
-    if mode == BoundaryMode::Mirror {
-        // The order>=2 B-spline prefilter needs mirror-specific boundary
-        // conditions that are not implemented yet (filters and order<=1
-        // interpolation DO support mirror). Fail closed rather than silently
-        // returning reflect-mode coefficients. Tracked by frankenscipy-w0olx.
-        return Err(NdimageError::InvalidArgument(
-            "mirror boundary mode is not yet supported for spline interpolation of order >= 2"
-                .to_string(),
-        ));
-    }
     // Orders 2..=5 reflect are solved exactly and in-place by the recursive
     // `bspline_reflect_coefficients` (exact half-sample-reflect B-spline).
     // The matching `nearest` mode mirrors scipy: edge-pad by SPLINE_NEAREST_PAD,
@@ -717,6 +748,17 @@ fn prefilter_spline_coefficients(
     let bspline_reflect = matches!(order, 2..=5);
     let exact_reflect =
         bspline_reflect && mode == BoundaryMode::Reflect && input.shape.iter().all(|&s| s > order);
+    let exact_mirror =
+        bspline_reflect && mode == BoundaryMode::Mirror && input.shape.iter().all(|&s| s > order);
+    if mode == BoundaryMode::Mirror && !exact_mirror {
+        // The exact mirror prefilter needs every axis longer than `order`; a
+        // too-short axis would fall through to the clamped de Boor solver,
+        // which does not carry mirror symmetry. Fail closed (tracked separately)
+        // rather than return wrong coefficients.
+        return Err(NdimageError::InvalidArgument(
+            "mirror boundary requires each axis length > spline order".to_string(),
+        ));
+    }
     let pad_input = matches!(mode, BoundaryMode::Nearest | BoundaryMode::Reflect) && !exact_reflect;
     let (mut current, coord_offsets) = if pad_input {
         (
@@ -764,6 +806,9 @@ fn prefilter_spline_coefficients(
                 }
                 (_, BoundaryMode::Reflect) if exact_reflect => {
                     bspline_reflect_coefficients(&line, order)
+                }
+                (_, BoundaryMode::Mirror) if exact_mirror => {
+                    bspline_mirror_coefficients(&line, order)
                 }
                 _ => spline_coefficients_for_line(&line, order)?,
             };
@@ -908,6 +953,7 @@ fn sample_interpolated(
         let cardinal_reflect_nearest = effective_order == order
             && matches!(order, 2..=5)
             && ((mode == BoundaryMode::Reflect && coord_offsets[axis] == 0.0)
+                || (mode == BoundaryMode::Mirror && coord_offsets[axis] == 0.0)
                 || mode == BoundaryMode::Nearest);
         if cardinal_reflect_nearest {
             let cc = coord + coord_offsets[axis];
@@ -915,6 +961,19 @@ fn sample_interpolated(
             let fold = |i: isize| -> usize {
                 match mode {
                     BoundaryMode::Nearest => i.clamp(0, len - 1) as usize,
+                    BoundaryMode::Mirror => {
+                        // Whole-sample fold, period 2(len-1).
+                        if len <= 1 {
+                            0
+                        } else {
+                            let period = 2 * (len - 1);
+                            let mut m = i.rem_euclid(period);
+                            if m >= len {
+                                m = period - m;
+                            }
+                            m as usize
+                        }
+                    }
                     _ => {
                         let period = 2 * len;
                         let mut m = i.rem_euclid(period);
@@ -8057,8 +8116,22 @@ mod tests {
             assert!((a - b).abs() < 1e-9, "map_coordinates mirror {a} vs {b}");
         }
 
-        // order >= 2 spline interpolation under mirror must fail closed.
-        assert!(map_coordinates(&input, &[vec![2.3]], 3, m, 0.0).is_err());
+        // order-3 spline interpolation under mirror (exact B-spline mirror
+        // prefilter), vs scipy.ndimage.map_coordinates(order=3, mode='mirror').
+        let mc3 = map_coordinates(&input, &[vec![-0.7, 0.5, 2.3, 5.5, 7.9]], 3, m, 0.0).unwrap();
+        let mc3_ref = [
+            1.599_479_903_813_123,
+            1.343_095_156_303_675_7,
+            5.369_718_996_908_279,
+            7.303_890_415_664_721,
+            4.996_015_802_129_852,
+        ];
+        for (a, b) in mc3.iter().zip(mc3_ref.iter()) {
+            assert!((a - b).abs() < 1e-9, "map_coordinates mirror order3 {a} vs {b}");
+        }
+        // An axis too short for the order's stencil still fails closed.
+        let short = NdArray::new(vec![1.0, 2.0, 3.0], vec![3]).unwrap();
+        assert!(map_coordinates(&short, &[vec![1.2]], 3, m, 0.0).is_err());
 
         // index reflection helpers agree on the whole-sample fold.
         assert_eq!(boundary_index_1d(-1, 8, m), Some(1));
