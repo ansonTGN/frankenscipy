@@ -7303,11 +7303,14 @@ impl DiscreteDistribution for DiscreteLaplace {
     }
 
     fn kurtosis(&self) -> f64 {
+        // `2·fourth_raw/var²` is ALREADY the excess (Fisher) kurtosis that
+        // scipy.stats.dlaplace.stats('k') reports — the old trailing `- 3.0`
+        // over-subtracted (dlaplace(0.5) gave 0.128 vs scipy 3.128).
         let ea = (-self.a).exp();
         let var = 2.0 * ea / ((1.0 - ea) * (1.0 - ea));
         let fourth_raw =
             ea * (1.0 + 4.0 * ea + ea * ea) / ((1.0 - ea) * (1.0 - ea) * (1.0 - ea) * (1.0 - ea));
-        2.0 * fourth_raw / (var * var) - 3.0
+        2.0 * fourth_raw / (var * var)
     }
 
     fn mode(&self) -> f64 {
@@ -7315,9 +7318,12 @@ impl DiscreteDistribution for DiscreteLaplace {
     }
 
     fn entropy(&self) -> f64 {
+        // H = -ln(tanh(a/2)) + a·E|k|, with E|k| = 2·tanh(a/2)·e^-a/(1-e^-a)².
+        // The old term used e^-a/(1-e^-a) (wrong E|k|), giving up to ~30% error.
         let ea = (-self.a).exp();
         let norm = (self.a / 2.0).tanh();
-        -norm.ln() + self.a * ea / (1.0 - ea)
+        let mean_abs = 2.0 * norm * ea / ((1.0 - ea) * (1.0 - ea));
+        -norm.ln() + self.a * mean_abs
     }
 }
 
@@ -64074,6 +64080,33 @@ mod tests {
             assert!(
                 (h - golden).abs() < 1e-7,
                 "poisson({mu}).entropy() = {h}, scipy {golden}"
+            );
+        }
+    }
+
+    #[test]
+    fn discrete_laplace_kurtosis_entropy_match_scipy() {
+        // Regression: kurtosis had a spurious -3 (excess vs raw) and entropy
+        // used the wrong E|k| term. Golden from scipy.stats.dlaplace(a).
+        let cases: &[(f64, f64, f64)] = &[
+            // (a, excess kurtosis, entropy) — scipy.stats.dlaplace(a)
+            (0.2, 3.020_066_755_619_076_6, 3.299_274_984_115_015_3),
+            (0.5, 3.127_625_965_206_379, 2.366_346_489_414_767),
+            (1.0, 3.543_080_634_815_244_6, 1.622_854_961_144_626_4),
+            (1.5, 4.352_409_615_243_245, 1.158_359_397_801_043_4),
+            (2.5, 8.132_289_479_663_687, 0.577_749_392_672_326_7),
+        ];
+        for &(a, kurt, ent) in cases {
+            let d = DiscreteLaplace::new(a);
+            assert!(
+                (d.kurtosis() - kurt).abs() < 1e-9,
+                "dlaplace({a}).kurtosis() = {} vs scipy {kurt}",
+                d.kurtosis()
+            );
+            assert!(
+                (d.entropy() - ent).abs() < 1e-9,
+                "dlaplace({a}).entropy() = {} vs scipy {ent}",
+                d.entropy()
             );
         }
     }
