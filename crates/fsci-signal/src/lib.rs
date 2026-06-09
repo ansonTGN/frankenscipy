@@ -1148,9 +1148,10 @@ pub fn correlate2d(
 /// (the SciPy default boundary). 2-D convolution is correlation with the kernel
 /// flipped in both axes — and [`correlate2d`] already flips its kernel internally
 /// — so `convolve2d(a, v) == correlate2d(a, flip(v))`, sharing its direct/FFT
-/// auto-dispatch and `mode` (Full/Same/Valid) cropping. Non-default `boundary`
-/// values (`wrap`/`symm`) are not yet supported (tracked as a follow-up; the same
-/// gap exists in `correlate2d`).
+/// auto-dispatch and `mode` (Full/Same/Valid) cropping. This entry point uses
+/// the SciPy default `boundary='fill', fillvalue=0`; for `boundary='wrap'`
+/// (circular) or `'symm'` (reflected), or a non-zero fill value, use
+/// [`convolve2d_with_boundary`] (and [`correlate2d_with_boundary`]).
 pub fn convolve2d(
     a: &[f64],
     a_shape: (usize, usize),
