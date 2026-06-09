@@ -2364,33 +2364,39 @@ pub fn newton_cotes(n: usize) -> Result<Vec<f64>, IntegrateValidationError> {
             7.0 / 90.0,
         ]), // Boole's rule
         _ => {
-            // General Newton-Cotes via Lagrange integration
+            // Exact Newton-Cotes weights: w_i = ∫₀¹ L_i(x) dx, where L_i is the
+            // Lagrange basis on the equally-spaced nodes x_j = j/n. Expand the
+            // numerator product Π_{j≠i}(x − x_j) into polynomial coefficients,
+            // divide by the constant denominator Π_{j≠i}(x_i − x_j), and integrate
+            // term-by-term (∫₀¹ xᵏ dx = 1/(k+1)). The previous composite-Simpson
+            // approximation of this integral was only accurate to ~1e-5 for n≥5,
+            // since Simpson is not exact for the degree-n (n≥4) basis polynomial.
             let nf = n as f64;
+            let nodes: Vec<f64> = (0..=n).map(|j| j as f64 / nf).collect();
             let mut weights = vec![0.0; n + 1];
-            for (i, item) in weights.iter_mut().enumerate() {
-                // w_i = ∫₀¹ L_i(x) dx where L_i = Π_{j≠i} (x - j/n) / (i/n - j/n)
-                // Use numerical integration with high-order quadrature
-                // Scale grid with polynomial degree to maintain accuracy
-                let m = (20 * (n + 1)).max(200);
-                let mut integral = 0.0;
-                for k in 0..=m {
-                    let x = k as f64 / m as f64;
-                    let w = if k == 0 || k == m {
-                        1.0
-                    } else if k % 2 == 0 {
-                        2.0
-                    } else {
-                        4.0
-                    };
-                    let mut li = 1.0;
-                    for j in 0..=n {
-                        if j != i {
-                            li *= (x - j as f64 / nf) / (i as f64 / nf - j as f64 / nf);
-                        }
+            for i in 0..=n {
+                // poly[k] = coefficient of xᵏ in Π_{j≠i}(x − x_j) (ascending).
+                let mut poly = vec![1.0_f64];
+                let mut denom = 1.0_f64;
+                for j in 0..=n {
+                    if j == i {
+                        continue;
                     }
-                    integral += w * li;
+                    let xj = nodes[j];
+                    let mut next = vec![0.0_f64; poly.len() + 1];
+                    for (k, &c) in poly.iter().enumerate() {
+                        next[k + 1] += c; // x · c
+                        next[k] -= xj * c; // −x_j · c
+                    }
+                    poly = next;
+                    denom *= nodes[i] - xj;
                 }
-                *item = integral / (3.0 * m as f64);
+                let integral: f64 = poly
+                    .iter()
+                    .enumerate()
+                    .map(|(k, &c)| c / (k as f64 + 1.0))
+                    .sum();
+                weights[i] = integral / denom;
             }
             Ok(weights)
         }
@@ -4458,6 +4464,30 @@ mod tests {
             "tplquad got {}, expected 0.125",
             result
         );
+    }
+
+    #[test]
+    fn newton_cotes_exact_for_degree_n_polynomials() {
+        // An order-n Newton-Cotes rule integrates polynomials up to degree n
+        // exactly. Regression: n>=5 weights were computed by composite Simpson and
+        // were only accurate to ~1e-5, breaking this exactness.
+        for n in 5..=10usize {
+            let w = newton_cotes(n).expect("newton_cotes(n)");
+            // weights are on [0,1] with nodes x_i = i/n; rule sums to 1.
+            for d in 0..=n {
+                let approx: f64 = (0..=n)
+                    .map(|i| w[i] * (i as f64 / n as f64).powi(d as i32))
+                    .sum();
+                let exact = 1.0 / (d as f64 + 1.0); // ∫₀¹ x^d dx
+                // ~1e-9 reflects f64 rounding in the high-n weight expansion (scipy
+                // uses exact rationals, ~1e-16); the old Simpson approximation broke
+                // this at ~1e-5.
+                assert!(
+                    (approx - exact).abs() < 1e-9,
+                    "newton_cotes n={n} not exact for x^{d}: got {approx}, want {exact}"
+                );
+            }
+        }
     }
 
     #[test]
