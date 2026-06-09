@@ -7858,11 +7858,28 @@ fn krylov_arnoldi_eigs<F: Fn(&[f64]) -> Vec<f64>>(
     let mut v: Vec<Vec<f64>> = Vec::with_capacity(m + 1);
     let mut h = vec![vec![0.0; m]; m + 1]; // (m+1) x m upper Hessenberg
 
-    // Initial vector
-    let mut v0 = vec![1.0 / (n as f64).sqrt(); n];
+    // Initial vector. A CONSTANT vector is orthogonal to the antisymmetric
+    // eigenvectors of symmetric structured matrices (e.g. the 1-D Laplacian
+    // [2,-1;-1,2,…], whose top "alternating-sign" mode is orthogonal to any
+    // equal-valued vector), so the Krylov subspace never reaches those eigenpairs
+    // and Lanczos silently returns the wrong "top" eigenvalue. scipy/ARPACK use a
+    // random start; we use a fixed-seed deterministic pseudo-random vector, which
+    // has generic (non-zero) components along every eigenvector while staying
+    // fully reproducible.
+    let mut state = 0x9E37_79B9_7F4A_7C15u64; // golden-ratio fixed seed
+    let mut v0 = vec![0.0_f64; n];
+    for vi in v0.iter_mut() {
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        // top 53 bits → uniform in [0, 1), mapped to (-1, 1)
+        *vi = ((state >> 11) as f64) / ((1u64 << 53) as f64) * 2.0 - 1.0;
+    }
     let v0_norm = vec_norm(&v0);
-    for vi in &mut v0 {
-        *vi /= v0_norm;
+    if v0_norm > 0.0 {
+        for vi in &mut v0 {
+            *vi /= v0_norm;
+        }
     }
     v.push(v0);
 
