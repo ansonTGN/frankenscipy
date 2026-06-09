@@ -2338,10 +2338,16 @@ fn gauss_kronrod_inner(f: &dyn Fn(f64) -> f64, a: f64, b: f64, options: QuadOpti
     }
 }
 
-/// Newton-Cotes integration weights for n equally-spaced points.
+/// Newton-Cotes integration weights for `n` equally-spaced intervals (n+1
+/// points).
 ///
-/// Returns weights such that ∫₀¹ f(x) dx ≈ Σ w_i * f(x_i).
-/// Matches `scipy.integrate.newton_cotes`.
+/// Returns weights on the **unit interval**, normalized so that
+/// `∫₀¹ f(x) dx ≈ Σ wᵢ·f(xᵢ)` — i.e. the weights sum to 1.
+///
+/// This is **not** the same normalization as `scipy.integrate.newton_cotes`,
+/// which returns weights `aᵢ` summing to `n` for the form
+/// `∫ₐᵇ f ≈ Δx·Σ aᵢ·f(xᵢ)` with `Δx = (b−a)/n`. The two are related by
+/// `aᵢ = n·wᵢ`; multiply these weights by `n` to recover scipy's values.
 pub fn newton_cotes(n: usize) -> Result<Vec<f64>, IntegrateValidationError> {
     if n == 0 {
         return Ok(vec![1.0]);
