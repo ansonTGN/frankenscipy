@@ -2633,56 +2633,12 @@ where
     if n == 0 {
         return 0.0;
     }
-    let (nodes, weights) = match n {
-        2 => (
-            vec![-0.577_350_269_189_625_7, 0.577_350_269_189_625_7],
-            vec![1.0, 1.0],
-        ),
-        3 => (
-            vec![-0.774_596_669_241_483_4, 0.0, 0.774_596_669_241_483_4],
-            vec![5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0],
-        ),
-        4 => (
-            vec![
-                -0.861_136_311_594_052_6,
-                -0.339_981_043_584_856_3,
-                0.339_981_043_584_856_3,
-                0.861_136_311_594_052_6,
-            ],
-            vec![
-                0.347_854_845_137_453_9,
-                0.652_145_154_862_546_1,
-                0.652_145_154_862_546_1,
-                0.347_854_845_137_453_9,
-            ],
-        ),
-        5 => (
-            vec![
-                -0.906_179_845_938_664,
-                -0.538_469_310_105_683,
-                0.0,
-                0.538_469_310_105_683,
-                0.906_179_845_938_664,
-            ],
-            vec![
-                0.236_926_885_056_189_1,
-                0.478_628_670_499_366_5,
-                0.568_888_888_888_889,
-                0.478_628_670_499_366_5,
-                0.236_926_885_056_189_1,
-            ],
-        ),
-        _ => {
-            // Fallback to Simpson for other n
-            let h = (b - a) / n as f64;
-            let mut sum = f(a) + f(b);
-            for i in 1..n {
-                let x = a + i as f64 * h;
-                sum += if i % 2 == 0 { 2.0 } else { 4.0 } * f(x);
-            }
-            return sum * h / 3.0;
-        }
-    };
+    // True n-point Gauss-Legendre for every n (exact to degree 2n-1), via the same
+    // general node/weight generator `fixed_quad` uses. The previous version only
+    // hardcoded n=2..5 and silently fell back to a composite Simpson rule for n>=6,
+    // which is NOT Gauss-Legendre and was wrong by several percent (e.g. n=10 lost
+    // ~5% on a degree-19 polynomial that GL integrates exactly).
+    let (nodes, weights) = gauss_legendre_nodes_weights(n);
 
     let mid = (a + b) / 2.0;
     let half = (b - a) / 2.0;
@@ -3136,6 +3092,23 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gauss_legendre_exact_for_high_n_polynomials() {
+        // n-point Gauss-Legendre is exact (to rounding) for polynomials up to
+        // degree 2n-1. Regression: n>=6 previously fell back to Simpson's rule and
+        // was wrong by several percent.
+        for &n in &[2usize, 5, 8, 10, 16, 20] {
+            let deg = 2 * n - 1;
+            let v = gauss_legendre(|x: f64| x.powi(deg as i32), 0.0, 1.0, n);
+            let exact = 1.0 / ((deg + 1) as f64);
+            let rel = ((v - exact) / exact).abs();
+            assert!(
+                rel < 1e-10,
+                "gauss_legendre n={n} on x^{deg}: rel error {rel:.3e} (got {v}, exact {exact})"
+            );
+        }
+    }
 
     #[test]
     fn qmc_quad_1d_smooth_x_squared() {
