@@ -42,6 +42,10 @@ pub enum BoundaryMode {
     Nearest,
     /// Wrap: a b c d | a b c d | a b c d
     Wrap,
+    /// Mirror: d c b | a b c d | c b a — reflect about the *centre* of the edge
+    /// samples (whole-sample symmetric, period 2(n−1), edge not repeated).
+    /// Matches `scipy.ndimage` `mode='mirror'`.
+    Mirror,
 }
 
 const DEFAULT_GAUSSIAN_TRUNCATE: f64 = 4.0;
@@ -321,6 +325,19 @@ impl NdArray {
                 BoundaryMode::Wrap => {
                     i = i.rem_euclid(size);
                 }
+                BoundaryMode::Mirror => {
+                    // Whole-sample symmetric: reflect about indices 0 and n-1,
+                    // period 2(n-1), edge not repeated.
+                    if size <= 1 {
+                        i = 0;
+                    } else {
+                        let period = 2 * (size - 1);
+                        i = i.rem_euclid(period);
+                        if i >= size {
+                            i = period - i;
+                        }
+                    }
+                }
             }
             safe_idx[d] = i as usize;
         }
@@ -414,6 +431,21 @@ fn map_reflect_coordinate(coord: f64, len: usize) -> f64 {
     shifted - 0.5
 }
 
+/// Whole-sample symmetric (`mirror`) coordinate fold: reflect a continuous
+/// coordinate about 0 and `len-1` with period `2(len-1)`, the edge not repeated.
+fn map_mirror_coordinate(coord: f64, len: usize) -> f64 {
+    if len <= 1 {
+        return 0.0;
+    }
+    let max = (len - 1) as f64;
+    let period = 2.0 * max;
+    let mut c = coord.rem_euclid(period);
+    if c > max {
+        c = period - c;
+    }
+    c
+}
+
 fn map_coordinate(coord: f64, len: usize, mode: BoundaryMode) -> Option<f64> {
     let max = (len.saturating_sub(1)) as f64;
     match mode {
@@ -427,6 +459,7 @@ fn map_coordinate(coord: f64, len: usize, mode: BoundaryMode) -> Option<f64> {
             }
         }
         BoundaryMode::Reflect => Some(map_reflect_coordinate(coord, len)),
+        BoundaryMode::Mirror => Some(map_mirror_coordinate(coord, len)),
     }
 }
 
@@ -654,7 +687,7 @@ fn prefilter_spline_coefficients(
         // beyond [0, len-1] near a boundary (a coord folded to e.g. -0.3 spans
         // indices -1 and 0). Pad the array with the reflected values so the
         // support always lands in range, mirroring the order>=2 path.
-        if order == 1 && mode == BoundaryMode::Reflect {
+        if order == 1 && matches!(mode, BoundaryMode::Reflect | BoundaryMode::Mirror) {
             return Ok(SplinePrefilter {
                 coeffs: pad_array_mode(input, SPLINE_NEAREST_PAD, mode)?,
                 coord_offsets: vec![SPLINE_NEAREST_PAD as f64; ndim],
@@ -664,6 +697,16 @@ fn prefilter_spline_coefficients(
             coeffs: input.clone(),
             coord_offsets: vec![0.0; ndim],
         });
+    }
+    if mode == BoundaryMode::Mirror {
+        // The order>=2 B-spline prefilter needs mirror-specific boundary
+        // conditions that are not implemented yet (filters and order<=1
+        // interpolation DO support mirror). Fail closed rather than silently
+        // returning reflect-mode coefficients. Tracked by frankenscipy-w0olx.
+        return Err(NdimageError::InvalidArgument(
+            "mirror boundary mode is not yet supported for spline interpolation of order >= 2"
+                .to_string(),
+        ));
     }
     // Orders 2..=5 reflect are solved exactly and in-place by the recursive
     // `bspline_reflect_coefficients` (exact half-sample-reflect B-spline).
@@ -1772,6 +1815,18 @@ fn boundary_index_1d(mut i: i64, n: i64, mode: BoundaryMode) -> Option<i64> {
         }
         BoundaryMode::Nearest => Some(i.clamp(0, n - 1)),
         BoundaryMode::Wrap => Some(i.rem_euclid(n)),
+        BoundaryMode::Mirror => {
+            if n <= 1 {
+                Some(0)
+            } else {
+                let period = 2 * (n - 1);
+                i = i.rem_euclid(period);
+                if i >= n {
+                    i = period - i;
+                }
+                Some(i)
+            }
+        }
     }
 }
 
@@ -7975,6 +8030,40 @@ mod tests {
         assert!(convolve_axes(&input, &weights_2d, &[-1], BoundaryMode::Reflect, 0.0).is_err());
         assert!(convolve_axes(&input, &weights_1d, &[-2, -1], BoundaryMode::Reflect, 0.0).is_err());
         assert!(convolve_axes(&input, &weights_1d, &[], BoundaryMode::Reflect, 0.0).is_err());
+    }
+
+    #[test]
+    fn mirror_mode_matches_scipy() {
+        // scipy.ndimage mode='mirror' (whole-sample symmetric). Filters and
+        // order<=1 interpolation are supported; order>=2 spline fails closed.
+        let input = NdArray::new(vec![1.0, 2.0, 4.0, 7.0, 3.0, 9.0, 5.0, 8.0], vec![8]).unwrap();
+        let m = BoundaryMode::Mirror;
+
+        let corr = correlate1d(&input, &[1.0, 2.0, -1.0], 0, m, 0.0).unwrap();
+        assert_eq!(corr.data, vec![2.0, 1.0, 3.0, 15.0, 4.0, 16.0, 11.0, 16.0]);
+
+        let g = gaussian_filter1d(&input, 1.0, 0, 0, m, 0.0).unwrap();
+        let g_ref = [
+            1.861607317776, 2.526828635116, 4.039436351458, 5.108236282683, 5.599415285308,
+            6.377488592219, 6.612007542601, 6.611567303452,
+        ];
+        for (a, b) in g.data.iter().zip(g_ref.iter()) {
+            assert!((a - b).abs() < 1e-9, "gaussian mirror {a} vs {b}");
+        }
+
+        let mc = map_coordinates(&input, &[vec![-0.7, 0.5, 2.3, 5.5, 7.9, 9.0]], 1, m, 0.0).unwrap();
+        let mc_ref = [1.7, 1.5, 4.9, 7.0, 5.3, 9.0];
+        for (a, b) in mc.iter().zip(mc_ref.iter()) {
+            assert!((a - b).abs() < 1e-9, "map_coordinates mirror {a} vs {b}");
+        }
+
+        // order >= 2 spline interpolation under mirror must fail closed.
+        assert!(map_coordinates(&input, &[vec![2.3]], 3, m, 0.0).is_err());
+
+        // index reflection helpers agree on the whole-sample fold.
+        assert_eq!(boundary_index_1d(-1, 8, m), Some(1));
+        assert_eq!(boundary_index_1d(8, 8, m), Some(6));
+        assert_eq!(boundary_index_1d(-7, 8, m), Some(7));
     }
 
     #[test]
