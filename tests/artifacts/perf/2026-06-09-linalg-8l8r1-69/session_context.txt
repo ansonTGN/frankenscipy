@@ -1,0 +1,3 @@
+created=2026-06-09T01:04:48-04:00
+worktree=/data/projects/.scratch/frankenscipy-8l8r1-69-clean-20260609-0504
+head=456a376a4fab09dc0657e334dfd28ceeb458746a
