@@ -5423,36 +5423,40 @@ pub fn sqrtm(a: &[Vec<f64>], options: DecompOptions) -> Result<Vec<Vec<f64>>, Li
     });
 
     if !is_symmetric {
-        // Non-symmetric: sqrtm via Schur decomposition
-        // A = Q T Q^T, sqrt(A) = Q sqrt(T) Q^T
+        // Non-symmetric: sqrtm via Schur decomposition, A = Q T Q^T,
+        // sqrt(A) = Q sqrt(T) Q^T. A complex spectrum (2×2 Schur blocks) needs the
+        // complex Schur–Parlett evaluator — the real-diagonal scalar Parlett below
+        // is wrong across those blocks. An all-real spectrum keeps the real path
+        // (and its negative-eigenvalue NaN behavior).
         let schur = matrix.clone().schur();
         let (q, t) = schur.unpack();
-        let mut sqrt_t = DMatrix::<f64>::zeros(n, n);
-        for i in 0..n {
-            if t[(i, i)] >= -1e-14 {
-                sqrt_t[(i, i)] = t[(i, i)].max(0.0).sqrt();
-            } else {
-                sqrt_t[(i, i)] = f64::NAN;
-            }
-        }
-        // Off-diagonal: Parlett recurrence for sqrt
-        for j in 1..n {
-            for i in (0..j).rev() {
-                let si = sqrt_t[(i, i)];
-                let sj = sqrt_t[(j, j)];
-                let mut sum = t[(i, j)];
-                for k in (i + 1)..j {
-                    sum -= sqrt_t[(i, k)] * sqrt_t[(k, j)];
-                }
-                let denom = si + sj;
-                sqrt_t[(i, j)] = if denom.abs() > 1e-15 {
-                    sum / denom
+        let has_complex_block = (0..n.saturating_sub(1)).any(|i| t[(i + 1, i)].abs() > 1e-300);
+        let result = if has_complex_block {
+            schur_parlett_complex(&q, &t, n, |z| z.sqrt())
+        } else {
+            let mut sqrt_t = DMatrix::<f64>::zeros(n, n);
+            for i in 0..n {
+                if t[(i, i)] >= -1e-14 {
+                    sqrt_t[(i, i)] = t[(i, i)].max(0.0).sqrt();
                 } else {
-                    0.0
-                };
+                    sqrt_t[(i, i)] = f64::NAN;
+                }
             }
-        }
-        let result = &q * sqrt_t * q.transpose();
+            // Off-diagonal: Parlett recurrence for sqrt
+            for j in 1..n {
+                for i in (0..j).rev() {
+                    let si = sqrt_t[(i, i)];
+                    let sj = sqrt_t[(j, j)];
+                    let mut sum = t[(i, j)];
+                    for k in (i + 1)..j {
+                        sum -= sqrt_t[(i, k)] * sqrt_t[(k, j)];
+                    }
+                    let denom = si + sj;
+                    sqrt_t[(i, j)] = if denom.abs() > 1e-15 { sum / denom } else { 0.0 };
+                }
+            }
+            &q * sqrt_t * q.transpose()
+        };
         emit_trace(LinalgTrace {
             operation: "sqrtm",
             matrix_size: (n, n),
