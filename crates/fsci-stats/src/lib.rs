@@ -3819,6 +3819,15 @@ impl ContinuousDistribution for GenGamma {
         g2 - g1 * g1
     }
 
+    fn entropy(&self) -> f64 {
+        // Differential entropy of the generalized gamma. With X^c ~ Gamma(a, 1):
+        //   h = ln(Γ(a)/|c|) + a − (a − 1/c)·ψ(a).
+        // Matches scipy.stats.gengamma(a, c).entropy().
+        let a = self.a;
+        let c = self.c;
+        ln_gamma(a) - c.abs().ln() + a - (a - 1.0 / c) * digamma(a)
+    }
+
     fn fit(_data: &[f64]) -> Self {
         Self {
             a: f64::NAN,
@@ -3918,10 +3927,6 @@ impl ContinuousDistribution for GenGamma {
         let var = g2 - g1 * g1;
         let mu4 = g4 - 4.0 * mu * g3 + 6.0 * mu * mu * g2 - 3.0 * mu.powi(4);
         mu4 / (var * var) - 3.0
-    }
-
-    fn entropy(&self) -> f64 {
-        f64::NAN
     }
 
     fn mode(&self) -> f64 {
@@ -47321,6 +47326,27 @@ mod tests {
             fitted.left.is_nan() && fitted.mode.is_nan() && fitted.right.is_nan(),
             "Triangular::fit must fail closed on zero-width samples, got {fitted:?}"
         );
+    }
+
+    #[test]
+    fn gengamma_entropy_matches_scipy() {
+        // Was NaN (default); closed form h = ln(Γ(a)/|c|) + a − (a − 1/c)·ψ(a).
+        // Golden values from scipy.stats.gengamma(a, c).entropy().
+        let cases: &[(f64, f64, f64)] = &[
+            (2.0, 1.5, 1.030_822_445_1),
+            (3.0, 2.0, 0.693_039_162_3),
+            (1.5, 0.8, 1.593_238_820_2),
+            (4.0, 3.0, 0.087_382_396_3),
+            (0.7, 1.2, 0.615_875_882_6),
+            (2.5, -1.5, 0.152_555_067_0),
+        ];
+        for &(a, c, golden) in cases {
+            let h = GenGamma::new(a, c).entropy();
+            assert!(
+                (h - golden).abs() < 1e-9,
+                "gengamma({a},{c}).entropy() = {h} vs scipy {golden}"
+            );
+        }
     }
 
     #[test]
