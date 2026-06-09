@@ -1,0 +1,6 @@
+3c3714e2c98e2868fff84f7075056c69f27fe815d2730391f740e2e1b63057d5  tests/artifacts/perf/2026-06-09-linalg-mifdz-eigh-two-stage/proof_eigh_index_sort_bits_rch.txt
+272c81ef7ca9138a942ee59aafa6b5eac9e3351953d50e9ead1781122b2dc2a2  tests/artifacts/perf/2026-06-09-linalg-mifdz-eigh-two-stage/after_eigh_index_sort_criterion_eigh_dense_rch.txt
+376936789633f0af53d435a254f7ae7af56b2eb70155dc814de57dffe4240617  tests/artifacts/perf/2026-06-09-linalg-mifdz-eigh-two-stage/check_fsci_linalg_rch.txt
+5d22cf774065cf04482c50d4e006fbe10d1287216ef25948de2afc083ffe683b  tests/artifacts/perf/2026-06-09-linalg-mifdz-eigh-two-stage/clippy_fsci_linalg_rch.txt
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  tests/artifacts/perf/2026-06-09-linalg-mifdz-eigh-two-stage/fmt_fsci_linalg_check.txt
+cc416e52b3df97f57df5a6edb11dbe6f23aa2e241cd3cd35bcb3f91f2c15a094  tests/artifacts/perf/2026-06-09-linalg-mifdz-eigh-two-stage/ubs_linalg_eigh_index_sort.txt

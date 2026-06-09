@@ -4251,23 +4251,18 @@ pub fn eigh(a: &[Vec<f64>], options: DecompOptions) -> Result<EighResult, Linalg
     let sym = matrix.symmetric_eigen();
 
     // nalgebra returns eigenvalues in arbitrary order; sort ascending
-    let mut pairs: Vec<(f64, Vec<f64>)> = sym
-        .eigenvalues
-        .iter()
-        .enumerate()
-        .map(|(j, &val)| {
-            let col: Vec<f64> = (0..rows).map(|i| sym.eigenvectors[(i, j)]).collect();
-            (val, col)
-        })
-        .collect();
-    pairs.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut sorted_indices: Vec<usize> = (0..rows).collect();
+    sorted_indices.sort_by(|&a, &b| sym.eigenvalues[a].total_cmp(&sym.eigenvalues[b]));
 
-    let eigenvalues: Vec<f64> = pairs.iter().map(|(v, _)| *v).collect();
+    let eigenvalues: Vec<f64> = sorted_indices
+        .iter()
+        .map(|&idx| sym.eigenvalues[idx])
+        .collect();
     // Reconstruct eigenvector matrix from sorted columns
     let mut eigenvectors = vec![vec![0.0; cols]; rows];
-    for (col_idx, (_, col_data)) in pairs.iter().enumerate() {
-        for (row_idx, &val) in col_data.iter().enumerate() {
-            eigenvectors[row_idx][col_idx] = val;
+    for (col_idx, &source_col) in sorted_indices.iter().enumerate() {
+        for (row_idx, row) in eigenvectors.iter_mut().enumerate() {
+            row[col_idx] = sym.eigenvectors[(row_idx, source_col)];
         }
     }
 
@@ -17070,6 +17065,114 @@ mod tests {
                 );
             }
         }
+    }
+
+    fn eigh_materialized_pair_sort_reference(a: &[Vec<f64>]) -> Result<EighResult, LinalgError> {
+        let rows = a.len();
+        let matrix = dmatrix_from_rows(a)?;
+        let sym = matrix.symmetric_eigen();
+        let mut pairs: Vec<(f64, Vec<f64>)> = sym
+            .eigenvalues
+            .iter()
+            .enumerate()
+            .map(|(j, &val)| {
+                let col: Vec<f64> = (0..rows).map(|i| sym.eigenvectors[(i, j)]).collect();
+                (val, col)
+            })
+            .collect();
+        pairs.sort_by(|a, b| a.0.total_cmp(&b.0));
+
+        let eigenvalues = pairs.iter().map(|(value, _)| *value).collect();
+        let mut eigenvectors = vec![vec![0.0; rows]; rows];
+        for (col_idx, (_, col_data)) in pairs.iter().enumerate() {
+            for (row_idx, &value) in col_data.iter().enumerate() {
+                eigenvectors[row_idx][col_idx] = value;
+            }
+        }
+
+        Ok(EighResult {
+            eigenvalues,
+            eigenvectors,
+        })
+    }
+
+    #[test]
+    fn eigh_index_sort_matches_materialized_pair_sort_bits() {
+        let fixtures = [
+            vec![vec![2.0, 1.0], vec![1.0, 3.0]],
+            vec![
+                vec![1.0, 0.0, 0.0],
+                vec![0.0, 1.0, 0.0],
+                vec![0.0, 0.0, 1.0],
+            ],
+            vec![
+                vec![4.0, 1.0, 0.5],
+                vec![1.0, 3.0, 0.25],
+                vec![0.5, 0.25, 2.0],
+            ],
+            vec![
+                vec![7.0, -1.0, 0.5, 0.25],
+                vec![-1.0, 6.0, 1.5, -0.5],
+                vec![0.5, 1.5, 5.0, 0.75],
+                vec![0.25, -0.5, 0.75, 4.0],
+            ],
+        ];
+
+        let mut golden_digest = 0xcbf29ce484222325_u64;
+        for a in fixtures {
+            let reference =
+                eigh_materialized_pair_sort_reference(&a).expect("materialized-pair reference");
+            let optimized = eigh(&a, DecompOptions::default()).expect("optimized eigh");
+            assert_eq!(
+                reference.eigenvalues.len(),
+                optimized.eigenvalues.len(),
+                "eigenvalue length changed"
+            );
+            for (idx, (&expected, &actual)) in reference
+                .eigenvalues
+                .iter()
+                .zip(optimized.eigenvalues.iter())
+                .enumerate()
+            {
+                assert_eq!(
+                    expected.to_bits(),
+                    actual.to_bits(),
+                    "eigenvalue {idx} changed"
+                );
+                golden_digest ^= actual.to_bits();
+                golden_digest = golden_digest.wrapping_mul(0x100000001b3);
+            }
+
+            assert_eq!(
+                reference.eigenvectors.len(),
+                optimized.eigenvectors.len(),
+                "eigenvector row count changed"
+            );
+            for (row_idx, (expected_row, actual_row)) in reference
+                .eigenvectors
+                .iter()
+                .zip(optimized.eigenvectors.iter())
+                .enumerate()
+            {
+                assert_eq!(
+                    expected_row.len(),
+                    actual_row.len(),
+                    "eigenvector col count changed at row {row_idx}"
+                );
+                for (col_idx, (&expected, &actual)) in
+                    expected_row.iter().zip(actual_row.iter()).enumerate()
+                {
+                    assert_eq!(
+                        expected.to_bits(),
+                        actual.to_bits(),
+                        "eigenvector ({row_idx}, {col_idx}) changed"
+                    );
+                    golden_digest ^= actual.to_bits();
+                    golden_digest = golden_digest.wrapping_mul(0x100000001b3);
+                }
+            }
+        }
+        println!("eigh_index_sort_public_golden_digest={golden_digest:#018x}");
     }
 
     #[test]

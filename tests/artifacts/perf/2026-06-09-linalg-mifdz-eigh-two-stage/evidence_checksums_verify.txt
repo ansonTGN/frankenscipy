@@ -1,0 +1,6 @@
+tests/artifacts/perf/2026-06-09-linalg-mifdz-eigh-two-stage/proof_eigh_index_sort_bits_rch.txt: OK
+tests/artifacts/perf/2026-06-09-linalg-mifdz-eigh-two-stage/after_eigh_index_sort_criterion_eigh_dense_rch.txt: OK
+tests/artifacts/perf/2026-06-09-linalg-mifdz-eigh-two-stage/check_fsci_linalg_rch.txt: OK
+tests/artifacts/perf/2026-06-09-linalg-mifdz-eigh-two-stage/clippy_fsci_linalg_rch.txt: OK
+tests/artifacts/perf/2026-06-09-linalg-mifdz-eigh-two-stage/fmt_fsci_linalg_check.txt: OK
+tests/artifacts/perf/2026-06-09-linalg-mifdz-eigh-two-stage/ubs_linalg_eigh_index_sort.txt: OK
