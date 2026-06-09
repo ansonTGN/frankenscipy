@@ -652,24 +652,24 @@ pub fn kaiser_bessel_derived(n: usize, beta: f64, sym: bool) -> Result<Vec<f64>,
 
 /// Modified Bessel function I0(x) via polynomial approximation.
 fn bessel_i0(x: f64) -> f64 {
-    let ax = x.abs();
-    if ax < 3.75 {
-        let t = (x / 3.75).powi(2);
-        1.0 + t
-            * (3.5156229
-                + t * (3.0899424
-                    + t * (1.2067492 + t * (0.2659732 + t * (0.0360768 + t * 0.0045813)))))
-    } else {
-        let t = 3.75 / ax;
-        (ax.exp() / ax.sqrt())
-            * (0.39894228
-                + t * (0.01328592
-                    + t * (0.00225319
-                        + t * (-0.00157565
-                            + t * (0.00916281
-                                + t * (-0.02057706
-                                    + t * (0.02635537 + t * (-0.01647633 + t * 0.00392377))))))))
+    // Modified Bessel function I0 via its everywhere-convergent power series
+    //   I0(x) = Σ_{k≥0} (x²/4)^k / (k!)²,
+    // summed to machine precision. The previous Abramowitz–Stegun rational
+    // approximation was only ~1e-7 accurate, which left `kaiser` windows ~6e-8
+    // off SciPy (whose kaiser is built on the exact scipy.special.i0).
+    let y = 0.25 * x * x;
+    let mut term = 1.0_f64;
+    let mut sum = 1.0_f64;
+    let mut k = 1.0_f64;
+    loop {
+        term *= y / (k * k);
+        sum += term;
+        if term <= 1e-18 * sum || k > 1000.0 {
+            break;
+        }
+        k += 1.0;
     }
+    sum
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -12918,6 +12918,30 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn kaiser_window_matches_scipy_high_beta() {
+        // Regression: the old Abramowitz–Stegun I0 approximation left kaiser
+        // ~6e-8 off scipy; the exact power series matches to machine precision.
+        // Golden from scipy.signal.windows.kaiser(16, 14.0, sym=True).
+        let w = kaiser(16, 14.0);
+        let golden: &[(usize, f64)] = &[
+            (0, 7.726_866_835_270_368e-6),
+            (4, 0.211_134_084_512_061_67),
+            (8, 0.970_435_199_470_663_7),
+            (12, 0.068_153_743_193_960_57),
+            (15, 7.726_866_835_270_368e-6),
+        ];
+        for &(i, g) in golden {
+            assert!(
+                (w[i] - g).abs() <= 1e-13 + 1e-12 * g.abs(),
+                "kaiser(16,14)[{i}] = {} vs scipy {g}",
+                w[i]
+            );
+        }
+        // I0 series itself, vs scipy.special.i0(14).
+        assert!((bessel_i0(14.0) - 129_418.562_700_648_56).abs() < 1e-6);
     }
 
     #[test]
