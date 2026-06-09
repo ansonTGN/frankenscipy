@@ -18,7 +18,7 @@ pub fn sync_audit_ledger() -> SyncSharedAuditLedger {
 }
 
 use nalgebra::linalg::Cholesky;
-use nalgebra::{DMatrix, DVector, Dyn, LU, linalg::SVD};
+use nalgebra::{Complex, DMatrix, DVector, Dyn, LU, linalg::SVD};
 use serde::Serialize;
 
 /// Hardened-mode reciprocal condition threshold: matrices with rcond below this
@@ -5227,34 +5227,140 @@ pub fn logm(a: &[Vec<f64>], options: DecompOptions) -> Result<Vec<Vec<f64>>, Lin
     Ok(rows_from_dmatrix(&result))
 }
 
-/// General logm via eigendecomposition (for non-symmetric matrices).
+/// Evaluate `f(A)` for a real matrix through its real Schur form, handling the
+/// 2×2 diagonal blocks (complex-conjugate eigenvalue pairs) correctly.
+///
+/// The real quasi-triangular factor `T` is complexified and each 2×2 block is
+/// triangularized by a 2×2 complex unitary built from the block's eigenvector,
+/// turning `T` into a genuine complex upper-triangular matrix on which the
+/// scalar Parlett recurrence is exact. `f` is applied to the (complex)
+/// eigenvalues. For the principal branch of a real matrix the imaginary part of
+/// `Q·f(T)·Qᵀ` cancels, so the real part is returned.
+///
+/// This replaces the previous real-diagonal scalar Parlett, which silently
+/// produced wrong answers whenever `A` had complex eigenvalues (the 2×2 blocks
+/// were treated as if `func(t[i,i])` were `f(λ)`).
+fn schur_parlett_complex(
+    q: &DMatrix<f64>,
+    t: &DMatrix<f64>,
+    n: usize,
+    f: impl Fn(Complex<f64>) -> Complex<f64>,
+) -> DMatrix<f64> {
+    let zero = Complex::new(0.0, 0.0);
+    let mut tc = DMatrix::<Complex<f64>>::from_element(n, n, zero);
+    for i in 0..n {
+        for j in 0..n {
+            tc[(i, j)] = Complex::new(t[(i, j)], 0.0);
+        }
+    }
+
+    // Block-diagonal unitary W triangularizing each 2×2 complex-pair block.
+    let mut w = DMatrix::<Complex<f64>>::identity(n, n);
+    let mut i = 0usize;
+    while i < n {
+        if i + 1 < n && t[(i + 1, i)].abs() > 1e-300 {
+            let (p, qd, r, s) = (t[(i, i)], t[(i, i + 1)], t[(i + 1, i)], t[(i + 1, i + 1)]);
+            let m = 0.5 * (p + s);
+            let disc = (p - s) * (p - s) + 4.0 * qd * r; // < 0 for a complex pair
+            let dd = (-disc).max(0.0).sqrt() * 0.5;
+            let lambda = Complex::new(m, dd);
+            // Eigenvector for λ: prefer [qd, λ - p], else [λ - s, r] (r ≠ 0 here).
+            let (mut v0, mut v1) = (Complex::new(qd, 0.0), lambda - Complex::new(p, 0.0));
+            if v0.norm() + v1.norm() < 1e-200 {
+                v0 = lambda - Complex::new(s, 0.0);
+                v1 = Complex::new(r, 0.0);
+            }
+            let nrm = (v0.norm_sqr() + v1.norm_sqr()).sqrt();
+            v0 /= Complex::new(nrm, 0.0);
+            v1 /= Complex::new(nrm, 0.0);
+            // Orthonormal complement u = [-conj(v1), conj(v0)].
+            w[(i, i)] = v0;
+            w[(i + 1, i)] = v1;
+            w[(i, i + 1)] = -v1.conj();
+            w[(i + 1, i + 1)] = v0.conj();
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+
+    // T_tri = Wᴴ T W is complex upper-triangular; run the scalar Parlett recurrence.
+    let tt = w.adjoint() * &tc * &w;
+    let mut fmat = DMatrix::<Complex<f64>>::from_element(n, n, zero);
+    for i in 0..n {
+        fmat[(i, i)] = f(tt[(i, i)]);
+    }
+    for j in 1..n {
+        for i in (0..j).rev() {
+            let mut sum = tt[(i, j)] * (fmat[(j, j)] - fmat[(i, i)]);
+            for k in (i + 1)..j {
+                sum += tt[(i, k)] * fmat[(k, j)] - fmat[(i, k)] * tt[(k, j)];
+            }
+            let denom = tt[(j, j)] - tt[(i, i)];
+            fmat[(i, j)] = if denom.norm() > 1e-300 {
+                sum / denom
+            } else {
+                zero // confluent eigenvalues: rare for distinct Schur values
+            };
+        }
+    }
+
+    // f(A) = Q · Re(W F_tri Wᴴ) · Qᵀ.
+    let ft = &w * &fmat * w.adjoint();
+    let mut ft_real = DMatrix::<f64>::zeros(n, n);
+    for i in 0..n {
+        for j in 0..n {
+            ft_real[(i, j)] = ft[(i, j)].re;
+        }
+    }
+    q * ft_real * q.transpose()
+}
+
+/// General logm for non-symmetric matrices. A real spectrum (no 2×2 Schur
+/// blocks) uses the real scalar Parlett recurrence, which carries the Jordan
+/// first-derivative limit for repeated eigenvalues; a complex spectrum uses the
+/// complex Schur–Parlett evaluator, which (unlike the old real-diagonal scalar
+/// path) is correct across the 2×2 blocks.
 fn logm_general(
     matrix: &DMatrix<f64>,
     n: usize,
     options: DecompOptions,
 ) -> Result<Vec<Vec<f64>>, LinalgError> {
-    // Use Schur decomposition: A = Q T Q^T where T is quasi-upper-triangular
     let schur = matrix.clone().schur();
     let (q, t) = schur.unpack();
 
-    // Compute log of the quasi-triangular matrix
+    let has_complex_block = (0..n.saturating_sub(1)).any(|i| t[(i + 1, i)].abs() > 1e-300);
+    let result = if has_complex_block {
+        schur_parlett_complex(&q, &t, n, |z| z.ln())
+    } else {
+        logm_real_triangular(&q, &t, n)
+    };
+
+    emit_trace(LinalgTrace {
+        operation: "logm",
+        matrix_size: (n, n),
+        mode: options.mode,
+        rcond: None,
+        warning: Some("used general (non-symmetric) path".to_string()),
+        error: None,
+    });
+
+    Ok(rows_from_dmatrix(&result))
+}
+
+/// Real scalar Parlett recurrence for `log` of an upper-triangular real Schur
+/// factor with an all-real spectrum (no 2×2 blocks). Repeated diagonal entries
+/// fall back to the Jordan first-derivative limit `f[i,j] ≈ n[i,j] / λ`.
+fn logm_real_triangular(q: &DMatrix<f64>, t: &DMatrix<f64>, n: usize) -> DMatrix<f64> {
     let mut log_t = DMatrix::<f64>::zeros(n, n);
     for i in 0..n {
-        if t[(i, i)] > 0.0 {
-            log_t[(i, i)] = t[(i, i)].ln();
+        log_t[(i, i)] = if t[(i, i)] > 0.0 {
+            t[(i, i)].ln()
         } else {
-            // Non-positive diagonal: return NaN for this element
-            log_t[(i, i)] = f64::NAN;
-        }
+            f64::NAN
+        };
     }
 
-    // Compute off-diagonal of log(T) using Parlett's recurrence:
-    //   (t[j,j] - t[i,i]) f[i,j]
-    //     = t[i,j] (f[j,j] - f[i,i])
-    //       + Σ_{k=i+1}^{j-1} (t[i,k] f[k,j] - f[i,k] t[k,j])
-    //
-    // For repeated diagonal entries we fall back to the first-derivative limit
-    // used by the logarithm of a Jordan block: f[i,j] ~= n[i,j] / λ.
     for j in 1..n {
         for i in (0..j).rev() {
             let tii = t[(i, i)];
@@ -5271,8 +5377,6 @@ fn logm_general(
                 let val = numerator / eigen_gap;
                 log_t[(i, j)] = if val.is_finite() { val } else { f64::NAN };
             } else {
-                // Near-degenerate case: T[i,i] ≈ T[j,j]
-                // Use the first-derivative limit for log(λI + N).
                 let mut jordan_sum = t[(i, j)];
                 for k in (i + 1)..j {
                     jordan_sum += t[(i, k)] * log_t[(k, j)] - log_t[(i, k)] * t[(k, j)];
@@ -5281,24 +5385,13 @@ fn logm_general(
                     let val = jordan_sum / tii;
                     log_t[(i, j)] = if val.is_finite() { val } else { f64::NAN };
                 } else {
-                    log_t[(i, j)] = f64::NAN; // Singularity
+                    log_t[(i, j)] = f64::NAN;
                 }
             }
         }
     }
 
-    let result = &q * log_t * q.transpose();
-
-    emit_trace(LinalgTrace {
-        operation: "logm",
-        matrix_size: (n, n),
-        mode: options.mode,
-        rcond: None,
-        warning: Some("used general (non-symmetric) path".to_string()),
-        error: None,
-    });
-
-    Ok(rows_from_dmatrix(&result))
+    q * log_t * q.transpose()
 }
 
 /// Matrix square root.
@@ -5712,9 +5805,14 @@ pub fn funm(
     Ok(rows_from_dmatrix(&result))
 }
 
-/// Fractional matrix power A^p for non-integer p.
+/// Fractional matrix power `A^p` for non-integer `p`.
 ///
-/// Computes A^p via eigendecomposition: A^p = V * diag(λ_i^p) * V^{-1}.
+/// A real spectrum reuses the real scalar path (`x^p` is real even for negative
+/// `x`, e.g. integer powers of matrices with negative eigenvalues). A complex
+/// spectrum uses the complex Schur–Parlett evaluator with the principal branch
+/// `z^p = exp(p·log z)`, which is correct across the 2×2 Schur blocks — the old
+/// `funm(_, powf)` path applied the scalar power only to the real diagonal and
+/// was wrong whenever `A` had complex eigenvalues.
 ///
 /// Matches `scipy.linalg.fractional_matrix_power(A, p)`.
 pub fn fractional_matrix_power(
@@ -5722,7 +5820,36 @@ pub fn fractional_matrix_power(
     p: f64,
     options: DecompOptions,
 ) -> Result<Vec<Vec<f64>>, LinalgError> {
-    funm(a, |x| x.powf(p), options)
+    let (rows, cols) = matrix_shape(a)?;
+    if rows != cols {
+        return Err(LinalgError::ExpectedSquareMatrix);
+    }
+    hardened_dimension_check(options.mode, rows, cols)?;
+    validate_finite_matrix(a, options.mode, options.check_finite)?;
+    if rows == 0 {
+        return Ok(Vec::new());
+    }
+
+    let matrix = dmatrix_from_rows(a)?;
+    let n = rows;
+    let is_symmetric = (0..n).all(|i| {
+        (0..n).all(|j| {
+            (matrix[(i, j)] - matrix[(j, i)]).abs() < 1e-12 * matrix[(i, j)].abs().max(1.0)
+        })
+    });
+    if is_symmetric {
+        return funm(a, |x| x.powf(p), options);
+    }
+
+    let schur = matrix.clone().schur();
+    let (q, t) = schur.unpack();
+    let has_complex_block = (0..n.saturating_sub(1)).any(|i| t[(i + 1, i)].abs() > 1e-300);
+    if has_complex_block {
+        let result = schur_parlett_complex(&q, &t, n, |z| (z.ln() * Complex::new(p, 0.0)).exp());
+        Ok(rows_from_dmatrix(&result))
+    } else {
+        funm(a, |x| x.powf(p), options)
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════
