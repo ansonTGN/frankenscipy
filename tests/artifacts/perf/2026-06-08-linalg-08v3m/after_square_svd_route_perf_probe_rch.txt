@@ -1,0 +1,8 @@
+PUBLIC_SQUARE_SVD_ROUTE_PERF_BEGIN
+shape=512x512
+previous_route_ms=1144.316472
+routed_ms=236.125536
+speedup_vs_previous_route=4.846221
+recon_err=9.88027437642813311e-11
+singular_value_max_diff_vs_nalgebra=4.07453626394271851e-10
+PUBLIC_SQUARE_SVD_ROUTE_PERF_END
