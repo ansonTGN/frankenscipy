@@ -6,11 +6,10 @@
 //!   - `scipy.signal.ellipord`
 //!
 //! Resolves [frankenscipy-kjl32]. Each returns (N, Wn). N integer
-//! (exact comparison); Wn at 1e-10 abs. fsci's docstrings note they
-//! match scipy's analog form `(...gpass, gstop, analog=True)`; scipy
-//! is called with default analog=False here — both should still match
-//! since they compute the same order/edge formulas for digital
-//! lowpass with normalized frequencies. Drop a case if scipy errors.
+//! (exact comparison); Wn at 1e-10 abs. fsci's filter-order routines match
+//! scipy's DIGITAL default (`analog=False`, per frankenscipy-qjotp): wp/ws are
+//! Nyquist-normalized in (0, 1), with frequency prewarping and highpass
+//! support. Drop a case if scipy errors.
 
 use std::collections::HashMap;
 use std::fs;
@@ -135,9 +134,9 @@ for case in q["points"]:
     gpass = float(case["gpass"]); gstop = float(case["gstop"])
     try:
         fn = getattr(signal, op)
-        # fsci's filter_ord routines match scipy's analog form
-        # (per docstrings). Use analog=True to compare apples to apples.
-        n, wn = fn(wp, ws, gpass, gstop, analog=True)
+        # fsci's filter_ord routines now match scipy's DIGITAL default
+        # (frankenscipy-qjotp); wp/ws are Nyquist-normalized in (0, 1).
+        n, wn = fn(wp, ws, gpass, gstop, analog=False)
         wn = float(wn) if wn is not None else None
         if wn is None or not math.isfinite(wn):
             points.append({"case_id": cid, "n": None, "wn": None})

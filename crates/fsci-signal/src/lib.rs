@@ -3217,62 +3217,62 @@ pub fn buttap(
 /// Elliptic (Cauer) filter order and natural frequency for analog
 /// lowpass design.
 ///
-/// Matches `scipy.signal.ellipord(wp, ws, gpass, gstop, analog=True)`
-/// for the lowpass case. **This is the ANALOG form** (`wp`/`ws` are rad/s);
-/// SciPy's default and the digital `ellip` designer are *not* matched here — do
-/// not feed this `(N, Wn)` into a digital design. Tracked by frankenscipy-qjotp.
-///
-/// Closed-form via complete elliptic integrals K:
-///   k    = wp / ws
-///   k1   = √((10^(gpass/10) − 1) / (10^(gstop/10) − 1))
-///   k'   = √(1 − k²),  k1' = √(1 − k1²)
-///   N    = ⌈ K(k²) · K(k1'²) / (K(k'²) · K(k1²)) ⌉
-///   Wn   = wp
-///
-/// Elliptic filters allow ripple in both passband and stopband and
-/// achieve the lowest order of any classical IIR design for a given
-/// spec. The inline `ellipk_internal` helper computes K(m) via the
-/// arithmetic-geometric mean (Carlson, AGM iteration) to avoid pulling
-/// fsci-special as a workspace dependency.
+/// Matches `scipy.signal.ellipord(wp, ws, gpass, gstop)` (digital default):
+/// `wp`/`ws` are Nyquist-normalized digital band edges in `(0, 1)`. Both lowpass
+/// (`wp < ws`) and highpass (`wp > ws`) are supported. Closed-form via complete
+/// elliptic integrals K on the prewarped band ratio; the natural frequency is
+/// the passband edge `wp`. The inline `ellipk_internal` computes K(m) via the
+/// arithmetic-geometric mean to avoid pulling fsci-special as a dependency.
 pub fn ellipord(wp: f64, ws: f64, gpass: f64, gstop: f64) -> Result<(u32, f64), SignalError> {
-    if !wp.is_finite() || !ws.is_finite() || wp <= 0.0 || ws <= 0.0 {
-        return Err(SignalError::InvalidArgument(
-            "ellipord: wp and ws must be positive finite".to_string(),
-        ));
-    }
-    if wp >= ws {
-        return Err(SignalError::InvalidArgument(
-            "ellipord lowpass: passband edge wp must be < stopband edge ws".to_string(),
-        ));
-    }
-    if gpass <= 0.0 || gstop <= 0.0 || gpass >= gstop {
-        return Err(SignalError::InvalidArgument(
-            "ellipord: require 0 < gpass < gstop".to_string(),
-        ));
-    }
-    let pass_factor = 10.0_f64.powf(gpass / 10.0) - 1.0;
-    let stop_factor = 10.0_f64.powf(gstop / 10.0) - 1.0;
-    if pass_factor <= 0.0 {
-        return Err(SignalError::InvalidArgument(
-            "ellipord: degenerate passband loss factor".to_string(),
-        ));
-    }
-    let k = wp / ws;
-    let k1 = (pass_factor / stop_factor).sqrt();
-    let k_sq = k * k;
-    let k1_sq = k1 * k1;
-    let k_p_sq = 1.0 - k_sq;
-    let k1_p_sq = 1.0 - k1_sq;
-    let num = ellipk_internal(k_sq) * ellipk_internal(k1_p_sq);
-    let den = ellipk_internal(k_p_sq) * ellipk_internal(k1_sq);
+    let (nat, _passb, _stopb, gp, gs) = ord_digital_prewarp("ellipord", wp, ws, gpass, gstop)?;
+    // Selectivity k = passb/stopb (= 1/nat) and discrimination k1 = sqrt(gp/gs).
+    let k = 1.0 / nat;
+    let k1 = (gp / gs).sqrt();
+    let num = ellipk_internal(k * k) * ellipk_internal(1.0 - k1 * k1);
+    let den = ellipk_internal(1.0 - k * k) * ellipk_internal(k1 * k1);
     if !num.is_finite() || !den.is_finite() || den <= 0.0 {
         return Err(SignalError::InvalidArgument(format!(
             "ellipord: degenerate K-ratio (num={num}, den={den})"
         )));
     }
-    let order_real = num / den;
-    let order = order_real.ceil().max(1.0) as u32;
+    let order = (num / den).ceil().max(1.0) as u32;
     Ok((order, wp))
+}
+
+/// Shared setup for the digital `*ord` functions: validate the spec, prewarp the
+/// digital band edges to analog (`tan(π·w/2)`), and form the stopband/passband
+/// frequency ratio `nat` for both lowpass (`wp < ws`) and highpass (`wp > ws`).
+/// Returns `(nat, passb, stopb, gp, gs)` with `gp = 10^(0.1·gpass) − 1` and
+/// `gs = 10^(0.1·gstop) − 1`. Mirrors scipy.signal's default (`analog=False`).
+fn ord_digital_prewarp(
+    name: &str,
+    wp: f64,
+    ws: f64,
+    gpass: f64,
+    gstop: f64,
+) -> Result<(f64, f64, f64, f64, f64), SignalError> {
+    if !wp.is_finite() || !ws.is_finite() || wp <= 0.0 || ws <= 0.0 || wp >= 1.0 || ws >= 1.0 {
+        return Err(SignalError::InvalidArgument(format!(
+            "{name}: wp and ws must lie in (0, 1) (Nyquist-normalized digital frequencies)"
+        )));
+    }
+    if gpass <= 0.0 || gstop <= 0.0 || gpass >= gstop {
+        return Err(SignalError::InvalidArgument(format!(
+            "{name}: require 0 < gpass < gstop"
+        )));
+    }
+    let half_pi = std::f64::consts::FRAC_PI_2;
+    let passb = (half_pi * wp).tan();
+    let stopb = (half_pi * ws).tan();
+    let nat = if wp < ws { stopb / passb } else { passb / stopb };
+    if !(nat > 1.0) {
+        return Err(SignalError::InvalidArgument(format!(
+            "{name}: wp and ws must differ (passband and stopband edges coincide)"
+        )));
+    }
+    let gp = 10.0_f64.powf(0.1 * gpass) - 1.0;
+    let gs = 10.0_f64.powf(0.1 * gstop) - 1.0;
+    Ok((nat, passb, stopb, gp, gs))
 }
 
 /// Complete elliptic integral of the first kind K(m) via the
@@ -3298,149 +3298,52 @@ fn ellipk_internal(m: f64) -> f64 {
     std::f64::consts::FRAC_PI_2 / a
 }
 
-/// Chebyshev type-II (inverse) filter order and natural frequency for
-/// analog lowpass design.
+/// Chebyshev type-II (inverse) filter order and natural frequency.
 ///
-/// Matches `scipy.signal.cheb2ord(wp, ws, gpass, gstop, analog=True)`
-/// for the lowpass case. **This is the ANALOG form** (`wp`/`ws` are rad/s),
-/// *not* SciPy's default/digital `cheby2` pairing. Tracked by frankenscipy-qjotp.
-/// The order formula is identical to cheb1ord
-/// (both Chebyshev variants share the same order curve); the
-/// difference is the natural frequency:
-///   Wn = wp · cosh(acosh(√((10^(gstop/10) − 1) / (10^(gpass/10) − 1))) / N)
-/// After rounding the order up, scipy recomputes Wn by scaling the
-/// passband edge `wp` so the realized Type-II design meets the
-/// stopband edge; Wn therefore lands just below `ws`.
+/// Matches `scipy.signal.cheb2ord(wp, ws, gpass, gstop)` (digital default):
+/// `wp`/`ws` are Nyquist-normalized digital band edges in `(0, 1)`; lowpass and
+/// highpass are both supported. The order formula is identical to cheb1ord (both
+/// Chebyshev variants share the same order curve); Type-II places the cutoff at
+/// the stopband side, so Wn is recomputed after rounding the order up and warped
+/// back to a digital frequency.
 pub fn cheb2ord(wp: f64, ws: f64, gpass: f64, gstop: f64) -> Result<(u32, f64), SignalError> {
-    if !wp.is_finite() || !ws.is_finite() || wp <= 0.0 || ws <= 0.0 {
-        return Err(SignalError::InvalidArgument(
-            "cheb2ord: wp and ws must be positive finite".to_string(),
-        ));
-    }
-    if wp >= ws {
-        return Err(SignalError::InvalidArgument(
-            "cheb2ord lowpass: passband edge wp must be < stopband edge ws".to_string(),
-        ));
-    }
-    if gpass <= 0.0 || gstop <= 0.0 || gpass >= gstop {
-        return Err(SignalError::InvalidArgument(
-            "cheb2ord: require 0 < gpass < gstop".to_string(),
-        ));
-    }
-    let pass_factor = 10.0_f64.powf(gpass / 10.0) - 1.0;
-    let stop_factor = 10.0_f64.powf(gstop / 10.0) - 1.0;
-    if pass_factor <= 0.0 {
-        return Err(SignalError::InvalidArgument(
-            "cheb2ord: degenerate passband loss factor".to_string(),
-        ));
-    }
-    let q = (stop_factor / pass_factor).sqrt();
-    let q_acosh = q.acosh();
-    let den = (ws / wp).acosh();
-    if !q_acosh.is_finite() || !den.is_finite() || den <= 0.0 {
-        return Err(SignalError::InvalidArgument(format!(
-            "cheb2ord: degenerate spec (q_acosh={q_acosh}, den={den})"
-        )));
-    }
-    let order_real = q_acosh / den;
-    let order = order_real.ceil().max(1.0) as u32;
-    // Wn = wp · cosh(q_acosh / N): scipy recomputes the natural
-    // frequency after the order is rounded up, scaling the passband
-    // edge so the realized design lands on the stopband edge.
-    let wn = wp * (q_acosh / order as f64).cosh();
+    let (nat, passb, _stopb, gp, gs) = ord_digital_prewarp("cheb2ord", wp, ws, gpass, gstop)?;
+    let num = (gs / gp).sqrt().acosh();
+    let order = (num / nat.acosh()).ceil().max(1.0) as u32;
+    let nf = 1.0 / (num / order as f64).cosh();
+    let wn_analog = if wp < ws { passb / nf } else { passb * nf };
+    let wn = (2.0 / std::f64::consts::PI) * wn_analog.atan();
     Ok((order, wn))
 }
 
-/// Chebyshev type-I filter order and natural frequency for analog
-/// lowpass design.
+/// Chebyshev type-I filter order and natural frequency.
 ///
-/// Matches `scipy.signal.cheb1ord(wp, ws, gpass, gstop, analog=True)`
-/// for the lowpass case. **This is the ANALOG form** (`wp`/`ws` are rad/s),
-/// *not* SciPy's default/digital `cheby1` pairing. Tracked by frankenscipy-qjotp.
-///
-/// Closed-form:
-///   N = ⌈ acosh(√((10^(gstop/10) − 1) / (10^(gpass/10) − 1))) / acosh(ws/wp) ⌉
-///   Wn = wp
-/// Type-I Chebyshev concentrates ripple in the passband, so it
-/// typically produces a smaller N than `buttord` for the same spec at
-/// the cost of equiripple passband behavior.
+/// Matches `scipy.signal.cheb1ord(wp, ws, gpass, gstop)` (digital default):
+/// `wp`/`ws` are Nyquist-normalized digital band edges in `(0, 1)`; lowpass and
+/// highpass are both supported. Type-I concentrates ripple in the passband, so
+/// it typically needs a smaller N than `buttord`; the natural frequency is the
+/// passband edge `wp`.
 pub fn cheb1ord(wp: f64, ws: f64, gpass: f64, gstop: f64) -> Result<(u32, f64), SignalError> {
-    if !wp.is_finite() || !ws.is_finite() || wp <= 0.0 || ws <= 0.0 {
-        return Err(SignalError::InvalidArgument(
-            "cheb1ord: wp and ws must be positive finite".to_string(),
-        ));
-    }
-    if wp >= ws {
-        return Err(SignalError::InvalidArgument(
-            "cheb1ord lowpass: passband edge wp must be < stopband edge ws".to_string(),
-        ));
-    }
-    if gpass <= 0.0 || gstop <= 0.0 || gpass >= gstop {
-        return Err(SignalError::InvalidArgument(
-            "cheb1ord: require 0 < gpass < gstop".to_string(),
-        ));
-    }
-    let pass_factor = 10.0_f64.powf(gpass / 10.0) - 1.0;
-    let stop_factor = 10.0_f64.powf(gstop / 10.0) - 1.0;
-    if pass_factor <= 0.0 {
-        return Err(SignalError::InvalidArgument(
-            "cheb1ord: degenerate passband loss factor".to_string(),
-        ));
-    }
-    let num = (stop_factor / pass_factor).sqrt().acosh();
-    let den = (ws / wp).acosh();
-    if !num.is_finite() || !den.is_finite() || den <= 0.0 {
-        return Err(SignalError::InvalidArgument(format!(
-            "cheb1ord: degenerate spec produced num={num}, den={den}"
-        )));
-    }
-    let order_real = num / den;
-    let order = order_real.ceil().max(1.0) as u32;
+    let (nat, _passb, _stopb, gp, gs) = ord_digital_prewarp("cheb1ord", wp, ws, gpass, gstop)?;
+    let order = ((gs / gp).sqrt().acosh() / nat.acosh()).ceil().max(1.0) as u32;
     Ok((order, wp))
 }
 
-/// Butterworth filter order and natural frequency for analog lowpass
-/// design.
+/// Butterworth filter order and natural frequency.
 ///
-/// Matches `scipy.signal.buttord(wp, ws, gpass, gstop, analog=True)` for
-/// the lowpass case. **This is the ANALOG form** (`wp`/`ws` are rad/s); SciPy's
-/// default and the digital `butter` designer are *not* matched here — do not
-/// feed this `(N, Wn)` into a digital `butter`. Tracked by frankenscipy-qjotp.
-///
-/// Returns `(order, wn)` where:
-///   order = ⌈ log10((10^(gstop/10) − 1) / (10^(gpass/10) − 1)) / (2·log10(ws/wp)) ⌉
-///   wn = wp / (10^(gpass/10) − 1)^(1 / (2·order))
-///
-/// `wp` and `ws` are angular frequencies in rad/s (analog form). `gpass`
-/// is the maximum passband loss in dB; `gstop` is the minimum stopband
-/// attenuation in dB. Requires `wp < ws` and `0 < gpass < gstop`.
+/// Matches `scipy.signal.buttord(wp, ws, gpass, gstop)` (digital default):
+/// `wp`/`ws` are Nyquist-normalized digital band edges in `(0, 1)`. Both lowpass
+/// (`wp < ws`) and highpass (`wp > ws`) are supported. `gpass` is the maximum
+/// passband loss in dB; `gstop` is the minimum stopband attenuation in dB.
+/// Returns `(order, wn)` ready to pass to the digital [`butter`].
 pub fn buttord(wp: f64, ws: f64, gpass: f64, gstop: f64) -> Result<(u32, f64), SignalError> {
-    if !wp.is_finite() || !ws.is_finite() || wp <= 0.0 || ws <= 0.0 {
-        return Err(SignalError::InvalidArgument(
-            "buttord: wp and ws must be positive finite".to_string(),
-        ));
-    }
-    if wp >= ws {
-        return Err(SignalError::InvalidArgument(
-            "buttord lowpass: passband edge wp must be < stopband edge ws".to_string(),
-        ));
-    }
-    if gpass <= 0.0 || gstop <= 0.0 || gpass >= gstop {
-        return Err(SignalError::InvalidArgument(
-            "buttord: require 0 < gpass < gstop".to_string(),
-        ));
-    }
-    let pass_factor = 10.0_f64.powf(gpass / 10.0) - 1.0;
-    let stop_factor = 10.0_f64.powf(gstop / 10.0) - 1.0;
-    let ratio = (ws / wp).log10();
-    if pass_factor <= 0.0 || ratio <= 0.0 {
-        return Err(SignalError::InvalidArgument(
-            "buttord: degenerate spec produced non-positive denominator".to_string(),
-        ));
-    }
-    let order_real = (stop_factor / pass_factor).log10() / (2.0 * ratio);
-    let order = order_real.ceil().max(1.0) as u32;
-    let wn = wp / pass_factor.powf(1.0 / (2.0 * order as f64));
+    let (nat, passb, _stopb, gp, gs) = ord_digital_prewarp("buttord", wp, ws, gpass, gstop)?;
+    let order = ((gs / gp).log10() / (2.0 * nat.log10())).ceil().max(1.0) as u32;
+    // W0 scales the prewarped passband edge so the realized −3 dB point meets
+    // the spec; warp the analog Wn back to a digital frequency.
+    let w0 = gp.powf(-1.0 / (2.0 * order as f64));
+    let wn_analog = if wp < ws { w0 * passb } else { passb / w0 };
+    let wn = (2.0 / std::f64::consts::PI) * wn_analog.atan();
     if !wn.is_finite() {
         return Err(SignalError::InvalidArgument(
             "buttord: natural frequency is not finite".to_string(),
@@ -19391,12 +19294,10 @@ mod tests {
 
     #[test]
     fn cheb1ord_known_design_returns_order_5() {
-        // acosh(√(9999 / 0.2589)) ≈ 5.974, acosh(2) ≈ 1.317
-        // → order = ceil(5.974 / 1.317) = ceil(4.535) = 5.
-        // Even with this saving, Cheby beats Butterworth's order 8 here.
-        let (n, wn) = cheb1ord(1.0, 2.0, 1.0, 40.0).expect("cheb1ord");
+        // scipy.signal.cheb1ord(0.2, 0.4, 1, 40) (digital) -> (5, 0.2).
+        let (n, wn) = cheb1ord(0.2, 0.4, 1.0, 40.0).expect("cheb1ord");
         assert_eq!(n, 5);
-        assert!((wn - 1.0).abs() < 1e-12);
+        assert!((wn - 0.2).abs() < 1e-12);
     }
 
     #[test]
@@ -19502,11 +19403,10 @@ mod tests {
     #[test]
     fn ellipord_known_design_returns_smallest_order_among_filter_types() {
         // Elliptic is the lowest-order classical filter for any spec.
-        // For (wp=1, ws=2, gpass=1 dB, gstop=40 dB) it should beat both
-        // Butterworth (8) and Chebyshev (5).
-        let (n_butter, _) = buttord(1.0, 2.0, 1.0, 40.0).unwrap();
-        let (n_cheby, _) = cheb1ord(1.0, 2.0, 1.0, 40.0).unwrap();
-        let (n_ellip, _) = ellipord(1.0, 2.0, 1.0, 40.0).unwrap();
+        // Digital (0.2, 0.4, 1 dB, 40 dB): Butterworth 7, Chebyshev 5, ellip 4.
+        let (n_butter, _) = buttord(0.2, 0.4, 1.0, 40.0).unwrap();
+        let (n_cheby, _) = cheb1ord(0.2, 0.4, 1.0, 40.0).unwrap();
+        let (n_ellip, _) = ellipord(0.2, 0.4, 1.0, 40.0).unwrap();
         assert_eq!(n_ellip, 4);
         assert!(
             n_ellip <= n_cheby,
@@ -19521,9 +19421,9 @@ mod tests {
     #[test]
     fn ellipord_metamorphic_lower_than_chebyshev_across_specs() {
         for spec in &[
-            (1.0_f64, 2.0, 1.0, 40.0),
-            (1.0, 1.5, 0.5, 60.0),
-            (1.0, 3.0, 2.0, 80.0),
+            (0.2_f64, 0.4, 1.0, 40.0),
+            (0.1, 0.3, 0.5, 60.0),
+            (0.2, 0.5, 2.0, 80.0),
         ] {
             let (n_cheby, _) = cheb1ord(spec.0, spec.1, spec.2, spec.3).unwrap();
             let (n_ellip, _) = ellipord(spec.0, spec.1, spec.2, spec.3).unwrap();
@@ -19535,13 +19435,14 @@ mod tests {
     }
 
     #[test]
-    fn ellipord_scipy_analog_lowpass_order_regression_cases() {
-        // Values generated by scipy.signal.ellipord(..., analog=True).
+    fn ellipord_scipy_digital_order_regression_cases() {
+        // scipy.signal.ellipord(wp, ws, gpass, gstop) (digital default); last
+        // case is highpass (wp > ws). Wn is the passband edge wp.
         for (wp, ws, gpass, gstop, expected_n, expected_wn) in [
-            (1.0_f64, 2.0, 1.0, 40.0, 4_u32, 1.0),
-            (1.0, 1.5, 0.5, 60.0, 6, 1.0),
-            (1.0, 3.0, 2.0, 80.0, 5, 1.0),
-            (0.2, 0.3, 1.0, 40.0, 5, 0.2),
+            (0.2_f64, 0.4, 1.0, 40.0, 4_u32, 0.2),
+            (0.1, 0.3, 0.5, 60.0, 4, 0.1),
+            (0.2, 0.5, 2.0, 80.0, 5, 0.2),
+            (0.4, 0.2, 1.0, 40.0, 4, 0.4),
         ] {
             let (n, wn) = ellipord(wp, ws, gpass, gstop).expect("ellipord");
             assert_eq!(n, expected_n);
@@ -19554,9 +19455,10 @@ mod tests {
 
     #[test]
     fn ellipord_rejects_invalid_specs() {
-        assert!(ellipord(2.0, 1.0, 1.0, 40.0).is_err());
-        assert!(ellipord(1.0, 2.0, 40.0, 1.0).is_err());
-        assert!(ellipord(-1.0, 2.0, 1.0, 40.0).is_err());
+        assert!(ellipord(0.3, 0.3, 1.0, 40.0).is_err()); // wp == ws
+        assert!(ellipord(0.2, 0.4, 40.0, 1.0).is_err()); // gpass >= gstop
+        assert!(ellipord(-0.1, 0.4, 1.0, 40.0).is_err()); // wp <= 0
+        assert!(ellipord(0.2, 1.5, 1.0, 40.0).is_err()); // ws >= 1 (not normalized)
     }
 
     #[test]
@@ -19564,9 +19466,9 @@ mod tests {
         // Order formula is identical for type-I and type-II; only Wn
         // differs.
         for spec in &[
-            (1.0_f64, 2.0, 1.0, 40.0),
-            (1.0, 1.5, 0.5, 60.0),
-            (1.0, 3.0, 2.0, 80.0),
+            (0.2_f64, 0.4, 1.0, 40.0),
+            (0.1, 0.3, 0.5, 60.0),
+            (0.2, 0.5, 2.0, 80.0),
         ] {
             let (n1, _) = cheb1ord(spec.0, spec.1, spec.2, spec.3).unwrap();
             let (n2, _) = cheb2ord(spec.0, spec.1, spec.2, spec.3).unwrap();
@@ -19577,18 +19479,18 @@ mod tests {
     #[test]
     fn cheb2ord_metamorphic_wn_between_wp_and_ws() {
         // Type-II's natural frequency sits between wp and ws.
-        let (_, wn) = cheb2ord(1.0, 2.0, 1.0, 40.0).expect("cheb2ord");
-        assert!(wn > 1.0 && wn < 2.0, "wn={wn} should be in (wp, ws)");
+        let (_, wn) = cheb2ord(0.2, 0.4, 1.0, 40.0).expect("cheb2ord");
+        assert!(wn > 0.2 && wn < 0.4, "wn={wn} should be in (wp, ws)");
     }
 
     #[test]
     fn cheb2ord_wn_matches_scipy_reference() {
-        // scipy.signal.cheb2ord(wp, ws, gpass, gstop, analog=True) places
-        // Wn just below the stopband edge ws.
+        // scipy.signal.cheb2ord(wp, ws, gpass, gstop) (digital); Wn lands near
+        // the stopband side. Last case is highpass (wp > ws).
         for &(wp, ws, gp, gs, n_exp, wn_exp) in &[
-            (1.0_f64, 2.0, 1.0, 40.0, 5_u32, 1.802_791_365_577_485),
-            (0.5, 1.5, 0.5, 30.0, 3, 1.458_262_371_465_648),
-            (2.0, 5.0, 2.0, 60.0, 6, 3.981_189_966_239_977),
+            (0.2_f64, 0.4, 1.0, 40.0, 5_u32, 0.337_335_210_835_035_37),
+            (0.1, 0.3, 0.5, 60.0, 5, 0.274_980_189_937_233_2),
+            (0.4, 0.2, 1.0, 40.0, 5, 0.243_887_957_569_922_8),
         ] {
             let (n, wn) = cheb2ord(wp, ws, gp, gs).expect("cheb2ord");
             assert_eq!(n, n_exp, "order for ({wp}, {ws}, {gp}, {gs})");
@@ -19601,9 +19503,10 @@ mod tests {
 
     #[test]
     fn cheb2ord_rejects_invalid_specs() {
-        assert!(cheb2ord(2.0, 1.0, 1.0, 40.0).is_err());
-        assert!(cheb2ord(1.0, 2.0, 40.0, 1.0).is_err());
-        assert!(cheb2ord(-1.0, 2.0, 1.0, 40.0).is_err());
+        assert!(cheb2ord(0.3, 0.3, 1.0, 40.0).is_err()); // wp == ws
+        assert!(cheb2ord(0.2, 0.4, 40.0, 1.0).is_err()); // gpass >= gstop
+        assert!(cheb2ord(-0.1, 0.4, 1.0, 40.0).is_err()); // wp <= 0
+        assert!(cheb2ord(0.2, 1.5, 1.0, 40.0).is_err()); // ws >= 1
     }
 
     #[test]
@@ -19611,9 +19514,9 @@ mod tests {
         // For any meaningful spec, Chebyshev I requires ≤ Butterworth order
         // because Cheby concentrates the design effort in the passband.
         for spec in &[
-            (1.0_f64, 2.0, 1.0, 40.0),
-            (1.0, 1.5, 0.5, 60.0),
-            (1.0, 3.0, 2.0, 80.0),
+            (0.2_f64, 0.4, 1.0, 40.0),
+            (0.1, 0.3, 0.5, 60.0),
+            (0.2, 0.5, 2.0, 80.0),
         ] {
             let (n_butter, _) = buttord(spec.0, spec.1, spec.2, spec.3).unwrap();
             let (n_cheby, _) = cheb1ord(spec.0, spec.1, spec.2, spec.3).unwrap();
@@ -19626,30 +19529,29 @@ mod tests {
 
     #[test]
     fn cheb1ord_rejects_invalid_specs() {
-        assert!(cheb1ord(2.0, 1.0, 1.0, 40.0).is_err());
-        assert!(cheb1ord(1.0, 2.0, 40.0, 1.0).is_err());
-        assert!(cheb1ord(-1.0, 2.0, 1.0, 40.0).is_err());
+        assert!(cheb1ord(0.3, 0.3, 1.0, 40.0).is_err()); // wp == ws
+        assert!(cheb1ord(0.2, 0.4, 40.0, 1.0).is_err()); // gpass >= gstop
+        assert!(cheb1ord(-0.1, 0.4, 1.0, 40.0).is_err()); // wp <= 0
+        assert!(cheb1ord(0.2, 1.5, 1.0, 40.0).is_err()); // ws >= 1
     }
 
     #[test]
     fn buttord_known_design_returns_order_3() {
-        // Spec: passband 0..1 rad/s, stopband 2 rad/s+, 1 dB ripple, 40 dB stop.
-        // Closed form: 10^(40/10)-1 = 9999, 10^(1/10)-1 ≈ 0.2589, ratio
-        // log10(2) ≈ 0.301. order = ceil(log10(9999/0.2589) / (2·0.301))
-        //                        = ceil(4.587 / 0.602) = ceil(7.62) = 8.
-        let (n, wn) = buttord(1.0, 2.0, 1.0, 40.0).expect("buttord");
-        assert_eq!(n, 8);
-        assert!((wn - 1.0881194736627366).abs() < 1e-12);
+        // scipy.signal.buttord(0.2, 0.4, 1, 40) (digital) -> (7, 0.21877...).
+        let (n, wn) = buttord(0.2, 0.4, 1.0, 40.0).expect("buttord");
+        assert_eq!(n, 7);
+        assert!((wn - 0.21877085586541928).abs() < 1e-12);
     }
 
     #[test]
-    fn buttord_scipy_analog_lowpass_wn_regression_cases() {
-        // Values generated by scipy.signal.buttord(..., analog=True).
+    fn buttord_scipy_digital_wn_regression_cases() {
+        // scipy.signal.buttord(wp, ws, gpass, gstop) (digital default); last
+        // case is highpass (wp > ws).
         for (wp, ws, gpass, gstop, expected_n, expected_wn) in [
-            (1.0_f64, 2.0, 1.0, 40.0, 8_u32, 1.0881194736627366),
-            (1.0, 1.5, 0.5, 60.0, 20, 1.0539969691259425),
-            (1.0, 3.0, 2.0, 80.0, 9, 1.0302442296515495),
-            (0.2, 0.3, 1.0, 40.0, 14, 0.20988820962077465),
+            (0.2_f64, 0.4, 1.0, 40.0, 7_u32, 0.21877085586541928),
+            (0.1, 0.3, 0.5, 60.0, 7, 0.11588145938333685),
+            (0.2, 0.5, 2.0, 80.0, 9, 0.2056421873735781),
+            (0.4, 0.2, 1.0, 40.0, 7, 0.3712527006740066),
         ] {
             let (n, wn) = buttord(wp, ws, gpass, gstop).expect("buttord");
             assert_eq!(n, expected_n);
@@ -19664,27 +19566,25 @@ mod tests {
     fn buttord_metamorphic_higher_stop_loss_increases_order() {
         // For fixed passband spec, raising the stopband attenuation
         // requirement can only increase the required order.
-        let (n_30, _) = buttord(1.0, 2.0, 1.0, 30.0).unwrap();
-        let (n_60, _) = buttord(1.0, 2.0, 1.0, 60.0).unwrap();
-        let (n_90, _) = buttord(1.0, 2.0, 1.0, 90.0).unwrap();
+        let (n_30, _) = buttord(0.2, 0.4, 1.0, 30.0).unwrap();
+        let (n_60, _) = buttord(0.2, 0.4, 1.0, 60.0).unwrap();
+        let (n_90, _) = buttord(0.2, 0.4, 1.0, 90.0).unwrap();
         assert!(n_30 <= n_60);
         assert!(n_60 <= n_90);
     }
 
     #[test]
     fn buttord_rejects_invalid_specs() {
-        // Just verify each invalid configuration returns Err — the error
-        // variant routing through classify_invalid_argument depends on
-        // string matching that's brittle to test directly.
-        assert!(buttord(2.0, 1.0, 1.0, 40.0).is_err(), "wp>=ws should fail");
+        assert!(buttord(0.3, 0.3, 1.0, 40.0).is_err(), "wp==ws should fail");
         assert!(
-            buttord(1.0, 2.0, 40.0, 1.0).is_err(),
+            buttord(0.2, 0.4, 40.0, 1.0).is_err(),
             "gpass>=gstop should fail"
         );
         assert!(
-            buttord(-1.0, 2.0, 1.0, 40.0).is_err(),
+            buttord(-0.1, 0.4, 1.0, 40.0).is_err(),
             "negative wp should fail"
         );
+        assert!(buttord(0.2, 1.5, 1.0, 40.0).is_err(), "ws>=1 should fail");
     }
 
     #[test]
