@@ -4195,7 +4195,11 @@ fn bessel_complex_scalar(
         BesselKind::Iv => Ok(complex_iv_scalar(order, z)),
         BesselKind::Kv => complex_kv_scalar(order, z, mode),
         BesselKind::Ive => Ok(complex_iv_scalar(order, z) * (-z.re.abs()).exp()),
-        BesselKind::Kve => complex_kv_scalar(order, z, mode).map(|k| k * z.re.exp()),
+        // kve(v, z) = kv(v, z) · exp(z) — the FULL complex exponential. Using exp(Re z)
+        // keeps the magnitude but drops the exp(i·Im z) phase rotation, diverging from scipy
+        // for non-real z (frankenscipy-2bmxw). ive below genuinely uses a real scale
+        // exp(-|Re z|), and jve/yve use exp(-|Im z|), matching scipy's distinct definitions.
+        BesselKind::Kve => complex_kv_scalar(order, z, mode).map(|k| k * z.exp()),
     }
 }
 
@@ -4652,6 +4656,38 @@ mod tests {
             let k = complex_kv_scalar(v, z, RuntimeMode::Strict).unwrap();
             let err = (k.re - kr).hypot(k.im - ki) / kr.hypot(ki);
             assert!(err <= 1e-7, "kv({v},{re}{im:+}i) = {k:?}, scipy ({kr},{ki}), rel {err:e}");
+        }
+    }
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
+    fn complex_kve_matches_scipy() {
+        // frankenscipy-2bmxw: exponentially-scaled K_v for complex z is
+        // kve(v,z) = kv(v,z)·exp(z) — the FULL complex exponential. A prior
+        // bug scaled by exp(Re z), keeping the magnitude but dropping the
+        // exp(i·Im z) phase rotation, which diverged from scipy for non-real z.
+        // Exercised through the public `kve` dispatcher (real order, complex z).
+        // (v, re, im, kve.re, kve.im) — scipy 1.17.1.
+        let cases: [(f64, f64, f64, f64, f64); 6] = [
+            (0.5, 3.0, -2.5, 5.9634253363884471e-01, 2.1590577564981434e-01),
+            (2.0, -1.5, 2.0, -1.6263736917360888e-01, -5.1718320252846783e-01),
+            (0.0, 0.2, 4.0, 4.6416194753566503e-01, -4.1575423635924635e-01),
+            (1.0, 5.0, 0.0, 6.0027385878831252e-01, 0.0000000000000000e+00),
+            (3.5, 0.0, 2.0, -2.4282961410487816e+00, 1.0183177365688443e+00),
+            (0.5, -4.0, -1.0, 7.5415294229784310e-02, 6.1260640081557272e-01),
+        ];
+        for (v, re, im, kr, ki) in cases {
+            let out = kve(
+                &SpecialTensor::RealScalar(v),
+                &SpecialTensor::ComplexScalar(Complex64::new(re, im)),
+                RuntimeMode::Strict,
+            )
+            .unwrap();
+            let SpecialTensor::ComplexScalar(k) = out else {
+                panic!("kve complex scalar input must yield a complex scalar, got {out:?}");
+            };
+            let err = (k.re - kr).hypot(k.im - ki) / kr.hypot(ki);
+            assert!(err <= 1e-9, "kve({v},{re}{im:+}i) = {k:?}, scipy ({kr},{ki}), rel {err:e}");
         }
     }
 
