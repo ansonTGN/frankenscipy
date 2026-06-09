@@ -843,12 +843,35 @@ pub fn simpson(y: &[f64], x: &[f64]) -> Result<CompositeQuadResult, IntegrateVal
         let integral = simpson_nonuniform_odd(y, x);
         Ok(CompositeQuadResult { integral })
     } else {
-        // Even number of points = odd number of intervals.
-        // Apply Simpson's 1/3 on first n-1 points, trapezoid on last panel.
+        // Even number of points = odd number of intervals. Apply Simpson's 1/3
+        // on the first n-1 points, then correct the final interval with the
+        // Cartwright parabolic formula (a quadratic through the last three
+        // points), exactly as scipy.integrate.simpson — NOT a plain trapezoid,
+        // which left the result off by up to ~3e-3.
         let integral_simp = simpson_nonuniform_odd(&y[..n - 1], &x[..n - 1]);
-        let last_trap = 0.5 * (x[n - 1] - x[n - 2]) * (y[n - 2] + y[n - 1]);
+        let h0 = x[n - 2] - x[n - 3];
+        let h1 = x[n - 1] - x[n - 2];
+        let den_a = 6.0 * (h1 + h0);
+        let den_b = 6.0 * h0;
+        let den_e = 6.0 * h0 * (h0 + h1);
+        let alpha = if den_a != 0.0 {
+            (2.0 * h1 * h1 + 3.0 * h0 * h1) / den_a
+        } else {
+            0.0
+        };
+        let beta = if den_b != 0.0 {
+            (h1 * h1 + 3.0 * h0 * h1) / den_b
+        } else {
+            0.0
+        };
+        let eta = if den_e != 0.0 {
+            h1 * h1 * h1 / den_e
+        } else {
+            0.0
+        };
+        let last = alpha * y[n - 1] + beta * y[n - 2] - eta * y[n - 3];
         Ok(CompositeQuadResult {
-            integral: integral_simp + last_trap,
+            integral: integral_simp + last,
         })
     }
 }
@@ -926,8 +949,10 @@ pub fn simpson_uniform(
             integral += 2.0 * y[i];
         }
         integral *= dx / 3.0;
-        // Add last trapezoid panel
-        integral += 0.5 * dx * (y[n - 2] + y[n - 1]);
+        // Cartwright parabolic correction for the final interval (uniform
+        // spacing h0=h1=dx reduces α,β,η to dx/12·(5,8,−1)), matching
+        // scipy.integrate.simpson rather than a plain trapezoid.
+        integral += dx / 12.0 * (5.0 * y[n - 1] + 8.0 * y[n - 2] - y[n - 3]);
         Ok(CompositeQuadResult { integral })
     }
 }
@@ -3843,8 +3868,37 @@ mod tests {
     }
 
     #[test]
+    fn simpson_even_points_matches_scipy_cartwright() {
+        // Regression: even point count (odd intervals) must use scipy's
+        // Cartwright parabolic correction on the final interval, not a
+        // trapezoid. Golden from scipy.integrate.simpson(y, x=x) with
+        // x[i]=0.37 i, y=sin(x)+0.5 x²+1.
+        let cases: &[(usize, f64)] = &[
+            (4, 1.892_759_045_295_215_7),
+            (6, 4.180_925_279_702_298_8),
+            (8, 7.338_022_266_672_648),
+            (10, 1.146_762_120_770_018e1),
+        ];
+        for &(npts, golden) in cases {
+            let x: Vec<f64> = (0..npts).map(|i| i as f64 * 0.37).collect();
+            let y: Vec<f64> = x.iter().map(|&t| t.sin() + 0.5 * t * t + 1.0).collect();
+            let v = simpson(&y, &x).expect("simpson").integral;
+            assert!(
+                (v - golden).abs() < 1e-12,
+                "simpson n={npts} = {v} vs scipy {golden}"
+            );
+            // uniform path must match too (here x is uniform with dx=0.37).
+            let vu = simpson_uniform(&y, 0.37).expect("simpson_uniform").integral;
+            assert!(
+                (vu - golden).abs() < 1e-12,
+                "simpson_uniform n={npts} = {vu} vs scipy {golden}"
+            );
+        }
+    }
+
+    #[test]
     fn simpson_even_points() {
-        // Even number of points — uses trapezoid correction on last panel
+        // Even number of points — Cartwright parabolic correction on last panel
         let n = 100;
         let x: Vec<f64> = (0..n)
             .map(|i| std::f64::consts::PI * i as f64 / (n - 1) as f64)
