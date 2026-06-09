@@ -1,0 +1,8 @@
+PUBLIC_SQUARE_PINV_ROUTE_PERF_BEGIN
+shape=512x512
+reference_pinv_ms=1032.680740
+routed_pinv_ms=51.420859
+pinv_speedup=20.082915
+pinv_rank=512
+pinv_max_abs_diff=1.54659271500712237e-14
+PUBLIC_SQUARE_PINV_ROUTE_PERF_END

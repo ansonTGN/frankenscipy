@@ -2817,6 +2817,51 @@ pub fn pinv_with_casp(
         });
     }
 
+    if options.mode == RuntimeMode::Strict
+        && let Some(fast) = pinv_full_rank_square_lu(a, &matrix, atol, rtol)
+    {
+        let (_, posterior, expected_losses, _) = portfolio.select_action(fast.rcond_estimate, None);
+        let action = SolverAction::SVDFallback;
+
+        let certificate = SolveCertificate {
+            action,
+            matrix_shape: (rows, cols),
+            rcond_estimate: fast.rcond_estimate,
+            structural_evidence: StructuralEvidence::General,
+            posterior: posterior.to_vec(),
+            expected_losses: expected_losses.to_vec(),
+            chosen_expected_loss: expected_losses[action.index()],
+            fallback_active: false,
+        };
+
+        emit_trace(LinalgTrace {
+            operation: "pinv_with_casp",
+            matrix_size: (rows, cols),
+            mode: options.mode,
+            rcond: Some(fast.rcond_estimate),
+            warning: None,
+            error: None,
+        });
+
+        portfolio.record_evidence(SolverEvidenceEntry {
+            component: "pinv_with_casp",
+            matrix_shape: (rows, cols),
+            rcond_estimate: fast.rcond_estimate,
+            chosen_action: action,
+            posterior: posterior.to_vec(),
+            expected_losses: expected_losses.to_vec(),
+            chosen_expected_loss: expected_losses[action.index()],
+            fallback_active: false,
+            backward_error: None,
+        });
+
+        return Ok(PinvResult {
+            pseudo_inverse: fast.pseudo_inverse,
+            rank: fast.rank,
+            certificate: Some(certificate),
+        });
+    }
+
     if let Some(thin_svd) = public_tall_thin_svd_candidate(&matrix)
         && let Some((max_s, min_s)) = public_bidiag_svd_stats(&thin_svd.singular_values)
     {
@@ -8104,6 +8149,89 @@ fn pinv_full_rank_tall_cholesky_with_min_cols(
         pseudo_inverse: rows_from_dmatrix(&pinv),
         rank: cols,
         rcond_estimate: (min_diag / max_diag).sqrt(),
+    })
+}
+
+/// Column 1-norm (max absolute column sum) of a dense matrix.
+fn dmatrix_norm1(m: &DMatrix<f64>) -> f64 {
+    let mut max_col_sum = 0.0_f64;
+    for col in 0..m.ncols() {
+        let mut col_sum = 0.0_f64;
+        for row in 0..m.nrows() {
+            col_sum += m[(row, col)].abs();
+        }
+        max_col_sum = max_col_sum.max(col_sum);
+    }
+    max_col_sum
+}
+
+/// Solve-only pseudo-inverse route for a full-rank **square** matrix.
+///
+/// For a full-rank square matrix the Moore-Penrose pseudo-inverse equals the
+/// ordinary inverse, which the in-house LU (`inv_blocked` for large `n`,
+/// nalgebra LU otherwise) computes far more cheaply than the full SVD the
+/// generic `pinv` path would otherwise run (`public_tall_thin_svd_candidate`
+/// is tall-only, so square matrices never get a fast route). Gated like the
+/// tall Cholesky route — only the default-threshold (`atol == 0`,
+/// `rtol <= default`) case, `n >= FULL_RANK_TALL_PINV_MIN_COLS` — and accepts
+/// only when the computed inverse satisfies `A·X ≈ I` to the same right-inverse
+/// tolerance. Any singular/ill-conditioned/rank-deficient matrix fails that
+/// gate and returns `None`, falling back to the rank-revealing SVD route.
+fn pinv_full_rank_square_lu(
+    a: &[Vec<f64>],
+    matrix: &DMatrix<f64>,
+    atol: f64,
+    rtol: f64,
+) -> Option<FullRankTallPinvResult> {
+    let n = matrix.nrows();
+    let default_rtol = (n as f64) * f64::EPSILON;
+    if matrix.ncols() != n
+        || n < FULL_RANK_TALL_PINV_MIN_COLS
+        || atol != 0.0
+        || rtol > default_rtol
+        || matrix.iter().any(|value| !value.is_finite())
+    {
+        return None;
+    }
+
+    // pinv == inv for full-rank square: use the in-house LU inverse.
+    let inverse = if n >= BLOCKED_LU_MIN_DIM {
+        dmatrix_from_rows(&inv_blocked(a)?).ok()?
+    } else {
+        matrix.clone().lu().try_inverse()?
+    };
+    if inverse.iter().any(|value| !value.is_finite()) {
+        return None;
+    }
+
+    // Verify A·X ≈ I — full-rank + well-conditioned certificate. A singular or
+    // ill-conditioned matrix produces a large residual and is rejected.
+    let right_inverse = matrix * &inverse;
+    let mut max_error = 0.0_f64;
+    for row in 0..n {
+        for col in 0..n {
+            let target = if row == col { 1.0 } else { 0.0 };
+            max_error = max_error.max((right_inverse[(row, col)] - target).abs());
+        }
+    }
+    let tolerance = FULL_RANK_TALL_PINV_RIGHT_INVERSE_REL_TOL * (n as f64).sqrt();
+    if max_error > tolerance {
+        return None;
+    }
+
+    // Cheap 1-norm condition estimate: rcond ≈ 1 / (‖A‖₁ · ‖A⁻¹‖₁).
+    let norm_a = dmatrix_norm1(matrix);
+    let norm_inv = dmatrix_norm1(&inverse);
+    let rcond_estimate = if norm_a > 0.0 && norm_inv > 0.0 && (norm_a * norm_inv).is_finite() {
+        1.0 / (norm_a * norm_inv)
+    } else {
+        0.0
+    };
+
+    Some(FullRankTallPinvResult {
+        pseudo_inverse: rows_from_dmatrix(&inverse),
+        rank: n,
+        rcond_estimate,
     })
 }
 
@@ -13471,6 +13599,32 @@ mod tests {
     }
 
     #[test]
+    fn pinv_full_rank_square_lu_route_matches_svd_and_inv() {
+        // n >= FULL_RANK_TALL_PINV_MIN_COLS so the LU pinv route fires.
+        let original = bidiag_deterministic_matrix(128, 128);
+        let matrix_rows = rows_from_dmatrix(&original);
+
+        // Fast route is selected and full-rank.
+        let routed = pinv(&matrix_rows, PinvOptions::default()).expect("routed square pinv");
+        assert_eq!(routed.rank, 128);
+
+        // Direct LU route output equals the SVD pseudo-inverse to tolerance.
+        let svd = safe_svd(original.clone(), true, true).expect("svd");
+        let max_s = svd.singular_values.iter().copied().fold(0.0_f64, f64::max);
+        let svd_pinv = pseudo_inverse_from_svd(&svd, f64::EPSILON * max_s).expect("svd pinv");
+        let routed_matrix = dmatrix_from_rows(&routed.pseudo_inverse).expect("routed matrix");
+        assert!(max_abs_dmatrix_diff(&routed_matrix, &svd_pinv) <= 1e-9);
+
+        // And equals the ordinary inverse (pinv == inv for full-rank square).
+        let inv_result = inv(&matrix_rows, InvOptions::default()).expect("inv");
+        assert_close_matrix(&routed.pseudo_inverse, &inv_result.inverse, 1e-9, 1e-9);
+
+        // Moore-Penrose: A · A⁺ · A == A.
+        let reconstructed = &original * &routed_matrix * &original;
+        assert!(max_abs_dmatrix_diff(&reconstructed, &original) <= 1e-8 * max_s.max(1.0));
+    }
+
+    #[test]
     fn pinv_full_rank_rectangular_golden_payload() {
         let rows = 64;
         let cols = 32;
@@ -15865,6 +16019,49 @@ mod tests {
         assert!(pinv_max_abs_diff <= 1e-7);
         assert!(previous_route_pinv_max_abs_diff <= 1e-7);
         assert!(routed_vs_previous_route_pinv_max_abs_diff <= 1e-7);
+    }
+
+    #[test]
+    #[ignore = "perf probe: run with rch and --release for public full-rank square pinv routing"]
+    fn public_square_pinv_route_perf_probe() {
+        let original = bidiag_deterministic_matrix(512, 512);
+        let n = original.nrows();
+        let matrix_rows = rows_from_dmatrix(&original);
+
+        let reference_start = std::time::Instant::now();
+        let reference_svd =
+            safe_svd(std::hint::black_box(original.clone()), true, true).expect("reference SVD");
+        let reference_max_s = reference_svd
+            .singular_values
+            .iter()
+            .copied()
+            .fold(0.0_f64, f64::max);
+        let reference_threshold = public_bidiag_default_threshold(n, n, reference_max_s);
+        let reference_pinv =
+            pseudo_inverse_from_svd(&reference_svd, reference_threshold).expect("reference pinv");
+        let reference_ms = reference_start.elapsed().as_secs_f64() * 1e3;
+
+        let routed_start = std::time::Instant::now();
+        let routed =
+            pinv(std::hint::black_box(&matrix_rows), PinvOptions::default()).expect("routed pinv");
+        let routed_ms = routed_start.elapsed().as_secs_f64() * 1e3;
+
+        let pinv_max_abs_diff = max_abs_dmatrix_diff(
+            &dmatrix_from_rows(&routed.pseudo_inverse).expect("routed pinv matrix"),
+            &reference_pinv,
+        );
+
+        println!("PUBLIC_SQUARE_PINV_ROUTE_PERF_BEGIN");
+        println!("shape={n}x{n}");
+        println!("reference_pinv_ms={reference_ms:.6}");
+        println!("routed_pinv_ms={routed_ms:.6}");
+        println!("pinv_speedup={:.6}", reference_ms / routed_ms);
+        println!("pinv_rank={}", routed.rank);
+        println!("pinv_max_abs_diff={pinv_max_abs_diff:.17e}");
+        println!("PUBLIC_SQUARE_PINV_ROUTE_PERF_END");
+
+        assert_eq!(routed.rank, n);
+        assert!(pinv_max_abs_diff <= 1e-7);
     }
 
     #[test]
