@@ -6648,9 +6648,20 @@ impl DiscreteDistribution for Skellam {
     }
 
     fn cdf(&self, k: u64) -> f64 {
+        // Skellam's support is all of ℤ, so P(X ≤ k) must include the negative
+        // tail. The old `pmf(0..=k)` sum returned only P(0 ≤ X ≤ k) — low by
+        // P(X < 0), up to ~0.88. Sum pmf_signed from far below the mean up to k.
+        let mean = self.mu1 - self.mu2;
+        let std = (self.mu1 + self.mu2).sqrt();
+        let lo = (mean - 12.0 * std - 40.0).floor() as i64;
+        let hi_cap = (mean + 12.0 * std + 40.0).ceil() as i64;
+        let k_i = (k.min(i64::MAX as u64) as i64).min(hi_cap);
+        if k_i < lo {
+            return 0.0;
+        }
         let mut sum = 0.0;
-        for i in 0..=k {
-            sum += self.pmf(i);
+        for j in lo..=k_i {
+            sum += self.pmf_signed(j);
         }
         sum.min(1.0)
     }
@@ -64080,6 +64091,28 @@ mod tests {
             assert!(
                 (h - golden).abs() < 1e-7,
                 "poisson({mu}).entropy() = {h}, scipy {golden}"
+            );
+        }
+    }
+
+    #[test]
+    fn skellam_cdf_includes_negative_support() {
+        // Regression: Skellam.cdf summed only pmf(0..=k) → P(0≤X≤k), missing the
+        // negative-support mass (scipy.skellam.cdf(k) = P(X≤k)). Golden values
+        // from scipy.stats.skellam(mu1, mu2).cdf(k).
+        let cases: &[(f64, f64, u64, f64)] = &[
+            (3.0, 2.0, 0, 0.414_710_59),
+            (3.0, 2.0, 2, 0.757_805_09),
+            (1.0, 4.0, 0, 0.952_770_30),
+            (1.0, 4.0, 2, 0.996_467_78),
+            (5.0, 5.0, 5, 0.959_557_39),
+            (0.7, 0.3, 0, 0.591_276_72),
+        ];
+        for &(mu1, mu2, k, golden) in cases {
+            let c = Skellam::new(mu1, mu2).cdf(k);
+            assert!(
+                (c - golden).abs() < 1e-7,
+                "skellam({mu1},{mu2}).cdf({k}) = {c} vs scipy {golden}"
             );
         }
     }
