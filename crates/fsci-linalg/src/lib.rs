@@ -4286,8 +4286,31 @@ pub fn eigh(a: &[Vec<f64>], options: DecompOptions) -> Result<EighResult, Linalg
 /// Returns real eigenvalues in ascending order.
 /// Matches `scipy.linalg.eigvalsh(a)`.
 pub fn eigvalsh(a: &[Vec<f64>], options: DecompOptions) -> Result<Vec<f64>, LinalgError> {
-    let result = eigh(a, options)?;
-    Ok(result.eigenvalues)
+    let (rows, cols) = matrix_shape(a)?;
+    if rows != cols {
+        return Err(LinalgError::ExpectedSquareMatrix);
+    }
+    hardened_dimension_check(options.mode, rows, cols)?;
+    validate_finite_matrix(a, options.mode, options.check_finite)?;
+
+    if rows == 0 {
+        return Ok(Vec::new());
+    }
+
+    let matrix = dmatrix_from_rows(a)?;
+    let mut eigenvalues: Vec<f64> = matrix.symmetric_eigenvalues().iter().copied().collect();
+    eigenvalues.sort_by(|left, right| left.total_cmp(right));
+
+    emit_trace(LinalgTrace {
+        operation: "eigh",
+        matrix_size: (rows, cols),
+        mode: options.mode,
+        rcond: None,
+        warning: None,
+        error: None,
+    });
+
+    Ok(eigenvalues)
 }
 
 /// Eigenvalues and eigenvectors of a symmetric banded matrix.
@@ -17181,6 +17204,74 @@ mod tests {
         let full_result = eigh(&a, DecompOptions::default()).expect("eigh works");
         let vals = eigvalsh(&a, DecompOptions::default()).expect("eigvalsh works");
         assert_close_slice(&vals, &full_result.eigenvalues, 1e-14, 1e-14);
+    }
+
+    fn make_dense_symmetric_eig_probe_matrix(n: usize) -> Vec<Vec<f64>> {
+        let mut a = vec![vec![0.0; n]; n];
+        for i in 0..n {
+            for j in 0..=i {
+                let value = if i == j {
+                    (n as f64) * 3.0 + (i as f64) * 0.01
+                } else {
+                    1.0 / ((i - j + 1) as f64)
+                };
+                a[i][j] = value;
+                a[j][i] = value;
+            }
+        }
+        a
+    }
+
+    fn eig_values_digest(values: &[f64]) -> u64 {
+        const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+        const FNV_PRIME: u64 = 0x100000001b3;
+        let mut digest = FNV_OFFSET;
+        for value in values {
+            digest ^= value.to_bits();
+            digest = digest.wrapping_mul(FNV_PRIME);
+        }
+        digest
+    }
+
+    fn public_eigvalsh_values_only_probe_shape(n: usize) {
+        let rows = make_dense_symmetric_eig_probe_matrix(n);
+
+        let started_at = std::time::Instant::now();
+        let values = eigvalsh(std::hint::black_box(&rows), DecompOptions::default())
+            .expect("public eigvalsh");
+        let eigvalsh_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
+
+        let started_at = std::time::Instant::now();
+        let full =
+            eigh(std::hint::black_box(&rows), DecompOptions::default()).expect("public eigh");
+        let eigh_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
+
+        let max_abs_diff = values
+            .iter()
+            .zip(full.eigenvalues.iter())
+            .map(|(left, right)| (left - right).abs())
+            .fold(0.0_f64, f64::max);
+        assert!(
+            max_abs_diff <= 1e-10 * (n as f64).max(1.0),
+            "eigvalsh/eigh eigenvalue drift {max_abs_diff:.17e} for n={n}"
+        );
+
+        println!("PUBLIC_EIGVALSH_VALUES_ONLY_PERF_BEGIN");
+        println!("shape={n}x{n}");
+        println!("eigvalsh_ms={eigvalsh_ms:.6}");
+        println!("eigh_ms={eigh_ms:.6}");
+        println!("speedup_vs_full_eigh={:.6}", eigh_ms / eigvalsh_ms);
+        println!("max_abs_diff={max_abs_diff:.17e}");
+        println!("values_digest={:#018x}", eig_values_digest(&values));
+        println!("PUBLIC_EIGVALSH_VALUES_ONLY_PERF_END");
+    }
+
+    #[test]
+    #[ignore = "perf/proof probe: run with rch and --release for public eigvalsh values-only route"]
+    fn public_eigvalsh_values_only_perf_probe() {
+        for n in [256usize, 512] {
+            public_eigvalsh_values_only_probe_shape(n);
+        }
     }
 
     #[test]

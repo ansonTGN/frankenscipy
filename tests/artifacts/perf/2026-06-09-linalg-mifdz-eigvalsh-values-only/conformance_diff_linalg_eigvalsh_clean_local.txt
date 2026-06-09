@@ -1,0 +1,142 @@
+   Compiling num-traits v0.2.19
+   Compiling rustix v1.1.4
+   Compiling unicode-segmentation v1.13.2
+   Compiling signal-hook v0.3.18
+   Compiling ahash v0.8.12
+   Compiling litrs v1.0.0
+   Compiling nalgebra-macros v0.3.0
+   Compiling web-time v1.1.0
+   Compiling unicode-width v0.2.2
+   Compiling getrandom v0.4.2
+   Compiling bumpalo v3.20.2
+   Compiling hashbrown v0.16.1
+   Compiling str_indices v0.4.4
+   Compiling mio v1.2.0
+   Compiling chacha20 v0.10.0
+   Compiling ftui-i18n v0.3.1
+   Compiling winnow v1.0.2
+   Compiling serde_spanned v1.1.1
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling itertools v0.13.0
+   Compiling toml_writer v1.1.1+spec-1.1.0
+   Compiling fsci-conformance v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-conformance)
+   Compiling fsci-odr v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-odr)
+   Compiling fsci-constants v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-constants)
+   Compiling fsci-runtime v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-runtime)
+   Compiling rayon v1.12.0
+   Compiling ropey v1.6.1
+   Compiling document-features v0.2.12
+   Compiling convert_case v0.10.0
+   Compiling unicode-display-width v0.3.0
+   Compiling rand v0.10.1
+   Compiling toml_parser v1.1.2+spec-1.1.0
+   Compiling signal-hook-mio v0.2.5
+   Compiling derive_more-impl v2.1.1
+   Compiling lru v0.16.4
+   Compiling approx v0.5.1
+   Compiling num-complex v0.4.6
+   Compiling num-integer v0.1.46
+   Compiling rmp v0.8.15
+   Compiling toml v1.1.2+spec-1.1.0
+   Compiling num-rational v0.4.2
+   Compiling rmp-serde v1.3.1
+   Compiling derive_more v2.1.1
+   Compiling fsci-fft v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-fft)
+   Compiling fsci-opt v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-opt)
+   Compiling fsci-io v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-io)
+   Compiling fsci-cluster v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-cluster)
+   Compiling simba v0.9.1
+   Compiling prost-derive v0.14.4
+   Compiling sysinfo v0.33.1
+   Compiling prost v0.14.4
+   Compiling crossterm v0.29.0
+   Compiling tempfile v3.27.0
+   Compiling polling v3.11.0
+   Compiling asupersync v0.3.4
+   Compiling rusty-fork v0.3.1
+   Compiling proptest v1.11.0
+   Compiling ftui-core v0.3.1
+   Compiling ftui-render v0.3.1
+   Compiling ftui-layout v0.3.1
+   Compiling ftui-a11y v0.3.1
+   Compiling nalgebra v0.34.2
+   Compiling ftui-style v0.3.1
+   Compiling ftui-backend v0.3.1
+   Compiling ftui-text v0.3.1
+   Compiling ftui-runtime v0.3.1
+   Compiling fsci-linalg v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-linalg)
+   Compiling fsci-arrayapi v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-arrayapi)
+   Compiling fsci-integrate v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-integrate)
+   Compiling ftui-widgets v0.3.1
+   Compiling fsci-sparse v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-sparse)
+   Compiling fsci-special v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-special)
+   Compiling fsci-signal v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-signal)
+warning: unused attribute
+    --> crates/fsci-special/src/gamma.rs:1228:1
+     |
+1228 | #[must_use]
+     | ^^^^^^^^^^^ help: remove this attribute
+     |
+note: attribute also specified here
+    --> crates/fsci-special/src/gamma.rs:1213:1
+     |
+1213 | #[must_use]
+     | ^^^^^^^^^^^
+     = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+     = note: `#[warn(unused_attributes)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `dev` is never read
+    --> crates/fsci-signal/src/lib.rs:8187:19
+     |
+8187 |     let mut dev = 0.0_f64;
+     |                   ^^^^^^^ this value is reassigned later and never used
+...
+8215 |         dev = dnum / dden;
+     |         ----------------- `dev` is overwritten here before the previous value is read
+     |
+     = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `dev` is never read
+    --> crates/fsci-signal/src/lib.rs:8440:19
+     |
+8440 |     let mut dev = 0.0_f64;
+     |                   ^^^^^^^ this value is reassigned later and never used
+...
+8466 |         dev = dnum / dden;
+     |         ----------------- `dev` is overwritten here before the previous value is read
+
+warning: value assigned to `dev` is never read
+    --> crates/fsci-signal/src/lib.rs:8724:19
+     |
+8724 |     let mut dev = 0.0_f64;
+     |                   ^^^^^^^ this value is reassigned later and never used
+...
+8750 |         dev = dnum / dden;
+     |         ----------------- `dev` is overwritten here before the previous value is read
+
+   Compiling fsci-spatial v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-spatial)
+   Compiling ftui v0.3.1
+   Compiling fsci-interpolate v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-interpolate)
+warning: `fsci-signal` (lib) generated 3 warnings
+   Compiling fsci-ndimage v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-ndimage)
+   Compiling fsci-stats v0.1.0 (/data/projects/.worktrees/frankenscipy-eigvalsh-blackthrush-20260609/crates/fsci-stats)
+warning: value assigned to `n_segments` is never read
+     --> crates/fsci-stats/src/lib.rs:38147:26
+      |
+38147 |     let mut n_segments = 0;
+      |                          ^ this value is reassigned later and never used
+...
+38182 |     n_segments = segments.len();
+      |     --------------------------- `n_segments` is overwritten here before the previous value is read
+      |
+      = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: `fsci-special` (lib) generated 1 warning (run `cargo fix --lib -p fsci-special` to apply 1 suggestion)
+warning: `fsci-stats` (lib) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 59s
+     Running tests/diff_linalg_eigvalsh.rs (/data/tmp/cargo-target/debug/deps/diff_linalg_eigvalsh-285785c4b1cdbe92)
+
+running 1 test
+test diff_linalg_eigvalsh ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
