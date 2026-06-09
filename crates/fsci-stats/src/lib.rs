@@ -7854,9 +7854,10 @@ impl DiscreteDistribution for Hypergeometric {
 
 /// Negative hypergeometric distribution.
 ///
-/// Matches `scipy.stats.nhypergeom(M, n, r)`.
-/// PMF: P(k) = C(k+r-1, k) * C(M-r-k, n-r) / C(M, n)
-/// Distribution of failures before r successes in sampling without replacement.
+/// Matches `scipy.stats.nhypergeom(M, n, r)`: a population of `M` objects with
+/// `n` of Type I; sample without replacement until `r` Type I are drawn; the
+/// variable is the number of Type II drawn before then. Support is `0..=n`.
+/// PMF: P(k) = C(k+r-1, k) * C(M-r-k, n-k) / C(M, n)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NegHypergeometric {
     pub big_m: u64,
@@ -7868,7 +7869,11 @@ impl NegHypergeometric {
     #[must_use]
     pub fn new(big_m: u64, n: u64, r: u64) -> Self {
         assert!(n <= big_m, "n must be <= M, got n={n}, M={big_m}");
-        assert!(r <= n, "r must be <= n, got r={r}, n={n}");
+        assert!(
+            r <= big_m - n,
+            "r must be <= M - n, got r={r}, M-n={}",
+            big_m - n
+        );
         Self { big_m, n, r }
     }
 
@@ -7888,12 +7893,12 @@ impl DiscreteDistribution for NegHypergeometric {
         if r == 0 {
             return if k == 0 { 1.0 } else { 0.0 };
         }
-        let max_k = m - n;
+        let max_k = n;
         if k > max_k {
             return 0.0;
         }
         let ln_num1 = Self::ln_comb(k + r - 1, k);
-        let ln_num2 = Self::ln_comb(m - r - k, n - r);
+        let ln_num2 = Self::ln_comb(m - r - k, n - k);
         let ln_den = Self::ln_comb(m, n);
         (ln_num1 + ln_num2 - ln_den).exp()
     }
@@ -7907,14 +7912,14 @@ impl DiscreteDistribution for NegHypergeometric {
         if r == 0 {
             return if k == 0 { 0.0 } else { f64::NEG_INFINITY };
         }
-        if k > m - n {
+        if k > n {
             return f64::NEG_INFINITY;
         }
-        Self::ln_comb(k + r - 1, k) + Self::ln_comb(m - r - k, n - r) - Self::ln_comb(m, n)
+        Self::ln_comb(k + r - 1, k) + Self::ln_comb(m - r - k, n - k) - Self::ln_comb(m, n)
     }
 
     fn cdf(&self, k: u64) -> f64 {
-        let max_k = self.big_m - self.n;
+        let max_k = self.n;
         let k = k.min(max_k);
         let mut sum = 0.0;
         for i in 0..=k {
@@ -7927,14 +7932,17 @@ impl DiscreteDistribution for NegHypergeometric {
         let m = self.big_m as f64;
         let n = self.n as f64;
         let r = self.r as f64;
-        r * (m - n) / (n + 1.0)
+        r * n / (m - n + 1.0)
     }
 
     fn var(&self) -> f64 {
+        // scipy.stats.nhypergeom variance:
+        // r·n·(M+1)·(M−n+1−r) / ((M−n+1)²·(M−n+2)).
         let m = self.big_m as f64;
         let n = self.n as f64;
         let r = self.r as f64;
-        r * (m - n) * (m + 1.0) * (n - r + 1.0) / ((n + 1.0) * (n + 1.0) * (n + 2.0))
+        let mn1 = m - n + 1.0;
+        r * n * (m + 1.0) * (mn1 - r) / (mn1 * mn1 * (mn1 + 1.0))
     }
 
     fn skewness(&self) -> f64 {
@@ -7950,7 +7958,7 @@ impl DiscreteDistribution for NegHypergeometric {
     }
 
     fn entropy(&self) -> f64 {
-        let max_k = self.big_m - self.n;
+        let max_k = self.n;
         let mut h = 0.0_f64;
         for k in 0..=max_k {
             let p = self.pmf(k);
@@ -41023,7 +41031,7 @@ mod tests {
         mid!(BetaNegativeBinomial::new(5, 2.0, 3.0), &[0, 3, 10, 25]);
         mid!(Skellam::new(3.0, 2.0), &[0, 2, 5, 9]);
         mid!(Hypergeometric::new(50, 20, 12), &[2, 5, 8, 11]);
-        mid!(NegHypergeometric::new(50, 20, 5), &[0, 5, 15, 29]);
+        mid!(NegHypergeometric::new(50, 20, 5), &[0, 5, 12, 19]);
         mid!(Zipfian::new(1.3, 100), &[1, 5, 50, 100]);
 
         // Skellam large μ1·μ2: pmf's I_k overflows → NaN; logpmf (log_ive) finite.
@@ -64031,6 +64039,35 @@ mod tests {
         assert!(mu > 0.0 && mu.is_finite());
         assert!(nhg.var() > 0.0);
         assert!((nhg.cdf(0) - nhg.pmf(0)).abs() < 1e-14);
+    }
+
+    #[test]
+    fn neg_hypergeometric_matches_scipy() {
+        // Regression: pmf used C(M-r-k, n-r) and support 0..=M-n, but
+        // scipy.stats.nhypergeom uses C(M-r-k, n-k) on 0..=n, with
+        // mean = r·n/(M-n+1) and var = r·n·(M+1)·(M-n+1-r)/((M-n+1)²(M-n+2)).
+        // Golden values from scipy 1.17.1 nhypergeom(20, 7, 3).
+        let d = NegHypergeometric::new(20, 7, 3);
+        assert!((d.mean() - 1.5).abs() < 1e-12, "mean = {}", d.mean());
+        assert!((d.var() - 1.65).abs() < 1e-12, "var = {}", d.var());
+        let pmf_ref: &[(u64, f64)] = &[
+            (0, 0.250_877_192_982_456_1),
+            (1, 0.309_907_120_743_034_1),
+            (2, 0.232_430_340_557_275_4),
+            (3, 0.129_127_966_976_264_16),
+            (5, 0.017_879_256_965_944_293),
+            (7, 0.000_464_396_284_829_721_8),
+        ];
+        for &(k, ref_) in pmf_ref {
+            assert!(
+                (d.pmf(k) - ref_).abs() <= 1e-12 + 1e-10 * ref_,
+                "pmf({k}) = {} vs scipy {ref_}",
+                d.pmf(k)
+            );
+        }
+        // support is 0..=n: pmf must vanish above n=7.
+        assert_eq!(d.pmf(8), 0.0);
+        assert!((d.cdf(7) - 1.0).abs() < 1e-12);
     }
 
     #[test]
