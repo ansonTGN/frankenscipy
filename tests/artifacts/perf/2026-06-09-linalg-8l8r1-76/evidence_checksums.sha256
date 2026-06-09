@@ -1,0 +1,6 @@
+51ff682c8b8a234545846aee01e575aea8e4bd994601862ef4b2005b9e333e7f  tests/artifacts/perf/2026-06-09-linalg-8l8r1-76/baseline_eigh_dense_criterion_rch.txt
+3c4ab0a8c1c3737357c389a9e84e9dbd7a34b2ed4dbbeec46d77f15a027a6f61  tests/artifacts/perf/2026-06-09-linalg-8l8r1-76/baseline_eigh_public_golden_rch.txt
+56c01fa0e88b07525727b26ef3de59efe189ec9645b3b53c7372a70cef3a9742  tests/artifacts/perf/2026-06-09-linalg-8l8r1-76/after_rank2_candidate_probe_rch.txt
+56c01fa0e88b07525727b26ef3de59efe189ec9645b3b53c7372a70cef3a9742  tests/artifacts/perf/2026-06-09-linalg-8l8r1-76/after_rank2_candidate_probe_unpinned_rch.txt
+88786c6d5bcf5d63f8f99f3de45d64f6c846943750778486a5f6814ace1ee899  tests/artifacts/perf/2026-06-09-linalg-8l8r1-76/after_rank2_candidate_probe_j1_rch.txt
+95a77962b0fdedf6770e8185613e561fac0260f8fed7081578ad1dedc12813d0  tests/artifacts/perf/2026-06-09-linalg-8l8r1-76/reject_rank2_tridiag_candidate.md
