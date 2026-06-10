@@ -90,6 +90,7 @@ fn make_matmul_matrix(rows: usize, cols: usize, seed: usize) -> Vec<Vec<f64>> {
         .collect()
 }
 
+#[allow(clippy::needless_range_loop)]
 fn make_symmetric_eigh_matrix(n: usize) -> Vec<Vec<f64>> {
     let mut a = vec![vec![0.0; n]; n];
     for i in 0..n {

@@ -8484,10 +8484,12 @@ fn golub_kahan_bidiagonal_reduction(
 fn dmatrix_from_rows(rows: &[Vec<f64>]) -> Result<DMatrix<f64>, LinalgError> {
     let (m, n) = matrix_shape(rows)?;
     let mut data = Vec::with_capacity(m * n);
-    for row in rows {
-        data.extend_from_slice(row);
+    for col in 0..n {
+        for row in rows {
+            data.push(row[col]);
+        }
     }
-    Ok(DMatrix::from_row_slice(m, n, &data))
+    Ok(DMatrix::from_vec(m, n, data))
 }
 
 fn dmatrix_from_rows_with_norm1(rows: &[Vec<f64>]) -> Result<(DMatrix<f64>, f64), LinalgError> {
@@ -17605,6 +17607,7 @@ mod tests {
         assert_close_slice(&vals, &full_result.eigenvalues, 1e-14, 1e-14);
     }
 
+    #[allow(clippy::needless_range_loop)]
     fn make_dense_symmetric_eig_probe_matrix(n: usize) -> Vec<Vec<f64>> {
         let mut a = vec![vec![0.0; n]; n];
         for i in 0..n {
