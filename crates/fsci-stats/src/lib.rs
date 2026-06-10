@@ -18172,14 +18172,28 @@ impl ContinuousDistribution for GenNorm {
     }
 
     fn cdf(&self, x: f64) -> f64 {
-        // Numerical integration via the trait default (bisection ppf inverse)
-        // For efficiency, use the incomplete gamma
+        // cdf = ½ + ½·P(1/β, x^β) for x ≥ 0; for x < 0 the symmetric form is
+        // ½ − ½·P(1/β, |x|^β) = ½·Q(1/β, |x|^β). The subtraction collapses to 0
+        // in the left tail (P → 1), so use the upper regularized gamma directly
+        // — keeps the value exact (matches scipy.gennorm.cdf to 0 ULP down to
+        // ~1e-155). frankenscipy-ew60b
         let b = self.beta;
-        let p = lower_regularized_gamma(1.0 / b, x.abs().powf(b));
         if x >= 0.0 {
-            0.5 + 0.5 * p
+            0.5 + 0.5 * lower_regularized_gamma(1.0 / b, x.powf(b))
         } else {
-            0.5 - 0.5 * p
+            0.5 * upper_regularized_gamma(1.0 / b, (-x).powf(b))
+        }
+    }
+
+    fn logcdf(&self, x: f64) -> f64 {
+        // Mirror of logsf: x < 0 → log cdf = −ln2 + log Q(1/β, |x|^β), finite
+        // where Q underflows (the default ln(cdf) returns −inf there); x ≥ 0 →
+        // cdf ≥ ½, so ln(cdf) is well-conditioned. frankenscipy-ew60b
+        let b = self.beta;
+        if x >= 0.0 {
+            self.cdf(x).ln()
+        } else {
+            -std::f64::consts::LN_2 + fsci_special::log_gammaincc_scalar(1.0 / b, (-x).powf(b))
         }
     }
 
@@ -40878,6 +40892,35 @@ mod tests {
             assert!(
                 (got - want).abs() <= 1e-9 * want.abs().max(1.0),
                 "gumbel_l({loc},{scale}).logsf({x}) = {got}, want {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn gennorm_left_tail_cdf_logcdf_match_scipy() {
+        // Regression (frankenscipy-ew60b): cdf(x<0) used ½ − ½·P(1/β,|x|^β),
+        // which cancels to 0 in the left tail (P → 1); e.g. cdf(-30) returned 0
+        // vs scipy 2.92e-73 and cdf(-10) was ~1.2% off. The symmetric upper-gamma
+        // form ½·Q(1/β,|x|^β) is exact, and logcdf now stays finite. Reference
+        // values from scipy.stats.gennorm 1.17.1.
+        let cases: &[(f64, f64, f64, f64)] = &[
+            (1.5, -30.0, 2.924_238_171_735_146_7e-73, -167.015_677_795_913_2),
+            (1.5, -10.0, 2.134_498_974_764_425_3e-15, -33.780_544_448_011_426),
+            (2.5, -10.0, 3.282_333_937_652_431_5e-140, -321.173_358_283_456_2),
+            (1.0, -50.0, 9.643_749_239_819_591e-23, -50.693_147_180_559_95),
+        ];
+        for &(beta, x, want_cdf, want_logcdf) in cases {
+            let d = GenNorm::new(beta);
+            let cdf = d.cdf(x);
+            assert!(
+                (cdf - want_cdf).abs() <= 1e-12 * want_cdf.abs().max(f64::MIN_POSITIVE),
+                "GenNorm({beta}).cdf({x}) = {cdf:e}, want {want_cdf:e}"
+            );
+            let lc = d.logcdf(x);
+            assert!(lc.is_finite(), "GenNorm({beta}).logcdf({x}) not finite");
+            assert!(
+                (lc - want_logcdf).abs() <= 1e-9 * want_logcdf.abs().max(1.0),
+                "GenNorm({beta}).logcdf({x}) = {lc}, want {want_logcdf}"
             );
         }
     }
