@@ -5462,6 +5462,15 @@ impl ContinuousDistribution for Gumbel {
         (-(-z).exp()).exp()
     }
 
+    fn logcdf(&self, x: f64) -> f64 {
+        // ln(cdf) = ln(exp(-e^{-z})) = -e^{-z}. The default log_probability(cdf)
+        // collapses to -inf once cdf underflows in the LEFT tail (z < ~-6.6,
+        // exp(-z) > 745); the closed form stays exact (matches scipy.gumbel_r
+        // .logcdf to 0 ULP).
+        let z = (x - self.loc) / self.scale;
+        -(-z).exp()
+    }
+
     fn sf(&self, x: f64) -> f64 {
         // Closed-form survival for [frankenscipy-6uo0s]:
         //   sf = 1 - exp(-exp(-z)) = -expm1(-exp(-z))
@@ -5578,6 +5587,15 @@ impl ContinuousDistribution for GumbelLeft {
         // (z large positive); the direct exp form preserves the value.
         let z = (x - self.loc) / self.scale;
         (-z.exp()).exp()
+    }
+
+    fn logsf(&self, x: f64) -> f64 {
+        // ln(sf) = ln(exp(-e^{z})) = -e^{z}. The default log_probability(sf)
+        // collapses to -inf once sf underflows in the RIGHT tail (z > ~6.6,
+        // exp(z) > 745); the closed form stays exact (matches scipy.gumbel_l
+        // .logsf to 0 ULP).
+        let z = (x - self.loc) / self.scale;
+        -z.exp()
     }
 
     fn ppf(&self, q: f64) -> f64 {
@@ -40826,6 +40844,42 @@ mod tests {
         tail!(Gompertz::new(1.0), 8.0); // −(e^8−1) ≈ −2980
         tail!(HalfLogistic, 800.0); // ≈ −800
         tail!(GumbelLeft::new(0.0, 1.0), -800.0); // z=−800 → ≈ −800
+    }
+
+    #[test]
+    fn gumbel_logcdf_logsf_finite_in_far_tail_match_scipy() {
+        // Regression (frankenscipy-uvzzl): the default logcdf/logsf are
+        // log_probability(cdf/sf), which collapse to -inf once the linear value
+        // underflows. The Gumbel family has exact closed forms:
+        //   gumbel_r.logcdf(x) = -e^{-(x-loc)/scale}
+        //   gumbel_l.logsf(x)  = -e^{ (x-loc)/scale}
+        // Reference values from scipy.stats 1.17.1.
+        let cases_r: &[(f64, f64, f64, f64)] = &[
+            (0.0, 1.0, -40.0, -2.353_852_668_370_2e17),
+            (0.0, 1.0, -3.0, -20.085_536_923_187_668),
+            (2.0, 3.0, -40.0, -1_202_604.284_164_776_8),
+        ];
+        for &(loc, scale, x, want) in cases_r {
+            let got = Gumbel::new(loc, scale).logcdf(x);
+            assert!(got.is_finite(), "gumbel_r.logcdf({x}) not finite");
+            assert!(
+                (got - want).abs() <= 1e-9 * want.abs().max(1.0),
+                "gumbel_r({loc},{scale}).logcdf({x}) = {got}, want {want}"
+            );
+        }
+        let cases_l: &[(f64, f64, f64, f64)] = &[
+            (0.0, 1.0, 40.0, -2.353_852_668_370_2e17),
+            (0.0, 1.0, 3.0, -20.085_536_923_187_668),
+            (2.0, 3.0, 40.0, -317_003.047_591_547_2),
+        ];
+        for &(loc, scale, x, want) in cases_l {
+            let got = GumbelLeft::new(loc, scale).logsf(x);
+            assert!(got.is_finite(), "gumbel_l.logsf({x}) not finite");
+            assert!(
+                (got - want).abs() <= 1e-9 * want.abs().max(1.0),
+                "gumbel_l({loc},{scale}).logsf({x}) = {got}, want {want}"
+            );
+        }
     }
 
     #[test]
