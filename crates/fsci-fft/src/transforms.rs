@@ -1843,15 +1843,25 @@ fn apply_dst_along_axis(
         } else {
             dst_ii(&temp, options)?
         };
-        // dst_iii in Backward mode returns the unnormalized DST-III
-        // (matching scipy.fft.dst(type=3)); idstn must apply the
-        // 1/(2N) per-axis factor that scipy.fft.idst injects so that
-        // idstn(dstn(x)) = x. The Forward and Ortho variants already
-        // include the correct scaling inside dst_ii/dst_iii.
-        if inverse && options.normalization == Normalization::Backward {
-            let scale = 1.0 / (2.0 * axis_len as f64);
-            for v in transformed.iter_mut() {
-                *v *= scale;
+        // Convert dst_iii (scipy.fft.dst type=3, scaled by options.normalization)
+        // into idst (the inverse of dst type=2 that scipy.fft.idstn computes), so
+        // that idstn(dstn(x)) = x for every normalization:
+        //   backward: dst_iii returns the unnormalized DST-III → apply 1/(2N).
+        //   forward:  dst_iii already divided by 2N (forward norm) → multiply it
+        //             back by 2N so the inverse carries no scaling (the forward
+        //             dstn already absorbed the 1/(2N)). Without this idstn/forward
+        //             was wrong by 1/(2N) per axis.
+        //   ortho:    dst_iii already applied 1/sqrt(2N), which idst also needs.
+        if inverse {
+            let scale = match options.normalization {
+                Normalization::Backward => 1.0 / (2.0 * axis_len as f64),
+                Normalization::Forward => 2.0 * axis_len as f64,
+                Normalization::Ortho => 1.0,
+            };
+            if scale != 1.0 {
+                for v in transformed.iter_mut() {
+                    *v *= scale;
+                }
             }
         }
         temp_out.copy_from_slice(&transformed);
@@ -3596,12 +3606,40 @@ mod tests {
     use fsci_runtime::{AuditAction, RuntimeMode};
 
     use super::{
-        FftError, FftOptions, TransformKind, WorkerPolicy, dct, dct_iv, dctn, dst_ii, dst_iii,
-        estimate_fft_flops, fft, fft_with_audit, fft2, fftn, hfft, hfft2, hfftn, idct, idctn, ifft,
-        ifft2, ifftn, ihfft2, ihfftn, irfft, irfft2, irfftn, is_fast_len, next_fast_len,
-        prev_fast_len, rfft, rfft_with_audit, rfft2, rfftn, sync_audit_ledger,
-        take_transform_traces,
+        FftError, FftOptions, TransformKind, WorkerPolicy, dct, dct_iv, dctn,
+        dst_ii, dst_iii, dstn, estimate_fft_flops, fft, fft_with_audit, fft2, fftn, hfft, hfft2,
+        hfftn, idct, idctn, idstn, ifft, ifft2, ifftn, ihfft2, ihfftn, irfft, irfft2, irfftn,
+        is_fast_len, next_fast_len, prev_fast_len, rfft, rfft_with_audit, rfft2, rfftn,
+        sync_audit_ledger, take_transform_traces,
     };
+
+    #[test]
+    fn idstn_dstn_round_trip_all_norms() {
+        // idstn(dstn(x)) == x for every normalization. Regression: idstn with
+        // Forward normalization was wrong by 1/(2N) per axis (the inverse forgot
+        // to undo dst_iii's forward 1/(2N) scaling), so the round trip drifted by
+        // the product of (2*N_axis).
+        let shape = [3usize, 4];
+        let x: Vec<f64> = (0..12)
+            .map(|k| (0.6 * k as f64).sin() + 0.2 * k as f64 - 0.04 * (k * k) as f64 + 1.1)
+            .collect();
+        for norm in [
+            Normalization::Backward,
+            Normalization::Ortho,
+            Normalization::Forward,
+        ] {
+            let mut o = FftOptions::default();
+            o.normalization = norm;
+            let fwd = dstn(&x, &shape, &o).expect("dstn");
+            let back = idstn(&fwd, &shape, &o).expect("idstn");
+            for (a, b) in x.iter().zip(&back) {
+                assert!(
+                    (a - b).abs() < 1e-9,
+                    "idstn(dstn(x)) != x for {norm:?}: {a} vs {b}"
+                );
+            }
+        }
+    }
     use crate::Normalization;
     use crate::plan::{clear_shared_plan_cache, shared_cache_test_lock};
 
