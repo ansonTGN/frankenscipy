@@ -10751,9 +10751,12 @@ impl ContinuousDistribution for GenExtreme {
     }
 
     fn entropy(&self) -> f64 {
-        // h(GenExtreme(c)) = γ · (1 − c) + 1.  (γ = Euler-Mascheroni.)
-        // c = 0 reduces to the Gumbel h = γ + 1.
-        EULER_MASCHERONI.mul_add(1.0 - self.c, 1.0)
+        // h(GenExtreme(c)) = γ · (1 + c) + 1.  (γ = Euler-Mascheroni.)
+        // Our `c` is scipy's negated shape (GenExtreme::new(c) == genextreme(-c)),
+        // so scipy's h = γ·(1 − c_scipy) + 1 becomes γ·(1 + c) + 1 here. The sign
+        // of `c` was previously flipped, matching scipy only at c = 0 (Gumbel,
+        // h = γ + 1) and diverging by up to ~25% for nonzero shape.
+        EULER_MASCHERONI.mul_add(1.0 + self.c, 1.0)
     }
 
     fn try_fit(data: &[f64]) -> Result<Self, FitError> {
@@ -42946,7 +42949,7 @@ mod tests {
         //  Lomax inherits the same formula via the Pareto-II identity.
         //  Rayleigh: h = 1 + ln(σ/√2) + γ/2.
         //  Maxwell:  h = ln(σ · √(2π)) + γ − 1/2.
-        //  GenExtreme(c): h = γ(1 − c) + 1.
+        //  GenExtreme(c): h = γ(1 + c) + 1  (c is scipy's negated shape).
         //  (GenPareto entropy is verified in its own dedicated test.)
         assert_close(
             Pareto::new(3.0, 1.0).entropy(),
@@ -42990,11 +42993,15 @@ mod tests {
             1e-8,
             "Maxwell(2) entropy",
         );
-        // GenExtreme: h = γ(1 − c) + 1.
+        // GenExtreme: h = γ(1 + c) + 1, where our c is scipy's negated shape
+        // (GenExtreme::new(c) == genextreme(-c)). Reference values are
+        // scipy.stats.genextreme(-c).entropy() (1.17.1) — the previous fixtures
+        // were generated with the wrong sign (genextreme(+c)), so the c = ±0.3
+        // expectations were swapped and masked the sign bug in the closed form.
         for &(c, h) in &[
             (0.0_f64, 1.577_215_664_9),
-            (0.3, 1.404_050_965_4),
-            (-0.3, 1.750_380_364_4),
+            (0.3, 1.750_380_364_4),
+            (-0.3, 1.404_050_965_4),
         ] {
             assert_close(
                 GenExtreme::new(c).entropy(),
