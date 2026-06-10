@@ -2762,8 +2762,20 @@ fn real_ifft_unscaled(input: &[Complex64], n: usize, backend: &dyn FftBackend) -
         let twiddles = get_or_compute_twiddles(n, true); // e^{+2πik/n}
         let mut packed = Vec::with_capacity(m);
         for k in 0..m {
-            let xk = input[k];
-            let xmk = complex_conj(input[m - k]);
+            // The packed even/odd split mixes the DC (index 0) and Nyquist
+            // (index m) bins only at k == 0. scipy.fft.irfft reconstructs the
+            // full Hermitian spectrum and returns the real part, so the
+            // imaginary parts of the DC and Nyquist bins NEVER contribute to the
+            // output. For a true Hermitian half-spectrum those imaginary parts
+            // are already zero (this is a no-op, byte-identical round-trip), but
+            // for non-Hermitian last-axis input — as produced by irfftn's
+            // complex iFFT over the non-last axes, and thus hfftn/hfft2 — keeping
+            // them diverges from scipy. Drop them here to match scipy exactly.
+            let (xk, xmk) = if k == 0 {
+                ((input[0].0, 0.0), (input[m].0, 0.0))
+            } else {
+                (input[k], complex_conj(input[m - k]))
+            };
             let even = (0.5 * (xk.0 + xmk.0), 0.5 * (xk.1 + xmk.1));
             let odd = (0.5 * (xk.0 - xmk.0), 0.5 * (xk.1 - xmk.1));
             let odd_tw = complex_mul(odd, twiddles[k]);
@@ -3712,6 +3724,73 @@ mod tests {
         for ((b, o), f) in back.iter().zip(ortho.iter()).zip(fwd.iter()) {
             assert!((o.0 - b.0 * n.sqrt()).abs() < 1e-10 && (o.1 - b.1 * n.sqrt()).abs() < 1e-10);
             assert!((f.0 - b.0 * n).abs() < 1e-10 && (f.1 - b.1 * n).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn irfftn_hfft2_match_scipy_non_hermitian() {
+        // Regression (frankenscipy-w4vr9): irfftn applies a complex iFFT over the
+        // non-last axes and an irfft over the last axis. The packed even-n irfft
+        // mixed the DC and Nyquist bins at k==0, carrying their imaginary parts —
+        // which scipy.fft.irfft always drops (it reconstructs the full Hermitian
+        // spectrum and returns the real part). For a TRUE Hermitian half-spectrum
+        // those imaginary parts are zero (round-trip stayed bit-clean), but the
+        // non-Hermitian half-spectrum produced by the non-last-axis iFFT diverged
+        // on every element. Reference values from scipy.fft.irfft2 / hfft2 1.17.1.
+        let o = FftOptions::default();
+
+        // irfft2 of an arbitrary (non-Hermitian) 3×3 half-spectrum → 3×4 real.
+        let spec: Vec<Complex64> = (0..9)
+            .map(|k| {
+                let t = k as f64;
+                ((0.4 * t).cos() + 0.5, -(0.3 * t).sin() * 0.6)
+            })
+            .collect();
+        let irfft2_expected = [
+            0.483_875_616_500_547_8,
+            0.320_968_444_421_923_7,
+            0.000_662_572_822_901_8,
+            -0.097_185_287_433_564_1,
+            0.462_071_204_481_245_2,
+            -0.232_222_197_841_266_9,
+            -0.018_774_427_774_383_7,
+            0.151_765_591_068_411_0,
+            0.438_760_353_356_441_0,
+            0.075_733_138_080_953_6,
+            -0.018_241_964_713_169_3,
+            -0.067_413_042_970_040_0,
+        ];
+        let got = irfft2(&spec, (3, 4), &o).expect("irfft2");
+        assert_eq!(got.len(), 12);
+        for (g, e) in got.iter().zip(irfft2_expected.iter()) {
+            assert!((g - e).abs() < 1e-12, "irfft2: got {g}, want {e}");
+        }
+
+        // hfft2 == irfftn(conj(x)) * N on the same (non-Hermitian) spectrum.
+        let spec_h: Vec<Complex64> = (0..9)
+            .map(|k| {
+                let t = k as f64;
+                ((0.4 * t).cos() + 0.5, (0.3 * t).sin() * 0.6)
+            })
+            .collect();
+        let hfft2_expected = [
+            5.806_507_398_006_573,
+            3.851_621_333_063_085,
+            0.007_950_873_874_821_5,
+            -1.166_223_449_202_769_2,
+            5.544_854_453_774_942,
+            -2.786_666_374_095_203,
+            -0.225_293_133_292_604_2,
+            1.821_187_092_820_931_7,
+            5.265_124_240_277_292,
+            0.908_797_656_971_443_3,
+            -0.218_903_576_558_031_6,
+            -0.808_956_515_640_480_3,
+        ];
+        let got_h = hfft2(&spec_h, (3, 4), &o).expect("hfft2");
+        assert_eq!(got_h.len(), 12);
+        for (g, e) in got_h.iter().zip(hfft2_expected.iter()) {
+            assert!((g - e).abs() < 1e-11, "hfft2: got {g}, want {e}");
         }
     }
 
