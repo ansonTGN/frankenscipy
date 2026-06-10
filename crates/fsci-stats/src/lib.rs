@@ -4987,10 +4987,23 @@ impl ContinuousDistribution for NormInvGauss {
         if x == f64::INFINITY {
             return 1.0;
         }
-        let lower = self.mean() - 20.0 * self.var().sqrt();
-        let upper = x.min(self.mean() + 50.0 * self.var().sqrt());
-        let lower = lower.max(-100.0);
-        simpson_integrate_adaptive(|t| self.pdf(t), lower, upper, 64, 1e-10, 1e-14, 12)
+        // The NIG cdf is ∫_{-∞}^x pdf. The left tail decays exponentially at rate
+        // a+b (>0 since |b|<a). The bulk window [mean−20σ, x] integrates fine, but
+        // for x far in the left tail it sat ABOVE x — the window inverted and the
+        // integral clamped to 0 (cdf(-60) = 0 vs scipy ~1e-42). There the integrand
+        // is concentrated just below x, so integrate a local window [x−W, x] with
+        // W ≈ 25/(a+b) e-foldings (captures the mass to ~1e-11; the deeper tail is
+        // negligible). abs_tol = 0 lets a tiny tail integral converge on relative
+        // error instead of stopping at the first refinement. frankenscipy-vk2l2
+        let sigma = self.var().sqrt();
+        let bulk_lower = (self.mean() - 20.0 * sigma).max(-100.0);
+        if x < bulk_lower {
+            let window = (25.0 / (self.a + self.b)).clamp(1.0, 200.0);
+            return simpson_integrate_adaptive(|t| self.pdf(t), x - window, x, 128, 1e-9, 0.0, 14)
+                .clamp(0.0, 1.0);
+        }
+        let upper = x.min(self.mean() + 50.0 * sigma);
+        simpson_integrate_adaptive(|t| self.pdf(t), bulk_lower, upper, 64, 1e-10, 1e-14, 12)
             .clamp(0.0, 1.0)
     }
 
@@ -47532,6 +47545,31 @@ mod tests {
             );
             assert!(k >= -2.0, "excess kurtosis cannot be below -2, got {k}");
         }
+    }
+
+    #[test]
+    fn norminvgauss_left_tail_cdf_matches_scipy() {
+        // Regression (frankenscipy-vk2l2): the cdf integrated [mean−20σ, x], a
+        // window independent of x. For x far in the left tail that lower bound sat
+        // ABOVE x, inverting the window so the integral clamped to 0 (cdf(-60) = 0
+        // vs scipy ~1e-42). The tail now integrates a local window [x−W, x].
+        // Values from scipy.stats.norminvgauss 1.17.1 (both quadrature-limited).
+        let cases: &[(f64, f64, f64, f64)] = &[
+            (1.0, 0.5, -40.0, 2.128_298_309_990_625_8e-29),
+            (1.5, 0.0, -60.0, 2.510_706_717_317_211e-42),
+            (2.0, -1.0, -60.0, 5.785_042_008_718_4e-29),
+            (3.0, 2.0, -20.0, 4.941_324_486_630_686e-46),
+        ];
+        for &(a, b, x, want) in cases {
+            let got = NormInvGauss::new(a, b).cdf(x);
+            let rel = (got - want).abs() / want.abs();
+            assert!(
+                rel < 1e-3,
+                "NormInvGauss({a},{b}).cdf({x}) = {got:e}, scipy {want:e} (relerr {rel:e})"
+            );
+        }
+        // Beyond the f64 range the cdf underflows to exactly 0, as scipy returns.
+        assert_eq!(NormInvGauss::new(3.0, 2.0).cdf(-300.0), 0.0);
     }
 
     #[test]
