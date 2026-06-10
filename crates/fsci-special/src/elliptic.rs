@@ -752,24 +752,38 @@ fn lambertw_complex_scalar(z: Complex64, mode: RuntimeMode) -> Result<Complex64,
 }
 
 fn lambertw_complex_initial_guess(z: Complex64) -> Complex64 {
-    let branch_delta = Complex64::from_real(std::f64::consts::E) * z + Complex64::from_real(1.0);
+    // Principal-branch (k = 0) initial guess matching scipy's `_lambertw.pxd`
+    // (Veberič 2012 / Corless 1996). The previous guess used the LARGE-|z|
+    // asymptotic `log(z) - log(log(z))` for moderate |z|, which lands in the
+    // basin of a non-principal branch (W·e^W = z has infinitely many roots) —
+    // Halley then converged to the wrong sheet (lambertw(0.5+0.3i) gave
+    // -1.97-3.68i instead of scipy's 0.372+0.152i). Three regions:
+    let expn1 = Complex64::from_real(1.0 / std::f64::consts::E);
+    let branch_delta = z + expn1;
     if branch_delta.abs() < 0.3 {
-        let p = complex_sqrt(branch_delta * 2.0);
+        // Near the branch point z = -1/e: series in p = √(2(e·z + 1)).
+        let ez1 = Complex64::from_real(std::f64::consts::E) * z + Complex64::from_real(1.0);
+        let p = complex_sqrt(ez1 * 2.0);
         let p2 = p * p;
         let p3 = p2 * p;
         return Complex64::from_real(-1.0) + p - p2 / 3.0 + p3 * (11.0 / 72.0);
     }
 
-    if z.abs() < 0.5 {
-        return z - z * z;
+    if -1.0 < z.re
+        && z.re < 1.5
+        && z.im.abs() < 1.0
+        && z.re > -2.5 * z.im.abs() - 0.2
+    {
+        // Empirically good region near 0: [2/2] Padé approximant of W₀.
+        let z2 = z * z;
+        let num = z * (Complex64::from_real(60.0)
+            + z * 114.0
+            + z2 * 17.0);
+        let den = Complex64::from_real(60.0) + z * 174.0 + z2 * 101.0;
+        return num / den;
     }
 
-    let log_z = z.ln();
-    if log_z.abs() < 1.0e-6 {
-        return z;
-    }
-
-    log_z - log_z.ln()
+    z.ln()
 }
 
 fn exp1_scalar(z: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
@@ -2497,6 +2511,41 @@ mod tests {
             "principal branch should choose the upper-half-plane value on the cut",
         );
         assert_complex_close(w * w.exp(), z, 1e-10, "lambertw branch-cut identity");
+    }
+
+    #[test]
+    fn lambertw_complex_matches_scipy_principal_branch() {
+        // Regression: the W·e^W = z identity holds on EVERY branch, so the
+        // metamorphic tests above passed while the principal-branch guess
+        // (large-|z| asymptotic) converged to the wrong sheet — e.g.
+        // lambertw(0.5+0.3i) returned -1.97-3.68i instead of scipy's
+        // 0.372+0.152i. These reference values are scipy.special.lambertw(z, 0)
+        // (1.17.1); they pin the branch, not just the defining equation.
+        let cases: &[(f64, f64, f64, f64)] = &[
+            (0.5, 0.3, 0.372_030_602_393_5, 0.152_166_010_103_015_42),
+            (1.3, 0.7, 0.701_900_647_738_376_3, 0.207_068_190_438_305_32),
+            (-1.5, 2.0, 0.640_576_739_989_03, 1.151_256_393_356_353_5),
+            (2.0, -2.5, 1.035_286_384_300_418_5, -0.469_942_289_784_801_2),
+            (-3.0, -1.0, 0.608_235_777_667_986_4, -1.610_213_135_169_645),
+            (0.2, 4.0, 1.073_172_875_178_164, 0.850_615_061_208_774_6),
+            (-0.4, 0.0, -0.944_089_738_264_935_8, 0.407_267_964_032_857_8),
+            (0.0, 1.5, 0.545_153_223_345_237_3, 0.677_542_092_022_338_5),
+            (10.0, -3.0, 1.769_471_344_173_386_3, -0.186_465_225_817_075_56),
+        ];
+        for &(re, im, wre, wim) in cases {
+            let w = eval_complex_scalar(lambertw(
+                &SpecialTensor::ComplexScalar(Complex64::new(re, im)),
+                RuntimeMode::Strict,
+            ));
+            let denom = wre.hypot(wim).max(1.0);
+            let err = (w.re - wre).hypot(w.im - wim) / denom;
+            assert!(
+                err < 1e-12,
+                "lambertw({re}+{im}i) = {}+{}i, scipy {wre}+{wim}i (relerr {err:e})",
+                w.re,
+                w.im
+            );
+        }
     }
 
     #[test]
