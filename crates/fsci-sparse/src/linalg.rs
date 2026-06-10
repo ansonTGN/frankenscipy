@@ -6110,6 +6110,63 @@ mod tests {
     }
 
     #[test]
+    fn eigs_recovers_complex_eigenvalues() {
+        // 4×4 block-diagonal: a 2×2 rotation-scaling block [[3,-4],[4,3]] with
+        // eigenvalues 3±4i (|·|=5), plus real diagonal entries 2 and 1. scipy's
+        // eigs returns the complex pair; the old single-shift QR dropped ±4i.
+        let a = CooMatrix::from_triplets(
+            Shape2D::new(4, 4),
+            vec![3.0, -4.0, 4.0, 3.0, 2.0, 1.0],
+            vec![0, 0, 1, 1, 2, 3],
+            vec![0, 1, 0, 1, 2, 3],
+            false,
+        )
+        .expect("coo")
+        .to_csr()
+        .expect("csr");
+
+        let result = eigs(&a, 2, EigsOptions::default()).expect("eigs works");
+        assert_eq!(result.eigenvalues.len(), 2);
+        assert_eq!(result.eigenvalues_im.len(), 2);
+
+        // Both top-2 eigenpairs are the conjugate pair: re≈3, |im|≈4, magnitude 5.
+        for (i, (&re, &im)) in result
+            .eigenvalues
+            .iter()
+            .zip(result.eigenvalues_im.iter())
+            .enumerate()
+        {
+            assert!((re - 3.0).abs() < 1e-6, "re[{i}]={re} expected 3");
+            assert!((im.abs() - 4.0).abs() < 1e-6, "|im[{i}]|={} expected 4", im.abs());
+        }
+        // The pair is conjugate: imaginary parts have opposite signs.
+        assert!(
+            result.eigenvalues_im[0] * result.eigenvalues_im[1] < 0.0,
+            "conjugate pair must have opposite-signed imaginary parts: {:?}",
+            result.eigenvalues_im
+        );
+
+        // Each (λ, x) is a genuine complex eigenpair: ‖A x − λ x‖ ≈ 0 over ℂ.
+        for ((&re, &im), (xr, xi)) in result
+            .eigenvalues
+            .iter()
+            .zip(result.eigenvalues_im.iter())
+            .zip(result.eigenvectors.iter().zip(result.eigenvectors_im.iter()))
+        {
+            let axr = csr_matvec(&a, xr);
+            let axi = csr_matvec(&a, xi);
+            // A x − λ x, with λ = re + im·i and x = xr + xi·i.
+            let mut resid = 0.0f64;
+            for j in 0..4 {
+                let lhs_r = axr[j] - (re * xr[j] - im * xi[j]);
+                let lhs_i = axi[j] - (re * xi[j] + im * xr[j]);
+                resid += lhs_r * lhs_r + lhs_i * lhs_i;
+            }
+            assert!(resid.sqrt() < 1e-6, "complex eigenpair residual {resid:.3e}");
+        }
+    }
+
+    #[test]
     fn eigs_identity() {
         let a = identity_csr(4);
         let result = eigs(&a, 2, EigsOptions::default()).expect("eigs works");
@@ -7640,10 +7697,22 @@ mod tests {
 /// Result of sparse eigenvalue computation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EigsResult {
-    /// Eigenvalues (real parts).
+    /// Eigenvalues (real parts). For [`eigsh`]/[`svds`] (symmetric/PSD operators)
+    /// these are the full eigenvalues; for general [`eigs`] they are the real
+    /// parts of the (possibly complex) eigenvalues — see [`Self::eigenvalues_im`].
     pub eigenvalues: Vec<f64>,
+    /// Imaginary parts of the eigenvalues, aligned with [`Self::eigenvalues`].
+    /// All zero for symmetric operators ([`eigsh`]/[`svds`]); for general
+    /// [`eigs`] a complex-conjugate pair appears as `±im`, matching
+    /// `scipy.sparse.linalg.eigs`, which returns a complex array.
+    pub eigenvalues_im: Vec<f64>,
     /// Eigenvectors as columns (row-major: `eigenvectors[i]` is the i-th eigenvector).
+    /// For general [`eigs`] this is the real part of the (possibly complex)
+    /// eigenvector — see [`Self::eigenvectors_im`].
     pub eigenvectors: Vec<Vec<f64>>,
+    /// Imaginary parts of the eigenvectors, aligned with [`Self::eigenvectors`].
+    /// All zero for symmetric operators and for real eigenpairs of [`eigs`].
+    pub eigenvectors_im: Vec<Vec<f64>>,
     /// Number of matrix-vector products performed.
     pub nmatvec: usize,
     /// Whether all requested eigenvalues converged.
@@ -7778,7 +7847,7 @@ pub fn eigsh(a: &CsrMatrix, k: usize, options: EigsOptions) -> SparseResult<Eigs
     // (pathologically-clustered spectra would need implicit restarts, as in
     // ARPACK — reported honestly via `converged = false` rather than looping).
     let m = (2 * k + 1).max(20).min(n);
-    let mut result = krylov_arnoldi_eigs(|v| csr_matvec(a, v), n, k, &options, m);
+    let mut result = krylov_arnoldi_eigs(|v| csr_matvec(a, v), n, k, &options, m, false);
     let (converged, resid_matvec) = eigsh_residual_check(a, &result, options.tol.max(1e-8));
     result.nmatvec += resid_matvec;
     result.converged = converged;
@@ -7835,7 +7904,14 @@ pub fn eigs(a: &CsrMatrix, k: usize, options: EigsOptions) -> SparseResult<EigsR
 
     // Krylov subspace dimension (larger than k for better convergence).
     let m = (2 * k + 1).min(n);
-    Ok(krylov_arnoldi_eigs(|v| csr_matvec(a, v), n, k, &options, m))
+    Ok(krylov_arnoldi_eigs(
+        |v| csr_matvec(a, v),
+        n,
+        k,
+        &options,
+        m,
+        true,
+    ))
 }
 
 /// Shared Arnoldi/Lanczos Krylov eigensolver used by both [`eigs`] (general) and
@@ -7850,6 +7926,7 @@ fn krylov_arnoldi_eigs<F: Fn(&[f64]) -> Vec<f64>>(
     k: usize,
     options: &EigsOptions,
     m: usize,
+    general: bool,
 ) -> EigsResult {
     let mut total_matvec = 0;
 
@@ -7918,8 +7995,18 @@ fn krylov_arnoldi_eigs<F: Fn(&[f64]) -> Vec<f64>>(
         v.push(w);
     }
 
-    // Extract eigenvalues from the Hessenberg matrix H[0..actual_m, 0..actual_m]
-    // Use QR algorithm on the small dense Hessenberg matrix
+    if general {
+        // General (nonsymmetric) operator: the projected Hessenberg matrix can
+        // have complex-conjugate eigenpairs, which a real single-shift QR silently
+        // collapses to their real parts. Use the double-shift Francis QR (`hqr`)
+        // to recover the full complex spectrum, then complex back-substitution for
+        // the eigenvectors. Matches `scipy.sparse.linalg.eigs`, which returns a
+        // complex array.
+        return krylov_extract_general(&v, &h, actual_m, n, k, options, total_matvec);
+    }
+
+    // Symmetric operator (eigsh/svds): real Ritz values from the single-shift QR.
+    // Extract eigenvalues from the Hessenberg matrix H[0..actual_m, 0..actual_m].
     let eig_vals = hessenberg_eigenvalues(&h, actual_m, options.max_iter, options.tol);
 
     // Sort by magnitude (largest first) and take top k
@@ -7956,9 +8043,95 @@ fn krylov_arnoldi_eigs<F: Fn(&[f64]) -> Vec<f64>>(
         eigenvectors.push(evec);
     }
 
+    let n_out = eigenvalues.len();
     EigsResult {
         eigenvalues,
+        eigenvalues_im: vec![0.0; n_out],
         eigenvectors,
+        eigenvectors_im: vec![vec![0.0; n]; n_out],
+        nmatvec: total_matvec,
+        converged: true,
+    }
+}
+
+/// Top-`k`-by-magnitude complex eigenpairs of a general operator from its
+/// Arnoldi basis `v` and upper-Hessenberg projection `h[0..m, 0..m]`.
+///
+/// The projected matrix is reduced by the double-shift Francis QR (`hqr`) into
+/// real and imaginary eigenvalue parts; the corresponding Ritz vectors are
+/// obtained by complex back-substitution against the *original* `h` (which `hqr`
+/// leaves untouched, working on a copy) and back-transformed into the original
+/// space as `x = V @ y`.
+fn krylov_extract_general(
+    v: &[Vec<f64>],
+    h: &[Vec<f64>],
+    m: usize,
+    n: usize,
+    k: usize,
+    options: &EigsOptions,
+    total_matvec: usize,
+) -> EigsResult {
+    let pairs = hessenberg_eigenvalues_complex(h, m, options.max_iter, options.tol);
+
+    // Sort by magnitude (largest first), take top k. `sort_by` is stable, so a
+    // complex-conjugate pair (equal magnitude) keeps deflation order.
+    let mut indexed: Vec<(usize, (f64, f64))> = pairs.iter().copied().enumerate().collect();
+    indexed.sort_by(|a, b| {
+        let ma = a.1.0 * a.1.0 + a.1.1 * a.1.1;
+        let mb = b.1.0 * b.1.0 + b.1.1 * b.1.1;
+        mb.total_cmp(&ma)
+    });
+
+    let k_actual = k.min(indexed.len());
+    let mut eigenvalues = Vec::with_capacity(k_actual);
+    let mut eigenvalues_im = Vec::with_capacity(k_actual);
+    let mut eigenvectors = Vec::with_capacity(k_actual);
+    let mut eigenvectors_im = Vec::with_capacity(k_actual);
+
+    for &(_, (re, im)) in indexed.iter().take(k_actual) {
+        eigenvalues.push(re);
+        eigenvalues_im.push(im);
+
+        // Eigenvector y of the projected Hessenberg matrix, in complex arithmetic,
+        // then x = V @ y back into the original space (V is real).
+        let y = hessenberg_eigenvector_complex(h, m, (re, im));
+        let mut evec_re = vec![0.0; n];
+        let mut evec_im = vec![0.0; n];
+        for (j, &(yr, yi)) in y.iter().enumerate() {
+            if yr == 0.0 && yi == 0.0 {
+                continue;
+            }
+            for ((xr, xi), &vji) in evec_re
+                .iter_mut()
+                .zip(evec_im.iter_mut())
+                .zip(v[j].iter())
+            {
+                *xr += yr * vji;
+                *xi += yi * vji;
+            }
+        }
+        // Normalize by the complex 2-norm sqrt(Σ |x_i|²).
+        let norm = evec_re
+            .iter()
+            .zip(evec_im.iter())
+            .map(|(&r, &i)| r * r + i * i)
+            .sum::<f64>()
+            .sqrt();
+        if norm > 0.0 {
+            for (xr, xi) in evec_re.iter_mut().zip(evec_im.iter_mut()) {
+                *xr /= norm;
+                *xi /= norm;
+            }
+        }
+        eigenvectors.push(evec_re);
+        eigenvectors_im.push(evec_im);
+    }
+
+    EigsResult {
+        eigenvalues,
+        eigenvalues_im,
+        eigenvectors,
+        eigenvectors_im,
         nmatvec: total_matvec,
         converged: true,
     }
@@ -8085,6 +8258,269 @@ fn hessenberg_eigenvalues(h: &[Vec<f64>], m: usize, max_iter: usize, tol: f64) -
     eigenvalues
 }
 
+/// Complex eigenvalues of an upper-Hessenberg matrix `H[0..m, 0..m]` via the
+/// double-shift Francis QR (the classic EISPACK/Numerical-Recipes `hqr`).
+///
+/// Unlike [`hessenberg_eigenvalues`] (a real single-shift QR that collapses a
+/// complex-conjugate pair onto its real part), this deflates 1×1 and 2×2 blocks
+/// and returns each eigenvalue as a `(re, im)` pair — a 2×2 block with negative
+/// discriminant yields the conjugate pair `re ± im·i`. Operates on a private copy
+/// of `H`, so the caller's matrix is left intact for eigenvector recovery.
+// The double-QR sweep indexes offset rows/columns (a[i][k+2], a[k+1][j], the
+// diagonal a[i][i], …); a range loop is the natural and clearest expression.
+#[allow(clippy::needless_range_loop)]
+fn hessenberg_eigenvalues_complex(
+    h: &[Vec<f64>],
+    m: usize,
+    max_iter: usize,
+    _tol: f64,
+) -> Vec<(f64, f64)> {
+    if m == 0 {
+        return Vec::new();
+    }
+    if m == 1 {
+        return vec![(h[0][0], 0.0)];
+    }
+
+    // Working copy of the m×m submatrix.
+    let mut a = vec![vec![0.0f64; m]; m];
+    for (ai, hi) in a.iter_mut().zip(h.iter()).take(m) {
+        ai[..m].copy_from_slice(&hi[..m]);
+    }
+
+    let mut wr = vec![0.0f64; m];
+    let mut wi = vec![0.0f64; m];
+
+    // |a|-style norm used by the subdiagonal-negligibility and exceptional-shift
+    // tests (NR `anorm`).
+    let mut anorm = 0.0f64;
+    for i in 0..m {
+        let start = i.saturating_sub(1);
+        for j in start..m {
+            anorm += a[i][j].abs();
+        }
+    }
+
+    // sign(x, y) = |x| with the sign of y.
+    let sign = |x: f64, y: f64| if y >= 0.0 { x.abs() } else { -x.abs() };
+
+    let max_its = max_iter.max(30);
+    let mut nn: isize = m as isize - 1; // current active bottom-right index
+    let mut t = 0.0f64; // accumulated exceptional-shift origin
+
+    while nn >= 0 {
+        let mut its = 0usize;
+        loop {
+            // Find a small subdiagonal element to split off a sub-block.
+            let mut l = nn;
+            while l >= 1 {
+                let lu = l as usize;
+                let mut s = a[lu - 1][lu - 1].abs() + a[lu][lu].abs();
+                if s == 0.0 {
+                    s = anorm;
+                }
+                if a[lu][lu - 1].abs() + s == s {
+                    a[lu][lu - 1] = 0.0;
+                    break;
+                }
+                l -= 1;
+            }
+
+            let x = a[nn as usize][nn as usize];
+            if l == nn {
+                // One real root.
+                wr[nn as usize] = x + t;
+                wi[nn as usize] = 0.0;
+                nn -= 1;
+                break;
+            }
+
+            let y = a[(nn - 1) as usize][(nn - 1) as usize];
+            let w = a[nn as usize][(nn - 1) as usize] * a[(nn - 1) as usize][nn as usize];
+            if l == nn - 1 {
+                // A 2×2 block: solve its characteristic quadratic directly.
+                let p = 0.5 * (y - x);
+                let q = p * p + w;
+                let z = q.abs().sqrt();
+                let xb = x + t;
+                if q >= 0.0 {
+                    // Real eigenvalue pair.
+                    let zr = p + sign(z, p);
+                    wr[(nn - 1) as usize] = xb + zr;
+                    wr[nn as usize] = if zr != 0.0 { xb - w / zr } else { xb + zr };
+                    wi[(nn - 1) as usize] = 0.0;
+                    wi[nn as usize] = 0.0;
+                } else {
+                    // Complex-conjugate pair re ± im·i.
+                    wr[(nn - 1) as usize] = xb + p;
+                    wr[nn as usize] = xb + p;
+                    wi[(nn - 1) as usize] = -z;
+                    wi[nn as usize] = z;
+                }
+                nn -= 2;
+                break;
+            }
+
+            if its >= max_its {
+                // Non-convergence backstop: deflate one real root and continue,
+                // rather than aborting as NR does.
+                wr[nn as usize] = x + t;
+                wi[nn as usize] = 0.0;
+                nn -= 1;
+                break;
+            }
+
+            // Form the (double) shift.
+            let mut xs = x;
+            let mut ys = y;
+            let mut ws = w;
+            if its == 10 || its == 20 {
+                // Exceptional shift to break a cycle.
+                t += xs;
+                for i in 0..=(nn as usize) {
+                    a[i][i] -= xs;
+                }
+                let s = a[nn as usize][(nn - 1) as usize].abs()
+                    + a[(nn - 1) as usize][(nn - 2) as usize].abs();
+                xs = 0.75 * s;
+                ys = xs;
+                ws = -0.4375 * s * s;
+            }
+            its += 1;
+
+            // Locate two consecutive small subdiagonal elements (the bulge start).
+            let mut p = 0.0f64;
+            let mut q = 0.0f64;
+            let mut r = 0.0f64;
+            let mut mm = nn - 2;
+            while mm >= l {
+                let mu = mm as usize;
+                let z = a[mu][mu];
+                let rr = xs - z;
+                let ss = ys - z;
+                p = (rr * ss - ws) / a[mu + 1][mu] + a[mu][mu + 1];
+                q = a[mu + 1][mu + 1] - z - rr - ss;
+                r = a[mu + 2][mu + 1];
+                let s = p.abs() + q.abs() + r.abs();
+                p /= s;
+                q /= s;
+                r /= s;
+                if mm == l {
+                    break;
+                }
+                let u = a[mu][mu - 1].abs() * (q.abs() + r.abs());
+                let vv =
+                    p.abs() * (a[mu - 1][mu - 1].abs() + z.abs() + a[mu + 1][mu + 1].abs());
+                if u + vv == vv {
+                    break;
+                }
+                mm -= 1;
+            }
+
+            for i in (mm + 2)..=nn {
+                let iu = i as usize;
+                a[iu][iu - 2] = 0.0;
+                if i != mm + 2 {
+                    a[iu][iu - 3] = 0.0;
+                }
+            }
+
+            // Double-QR sweep (chase the bulge) over rows/cols l..=nn.
+            let mut kk = mm;
+            while kk < nn {
+                let ku = kk as usize;
+                if kk != mm {
+                    p = a[ku][ku - 1];
+                    q = a[ku + 1][ku - 1];
+                    r = 0.0;
+                    if kk != nn - 1 {
+                        r = a[ku + 2][ku - 1];
+                    }
+                    xs = p.abs() + q.abs() + r.abs();
+                    if xs != 0.0 {
+                        p /= xs;
+                        q /= xs;
+                        r /= xs;
+                    }
+                }
+                let s = sign((p * p + q * q + r * r).sqrt(), p);
+                if s != 0.0 {
+                    if kk == mm {
+                        if l != mm {
+                            a[ku][ku - 1] = -a[ku][ku - 1];
+                        }
+                    } else {
+                        a[ku][ku - 1] = -s * xs;
+                    }
+                    p += s;
+                    let xp = p / s;
+                    let yp = q / s;
+                    let zp = r / s;
+                    let qp = q / p;
+                    let rp = r / p;
+                    // Row modification.
+                    for j in ku..m {
+                        let mut pp = a[ku][j] + qp * a[ku + 1][j];
+                        if kk != nn - 1 {
+                            pp += rp * a[ku + 2][j];
+                            a[ku + 2][j] -= pp * zp;
+                        }
+                        a[ku + 1][j] -= pp * yp;
+                        a[ku][j] -= pp * xp;
+                    }
+                    let mmin = if nn < kk + 3 { nn } else { kk + 3 };
+                    // Column modification.
+                    for i in (l as usize)..=(mmin as usize) {
+                        let mut pp = xp * a[i][ku] + yp * a[i][ku + 1];
+                        if kk != nn - 1 {
+                            pp += zp * a[i][ku + 2];
+                            a[i][ku + 2] -= pp * rp;
+                        }
+                        a[i][ku + 1] -= pp * qp;
+                        a[i][ku] -= pp;
+                    }
+                }
+                kk += 1;
+            }
+        }
+    }
+
+    (0..m).map(|i| (wr[i], wi[i])).collect()
+}
+
+/// Complex eigenvector of `H[0..m, 0..m]` for the (possibly complex) eigenvalue
+/// `lambda`. The complex analogue of [`hessenberg_eigenvector`]: solve
+/// `(H - lambda·I) y = 0` by back-substitution against the subdiagonal with
+/// `y[m-1] = 1`. For a real `lambda` and real `H` every component stays real,
+/// matching the real solver exactly.
+fn hessenberg_eigenvector_complex(h: &[Vec<f64>], m: usize, lambda: (f64, f64)) -> Vec<(f64, f64)> {
+    if m == 0 {
+        return Vec::new();
+    }
+    if m == 1 {
+        return vec![(1.0, 0.0)];
+    }
+    let (lr, li) = lambda;
+    let mut y = vec![(0.0f64, 0.0f64); m];
+    y[m - 1] = (1.0, 0.0);
+    for rr in (1..m).rev() {
+        // acc = -lambda*y[r] + Σ_{c>=r} h[r][c]*y[c]   (h is real)
+        let yr = y[rr];
+        let mut acc = (-lr * yr.0 + li * yr.1, -lr * yr.1 - li * yr.0);
+        for c in rr..m {
+            acc.0 += h[rr][c] * y[c].0;
+            acc.1 += h[rr][c] * y[c].1;
+        }
+        let sub = h[rr][rr - 1];
+        if sub.abs() < f64::MIN_POSITIVE {
+            // Decoupled block: leave the remaining components at zero.
+            break;
+        }
+        y[rr - 1] = (-acc.0 / sub, -acc.1 / sub);
+    }
+    y
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // svds — Sparse Singular Value Decomposition
 // ══════════════════════════════════════════════════════════════════════
@@ -8129,7 +8565,7 @@ pub fn svds(a: &CsrMatrix, k: usize, options: EigsOptions) -> SparseResult<SvdsR
     // spectrum a single subspace of max(2k+1, 20) resolves the extremes.
     let ncv = (2 * k + 1).max(20).min(n);
     let ata_op = |v: &[f64]| csc_matvec(&a_csc, &csr_matvec(a, v));
-    let eig = krylov_arnoldi_eigs(ata_op, n, k, &options, ncv);
+    let eig = krylov_arnoldi_eigs(ata_op, n, k, &options, ncv, false);
 
     let mut singular_values = Vec::with_capacity(k);
     let mut v_vecs: Vec<Vec<f64>> = Vec::with_capacity(k);

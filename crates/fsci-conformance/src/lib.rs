@@ -3468,7 +3468,17 @@ fn execute_sparse_case(case: &SparseCase) -> SparseObserved {
             };
             let k = case.k.unwrap_or(1);
             match fsci_sparse::eigs(&csr, k, fsci_sparse::EigsOptions::default()) {
-                Ok(res) => SparseObserved::EigenvaluesAbsSorted(res.eigenvalues),
+                Ok(res) => {
+                    // eigs may return complex eigenvalues; compare by complex
+                    // magnitude |re + im·i| (identical to |re| for real spectra).
+                    let mags = res
+                        .eigenvalues
+                        .iter()
+                        .zip(res.eigenvalues_im.iter())
+                        .map(|(re, im)| (re * re + im * im).sqrt())
+                        .collect();
+                    SparseObserved::EigenvaluesAbsSorted(mags)
+                }
                 Err(e) => SparseObserved::Error(format!("{e}")),
             }
         }
