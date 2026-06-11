@@ -2635,9 +2635,248 @@ pub fn sh_jacobi(n: u32, p: f64, q: f64) -> Vec<f64> {
     to_descending(c)
 }
 
+// ── Ellipsoidal harmonics (Lamé functions) ──────────────────────────────────
+
+/// Solve the small dense linear system `mat · x = rhs` by Gaussian elimination
+/// with partial pivoting. `mat` and `rhs` are consumed.
+fn dense_solve(mut mat: Vec<Vec<f64>>, mut rhs: Vec<f64>) -> Vec<f64> {
+    let n = rhs.len();
+    for col in 0..n {
+        let mut pivot = col;
+        for r in (col + 1)..n {
+            if mat[r][col].abs() > mat[pivot][col].abs() {
+                pivot = r;
+            }
+        }
+        mat.swap(col, pivot);
+        rhs.swap(col, pivot);
+        let diag = mat[col][col];
+        for r in (col + 1)..n {
+            let factor = mat[r][col] / diag;
+            for c in col..n {
+                mat[r][c] -= factor * mat[col][c];
+            }
+            rhs[r] -= factor * rhs[col];
+        }
+    }
+    let mut x = vec![0.0_f64; n];
+    for r in (0..n).rev() {
+        let mut acc = rhs[r];
+        for c in (r + 1)..n {
+            acc -= mat[r][c] * x[c];
+        }
+        x[r] = acc / mat[r][r];
+    }
+    x
+}
+
+/// Build the (non-symmetric, tridiagonal) Lamé coefficient matrix for the
+/// species `(e1, e2, σ)` at degree `n`, returned as `(diag, sub, sup)`.
+///
+/// The matrix satisfies `M b = a b` where `a` is the Lamé eigenvalue and `b` the
+/// coefficients of the polynomial part `Σ b_j s^{2j}` of the harmonic
+/// `E = |s²−h²|^{e1/2} |s²−k²|^{e2/2} s^σ · Σ b_j s^{2j}`. Each column is the
+/// polynomial `−L₀[ρ s^{2j}]/ρ` (`L₀` = Lamé operator minus the `a` term),
+/// recovered from `d+1` exact evaluations via a Vandermonde solve.
+fn lame_matrix(n: u32, e1: u32, e2: u32, sigma: u32, h2: f64, k2: f64) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+    let d = ((n - e1 - e2 - sigma) / 2) as usize;
+    let nb = d + 1;
+    let nf = f64::from(n);
+    // Sample points above √(max(h2,k2)) so the prefactor bases stay positive.
+    let base = k2.max(h2).sqrt() + 0.7;
+    let samples: Vec<f64> = (0..nb).map(|r| base + 0.55 * r as f64).collect();
+    // Exact operator value −L₀[ρ s^{2j}]/ρ at point s.
+    let op = |s: f64, j: usize| -> f64 {
+        let a = s * s - h2;
+        let b = s * s - k2;
+        let jf = j as f64;
+        let q = s.powi(2 * j as i32);
+        let qp = if j > 0 { 2.0 * jf * s.powi(2 * j as i32 - 1) } else { 0.0 };
+        let qpp = if j >= 1 { 2.0 * jf * (2.0 * jf - 1.0) * s.powi(2 * j as i32 - 2) } else { 0.0 };
+        let (e1f, e2f, sf) = (f64::from(e1), f64::from(e2), f64::from(sigma));
+        let r1 = e1f * s / a + e2f * s / b + sf / s;
+        let dr1 = -e1f * (s * s + h2) / (a * a) - e2f * (s * s + k2) / (b * b) - sf / (s * s);
+        let r2 = dr1 + r1 * r1;
+        let l0 = a * b * (qpp + 2.0 * r1 * qp + r2 * q)
+            + s * (2.0 * s * s - h2 - k2) * (qp + r1 * q)
+            - nf * (nf + 1.0) * s * s * q;
+        -l0
+    };
+    // Vandermonde rows V[r][m] = (s_r²)^m.
+    let vander: Vec<Vec<f64>> = samples
+        .iter()
+        .map(|&s| {
+            let t = s * s;
+            (0..nb).map(|m| t.powi(m as i32)).collect()
+        })
+        .collect();
+    // Column j coefficients (the polynomial coefficients of −L₀[ρ s^{2j}]/ρ).
+    let columns: Vec<Vec<f64>> = (0..nb)
+        .map(|j| {
+            let rhs: Vec<f64> = samples.iter().map(|&s| op(s, j)).collect();
+            dense_solve(vander.clone(), rhs)
+        })
+        .collect();
+    let mut diag = vec![0.0_f64; nb];
+    let mut sub = vec![0.0_f64; nb];
+    let mut sup = vec![0.0_f64; nb];
+    for j in 0..nb {
+        diag[j] = columns[j][j];
+        if j >= 1 {
+            sub[j] = columns[j - 1][j];
+        }
+        if j + 1 < nb {
+            sup[j] = columns[j + 1][j];
+        }
+    }
+    (diag, sub, sup)
+}
+
+/// Sign of the tridiagonal characteristic polynomial `det(T − a I)` at `a`,
+/// computed by the leading-minor recurrence with rescaling to avoid overflow.
+fn lame_charpoly_sign(diag: &[f64], sub: &[f64], sup: &[f64], a: f64) -> f64 {
+    let nb = diag.len();
+    let mut f_prev = 1.0_f64;
+    let mut f_cur = diag[0] - a;
+    for k in 2..=nb {
+        let prod = sub[k - 1] * sup[k - 2];
+        let f_next = (diag[k - 1] - a) * f_cur - prod * f_prev;
+        f_prev = f_cur;
+        f_cur = f_next;
+        let scale = f_cur.abs().max(f_prev.abs());
+        if scale > 1e150 {
+            f_cur /= scale;
+            f_prev /= scale;
+        }
+    }
+    f_cur
+}
+
+/// Ascending real eigenvalues of the Lamé tridiagonal matrix, found by
+/// bracketing sign changes of the characteristic polynomial over the Gershgorin
+/// range and bisecting.
+fn lame_eigenvalues(diag: &[f64], sub: &[f64], sup: &[f64]) -> Vec<f64> {
+    let nb = diag.len();
+    if nb == 1 {
+        return vec![diag[0]];
+    }
+    let mut lo = f64::INFINITY;
+    let mut hi = f64::NEG_INFINITY;
+    for i in 0..nb {
+        let radius = sub[i].abs() + sup[i].abs();
+        lo = lo.min(diag[i] - radius - 1.0);
+        hi = hi.max(diag[i] + radius + 1.0);
+    }
+    let mut eigs = Vec::with_capacity(nb);
+    let mut grid = 200 * nb;
+    while eigs.len() < nb && grid <= 200_000 * nb {
+        eigs.clear();
+        let step = (hi - lo) / grid as f64;
+        let mut a_prev = lo;
+        let mut s_prev = lame_charpoly_sign(diag, sub, sup, a_prev);
+        for g in 1..=grid {
+            let a = lo + step * g as f64;
+            let s = lame_charpoly_sign(diag, sub, sup, a);
+            if s_prev != 0.0 && s != 0.0 && s_prev.signum() != s.signum() {
+                let (mut x0, mut x1) = (a_prev, a);
+                for _ in 0..80 {
+                    let mid = 0.5 * (x0 + x1);
+                    let sm = lame_charpoly_sign(diag, sub, sup, mid);
+                    if sm.signum() == s_prev.signum() {
+                        x0 = mid;
+                    } else {
+                        x1 = mid;
+                    }
+                }
+                eigs.push(0.5 * (x0 + x1));
+            }
+            a_prev = a;
+            s_prev = s;
+        }
+        grid *= 4;
+    }
+    eigs.sort_by(f64::total_cmp);
+    eigs
+}
+
+/// Ellipsoidal harmonic function (Lamé function of the first kind) `E^p_n(s)`.
+///
+/// Matches `scipy.special.ellip_harm(h2, k2, n, p, s, signm, signn)`. `h2 = h²`,
+/// `k2 = k²` (`k² > h²`), degree `n`, order `p ∈ [1, 2n+1]`, coordinate `s`. The
+/// `signm`/`signn` (`±1`) set the prefactor sign per class (`K:+1, L:signm,
+/// M:signn, N:signm·signn`).
+///
+/// The `2n+1` harmonics split into four classes by the prefactor exponents
+/// `(e1, e2) ∈ {(0,0),(1,0),(0,1),(1,1)}` with `σ = (n−e1−e2) mod 2`; within each
+/// class the polynomial coefficients are the (monic) eigenvector of the Lamé
+/// matrix, ordered by ascending eigenvalue, and `p` enumerates the classes in
+/// order `K, L, M, N`.
+#[must_use]
+pub fn ellip_harm(h2: f64, k2: f64, n: u32, p: u32, s: f64, signm: i32, signn: i32) -> f64 {
+    let classes = [
+        (0u32, 0u32, 1.0_f64),
+        (1, 0, f64::from(signm)),
+        (0, 1, f64::from(signn)),
+        (1, 1, f64::from(signm * signn)),
+    ];
+    let mut index = 0u32;
+    for &(e1, e2, class_sign) in &classes {
+        if e1 + e2 > n {
+            continue;
+        }
+        let sigma = (n - e1 - e2) % 2;
+        if e1 + e2 + sigma > n {
+            continue;
+        }
+        let count = (n - e1 - e2 - sigma) / 2 + 1;
+        if p > index && p <= index + count {
+            let (diag, sub, sup) = lame_matrix(n, e1, e2, sigma, h2, k2);
+            let eigs = lame_eigenvalues(&diag, &sub, &sup);
+            let which = (p - index - 1) as usize;
+            let lambda = eigs[which];
+            let mut b = tridiagonal_eigenvector_nonsym(&sub, &diag, &sup, lambda);
+            let last = *b.last().expect("non-empty eigenvector");
+            for value in &mut b {
+                *value /= last; // monic: highest coefficient = 1
+            }
+            let poly: f64 = b
+                .iter()
+                .enumerate()
+                .map(|(j, &bj)| bj * s.powi(2 * j as i32))
+                .sum();
+            let prefactor = class_sign
+                * (s * s - h2).abs().powf(f64::from(e1) / 2.0)
+                * (s * s - k2).abs().powf(f64::from(e2) / 2.0)
+                * s.powi(sigma as i32);
+            return prefactor * poly;
+        }
+        index += count;
+    }
+    f64::NAN
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ellip_harm_matches_scipy() {
+        // frankenscipy: golden from scipy.special.ellip_harm (h2=5, k2=8, 1.17.1).
+        let c = |got: f64, want: f64, msg: &str| {
+            assert!((got - want).abs() < 1e-7 * want.abs().max(1.0), "{msg}: got {got}, want {want}");
+        };
+        c(ellip_harm(5.0, 8.0, 0, 1, 2.5, 1, 1), 1.0, "(0,1)");
+        c(ellip_harm(5.0, 8.0, 1, 1, 2.5, 1, 1), 2.5, "(1,1)");
+        c(ellip_harm(5.0, 8.0, 1, 2, 2.5, 1, 1), 1.118033988749895, "(1,2)");
+        c(ellip_harm(5.0, 8.0, 1, 3, 2.5, 1, 1), 1.3228756555322954, "(1,3)");
+        c(ellip_harm(5.0, 8.0, 2, 1, 2.5, 1, 1), -0.41666666666666696, "(2,1)");
+        c(ellip_harm(5.0, 8.0, 2, 5, 2.5, 1, 1), 1.479019945774904, "(2,5)");
+        c(ellip_harm(5.0, 8.0, 3, 4, 4.0, 1, 1), 49.43374505567852, "(3,4)");
+        c(ellip_harm(5.0, 8.0, 4, 7, 6.0, 1, 1), 1052.2530928576887, "(4,7)");
+        // signm / signn flip the L/M/N prefactor signs.
+        c(ellip_harm(5.0, 8.0, 2, 3, 2.5, -1, 1), -2.7950849718747373, "(2,3) signm=-1");
+        c(ellip_harm(5.0, 8.0, 1, 2, 2.5, -1, 1), -1.118033988749895, "(1,2) signm=-1");
+    }
 
     fn assert_coeffs(actual: &[f64], expected: &[f64], msg: &str) {
         assert_eq!(actual.len(), expected.len(), "{msg}: degree/length");
