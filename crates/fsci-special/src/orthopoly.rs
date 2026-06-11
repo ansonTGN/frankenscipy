@@ -636,6 +636,26 @@ pub fn legendre_p(n: u32, z: f64, diff_n: usize) -> Vec<f64> {
     out
 }
 
+/// All Legendre polynomials of the first kind up to degree `n`, with all
+/// derivatives up to order `diff_n`.
+///
+/// Returns a `(diff_n + 1) × (n + 1)` table where entry `[i][j]` is the `i`-th
+/// derivative of the degree-`j` Legendre polynomial at `z`, matching
+/// `scipy.special.legendre_p_all(n, z, diff_n=diff_n)` (output shape
+/// `(diff_n + 1, n + 1)`). Each column is one [`legendre_p`] evaluation, so it
+/// inherits the everywhere-stable Gegenbauer derivative identity.
+#[must_use]
+pub fn legendre_p_all(n: u32, z: f64, diff_n: usize) -> Vec<Vec<f64>> {
+    let mut table = vec![vec![0.0_f64; n as usize + 1]; diff_n + 1];
+    for j in 0..=n {
+        let col = legendre_p(j, z, diff_n);
+        for (i, &v) in col.iter().enumerate() {
+            table[i][j as usize] = v;
+        }
+    }
+    table
+}
+
 /// Evaluate the shifted Legendre polynomial P_n*(x) = P_n(2x - 1).
 ///
 /// The shifted Legendre polynomials are orthogonal on [0, 1] instead of [-1, 1].
@@ -1964,6 +1984,40 @@ mod tests {
         // diff_n exceeding the degree -> trailing zero derivatives
         close(&legendre_p(0, 0.5, 2), &[1.0, 0.0, 0.0], "P_0(0.5) d2");
         close(&legendre_p(1, 0.5, 2), &[0.5, 1.0, 0.0], "P_1(0.5) d2");
+    }
+
+    #[test]
+    fn legendre_p_all_matches_scipy() {
+        // frankenscipy: golden from scipy.special.legendre_p_all(n, z, diff_n=...) (1.17.1),
+        // shape (diff_n+1, n+1); entry [i][j] = i-th derivative of degree-j polynomial.
+        let check = |got: &[Vec<f64>], want: &[Vec<f64>], msg: &str| {
+            assert_eq!(got.len(), want.len(), "{msg}: rows");
+            for (gr, wr) in got.iter().zip(want.iter()) {
+                assert_eq!(gr.len(), wr.len(), "{msg}: cols");
+                for (g, w) in gr.iter().zip(wr.iter()) {
+                    assert!((g - w).abs() < 1e-10, "{msg}: got {g}, want {w}");
+                }
+            }
+        };
+        check(
+            &legendre_p_all(3, 0.4, 0),
+            &[vec![1.0, 0.4, -0.26, -0.44]],
+            "all(3,0.4,0)",
+        );
+        check(
+            &legendre_p_all(3, 0.4, 1),
+            &[vec![1.0, 0.4, -0.26, -0.44], vec![0.0, 1.0, 1.2, -0.3]],
+            "all(3,0.4,1)",
+        );
+        check(
+            &legendre_p_all(4, -0.6, 2),
+            &[
+                vec![1.0, -0.6, 0.04, 0.36, -0.408],
+                vec![0.0, 1.0, -1.8, 1.2, 0.72],
+                vec![0.0, 0.0, 3.0, -9.0, 11.4],
+            ],
+            "all(4,-0.6,2)",
+        );
     }
 
     #[test]
