@@ -1,0 +1,6 @@
+fefed290c7f70c7f14ed2cf68c89e559db89465f1a2d4a21eba9ab406130c6ec  tests/artifacts/perf/2026-06-11-linalg-8l8r1-85/after_lower_mirror_eigh_dense_rch.txt
+1546a41f8cb3db3fff4bb9344ae5492963f1630075c5bcd9959bfd5e5543c100  tests/artifacts/perf/2026-06-11-linalg-8l8r1-85/baseline_and_profile_contract.md
+b171127e86ef3e281f78df5f216c43294629a7c9315826ef110754d9e9daec6c  tests/artifacts/perf/2026-06-11-linalg-8l8r1-85/baseline_eigh_dense_clean_worktree_rch.txt
+56c01fa0e88b07525727b26ef3de59efe189ec9645b3b53c7372a70cef3a9742  tests/artifacts/perf/2026-06-11-linalg-8l8r1-85/baseline_matmul_criterion_rch.txt
+fed1a2ad78b4f3dd267731c0f81c747e225cda6648239121947f87e2e4d28681  tests/artifacts/perf/2026-06-11-linalg-8l8r1-85/proof_eigh_lower_mirror_tests_rch.txt
+29645e7f8a73446a9470cb86c499d166e10725d064d556be02199c59e4913fd4  tests/artifacts/perf/2026-06-11-linalg-8l8r1-85/reject_lower_mirror_route_blocked_eigh.md
