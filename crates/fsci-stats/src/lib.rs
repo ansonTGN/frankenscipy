@@ -23426,6 +23426,40 @@ pub fn mannwhitneyu_alternative(x: &[f64], y: &[f64], alternative: &str) -> Ttes
 /// Matches `scipy.stats.wilcoxon(x, y)`.
 ///
 /// Non-parametric test: H0: median of x - y is zero.
+/// pmf of the Wilcoxon signed-rank statistic T+ (sum of the positive ranks) over
+/// integer ranks 1..n, via scipy's halving recurrence (`_get_wilcoxon_distr`).
+/// Returns probabilities for T+ = 0, 1, …, n(n+1)/2. Used for the EXACT p-value
+/// when the absolute differences have no ties and no zeros were dropped.
+/// frankenscipy-78v5y
+fn wilcoxon_signed_rank_pmf(n: usize) -> Vec<f64> {
+    let mut c = vec![1.0_f64];
+    for k in 1..=n {
+        let prev = c;
+        let len = k * (k + 1) / 2 + 1;
+        let mut nc = vec![0.0_f64; len];
+        for (i, &p) in prev.iter().enumerate() {
+            nc[i] += p * 0.5; // rank k assigned a negative sign
+            nc[k + i] += p * 0.5; // rank k assigned a positive sign (shift by k)
+        }
+        c = nc;
+    }
+    c
+}
+
+/// scipy's exact signed-rank p-value (`method='exact'`, used only when there are
+/// no ties and no zeros so the ranks are 1..n). Returns (statistic, pvalue).
+fn wilcoxon_exact_pvalue(t_plus: f64, t_minus: f64, n: usize, alternative: &str) -> (f64, f64) {
+    let pmf = wilcoxon_signed_rank_pmf(n);
+    let rp = (t_plus.round() as usize).min(pmf.len() - 1);
+    let cdf: f64 = pmf[..=rp].iter().sum(); // P(T+ <= r_plus)
+    let sf: f64 = pmf[rp..].iter().sum(); // P(T+ >= r_plus)
+    match alternative {
+        "less" => (t_plus, cdf),
+        "greater" => (t_plus, sf),
+        _ => (t_plus.min(t_minus), (2.0 * sf.min(cdf)).min(1.0)),
+    }
+}
+
 pub fn wilcoxon(x: &[f64], y: &[f64]) -> TtestResult {
     if x.len() != y.len() || x.iter().any(|v| v.is_nan()) || y.iter().any(|v| v.is_nan()) {
         return TtestResult {
@@ -23470,6 +23504,24 @@ pub fn wilcoxon(x: &[f64], y: &[f64]) -> TtestResult {
         .filter(|(_, d)| **d < 0.0)
         .map(|(r, _)| *r)
         .sum();
+
+    // scipy `method='auto'` uses the EXACT signed-rank null distribution when no
+    // zeros were dropped and the absolute differences have no ties (ranks 1..n);
+    // it falls back to the normal approximation otherwise. frankenscipy-78v5y
+    let no_zeros = x.len() == nr;
+    let no_ties = {
+        let mut s = abs_diffs.clone();
+        s.sort_by(|a, b| a.total_cmp(b));
+        s.windows(2).all(|w| w[0] != w[1])
+    };
+    if no_zeros && no_ties && nr <= 1000 {
+        let (stat, pvalue) = wilcoxon_exact_pvalue(t_plus, t_minus, nr, "two-sided");
+        return TtestResult {
+            statistic: stat,
+            pvalue,
+            df: f64::NAN,
+        };
+    }
 
     let t_stat = t_plus.min(t_minus);
     let nrf = nr as f64;
@@ -23563,6 +23615,23 @@ pub fn wilcoxon_alternative(x: &[f64], y: &[f64], alternative: &str) -> TtestRes
         .filter(|(_, d)| **d < 0.0)
         .map(|(r, _)| *r)
         .sum();
+
+    // Exact signed-rank p-value when no zeros/ties (see `wilcoxon`).
+    // frankenscipy-78v5y
+    let no_zeros = x.len() == nr;
+    let no_ties = {
+        let mut s = abs_diffs.clone();
+        s.sort_by(|a, b| a.total_cmp(b));
+        s.windows(2).all(|w| w[0] != w[1])
+    };
+    if no_zeros && no_ties && nr <= 1000 {
+        let (stat, pvalue) = wilcoxon_exact_pvalue(t_plus, t_minus, nr, alternative);
+        return TtestResult {
+            statistic: stat,
+            pvalue,
+            df: f64::NAN,
+        };
+    }
 
     let nrf = nr as f64;
     let mu = nrf * (nrf + 1.0) / 4.0;
@@ -60553,6 +60622,28 @@ mod tests {
             "wilcoxon identical should have high pvalue or NaN, got {}",
             res2.pvalue
         );
+    }
+
+    #[test]
+    fn wilcoxon_exact_no_ties_matches_scipy() {
+        // Regression (frankenscipy-78v5y): with no ties and no zeros scipy uses the
+        // EXACT signed-rank null distribution, not the normal approximation. Golden
+        // values from scipy.stats.wilcoxon(method='auto') 1.17.1. (Distinct |diffs|
+        // {0.3,0.5,0.8,1.1,1.4,1.9,2.2,0.7} → exact path.)
+        let x = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let y = [1.3, 1.5, 3.8, 2.9, 6.4, 4.1, 9.2, 7.3];
+        let r = wilcoxon(&x, &y);
+        assert!((r.statistic - 17.0).abs() < 1e-12, "two-sided stat = {}", r.statistic);
+        assert!((r.pvalue - 0.9453125).abs() < 1e-10, "two-sided p = {}", r.pvalue);
+        let less = wilcoxon_alternative(&x, &y, "less");
+        assert!((less.pvalue - 0.47265625).abs() < 1e-10, "less p = {}", less.pvalue);
+        let greater = wilcoxon_alternative(&x, &y, "greater");
+        assert!((greater.pvalue - 0.578125).abs() < 1e-10, "greater p = {}", greater.pvalue);
+
+        // The pmf is a proper distribution (sums to 1) and symmetric.
+        let pmf = wilcoxon_signed_rank_pmf(8);
+        let total: f64 = pmf.iter().sum();
+        assert!((total - 1.0).abs() < 1e-12, "pmf sums to 1: {total}");
     }
 
     #[test]
