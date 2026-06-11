@@ -521,6 +521,70 @@ pub fn fdtridfd(dfn: f64, p: f64, x: f64) -> f64 {
     if dfd == 0.0 { LOWER_SENTINEL } else { dfd }
 }
 
+/// Non-central F cumulative distribution function.
+///
+/// Matches `scipy.special.ncfdtr(dfn, dfd, nc, f)`: the CDF at `f` of a
+/// non-central F variable with `dfn`/`dfd` degrees of freedom and
+/// non-centrality `nc`.
+///
+/// Computed as the Poisson(nc/2)-weighted mixture of central regularized
+/// incomplete beta values
+///
+/// ```text
+///   ncfdtr = Σ_{j≥0} e^{−λ} λ^j/j! · I_y(dfn/2 + j, dfd/2),
+///   λ = nc/2,  y = dfn·f / (dfn·f + dfd)
+/// ```
+///
+/// The sum is accumulated outward from the Poisson mode `j₀ = ⌊λ⌋` (mode weight
+/// formed in log space) so large `nc` neither underflows `e^{−λ}` nor loses
+/// precision.
+#[must_use]
+pub fn ncfdtr(dfn: f64, dfd: f64, nc: f64, f: f64) -> f64 {
+    if dfn.is_nan() || dfd.is_nan() || nc.is_nan() || f.is_nan() {
+        return f64::NAN;
+    }
+    if dfn <= 0.0 || dfd <= 0.0 || nc < 0.0 {
+        return f64::NAN;
+    }
+    if f <= 0.0 {
+        return 0.0;
+    }
+    let y = dfn * f / (dfn * f + dfd);
+    if nc == 0.0 {
+        return btdtr(0.5 * dfn, 0.5 * dfd, y);
+    }
+    let lam = nc / 2.0;
+    let j0 = lam.floor();
+    let logw0 = -lam + j0 * lam.ln()
+        - gammaln_scalar(j0 + 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN);
+    let w0 = logw0.exp();
+
+    let mut total = 0.0_f64;
+    let mut w = w0;
+    let mut j = j0;
+    let mut steps = 0;
+    while steps < 100_000 {
+        total += w * btdtr(0.5 * dfn + j, 0.5 * dfd, y);
+        j += 1.0;
+        w *= lam / j;
+        if w < 1e-300 || (w < 1e-17 * total.max(1e-300) && j > lam) {
+            break;
+        }
+        steps += 1;
+    }
+    w = w0;
+    j = j0;
+    while j > 0.0 {
+        w *= j / lam;
+        j -= 1.0;
+        total += w * btdtr(0.5 * dfn + j, 0.5 * dfd, y);
+        if w < 1e-17 * total.max(1e-300) {
+            break;
+        }
+    }
+    total.clamp(0.0, 1.0)
+}
+
 /// Student's t distribution CDF.
 ///
 /// Returns P(T <= t) where T follows a Student's t distribution
@@ -3090,6 +3154,26 @@ mod tests {
             result0.abs() < 1e-10,
             "fdtr(5, 10, 0) got {result0}, expected 0"
         );
+    }
+
+    #[test]
+    fn ncfdtr_matches_scipy_reference_values() {
+        // frankenscipy: non-central F CDF was missing. Golden values from
+        // scipy.special.ncfdtr(dfn, dfd, nc, f) 1.17.1.
+        let cases = [
+            (5.0_f64, 10.0, 3.0, 2.0, 0.6391470579975839_f64),
+            (2.0, 4.0, 0.0, 1.5, 0.673469387755102), // nc=0 → central F
+            (10.0, 20.0, 40.0, 3.0, 0.10716411882720595), // large nc
+            (3.0, 3.0, 5.0, 0.5, 0.0625950844013485),
+        ];
+        for (dfn, dfd, nc, f, want) in cases {
+            let got = ncfdtr(dfn, dfd, nc, f);
+            assert!(
+                (got - want).abs() <= 1e-10 * want.abs().max(1e-12),
+                "ncfdtr({dfn},{dfd},{nc},{f}) = {got}, expected {want}"
+            );
+        }
+        assert_eq!(ncfdtr(5.0, 10.0, 3.0, 0.0), 0.0);
     }
 
     #[test]
