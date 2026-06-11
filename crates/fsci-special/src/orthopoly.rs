@@ -915,6 +915,61 @@ pub fn mathieu_sem(m: u32, q: f64, x: f64) -> (f64, f64) {
     (value, derivative)
 }
 
+/// Characteristic value of a spheroidal wave function of order `m`, `n` (`n ≥ m`)
+/// and parameter `c`; `prolate` selects `c²` (prolate) vs `−c²` (oblate).
+///
+/// The expansion coefficients of the spheroidal angular function obey a
+/// three-term recurrence (DLMF 30.8): `A_r d_{r+2} + (B_r − λ) d_r + C_r d_{r-2}
+/// = 0` over `r` of the same parity as `n − m`. The characteristic value `λ` is
+/// the `⌊(n−m)/2⌋`-th eigenvalue of that (symmetrized) tridiagonal matrix. The
+/// symmetric off-diagonal `√(A_{r_k} C_{r_{k+1}})` is real because both factors
+/// carry one power of `±c²`, so their product is `∝ c⁴ ≥ 0`.
+fn spheroidal_cv(m: u32, n: u32, c: f64, prolate: bool) -> f64 {
+    if n < m {
+        return f64::NAN;
+    }
+    let cc = if prolate { c * c } else { -c * c };
+    let mf = f64::from(m);
+    let parity = (n - m) % 2;
+    let dim = (n - m) as usize / 2 + 2 * c.abs().ceil() as usize + 50;
+    let r_of = |k: usize| (parity as usize + 2 * k) as f64;
+    let a_coef = |r: f64| {
+        (2.0 * mf + r + 2.0) * (2.0 * mf + r + 1.0)
+            / ((2.0 * mf + 2.0 * r + 3.0) * (2.0 * mf + 2.0 * r + 5.0))
+            * cc
+    };
+    let b_coef = |r: f64| {
+        (mf + r) * (mf + r + 1.0)
+            + (2.0 * (mf + r) * (mf + r + 1.0) - 2.0 * mf * mf - 1.0)
+                / ((2.0 * mf + 2.0 * r - 1.0) * (2.0 * mf + 2.0 * r + 3.0))
+                * cc
+    };
+    let c_coef = |r: f64| {
+        r * (r - 1.0) / ((2.0 * mf + 2.0 * r - 3.0) * (2.0 * mf + 2.0 * r - 1.0)) * cc
+    };
+    let diag: Vec<f64> = (0..dim).map(|k| b_coef(r_of(k))).collect();
+    let off: Vec<f64> = (0..dim - 1)
+        .map(|k| (a_coef(r_of(k)) * c_coef(r_of(k + 1))).sqrt())
+        .collect();
+    symmetric_tridiagonal_eigenvalues(&diag, &off)[(n - m) as usize / 2]
+}
+
+/// Characteristic value of the prolate spheroidal wave functions of order `m`,
+/// `n` (`n ≥ m`) and parameter `c`. Matches `scipy.special.pro_cv(m, n, c)`.
+/// `n < m` returns NaN, as SciPy does.
+#[must_use]
+pub fn pro_cv(m: u32, n: u32, c: f64) -> f64 {
+    spheroidal_cv(m, n, c, true)
+}
+
+/// Characteristic value of the oblate spheroidal wave functions of order `m`,
+/// `n` (`n ≥ m`) and parameter `c`. Matches `scipy.special.obl_cv(m, n, c)`.
+/// `n < m` returns NaN, as SciPy does.
+#[must_use]
+pub fn obl_cv(m: u32, n: u32, c: f64) -> f64 {
+    spheroidal_cv(m, n, c, false)
+}
+
 /// Evaluate the shifted Legendre polynomial P_n*(x) = P_n(2x - 1).
 ///
 /// The shifted Legendre polynomials are orthogonal on [0, 1] instead of [-1, 1].
@@ -2277,6 +2332,26 @@ mod tests {
             ],
             "all(4,-0.6,2)",
         );
+    }
+
+    #[test]
+    fn spheroidal_cv_match_scipy() {
+        // frankenscipy: golden from scipy.special.pro_cv / obl_cv (1.17.1).
+        let c = |got: f64, want: f64, msg: &str| {
+            assert!((got - want).abs() < 1e-9, "{msg}: got {got}, want {want}");
+        };
+        c(pro_cv(0, 0, 0.0), 0.0, "pro(0,0,0)");
+        c(pro_cv(0, 1, 1.0), 2.5930845799771327, "pro(0,1,1)");
+        c(pro_cv(1, 2, 2.0), 7.653149562003566, "pro(1,2,2)");
+        c(pro_cv(2, 5, 3.0), 33.936151070297626, "pro(2,5,3)");
+        c(pro_cv(0, 3, 5.0), 26.58735960739739, "pro(0,3,5)");
+        c(pro_cv(3, 7, 10.0), 96.40807000927285, "pro(3,7,10)");
+        c(obl_cv(0, 1, 1.0), 1.3932063104484202, "obl(0,1,1)");
+        c(obl_cv(1, 2, 2.0), 4.222747333357613, "obl(1,2,2)");
+        c(obl_cv(2, 5, 3.0), 26.10501393807085, "obl(2,5,3)");
+        c(obl_cv(0, 4, 8.0), -2.7990336507689504, "obl(0,4,8)");
+        // n < m is undefined -> NaN, as SciPy does.
+        assert!(pro_cv(3, 1, 2.0).is_nan(), "pro n<m -> NaN");
     }
 
     #[test]
