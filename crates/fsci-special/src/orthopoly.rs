@@ -1524,9 +1524,203 @@ pub fn sph_harm_y(n: u32, m: i32, theta: f64, phi: f64) -> Complex64 {
     sph_harm(m, n, phi, theta)
 }
 
+// ---------------------------------------------------------------------------
+// Polynomial coefficient constructors
+//
+// SciPy exposes `legendre(n)`, `chebyt(n)`, ... as `orthopoly1d` objects whose
+// coefficient array `.c` is ordered highest-degree-first (the NumPy `poly1d`
+// convention). We mirror that surface by returning the coefficient `Vec<f64>`
+// in the same order. Coefficients are built exactly from each family's
+// three-term recurrence acting on the coefficient vectors (ascending powers),
+// then reversed to highest-degree-first — this avoids the float noise SciPy
+// incurs from constructing the polynomial out of its (approximate) roots.
+// ---------------------------------------------------------------------------
+
+/// Build the degree-`n` coefficients (ascending powers, `c[i]` multiplies `x^i`)
+/// from a three-term recurrence
+/// `P_{k+1}(x) = (a_k·x + b_k)·P_k(x) + c_k·P_{k-1}(x)`, given `P_0` and `P_1`.
+fn recurrence_coeffs(
+    n: u32,
+    p0: Vec<f64>,
+    p1: Vec<f64>,
+    abc: impl Fn(u32) -> (f64, f64, f64),
+) -> Vec<f64> {
+    if n == 0 {
+        return p0;
+    }
+    let mut prev = p0;
+    let mut curr = p1;
+    for k in 1..n {
+        let (a, b, c) = abc(k);
+        let mut next = vec![0.0_f64; (k + 2) as usize];
+        for (i, &ci) in curr.iter().enumerate() {
+            next[i + 1] += a * ci; // x · curr shifts powers up by one
+            next[i] += b * ci;
+        }
+        for (i, &pi) in prev.iter().enumerate() {
+            next[i] += c * pi;
+        }
+        prev = curr;
+        curr = next;
+    }
+    curr
+}
+
+/// Reverse ascending-power coefficients to the highest-degree-first order SciPy
+/// (and NumPy `poly1d`) uses.
+fn to_descending(mut ascending: Vec<f64>) -> Vec<f64> {
+    ascending.reverse();
+    ascending
+}
+
+/// Legendre polynomial `P_n` coefficients, highest degree first.
+///
+/// Matches `scipy.special.legendre(n).c`. Recurrence
+/// `(k+1)P_{k+1} = (2k+1)x P_k − k P_{k-1}`, with `P_0 = 1`, `P_1 = x`.
+#[must_use]
+pub fn legendre(n: u32) -> Vec<f64> {
+    to_descending(recurrence_coeffs(n, vec![1.0], vec![0.0, 1.0], |k| {
+        let kf = k as f64;
+        ((2.0 * kf + 1.0) / (kf + 1.0), 0.0, -kf / (kf + 1.0))
+    }))
+}
+
+/// Chebyshev polynomial of the first kind `T_n` coefficients, highest degree
+/// first.
+///
+/// Matches `scipy.special.chebyt(n).c`. Recurrence `T_{k+1} = 2x T_k − T_{k-1}`,
+/// with `T_0 = 1`, `T_1 = x`.
+#[must_use]
+pub fn chebyt(n: u32) -> Vec<f64> {
+    to_descending(recurrence_coeffs(n, vec![1.0], vec![0.0, 1.0], |_| {
+        (2.0, 0.0, -1.0)
+    }))
+}
+
+/// Chebyshev polynomial of the second kind `U_n` coefficients, highest degree
+/// first.
+///
+/// Matches `scipy.special.chebyu(n).c`. Recurrence `U_{k+1} = 2x U_k − U_{k-1}`,
+/// with `U_0 = 1`, `U_1 = 2x`.
+#[must_use]
+pub fn chebyu(n: u32) -> Vec<f64> {
+    to_descending(recurrence_coeffs(n, vec![1.0], vec![0.0, 2.0], |_| {
+        (2.0, 0.0, -1.0)
+    }))
+}
+
+/// Physicist's Hermite polynomial `H_n` coefficients, highest degree first.
+///
+/// Matches `scipy.special.hermite(n).c`. Recurrence
+/// `H_{k+1} = 2x H_k − 2k H_{k-1}`, with `H_0 = 1`, `H_1 = 2x`.
+#[must_use]
+pub fn hermite(n: u32) -> Vec<f64> {
+    to_descending(recurrence_coeffs(n, vec![1.0], vec![0.0, 2.0], |k| {
+        (2.0, 0.0, -2.0 * k as f64)
+    }))
+}
+
+/// Probabilist's Hermite polynomial `He_n` coefficients, highest degree first.
+///
+/// Matches `scipy.special.hermitenorm(n).c`. Recurrence
+/// `He_{k+1} = x He_k − k He_{k-1}`, with `He_0 = 1`, `He_1 = x`.
+#[must_use]
+pub fn hermitenorm(n: u32) -> Vec<f64> {
+    to_descending(recurrence_coeffs(n, vec![1.0], vec![0.0, 1.0], |k| {
+        (1.0, 0.0, -(k as f64))
+    }))
+}
+
+/// Laguerre polynomial `L_n` coefficients, highest degree first.
+///
+/// Matches `scipy.special.laguerre(n).c`. Recurrence
+/// `(k+1)L_{k+1} = (2k+1−x)L_k − k L_{k-1}`, with `L_0 = 1`, `L_1 = 1 − x`.
+#[must_use]
+pub fn laguerre(n: u32) -> Vec<f64> {
+    to_descending(recurrence_coeffs(n, vec![1.0], vec![1.0, -1.0], |k| {
+        let kf = k as f64;
+        (
+            -1.0 / (kf + 1.0),
+            (2.0 * kf + 1.0) / (kf + 1.0),
+            -kf / (kf + 1.0),
+        )
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_coeffs(actual: &[f64], expected: &[f64], msg: &str) {
+        assert_eq!(actual.len(), expected.len(), "{msg}: degree/length");
+        for (i, (&a, &e)) in actual.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (a - e).abs() < 1e-9,
+                "{msg}[{i}]: got {a}, expected {e} (diff={})",
+                (a - e).abs()
+            );
+        }
+    }
+
+    #[test]
+    fn polynomial_coeffs_match_scipy() {
+        // frankenscipy: golden from scipy.special.{legendre,chebyt,...}(n).c (1.17.1),
+        // highest-degree-first. SciPy's near-zero noise (~1e-15) is absorbed by tol.
+        assert_coeffs(&legendre(0), &[1.0], "legendre0");
+        assert_coeffs(&legendre(1), &[1.0, 0.0], "legendre1");
+        assert_coeffs(&legendre(5), &[7.875, 0.0, -8.75, 0.0, 1.875, 0.0], "legendre5");
+        assert_coeffs(
+            &legendre(6),
+            &[14.4375, 0.0, -19.6875, 0.0, 6.5625, 0.0, -0.3125],
+            "legendre6",
+        );
+        assert_coeffs(&chebyt(4), &[8.0, 0.0, -8.0, 0.0, 1.0], "chebyt4");
+        assert_coeffs(
+            &chebyt(7),
+            &[64.0, 0.0, -112.0, 0.0, 56.0, 0.0, -7.0, 0.0],
+            "chebyt7",
+        );
+        assert_coeffs(&chebyu(3), &[8.0, 0.0, -4.0, 0.0], "chebyu3");
+        assert_coeffs(
+            &chebyu(6),
+            &[64.0, 0.0, -80.0, 0.0, 24.0, 0.0, -1.0],
+            "chebyu6",
+        );
+        assert_coeffs(&hermite(3), &[8.0, 0.0, -12.0, 0.0], "hermite3");
+        assert_coeffs(&hermite(5), &[32.0, 0.0, -160.0, 0.0, 120.0, 0.0], "hermite5");
+        assert_coeffs(
+            &hermitenorm(4),
+            &[1.0, 0.0, -6.0, 0.0, 3.0],
+            "hermitenorm4",
+        );
+        assert_coeffs(
+            &hermitenorm(6),
+            &[1.0, 0.0, -15.0, 0.0, 45.0, 0.0, -15.0],
+            "hermitenorm6",
+        );
+        assert_coeffs(
+            &laguerre(3),
+            &[
+                -0.166_666_666_666_666_66,
+                1.5,
+                -3.0,
+                1.0,
+            ],
+            "laguerre3",
+        );
+        assert_coeffs(
+            &laguerre(5),
+            &[
+                -0.008_333_333_333_333_333,
+                0.208_333_333_333_333_34,
+                -1.666_666_666_666_666_7,
+                5.0,
+                -5.0,
+                1.0,
+            ],
+            "laguerre5",
+        );
+    }
 
     fn assert_close(actual: f64, expected: f64, tol: f64, msg: &str) {
         assert!(
