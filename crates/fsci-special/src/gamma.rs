@@ -1073,6 +1073,13 @@ fn trigamma_scalar(x: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
             detail: "trigamma pole at nonpositive integer",
         });
     }
+    // scipy.special.polygamma(1, x) = +inf at every nonpositive-integer pole
+    // (the trigamma double pole is one-signed). The core returns NaN at negative
+    // integers (0/0 in the reflection); pin all nonpositive integers to +inf to
+    // match scipy. frankenscipy-fxm0t
+    if x == 0.0 || is_negative_integer_pole(x) {
+        return Ok(f64::INFINITY);
+    }
     let value = trigamma_core(x);
     if !value.is_finite() {
         record_special_trace(
@@ -1106,6 +1113,11 @@ fn tetragamma_scalar(x: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
             detail: "tetragamma pole at nonpositive integer",
         });
     }
+    // scipy.special.polygamma(2, x) = -inf at every nonpositive-integer pole
+    // (even-order derivative → one-signed −inf). frankenscipy-fxm0t
+    if x == 0.0 || is_negative_integer_pole(x) {
+        return Ok(f64::NEG_INFINITY);
+    }
     let value = crate::convenience::tetragamma(x);
     if !value.is_finite() {
         record_special_trace(
@@ -1137,6 +1149,16 @@ fn polygamma_higher_scalar(order: usize, x: f64, mode: RuntimeMode) -> Result<f6
             kind: SpecialErrorKind::PoleInput,
             mode,
             detail: "higher-order polygamma pole at nonpositive integer",
+        });
+    }
+    // scipy.special.polygamma(n, x) at a nonpositive-integer pole is +inf for odd
+    // n and -inf for even n (the leading term is (-1)^{n+1} n!/(x+k)^{n+1}, a
+    // one-signed pole). frankenscipy-fxm0t
+    if x == 0.0 || is_negative_integer_pole(x) {
+        return Ok(if order % 2 == 1 {
+            f64::INFINITY
+        } else {
+            f64::NEG_INFINITY
         });
     }
     let value = polygamma_higher_core(order, x);
@@ -3011,6 +3033,43 @@ mod tests {
             let got = g(polygamma(2, &s(x), m));
             assert!(((got - expected) / expected).abs() < 1e-10, "polygamma(2,{x}) = {got}, scipy {expected}");
         }
+    }
+
+    #[test]
+    fn polygamma_nonpositive_integer_poles_match_scipy() {
+        // Regression (frankenscipy-fxm0t): for n >= 1 the polygamma core
+        // returned NaN at negative-integer poles, but scipy.special.polygamma(n, k)
+        // for nonpositive integers k is a one-signed infinity: +inf for odd n,
+        // -inf for even n (same at 0 and the negatives). digamma (n=0) keeps its
+        // distinct convention (-inf at 0, NaN at the negatives) and is unchanged.
+        let mode = RuntimeMode::Strict;
+        let poles = [0.0_f64, -1.0, -2.0, -3.0, -7.0];
+        for n in 1..=5usize {
+            let want_pos = n % 2 == 1; // +inf for odd n, -inf for even n
+            for &x in &poles {
+                let v = match polygamma(n, &SpecialTensor::RealScalar(x), mode) {
+                    Ok(SpecialTensor::RealScalar(v)) => v,
+                    other => panic!("polygamma({n}, {x}) returned {other:?}"),
+                };
+                assert!(v.is_infinite(), "polygamma({n}, {x}) = {v}, want infinite");
+                assert_eq!(
+                    v.is_sign_positive(),
+                    want_pos,
+                    "polygamma({n}, {x}) = {v}, wrong sign of infinity"
+                );
+            }
+        }
+        // digamma (n = 0) is unchanged: -inf at 0, NaN at negative integers.
+        let d0 = match polygamma(0, &SpecialTensor::RealScalar(0.0), mode) {
+            Ok(SpecialTensor::RealScalar(v)) => v,
+            other => panic!("{other:?}"),
+        };
+        assert!(d0.is_infinite() && d0.is_sign_negative(), "digamma(0) = {d0}");
+        let dm1 = match polygamma(0, &SpecialTensor::RealScalar(-1.0), mode) {
+            Ok(SpecialTensor::RealScalar(v)) => v,
+            other => panic!("{other:?}"),
+        };
+        assert!(dm1.is_nan(), "digamma(-1) = {dm1}, want NaN");
     }
 
     fn scalar(value: f64) -> SpecialTensor {
