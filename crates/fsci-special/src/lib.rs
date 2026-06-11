@@ -31,8 +31,8 @@ pub use beta::{
     BETA_DISPATCH_PLAN, bdtr, bdtrc, bdtri, bdtrik, bdtrin, beta, betainc, betainc_scalar,
     betaincc, betaincc_scalar, betainccinv, betainccinv_scalar, betaln, betaln_scalar,
     log_betainc_scalar, btdtr,
-    btdtrc, btdtri, btdtria, btdtrib, fdtr, fdtrc, fdtri, fdtridfd, ncfdtr, nbdtr, nbdtrc, nbdtri, nbdtrik,
-    nbdtrin, nctdtr, stdtr, stdtrc, stdtridf, stdtrit,
+    btdtrc, btdtri, btdtria, btdtrib, fdtr, fdtrc, fdtri, fdtridfd, ncfdtr, ncfdtri, nbdtr, nbdtrc, nbdtri, nbdtrik,
+    nbdtrin, nctdtr, nctdtrit, stdtr, stdtrc, stdtridf, stdtrit,
 };
 pub use convenience::{
     CONVENIENCE_DISPATCH_PLAN,
@@ -257,7 +257,7 @@ pub use error::{
     ERROR_DISPATCH_PLAN, erf, erf_scalar, erfc, erfc_scalar, erfcinv, erfinv, erfinv_scalar,
 };
 pub use gamma::{
-    GAMMA_DISPATCH_PLAN, binom, chdtr, chdtrc, chdtri, chdtriv, chndtr, comb, digamma, factorial,
+    GAMMA_DISPATCH_PLAN, binom, chdtr, chdtrc, chdtri, chdtriv, chndtr, chndtrix, comb, digamma, factorial,
     factorial2, factorialk, gamma, gamma_with_audit, gammainc, gammainc_scalar, gammaincc,
     gammaincc_scalar, gammaln, gammaln_scalar, gammasgn, gammasgn_scalar, gdtr, gdtrc, gdtria,
     gdtrib, gdtrix, log_gammainc_scalar, log_gammaincc_scalar, loggamma, loggamma_scalar,

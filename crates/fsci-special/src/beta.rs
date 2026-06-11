@@ -585,6 +585,87 @@ pub fn ncfdtr(dfn: f64, dfd: f64, nc: f64, f: f64) -> f64 {
     total.clamp(0.0, 1.0)
 }
 
+/// Inverse of [`ncfdtr`] in the argument `f`.
+///
+/// Returns `f` such that `ncfdtr(dfn, dfd, nc, f) = p`, matching
+/// `scipy.special.ncfdtri(dfn, dfd, nc, p)`. Monotone increasing in `f`, solved
+/// by bracket-and-bisect. `p = 0 → 0`, `p = 1 → +∞`, `p ∉ [0, 1]` → NaN.
+#[must_use]
+pub fn ncfdtri(dfn: f64, dfd: f64, nc: f64, p: f64) -> f64 {
+    if dfn.is_nan() || dfd.is_nan() || nc.is_nan() || p.is_nan() || !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    if dfn <= 0.0 || dfd <= 0.0 || nc < 0.0 {
+        return f64::NAN;
+    }
+    if p == 0.0 {
+        return 0.0;
+    }
+    if p == 1.0 {
+        return f64::INFINITY;
+    }
+    let mut hi = 1.0_f64;
+    while ncfdtr(dfn, dfd, nc, hi) < p {
+        hi *= 2.0;
+        if hi > 1e300 {
+            return f64::INFINITY;
+        }
+    }
+    let mut lo = 0.0_f64;
+    for _ in 0..100 {
+        let mid = 0.5 * (lo + hi);
+        if ncfdtr(dfn, dfd, nc, mid) < p {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    0.5 * (lo + hi)
+}
+
+/// Inverse of [`nctdtr`] in the argument `t`.
+///
+/// Returns `t` such that `nctdtr(df, nc, t) = p`, matching
+/// `scipy.special.nctdtrit(df, nc, p)`. Monotone increasing in `t`, solved by
+/// bracket-and-bisect over the whole real line. Following scipy's cdflib, the
+/// exact boundaries `p ≤ 0` and `p ≥ 1` return `+∞`.
+#[must_use]
+pub fn nctdtrit(df: f64, nc: f64, p: f64) -> f64 {
+    if df.is_nan() || nc.is_nan() || p.is_nan() {
+        return f64::NAN;
+    }
+    if df <= 0.0 {
+        return f64::NAN;
+    }
+    if p <= 0.0 || p >= 1.0 {
+        return f64::INFINITY;
+    }
+    // Bracket the root.
+    let mut lo = -1.0_f64;
+    while nctdtr(df, nc, lo) > p {
+        lo *= 2.0;
+        if lo < -1e300 {
+            return f64::NEG_INFINITY;
+        }
+    }
+    let mut hi = 1.0_f64;
+    while nctdtr(df, nc, hi) < p {
+        hi *= 2.0;
+        if hi > 1e300 {
+            return f64::INFINITY;
+        }
+    }
+    for _ in 0..100 {
+        let mid = 0.5 * (lo + hi);
+        if nctdtr(df, nc, mid) < p {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    0.5 * (lo + hi)
+}
+
 /// Student's t distribution CDF.
 ///
 /// Returns P(T <= t) where T follows a Student's t distribution
@@ -3250,6 +3331,31 @@ mod tests {
                 "nctdtr({df},{nc},{t}) = {got}, expected {want}"
             );
         }
+    }
+
+    #[test]
+    fn noncentral_quantile_inverses_match_scipy() {
+        // frankenscipy: golden from scipy.special.ncfdtri / nctdtrit 1.17.1.
+        let nc_f = [
+            (5.0_f64, 10.0, 3.0, 0.5, 1.5254092911626238_f64),
+            (2.0, 4.0, 0.0, 0.7, 1.6514837167011074),
+            (10.0, 20.0, 40.0, 0.3, 4.058092482878802),
+        ];
+        for (dfn, dfd, nc, p, want) in nc_f {
+            let got = ncfdtri(dfn, dfd, nc, p);
+            assert!((got - want).abs() <= 1e-9 * want.abs(), "ncfdtri = {got}, want {want}");
+        }
+        let nc_t = [
+            (10.0_f64, 2.0, 0.3, 1.4856759815279506_f64),
+            (20.0, -3.0, 0.8, -2.138962456180749),
+            (5.0, 0.0, 0.5, 0.0),
+        ];
+        for (df, nc, p, want) in nc_t {
+            let got = nctdtrit(df, nc, p);
+            assert!((got - want).abs() <= 1e-8 * want.abs().max(1e-6), "nctdtrit = {got}, want {want}");
+        }
+        assert_eq!(ncfdtri(5.0, 10.0, 3.0, 0.0), 0.0);
+        assert!(ncfdtri(5.0, 10.0, 3.0, 1.0).is_infinite());
     }
 
     #[test]

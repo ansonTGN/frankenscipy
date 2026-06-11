@@ -2153,6 +2153,42 @@ pub fn chndtr(x: f64, df: f64, nc: f64) -> f64 {
     total.clamp(0.0, 1.0)
 }
 
+/// Inverse of [`chndtr`] in the argument `x`.
+///
+/// Returns `x` such that `chndtr(x, df, nc) = p`, matching
+/// `scipy.special.chndtrix(p, df, nc)`. The CDF is monotonically increasing in
+/// `x`, so the root is found by bracket-and-bisect. Boundaries follow scipy:
+/// `p = 0 → 0`, `p = 1 → +∞`, and `p ∉ [0, 1]` (or NaN inputs) → NaN.
+#[must_use]
+pub fn chndtrix(p: f64, df: f64, nc: f64) -> f64 {
+    if p.is_nan() || df.is_nan() || nc.is_nan() || !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    if p == 0.0 {
+        return 0.0;
+    }
+    if p == 1.0 {
+        return f64::INFINITY;
+    }
+    let mut hi = 1.0_f64;
+    while chndtr(hi, df, nc) < p {
+        hi *= 2.0;
+        if hi > 1e300 {
+            return f64::INFINITY;
+        }
+    }
+    let mut lo = 0.0_f64;
+    for _ in 0..100 {
+        let mid = 0.5 * (lo + hi);
+        if chndtr(mid, df, nc) < p {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    0.5 * (lo + hi)
+}
+
 /// Inverse complemented chi-squared distribution.
 ///
 /// Returns x such that P(X > x) = p where X follows a chi-squared
@@ -4014,6 +4050,23 @@ mod tests {
         }
         // x ≤ 0 → 0.
         assert_eq!(chndtr(0.0, 5.0, 2.0), 0.0);
+    }
+
+    #[test]
+    fn chndtrix_inverts_chndtr_matching_scipy() {
+        // frankenscipy: golden from scipy.special.chndtrix(p, df, nc) 1.17.1.
+        let cases = [
+            (0.5_f64, 3.0, 2.0, 4.137515123399119_f64),
+            (0.1, 5.0, 8.0, 5.486633223562761),
+            (0.9, 10.0, 1.0, 17.560589244156514),
+        ];
+        for (p, df, nc, want) in cases {
+            let got = chndtrix(p, df, nc);
+            assert!((got - want).abs() <= 1e-9 * want.abs(), "chndtrix({p},{df},{nc}) = {got}, want {want}");
+        }
+        assert_eq!(chndtrix(0.0, 3.0, 2.0), 0.0);
+        assert!(chndtrix(1.0, 3.0, 2.0).is_infinite());
+        assert!(chndtrix(1.5, 3.0, 2.0).is_nan());
     }
 
     #[test]
