@@ -717,6 +717,69 @@ pub fn sph_legendre_p(n: u32, m: i32, theta: f64) -> f64 {
     }
 }
 
+/// Ascending eigenvalues of a symmetric tridiagonal matrix (the Mathieu
+/// characteristic-value recurrence matrices), reusing the Golub–Welsch QL.
+fn symmetric_tridiagonal_eigenvalues(diagonal: &[f64], offdiagonal: &[f64]) -> Vec<f64> {
+    let (mut values, _) = gw_tridiagonal_eigen_first_row(diagonal, offdiagonal)
+        .unwrap_or_else(|| (vec![f64::NAN; diagonal.len()], Vec::new()));
+    values.sort_by(f64::total_cmp);
+    values
+}
+
+/// Fourier-mode count for the Mathieu recurrence matrix: large enough that the
+/// `m`-th characteristic value has converged for non-centrality `q`.
+fn mathieu_matrix_dim(m: u32, q: f64) -> usize {
+    m as usize + 2 * (q.abs() + 1.0).sqrt().ceil() as usize + 40
+}
+
+/// Characteristic value `a_m(q)` of the even-periodic Mathieu functions `ce_m`.
+///
+/// Matches `scipy.special.mathieu_a(m, q)`. Computed as the `⌊m/2⌋`-th smallest
+/// eigenvalue of the symmetric tridiagonal Fourier-recurrence matrix (DLMF 28.4):
+/// for even `m`, diagonal `(2k)²` with first off-diagonal `q√2`; for odd `m`,
+/// diagonal `(2k+1)²` with `d₀ = 1 + q`; all other off-diagonals `q`.
+#[must_use]
+pub fn mathieu_a(m: u32, q: f64) -> f64 {
+    let n = mathieu_matrix_dim(m, q);
+    if m % 2 == 0 {
+        let diag: Vec<f64> = (0..n).map(|k| (2 * k as i64).pow(2) as f64).collect();
+        let mut off = vec![q; n - 1];
+        off[0] = q * std::f64::consts::SQRT_2;
+        symmetric_tridiagonal_eigenvalues(&diag, &off)[m as usize / 2]
+    } else {
+        let mut diag: Vec<f64> = (0..n).map(|k| (2 * k as i64 + 1).pow(2) as f64).collect();
+        diag[0] = 1.0 + q;
+        let off = vec![q; n - 1];
+        symmetric_tridiagonal_eigenvalues(&diag, &off)[(m as usize - 1) / 2]
+    }
+}
+
+/// Characteristic value `b_m(q)` of the odd-periodic Mathieu functions `se_m`
+/// (`m ≥ 1`).
+///
+/// Matches `scipy.special.mathieu_b(m, q)`. The `⌊(m−1)/2⌋`-th (odd `m`) or
+/// `m/2−1`-th (even `m`) smallest eigenvalue of the symmetric tridiagonal
+/// recurrence matrix (DLMF 28.4): for even `m`, diagonal `(2k+2)²`; for odd `m`,
+/// diagonal `(2k+1)²` with `d₀ = 1 − q`; all off-diagonals `q`. `m = 0` is
+/// undefined and returns NaN, as SciPy does.
+#[must_use]
+pub fn mathieu_b(m: u32, q: f64) -> f64 {
+    if m == 0 {
+        return f64::NAN;
+    }
+    let n = mathieu_matrix_dim(m, q);
+    if m % 2 == 0 {
+        let diag: Vec<f64> = (0..n).map(|k| (2 * k as i64 + 2).pow(2) as f64).collect();
+        let off = vec![q; n - 1];
+        symmetric_tridiagonal_eigenvalues(&diag, &off)[m as usize / 2 - 1]
+    } else {
+        let mut diag: Vec<f64> = (0..n).map(|k| (2 * k as i64 + 1).pow(2) as f64).collect();
+        diag[0] = 1.0 - q;
+        let off = vec![q; n - 1];
+        symmetric_tridiagonal_eigenvalues(&diag, &off)[(m as usize - 1) / 2]
+    }
+}
+
 /// Evaluate the shifted Legendre polynomial P_n*(x) = P_n(2x - 1).
 ///
 /// The shifted Legendre polynomials are orthogonal on [0, 1] instead of [-1, 1].
@@ -2079,6 +2142,30 @@ mod tests {
             ],
             "all(4,-0.6,2)",
         );
+    }
+
+    #[test]
+    fn mathieu_characteristic_values_match_scipy() {
+        // frankenscipy: golden from scipy.special.mathieu_a / mathieu_b (1.17.1).
+        let c = |got: f64, want: f64, msg: &str| {
+            assert!((got - want).abs() < 1e-9, "{msg}: got {got}, want {want}");
+        };
+        c(mathieu_a(0, 5.0), -5.800046020851508, "a(0,5)");
+        c(mathieu_a(1, 5.0), 1.8581875415477505, "a(1,5)");
+        c(mathieu_a(2, 5.0), 7.449109739529178, "a(2,5)");
+        c(mathieu_a(3, 5.0), 11.548832036343402, "a(3,5)");
+        c(mathieu_a(0, 3.0), -2.8343918899043112, "a(0,3)");
+        c(mathieu_a(11, 50.0), 132.34094554702267, "a(11,50)");
+        c(mathieu_a(2, -10.0), 7.717369849779622, "a(2,-10)");
+        c(mathieu_b(1, 5.0), -5.790080598637771, "b(1,5)");
+        c(mathieu_b(2, 5.0), 2.0994604454866654, "b(2,5)");
+        c(mathieu_b(3, 5.0), 9.2363277136937, "b(3,5)");
+        c(mathieu_b(4, 5.0), 16.648219937169777, "b(4,5)");
+        c(mathieu_b(4, 10.0), 17.381380678623046, "b(4,10)");
+        assert!(mathieu_b(0, 5.0).is_nan(), "b(0,5) -> NaN");
+        // q = 0 reduces to a_m(0) = b_m(0) = m^2.
+        c(mathieu_a(4, 0.0), 16.0, "a(4,0)");
+        c(mathieu_b(3, 0.0), 9.0, "b(3,0)");
     }
 
     #[test]

@@ -289,7 +289,7 @@ pub use orthopoly::{
     eval_jacobi, eval_laguerre, eval_legendre, eval_sh_chebyt, eval_sh_chebyu, eval_sh_jacobi,
     eval_sh_legendre, gegenbauer, genlaguerre, h_roots, hermite, hermitenorm, he_roots, j_roots,
     assoc_legendre_p, jacobi, js_roots, l_roots, la_roots, laguerre, legendre, legendre_p,
-    legendre_p_all, lpmn, lpmv, lpn, lqmn, lqn, p_roots,
+    legendre_p_all, lpmn, lpmv, lpn, lqmn, lqn, mathieu_a, mathieu_b, p_roots,
     ps_roots, roots_chebyc, roots_chebys, roots_chebyt, roots_chebyu, roots_gegenbauer,
     roots_genlaguerre, roots_hermite, roots_hermitenorm, roots_jacobi, roots_laguerre,
     roots_legendre, roots_sh_chebyt, roots_sh_chebyu, roots_sh_jacobi, roots_sh_legendre, s_roots,
