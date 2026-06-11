@@ -786,7 +786,7 @@ where
     }
 }
 
-fn gamma_scalar(x: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
+pub(crate) fn gamma_scalar(x: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
     if matches!(mode, RuntimeMode::Hardened) && is_negative_integer_pole(x) {
         record_special_trace(
             "gamma",
