@@ -1031,6 +1031,60 @@ pub fn mathieu_modsem2(m: u32, q: f64, x: f64) -> (f64, f64) {
     mathieu_mod(m, q, x, false, true)
 }
 
+/// Number of Fourier coefficients SciPy's `mathieu_*_coef` returns, `km =
+/// ⌊qm + m/2⌋`, where `qm` is the specfun convergence estimate (`q ≤ 1` vs
+/// `q > 1` polynomials in `√q`). Reproduces SciPy's truncation exactly.
+fn mathieu_coef_count(m: u32, q: f64) -> usize {
+    let sq = q.sqrt();
+    let qm = if q <= 1.0 {
+        7.5 + 56.1 * sq - 134.7 * q + 90.7 * sq * q
+    } else {
+        17.0 + 3.1 * sq - 0.126 * q + 0.0037 * sq * q
+    };
+    (qm + 0.5 * f64::from(m)) as usize
+}
+
+/// Take the first `km` Fourier coefficients, padding with zeros if the computed
+/// vector is shorter (the omitted tail coefficients are negligible).
+fn mathieu_take_coef(mut coeffs: Vec<f64>, km: usize) -> Vec<f64> {
+    if coeffs.len() < km {
+        coeffs.resize(km, 0.0);
+    } else {
+        coeffs.truncate(km);
+    }
+    coeffs
+}
+
+/// Fourier coefficients `A` of the even Mathieu function `ce_m(x, q)`
+/// (`q ≥ 0`), matching `scipy.special.mathieu_even_coef(m, q)`.
+///
+/// These are the angular eigenvector coefficients (as used by [`mathieu_cem`]),
+/// truncated to SciPy's specfun count `⌊qm + m/2⌋`. `q < 0` returns an empty
+/// vector (SciPy raises for negative `q`).
+#[must_use]
+pub fn mathieu_even_coef(m: u32, q: f64) -> Vec<f64> {
+    if q < 0.0 {
+        return Vec::new();
+    }
+    let (coeffs, _) = mathieu_fourier(m, q, true);
+    mathieu_take_coef(coeffs, mathieu_coef_count(m, q))
+}
+
+/// Fourier coefficients `B` of the odd Mathieu function `se_m(x, q)`
+/// (`m ≥ 1`, `q ≥ 0`), matching `scipy.special.mathieu_odd_coef(m, q)`.
+///
+/// These are the angular eigenvector coefficients (as used by [`mathieu_sem`]),
+/// truncated to SciPy's specfun count `⌊qm + m/2⌋`. `q < 0` returns an empty
+/// vector.
+#[must_use]
+pub fn mathieu_odd_coef(m: u32, q: f64) -> Vec<f64> {
+    if q < 0.0 {
+        return Vec::new();
+    }
+    let (coeffs, _) = mathieu_fourier(m, q, false);
+    mathieu_take_coef(coeffs, mathieu_coef_count(m, q))
+}
+
 /// Characteristic value of a spheroidal wave function of order `m`, `n` (`n ≥ m`)
 /// and parameter `c`; `prolate` selects `c²` (prolate) vs `−c²` (oblate).
 ///
@@ -2782,6 +2836,42 @@ mod tests {
         c(obl_cv(0, 4, 8.0), -2.7990336507689504, "obl(0,4,8)");
         // n < m is undefined -> NaN, as SciPy does.
         assert!(pro_cv(3, 1, 2.0).is_nan(), "pro n<m -> NaN");
+    }
+
+    #[test]
+    fn mathieu_coef_match_scipy() {
+        // frankenscipy: golden from scipy.special.mathieu_even_coef / mathieu_odd_coef (1.17.1).
+        let head = |got: &[f64], len: usize, want: &[f64], msg: &str| {
+            assert_eq!(got.len(), len, "{msg}: length");
+            for (i, w) in want.iter().enumerate() {
+                assert!((got[i] - w).abs() < 1e-9, "{msg}[{i}]: got {} want {w}", got[i]);
+            }
+        };
+        head(
+            &mathieu_even_coef(2, 5.0),
+            24,
+            &[0.438737166377, 0.65364025983, -0.426578935488, 0.075885673127, -0.00674176967, 0.000364942223],
+            "even_coef(2,5)",
+        );
+        head(
+            &mathieu_even_coef(0, 1.0),
+            19,
+            &[0.672989672316, -0.306303580037, 0.018645559365, -0.000511683672],
+            "even_coef(0,1)",
+        );
+        head(
+            &mathieu_odd_coef(1, 5.0),
+            23,
+            &[0.940019021698, -0.336541962618, 0.055477528692, -0.00508955335, 0.000293878955, -1.160229e-05],
+            "odd_coef(1,5)",
+        );
+        head(
+            &mathieu_odd_coef(2, 10.0),
+            26,
+            &[0.833907355976, -0.532212869997, 0.144414763173, -0.022082159176, 0.002171375286],
+            "odd_coef(2,10)",
+        );
+        assert!(mathieu_even_coef(0, -1.0).is_empty(), "q<0 -> empty");
     }
 
     #[test]
