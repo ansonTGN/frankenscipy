@@ -1401,7 +1401,12 @@ fn hyp2f1_dispatch(
 ///
 /// 1F1(a; b; z) = Σ_{n=0}^∞ (a)_n z^n / ((b)_n n!)
 /// where (a)_n = a(a+1)...(a+n-1) is the Pochhammer symbol.
-pub(crate) fn hyp1f1_scalar(a: f64, b: f64, z: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
+pub(crate) fn hyp1f1_scalar(
+    a: f64,
+    b: f64,
+    z: f64,
+    mode: RuntimeMode,
+) -> Result<f64, SpecialError> {
     // A nonpositive-integer a terminates 1F1 into a degree-|a| polynomial that
     // is EXACT for every z. This must be decided before the b-pole guard and
     // before the large-|z| asymptotic, both of which mishandle it:
@@ -1596,7 +1601,11 @@ fn hyp1f1_asymptotic_negative(a: f64, b: f64, z: f64) -> Result<f64, SpecialErro
         let k = (a - b).round();
         let (ln_gb, sign_b) = ln_gamma_with_sign(b);
         let (ln_ga, sign_a) = ln_gamma_with_sign(a);
-        let z_pow_sign = if (k as i64).rem_euclid(2) == 0 { 1.0 } else { -1.0 };
+        let z_pow_sign = if (k as i64).rem_euclid(2) == 0 {
+            1.0
+        } else {
+            -1.0
+        };
         let sign = sign_a * sign_b * z_pow_sign;
         let ln_pref = ln_gb - ln_ga + z + k * neg_z.ln();
         let mut series = 1.0_f64;
@@ -2398,17 +2407,17 @@ fn hyp2f1_inv_z_connection(
     let neg_z = -z;
     let inv_z = z.recip();
 
-    let w1 = (complex_gammaln(c) + complex_gammaln(b - a)
-        - complex_gammaln(b)
-        - complex_gammaln(c - a))
-    .exp();
-    let w2 = (complex_gammaln(c) + complex_gammaln(a - b)
-        - complex_gammaln(a)
-        - complex_gammaln(c - b))
-    .exp();
+    let w1 =
+        (complex_gammaln(c) + complex_gammaln(b - a) - complex_gammaln(b) - complex_gammaln(c - a))
+            .exp();
+    let w2 =
+        (complex_gammaln(c) + complex_gammaln(a - b) - complex_gammaln(a) - complex_gammaln(c - b))
+            .exp();
 
-    let term1 = w1 * neg_z.powc(-a) * hyp2f1_series_complex(a, a - c + one, a - b + one, inv_z, mode)?;
-    let term2 = w2 * neg_z.powc(-b) * hyp2f1_series_complex(b, b - c + one, b - a + one, inv_z, mode)?;
+    let term1 =
+        w1 * neg_z.powc(-a) * hyp2f1_series_complex(a, a - c + one, a - b + one, inv_z, mode)?;
+    let term2 =
+        w2 * neg_z.powc(-b) * hyp2f1_series_complex(b, b - c + one, b - a + one, inv_z, mode)?;
 
     Ok(term1 + term2)
 }
@@ -2496,8 +2505,8 @@ fn hyp2f1_inv_z_connection_degenerate(
     // covers both the generic (c-a non-integer) and triple-degenerate corners.
     let tol = 1.0e-15;
     let max_terms = 4_000u64;
-    let mut cp_core = Complex64::from_real(1.0 / factorial(m))
-        * inv_z.powc(Complex64::from_real(m_f)); // Cp_0 = z^{-m}/m!
+    let mut cp_core =
+        Complex64::from_real(1.0 / factorial(m)) * inv_z.powc(Complex64::from_real(m_f)); // Cp_0 = z^{-m}/m!
     let mut s2 = Complex64::from_real(0.0);
     let mut converged = false;
     for k in 0..max_terms {
@@ -2667,8 +2676,8 @@ fn parabolic_cylinder_d(v: f64, x: f64) -> f64 {
     } else {
         let m1 = hyp1f1_scalar(-v / 2.0, 0.5, z, RuntimeMode::Strict).unwrap_or(f64::NAN);
         let m2 = hyp1f1_scalar((1.0 - v) / 2.0, 1.5, z, RuntimeMode::Strict).unwrap_or(f64::NAN);
-        let r1 = crate::gamma::rgamma_scalar((1.0 - v) / 2.0, RuntimeMode::Strict)
-            .unwrap_or(f64::NAN);
+        let r1 =
+            crate::gamma::rgamma_scalar((1.0 - v) / 2.0, RuntimeMode::Strict).unwrap_or(f64::NAN);
         let r2 = crate::gamma::rgamma_scalar(-v / 2.0, RuntimeMode::Strict).unwrap_or(f64::NAN);
         let term = m1 * r1 - std::f64::consts::SQRT_2 * x * m2 * r2;
         coef * std::f64::consts::PI.sqrt() * term
@@ -2763,7 +2772,9 @@ fn pbwa_series(a: f64, x: f64, odd: bool) -> (f64, f64) {
 
 /// `|Γ(re + i·im)|` via the complex log-gamma.
 fn gamma_modulus(re: f64, im: f64) -> f64 {
-    crate::gamma::complex_gammaln(Complex64::new(re, im)).re.exp()
+    crate::gamma::complex_gammaln(Complex64::new(re, im))
+        .re
+        .exp()
 }
 
 /// Parabolic cylinder function `W(a, x)` and its derivative `W'(a, x)`.
@@ -2921,7 +2932,11 @@ mod tests {
         let (dvr, _) = pbdn_seq(2, Complex64::new(0.5, 0.0));
         c(
             &dvr,
-            &[(0.9394130628134758, 0.0), (0.4697065314067379, 0.0), (-0.7045597971101069, 0.0)],
+            &[
+                (0.9394130628134758, 0.0),
+                (0.4697065314067379, 0.0),
+                (-0.7045597971101069, 0.0),
+            ],
             "pbdn_seq(2,0.5) v",
         );
     }
@@ -2932,24 +2947,75 @@ mod tests {
         let close = |got: &[f64], want: &[f64], msg: &str| {
             assert_eq!(got.len(), want.len(), "{msg}: len");
             for (g, w) in got.iter().zip(want.iter()) {
-                assert!((g - w).abs() < 1e-7 * w.abs().max(1.0), "{msg}: got {g}, want {w}");
+                assert!(
+                    (g - w).abs() < 1e-7 * w.abs().max(1.0),
+                    "{msg}: got {g}, want {w}"
+                );
             }
         };
         let (dv, dp) = pbdv_seq(2.0, 1.5);
-        close(&dv, &[0.569782824730923, 0.8546742370963845, 0.7122285309136537], "pbdv_seq(2,1.5) v");
-        close(&dp, &[-0.42733711854819223, -0.07122285309136533, 1.1751770760075286], "pbdv_seq(2,1.5) d");
+        close(
+            &dv,
+            &[0.569782824730923, 0.8546742370963845, 0.7122285309136537],
+            "pbdv_seq(2,1.5) v",
+        );
+        close(
+            &dp,
+            &[
+                -0.42733711854819223,
+                -0.07122285309136533,
+                1.1751770760075286,
+            ],
+            "pbdv_seq(2,1.5) d",
+        );
         let (dv, dp) = pbdv_seq(2.5, -1.0);
-        close(&dv, &[-0.19500101822336233, -0.7201956895827357, 1.0126972169177793], "pbdv_seq(2.5,-1) v");
-        close(&dp, &[0.8176961986944169, -0.6525993721264114, -1.2941406154979496], "pbdv_seq(2.5,-1) d");
+        close(
+            &dv,
+            &[
+                -0.19500101822336233,
+                -0.7201956895827357,
+                1.0126972169177793,
+            ],
+            "pbdv_seq(2.5,-1) v",
+        );
+        close(
+            &dp,
+            &[0.8176961986944169, -0.6525993721264114, -1.2941406154979496],
+            "pbdv_seq(2.5,-1) d",
+        );
         let (dv, dp) = pbdv_seq(0.0, 2.0);
-        close(&dv, &[0.36787944117144233, 0.7357588823428847], "pbdv_seq(0,2) v");
-        close(&dp, &[-0.36787944117144233, -0.36787944117144233], "pbdv_seq(0,2) d");
+        close(
+            &dv,
+            &[0.36787944117144233, 0.7357588823428847],
+            "pbdv_seq(0,2) v",
+        );
+        close(
+            &dp,
+            &[-0.36787944117144233, -0.36787944117144233],
+            "pbdv_seq(0,2) d",
+        );
         let (vv, vp) = pbvv_seq(2.0, 1.5);
-        close(&vv, &[1.0532396617590685, 0.17952847848481102, -0.391973472015926], "pbvv_seq(2,1.5) v");
-        close(&vp, &[0.6104012678344903, 0.9185933028954603, 0.47350858249675554], "pbvv_seq(2,1.5) d");
+        close(
+            &vv,
+            &[1.0532396617590685, 0.17952847848481102, -0.391973472015926],
+            "pbvv_seq(2,1.5) v",
+        );
+        close(
+            &vp,
+            &[0.6104012678344903, 0.9185933028954603, 0.47350858249675554],
+            "pbvv_seq(2,1.5) d",
+        );
         let (vv, vp) = pbvv_seq(1.5, 2.0);
-        close(&vv, &[1.021133116771255, 0.21052729729833977], "pbvv_seq(1.5,2) v");
-        close(&vp, &[0.7053421708237453, 0.8106058194729152], "pbvv_seq(1.5,2) d");
+        close(
+            &vv,
+            &[1.021133116771255, 0.21052729729833977],
+            "pbvv_seq(1.5,2) v",
+        );
+        close(
+            &vp,
+            &[0.7053421708237453, 0.8106058194729152],
+            "pbvv_seq(1.5,2) d",
+        );
     }
 
     #[test]
@@ -2969,8 +3035,14 @@ mod tests {
         for (a, x, wv, wvp) in cases {
             let (w, wp) = pbwa(a, x);
             let tol = |t: f64| 1e-7 * t.abs().max(1.0);
-            assert!((w - wv).abs() < tol(wv), "pbwa({a},{x}) W: got {w}, want {wv}");
-            assert!((wp - wvp).abs() < tol(wvp), "pbwa({a},{x}) W': got {wp}, want {wvp}");
+            assert!(
+                (w - wv).abs() < tol(wv),
+                "pbwa({a},{x}) W: got {w}, want {wv}"
+            );
+            assert!(
+                (wp - wvp).abs() < tol(wvp),
+                "pbwa({a},{x}) W': got {wp}, want {wvp}"
+            );
         }
         // Outside SciPy's |a| <= 5, |x| <= 5 domain the result is NaN.
         assert!(pbwa(0.0, 5.1).0.is_nan(), "pbwa |x|>5 -> NaN");
@@ -2994,8 +3066,14 @@ mod tests {
         for (v, x, wv, wvp) in cases {
             let (val, vp) = pbvv(v, x);
             let tol = |w: f64| 1e-6 * w.abs().max(1.0);
-            assert!((val - wv).abs() < tol(wv), "pbvv({v},{x}) V: got {val}, want {wv}");
-            assert!((vp - wvp).abs() < tol(wvp), "pbvv({v},{x}) V': got {vp}, want {wvp}");
+            assert!(
+                (val - wv).abs() < tol(wv),
+                "pbvv({v},{x}) V: got {val}, want {wv}"
+            );
+            assert!(
+                (vp - wvp).abs() < tol(wvp),
+                "pbvv({v},{x}) V': got {vp}, want {wvp}"
+            );
         }
     }
 
@@ -3016,8 +3094,14 @@ mod tests {
         for (v, x, wd, wdp) in cases {
             let (d, dp) = pbdv(v, x);
             let tol = |w: f64| 1e-6 * w.abs().max(1.0);
-            assert!((d - wd).abs() < tol(wd), "pbdv({v},{x}) D: got {d}, want {wd}");
-            assert!((dp - wdp).abs() < tol(wdp), "pbdv({v},{x}) D': got {dp}, want {wdp}");
+            assert!(
+                (d - wd).abs() < tol(wd),
+                "pbdv({v},{x}) D: got {d}, want {wd}"
+            );
+            assert!(
+                (dp - wdp).abs() < tol(wdp),
+                "pbdv({v},{x}) D': got {dp}, want {wdp}"
+            );
         }
     }
 
@@ -3050,15 +3134,18 @@ mod tests {
         // Genuine poles → +inf (matching scipy): non-terminating a with
         // negative-integer b, and nonpos-int a with |a|>|b|.
         let poles: [(f64, f64, f64); 5] = [
-            (0.5, -2.0, 5.0),   // non-integer a, b=-2
-            (2.0, -2.0, 0.5),   // positive-int a, b=-2 (no termination)
-            (-2.5, 0.0, 2.0),   // b=0
-            (-3.0, -2.0, 0.5),  // |a|>|b|
-            (-2.0, -1.0, 0.0),  // |a|>|b|, even at z=0
+            (0.5, -2.0, 5.0),  // non-integer a, b=-2
+            (2.0, -2.0, 0.5),  // positive-int a, b=-2 (no termination)
+            (-2.5, 0.0, 2.0),  // b=0
+            (-3.0, -2.0, 0.5), // |a|>|b|
+            (-2.0, -1.0, 0.0), // |a|>|b|, even at z=0
         ];
         for (a, b, z) in poles {
             let got = hyp1f1_scalar(a, b, z, RuntimeMode::Strict).unwrap();
-            assert!(got == f64::INFINITY, "hyp1f1({a},{b},{z}) = {got}, expected +inf");
+            assert!(
+                got == f64::INFINITY,
+                "hyp1f1({a},{b},{z}) = {got}, expected +inf"
+            );
         }
     }
 
@@ -3512,7 +3599,10 @@ mod tests {
             RuntimeMode::Strict,
         );
         let val = get_scalar(&r).unwrap_or(f64::NAN);
-        assert!(val == f64::INFINITY, "b=0 should return +inf in strict mode, got {val}");
+        assert!(
+            val == f64::INFINITY,
+            "b=0 should return +inf in strict mode, got {val}"
+        );
     }
 
     #[test]
@@ -3572,8 +3662,18 @@ mod tests {
         // (z=-10000). scipy.hyp0f1 accepts real b + complex z.
         let cases: &[(f64, (f64, f64), f64, f64)] = &[
             (2.0, (-400.0, 0.0), 0.00630191590187925, 0.0),
-            (1.5, (0.0, -900.0), -1.5462761722273576e16, 1.5930749561190496e16),
-            (2.5, (-2500.0, 300.0), -0.05794675493376355, 0.013103138447106267),
+            (
+                1.5,
+                (0.0, -900.0),
+                -1.5462761722273576e16,
+                1.5930749561190496e16,
+            ),
+            (
+                2.5,
+                (-2500.0, 300.0),
+                -0.05794675493376355,
+                0.013103138447106267,
+            ),
             (0.5, (-10000.0, 0.0), 0.48718767500700594, 0.0),
             (3.0, (-625.0, 625.0), -159626.04856509008, 867341.6324720286),
             (1.0, (-50.0, 50.0), -43.843811768703894, 42.19916419322264),
@@ -3602,13 +3702,55 @@ mod tests {
         // the negative-real-axis case used to return ~1e69, and the
         // arg z = ±pi/2 anti-Stokes band used to fail at rel ~1.8.
         let cases: &[((f64, f64), (f64, f64), (f64, f64), f64, f64)] = &[
-            ((1.0, 0.5), (2.0, -0.3), (-99.0, 14.0), -0.011969417454155048, -0.007406056247135601),
-            ((0.5, 0.0), (1.5, 0.0), (0.0, 60.0), 0.07842759028142188, 0.08885735047389137),
-            ((0.5, 0.0), (1.5, 0.0), (-40.0, 40.0), 0.10886111845882578, 0.04509175168074972),
-            ((1.2, 0.0), (3.4, 0.0), (0.0, -80.0), -0.004023506086242592, -0.013660756513785781),
-            ((1.0, 1.0), (3.0, 0.5), (50.0, 30.0), 3.9816355065269386e18, 1.1345975153736888e18),
-            ((0.5, 0.0), (10.0, 0.0), (-70.0, 20.0), 0.335215644799161, 0.04195012139845268),
-            ((2.0, 0.0), (5.0, 0.0), (80.0, 0.0), 2.4997729898337908e30, 0.0),
+            (
+                (1.0, 0.5),
+                (2.0, -0.3),
+                (-99.0, 14.0),
+                -0.011969417454155048,
+                -0.007406056247135601,
+            ),
+            (
+                (0.5, 0.0),
+                (1.5, 0.0),
+                (0.0, 60.0),
+                0.07842759028142188,
+                0.08885735047389137,
+            ),
+            (
+                (0.5, 0.0),
+                (1.5, 0.0),
+                (-40.0, 40.0),
+                0.10886111845882578,
+                0.04509175168074972,
+            ),
+            (
+                (1.2, 0.0),
+                (3.4, 0.0),
+                (0.0, -80.0),
+                -0.004023506086242592,
+                -0.013660756513785781,
+            ),
+            (
+                (1.0, 1.0),
+                (3.0, 0.5),
+                (50.0, 30.0),
+                3.9816355065269386e18,
+                1.1345975153736888e18,
+            ),
+            (
+                (0.5, 0.0),
+                (10.0, 0.0),
+                (-70.0, 20.0),
+                0.335215644799161,
+                0.04195012139845268,
+            ),
+            (
+                (2.0, 0.0),
+                (5.0, 0.0),
+                (80.0, 0.0),
+                2.4997729898337908e30,
+                0.0,
+            ),
         ];
         for &(a, b, z, re, im) in cases {
             let a = Complex64::new(a.0, a.1);
@@ -4151,9 +4293,33 @@ mod tests {
         // mpmath.hyp2f1 references computed at 30 digits. frankenscipy-31a0c.
         let cases = [
             // (a, b, c, z_re, z_im, ref_re, ref_im)
-            (2.0, 3.0, 1.5, 1.4, 0.6, 0.782_543_846_311_524, 5.211_527_724_255_207),
-            (1.5, 0.5, 2.0, 2.0, 1.0, 0.588_752_395_346_859, 0.805_805_439_764_103),
-            (3.0, 1.0, 2.5, 1.1, 0.9, -0.419_516_836_979_255, 0.863_898_169_851_454),
+            (
+                2.0,
+                3.0,
+                1.5,
+                1.4,
+                0.6,
+                0.782_543_846_311_524,
+                5.211_527_724_255_207,
+            ),
+            (
+                1.5,
+                0.5,
+                2.0,
+                2.0,
+                1.0,
+                0.588_752_395_346_859,
+                0.805_805_439_764_103,
+            ),
+            (
+                3.0,
+                1.0,
+                2.5,
+                1.1,
+                0.9,
+                -0.419_516_836_979_255,
+                0.863_898_169_851_454,
+            ),
         ];
         for (a, b, c, zr, zi, rr, ri) in cases {
             let result = hyp2f1(
@@ -4297,11 +4463,19 @@ mod tests {
             let r = hyp1f1(&scalar(a), &scalar(b), &scalar(z), RuntimeMode::Strict);
             let v = get_scalar(&r).expect("finite hyp1f1");
             let rel = ((v - expected) / expected).abs();
-            assert!(rel < 1e-12, "hyp1f1({a},{b},{z}) = {v:e}, scipy {expected:e}, rel={rel:e}");
+            assert!(
+                rel < 1e-12,
+                "hyp1f1({a},{b},{z}) = {v:e}, scipy {expected:e}, rel={rel:e}"
+            );
         }
 
         // SciPy overflows e^z to +inf for z past ln(f64::MAX) ≈ 709.78; match it.
-        let inf = hyp1f1(&scalar(1.0), &scalar(2.0), &scalar(710.0), RuntimeMode::Strict);
+        let inf = hyp1f1(
+            &scalar(1.0),
+            &scalar(2.0),
+            &scalar(710.0),
+            RuntimeMode::Strict,
+        );
         assert_eq!(get_scalar(&inf), Some(f64::INFINITY));
     }
 
@@ -4323,7 +4497,10 @@ mod tests {
             let r = hyp1f1(&scalar(a), &scalar(b), &scalar(z), RuntimeMode::Strict);
             let v = get_scalar(&r).expect("finite hyp1f1");
             let rel = ((v - expected) / expected).abs();
-            assert!(rel < 1e-12, "hyp1f1({a},{b},{z}) = {v:e}, scipy {expected:e}, rel={rel:e}");
+            assert!(
+                rel < 1e-12,
+                "hyp1f1({a},{b},{z}) = {v:e}, scipy {expected:e}, rel={rel:e}"
+            );
         }
     }
 
@@ -4346,7 +4523,10 @@ mod tests {
             let r = hyp1f1(&scalar(a), &scalar(b), &scalar(z), RuntimeMode::Strict);
             let v = get_scalar(&r).expect("finite hyp1f1");
             let rel = ((v - expected) / expected).abs();
-            assert!(rel < 1e-8, "hyp1f1({a},{b},{z}) = {v:e}, scipy {expected:e}, rel={rel:e}");
+            assert!(
+                rel < 1e-8,
+                "hyp1f1({a},{b},{z}) = {v:e}, scipy {expected:e}, rel={rel:e}"
+            );
         }
     }
 
@@ -4366,7 +4546,10 @@ mod tests {
         for (b, z, expected) in cases {
             let v = hyp0f1_scalar(b, z, RuntimeMode::Strict).expect("finite");
             let rel = ((v - expected) / expected).abs();
-            assert!(rel < 1e-9, "hyp0f1({b},{z}) = {v:e}, scipy {expected:e}, rel={rel:e}");
+            assert!(
+                rel < 1e-9,
+                "hyp0f1({b},{z}) = {v:e}, scipy {expected:e}, rel={rel:e}"
+            );
         }
         // Positive z (modified Bessel I) branch stays correct.
         let pos = hyp0f1_scalar(2.0, 200.0, RuntimeMode::Strict).expect("finite");
@@ -4401,12 +4584,48 @@ mod tests {
     fn hyp2f1_complex_pfaff_continuation_matches_mpmath() {
         // (a, b, c, (z_re, z_im), (val_re, val_im))
         let cases: [Hyp2f1ComplexCase; 6] = [
-            (0.5, 0.5, 1.5, (-1.0, 1.0), (0.862231298085739, 0.08130072049794629)),
-            (0.5, 1.0, 2.0, (-2.0, 0.5), (0.7284461294343433, 0.038269144396779094)),
-            (0.3, 0.7, 1.2, (-1.0, -1.0), (0.8593620385670224, -0.07934104644643247)),
-            (1.0, 0.5, 1.5, (0.2, 1.5), (0.7910171811374038, 0.3217213255606514)),
-            (0.5, 0.5, 2.0, (-3.0, 2.0), (0.7860012327422344, 0.0725236459589195)),
-            (1.5, 0.5, 2.5, (-0.5, 3.0), (0.6267035512763195, 0.280313155049662)),
+            (
+                0.5,
+                0.5,
+                1.5,
+                (-1.0, 1.0),
+                (0.862231298085739, 0.08130072049794629),
+            ),
+            (
+                0.5,
+                1.0,
+                2.0,
+                (-2.0, 0.5),
+                (0.7284461294343433, 0.038269144396779094),
+            ),
+            (
+                0.3,
+                0.7,
+                1.2,
+                (-1.0, -1.0),
+                (0.8593620385670224, -0.07934104644643247),
+            ),
+            (
+                1.0,
+                0.5,
+                1.5,
+                (0.2, 1.5),
+                (0.7910171811374038, 0.3217213255606514),
+            ),
+            (
+                0.5,
+                0.5,
+                2.0,
+                (-3.0, 2.0),
+                (0.7860012327422344, 0.0725236459589195),
+            ),
+            (
+                1.5,
+                0.5,
+                2.5,
+                (-0.5, 3.0),
+                (0.6267035512763195, 0.280313155049662),
+            ),
         ];
         for (a, b, c, (zr, zi), (vr, vi)) in cases {
             let result = hyp2f1(
@@ -4416,8 +4635,8 @@ mod tests {
                 &complex(zr, zi),
                 RuntimeMode::Strict,
             );
-            let got = get_complex_scalar(&result)
-                .unwrap_or_else(|| Complex64::new(f64::NAN, f64::NAN));
+            let got =
+                get_complex_scalar(&result).unwrap_or_else(|| Complex64::new(f64::NAN, f64::NAN));
             let expected = Complex64::new(vr, vi);
             let err = (got - expected).abs();
             let scale = expected.abs().max(1.0);
@@ -4452,10 +4671,34 @@ mod tests {
         // the fully-logarithmic DLMF 15.8.9/15.8.11 corner (frankenscipy-wwi45).
         // Golden values from mpmath 1.4.1 (mp.dps=30).
         let cases: [Hyp2f1ComplexCase; 4] = [
-            (0.5, 0.5, 2.5, (2.0, 1.0), (1.0764492159986923, 0.28361960044123111)),
-            (0.3, 1.3, 2.3, (1.6, 0.7), (1.0667148233989199, 0.42844504985442885)),
-            (1.5, 0.5, 2.5, (1.4, -0.9), (0.95593059253373275, -0.65513882101253395)),
-            (0.5, 0.5, 3.5, (1.2, 1.1), (1.0525162721774637, 0.12780600458121074)),
+            (
+                0.5,
+                0.5,
+                2.5,
+                (2.0, 1.0),
+                (1.0764492159986923, 0.28361960044123111),
+            ),
+            (
+                0.3,
+                1.3,
+                2.3,
+                (1.6, 0.7),
+                (1.0667148233989199, 0.42844504985442885),
+            ),
+            (
+                1.5,
+                0.5,
+                2.5,
+                (1.4, -0.9),
+                (0.95593059253373275, -0.65513882101253395),
+            ),
+            (
+                0.5,
+                0.5,
+                3.5,
+                (1.2, 1.1),
+                (1.0525162721774637, 0.12780600458121074),
+            ),
         ];
         for (a, b, c, (zr, zi), (vr, vi)) in cases {
             let result = hyp2f1(
@@ -4478,12 +4721,48 @@ mod tests {
     #[allow(clippy::excessive_precision)] // golden constants verbatim from mpmath
     fn hyp2f1_complex_inv_z_continuation_matches_mpmath() {
         let cases: [Hyp2f1ComplexCase; 6] = [
-            (0.5, 0.3, 1.2, (2.0, 1.0), (0.9903704668763302, 0.32750091263584863)),
-            (1.0, 0.4, 1.5, (2.5, 2.0), (0.6561515879441171, 0.5286478314518919)),
-            (0.7, 0.2, 1.1, (5.0, -3.0), (0.7697473975684688, -0.32616546130854634)),
-            (0.5, 0.25, 1.0, (1.5, 0.5), (1.0741936293080392, 0.30149211979729423)),
-            (0.9, 0.3, 2.0, (2.0, 0.1), (1.147235558288442, 0.489377889798951)),
-            (0.4, 0.7, 1.3, (4.0, -1.0), (0.6477257675533721, -0.6024687066512131)),
+            (
+                0.5,
+                0.3,
+                1.2,
+                (2.0, 1.0),
+                (0.9903704668763302, 0.32750091263584863),
+            ),
+            (
+                1.0,
+                0.4,
+                1.5,
+                (2.5, 2.0),
+                (0.6561515879441171, 0.5286478314518919),
+            ),
+            (
+                0.7,
+                0.2,
+                1.1,
+                (5.0, -3.0),
+                (0.7697473975684688, -0.32616546130854634),
+            ),
+            (
+                0.5,
+                0.25,
+                1.0,
+                (1.5, 0.5),
+                (1.0741936293080392, 0.30149211979729423),
+            ),
+            (
+                0.9,
+                0.3,
+                2.0,
+                (2.0, 0.1),
+                (1.147235558288442, 0.489377889798951),
+            ),
+            (
+                0.4,
+                0.7,
+                1.3,
+                (4.0, -1.0),
+                (0.6477257675533721, -0.6024687066512131),
+            ),
         ];
         for (a, b, c, (zr, zi), (vr, vi)) in cases {
             let result = hyp2f1(
@@ -4493,8 +4772,8 @@ mod tests {
                 &complex(zr, zi),
                 RuntimeMode::Strict,
             );
-            let got = get_complex_scalar(&result)
-                .unwrap_or_else(|| Complex64::new(f64::NAN, f64::NAN));
+            let got =
+                get_complex_scalar(&result).unwrap_or_else(|| Complex64::new(f64::NAN, f64::NAN));
             let expected = Complex64::new(vr, vi);
             let err = (got - expected).abs();
             let scale = expected.abs().max(1.0);

@@ -555,8 +555,8 @@ pub fn ncfdtr(dfn: f64, dfd: f64, nc: f64, f: f64) -> f64 {
     }
     let lam = nc / 2.0;
     let j0 = lam.floor();
-    let logw0 = -lam + j0 * lam.ln()
-        - gammaln_scalar(j0 + 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN);
+    let logw0 =
+        -lam + j0 * lam.ln() - gammaln_scalar(j0 + 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN);
     let w0 = logw0.exp();
 
     let mut total = 0.0_f64;
@@ -2052,7 +2052,9 @@ mod tests {
         // v == 1 is the standard Cauchy. Verify via the independent round-trip
         // through the Cauchy CDF F(t) = 1/2 + atan(t)/π, which must recover p.
         // Regression: the general inverse-beta path lost ~3e-6 at p = 1e-6.
-        for &p in &[1e-8_f64, 1e-6, 1e-3, 0.01, 0.1, 0.25, 0.75, 0.9, 0.99, 0.999_999] {
+        for &p in &[
+            1e-8_f64, 1e-6, 1e-3, 0.01, 0.1, 0.25, 0.75, 0.9, 0.99, 0.999_999,
+        ] {
             let t = stdtrit(1.0, p);
             let cdf = 0.5 + t.atan() / std::f64::consts::PI;
             assert!(
@@ -2082,7 +2084,11 @@ mod tests {
             let li = log_betainc_scalar(a, b, x);
             assert!(i > 0.0, "precondition: I representable for ({a},{b},{x})");
             let rel = (li - i.ln()).abs() / i.ln().abs().max(1.0);
-            assert!(rel <= 1e-11, "log_betainc({a},{b},{x})={li} vs ln(I)={}", i.ln());
+            assert!(
+                rel <= 1e-11,
+                "log_betainc({a},{b},{x})={li} vs ln(I)={}",
+                i.ln()
+            );
         }
     }
 
@@ -2097,10 +2103,12 @@ mod tests {
                 "precondition: I underflows for ({a},{b},{x})"
             );
             let li = log_betainc_scalar(a, b, x);
-            assert!(li.is_finite() && li < -100.0, "log I({a},{b},{x})={li} not finite");
+            assert!(
+                li.is_finite() && li < -100.0,
+                "log I({a},{b},{x})={li} not finite"
+            );
             // I ≈ x^a/(a·B(a,b)) for tiny x ⇒ ln I ≈ a·ln x − ln a − lnB(a,b).
-            let asymp =
-                a * x.ln() - a.ln() - betaln_scalar(a, b, RuntimeMode::Strict).unwrap();
+            let asymp = a * x.ln() - a.ln() - betaln_scalar(a, b, RuntimeMode::Strict).unwrap();
             assert!(
                 (li - asymp).abs() / asymp.abs() < 1e-2,
                 "log I({a},{b},{x})={li} vs asymptotic {asymp}"
@@ -3262,7 +3270,11 @@ mod tests {
         assert!(
             (betaln_scalar(2.0, -2.0, RuntimeMode::Strict).unwrap() - (0.5_f64).ln()).abs() < 1e-12
         );
-        assert!(betaln_scalar(2.0, -1.0, RuntimeMode::Strict).unwrap().is_infinite());
+        assert!(
+            betaln_scalar(2.0, -1.0, RuntimeMode::Strict)
+                .unwrap()
+                .is_infinite()
+        );
     }
 
     #[test]
@@ -3319,7 +3331,7 @@ mod tests {
         // scipy.special.nctdtr(df, nc, t) 1.17.1.
         let cases = [
             (10.0_f64, 2.0, 1.5, 0.3047854473760421_f64),
-            (5.0, 0.0, 1.0, 0.8183912661754386),    // nc=0 → central t
+            (5.0, 0.0, 1.0, 0.8183912661754386), // nc=0 → central t
             (20.0, -3.0, -2.0, 0.8358989270421169), // negative nc and t (reflection)
             (8.0, 5.0, 4.0, 0.21027058165197615),
             (15.0, 1.0, 0.0, 0.15865525393145707), // t=0 → Phi(-nc)
@@ -3343,7 +3355,10 @@ mod tests {
         ];
         for (dfn, dfd, nc, p, want) in nc_f {
             let got = ncfdtri(dfn, dfd, nc, p);
-            assert!((got - want).abs() <= 1e-9 * want.abs(), "ncfdtri = {got}, want {want}");
+            assert!(
+                (got - want).abs() <= 1e-9 * want.abs(),
+                "ncfdtri = {got}, want {want}"
+            );
         }
         let nc_t = [
             (10.0_f64, 2.0, 0.3, 1.4856759815279506_f64),
@@ -3352,7 +3367,10 @@ mod tests {
         ];
         for (df, nc, p, want) in nc_t {
             let got = nctdtrit(df, nc, p);
-            assert!((got - want).abs() <= 1e-8 * want.abs().max(1e-6), "nctdtrit = {got}, want {want}");
+            assert!(
+                (got - want).abs() <= 1e-8 * want.abs().max(1e-6),
+                "nctdtrit = {got}, want {want}"
+            );
         }
         assert_eq!(ncfdtri(5.0, 10.0, 3.0, 0.0), 0.0);
         assert!(ncfdtri(5.0, 10.0, 3.0, 1.0).is_infinite());

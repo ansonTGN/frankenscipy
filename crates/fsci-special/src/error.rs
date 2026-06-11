@@ -709,7 +709,10 @@ mod tests {
             let g = erf_complex_scalar(Complex64::new(re, im));
             let denom = wr.hypot(wi);
             let err = (g.re - wr).hypot(g.im - wi) / denom;
-            assert!(err <= 1e-9, "erf({re}{im:+}i) = {g:?}, scipy ({wr}, {wi}), rel {err:e}");
+            assert!(
+                err <= 1e-9,
+                "erf({re}{im:+}i) = {g:?}, scipy ({wr}, {wi}), rel {err:e}"
+            );
         }
     }
 
@@ -729,7 +732,10 @@ mod tests {
         ];
         for (x, expected) in cases {
             let got = erfc_scalar(x);
-            assert!(((got - expected) / expected).abs() < 1e-13, "erfc({x}) = {got:e}, scipy {expected:e}");
+            assert!(
+                ((got - expected) / expected).abs() < 1e-13,
+                "erfc({x}) = {got:e}, scipy {expected:e}"
+            );
         }
     }
 

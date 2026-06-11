@@ -785,8 +785,7 @@ fn bessel_derivative_dispatch(
         }
         (SpecialTensor::RealVec(orders), SpecialTensor::RealScalar(x)) => {
             let x = *x;
-            par_map_indices(orders.len(), |i| eval_real(orders[i], x))
-                .map(SpecialTensor::RealVec)
+            par_map_indices(orders.len(), |i| eval_real(orders[i], x)).map(SpecialTensor::RealVec)
         }
         (SpecialTensor::RealScalar(order), SpecialTensor::RealVec(xs)) => {
             let order = *order;
@@ -809,8 +808,7 @@ fn bessel_derivative_dispatch(
         }
         (SpecialTensor::RealScalar(order), SpecialTensor::ComplexVec(zs)) => {
             let order = *order;
-            par_map_indices(zs.len(), |i| eval_complex(order, zs[i]))
-                .map(SpecialTensor::ComplexVec)
+            par_map_indices(zs.len(), |i| eval_complex(order, zs[i])).map(SpecialTensor::ComplexVec)
         }
         (SpecialTensor::RealVec(orders), SpecialTensor::ComplexScalar(z_val)) => {
             let z_val = *z_val;
@@ -1020,8 +1018,7 @@ fn hankel_derivative_dispatch(
         }
         (SpecialTensor::RealScalar(order), SpecialTensor::ComplexVec(zs)) => {
             let order = *order;
-            par_map_indices(zs.len(), |i| eval_complex(order, zs[i]))
-                .map(SpecialTensor::ComplexVec)
+            par_map_indices(zs.len(), |i| eval_complex(order, zs[i])).map(SpecialTensor::ComplexVec)
         }
         (SpecialTensor::RealVec(orders), SpecialTensor::ComplexScalar(z_val)) => {
             let z_val = *z_val;
@@ -1909,7 +1906,11 @@ fn spherical_bessel_complex_scalar(
     })
 }
 
-pub(crate) fn spherical_jn_scalar(order: f64, x: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
+pub(crate) fn spherical_jn_scalar(
+    order: f64,
+    x: f64,
+    mode: RuntimeMode,
+) -> Result<f64, SpecialError> {
     if order.is_nan() || x.is_nan() {
         return Ok(f64::NAN);
     }
@@ -2581,7 +2582,10 @@ where
                     .chunks(chunk)
                     .map(|c| {
                         scope.spawn(move || {
-                            c.iter().copied().map(kernel).collect::<Result<Vec<f64>, _>>()
+                            c.iter()
+                                .copied()
+                                .map(kernel)
+                                .collect::<Result<Vec<f64>, _>>()
                         })
                     })
                     .collect::<Vec<_>>()
@@ -2654,7 +2658,10 @@ where
             })
             .collect::<Vec<_>>()
             .into_iter()
-            .map(|h| h.join().expect("bessel binary/ternary array worker panicked"))
+            .map(|h| {
+                h.join()
+                    .expect("bessel binary/ternary array worker panicked")
+            })
             .collect()
     });
     let mut out = Vec::with_capacity(n);
@@ -3708,13 +3715,18 @@ fn complex_y1_series(z: Complex64) -> Complex64 {
         hk = hk1;
     }
     let log_term = (z / 2.0).ln() + Complex64::new(BESSEL_EULER_GAMMA, 0.0);
-    Complex64::new(FRAC_2_PI, 0.0) * log_term * j1 - Complex64::new(FRAC_2_PI, 0.0) * z.recip()
+    Complex64::new(FRAC_2_PI, 0.0) * log_term * j1
+        - Complex64::new(FRAC_2_PI, 0.0) * z.recip()
         - Complex64::new(1.0 / PI, 0.0) * (z / 2.0) * s
 }
 
 /// Complex K_v(z) for real order v.
 /// K_v = π/2 * (I_{-v} - I_v) / sin(vπ) for non-integer v.
-pub(crate) fn complex_kv_scalar(v: f64, z: Complex64, _mode: RuntimeMode) -> Result<Complex64, SpecialError> {
+pub(crate) fn complex_kv_scalar(
+    v: f64,
+    z: Complex64,
+    _mode: RuntimeMode,
+) -> Result<Complex64, SpecialError> {
     if v.is_nan() || !z.is_finite() {
         return Ok(Complex64::new(f64::NAN, f64::NAN));
     }
@@ -3859,13 +3871,17 @@ fn hankel_dispatch(
         }
         (SpecialTensor::RealVec(orders), SpecialTensor::RealScalar(x)) => {
             let x = *x;
-            par_map_indices(orders.len(), |i| hankel_real_scalar(function, orders[i], x, mode, kind))
-                .map(SpecialTensor::ComplexVec)
+            par_map_indices(orders.len(), |i| {
+                hankel_real_scalar(function, orders[i], x, mode, kind)
+            })
+            .map(SpecialTensor::ComplexVec)
         }
         (SpecialTensor::RealScalar(order), SpecialTensor::RealVec(xs)) => {
             let order = *order;
-            par_map_indices(xs.len(), |i| hankel_real_scalar(function, order, xs[i], mode, kind))
-                .map(SpecialTensor::ComplexVec)
+            par_map_indices(xs.len(), |i| {
+                hankel_real_scalar(function, order, xs[i], mode, kind)
+            })
+            .map(SpecialTensor::ComplexVec)
         }
         (SpecialTensor::RealVec(orders), SpecialTensor::RealVec(xs)) => {
             if orders.len() != xs.len() {
@@ -3887,8 +3903,10 @@ fn hankel_dispatch(
         }
         (SpecialTensor::RealScalar(order), SpecialTensor::ComplexVec(zs)) => {
             let order = *order;
-            par_map_indices(zs.len(), |i| hankel_complex_scalar(function, order, zs[i], mode, kind))
-                .map(SpecialTensor::ComplexVec)
+            par_map_indices(zs.len(), |i| {
+                hankel_complex_scalar(function, order, zs[i], mode, kind)
+            })
+            .map(SpecialTensor::ComplexVec)
         }
         (SpecialTensor::RealVec(orders), SpecialTensor::ComplexScalar(z_val)) => {
             let z_val = *z_val;
@@ -4141,8 +4159,10 @@ fn bessel_dispatch(
         }
         (SpecialTensor::RealScalar(order), SpecialTensor::ComplexVec(zs)) => {
             let order = *order;
-            par_map_indices(zs.len(), |i| bessel_complex_scalar(function, order, zs[i], mode, kind))
-                .map(SpecialTensor::ComplexVec)
+            par_map_indices(zs.len(), |i| {
+                bessel_complex_scalar(function, order, zs[i], mode, kind)
+            })
+            .map(SpecialTensor::ComplexVec)
         }
         (SpecialTensor::RealVec(orders), SpecialTensor::ComplexScalar(z_val)) => {
             let z_val = *z_val;
@@ -4702,14 +4722,34 @@ mod tests {
             }
         };
         let (vl, dl) = lmbda(2.0, 3.0);
-        close(&vl, &[-0.2600519549, 0.2260393057, 0.4320811205], "lmbda(2,3) v");
-        close(&dl, &[-0.3390589585, -0.3240608404, -0.2747224198], "lmbda(2,3) d");
+        close(
+            &vl,
+            &[-0.2600519549, 0.2260393057, 0.4320811205],
+            "lmbda(2,3) v",
+        );
+        close(
+            &dl,
+            &[-0.3390589585, -0.3240608404, -0.2747224198],
+            "lmbda(2,3) d",
+        );
         let (vl, dl) = lmbda(2.5, 1.0);
-        close(&vl, &[0.8414709848, 0.9035060368, 0.9305257802], "lmbda(2.5,1) v");
-        close(&dl, &[-0.3011686789, -0.186105156, -0.1350987168], "lmbda(2.5,1) d");
+        close(
+            &vl,
+            &[0.8414709848, 0.9035060368, 0.9305257802],
+            "lmbda(2.5,1) v",
+        );
+        close(
+            &dl,
+            &[-0.3011686789, -0.186105156, -0.1350987168],
+            "lmbda(2.5,1) d",
+        );
         // Large order: stable downward recurrence stays accurate where J underflows.
         let (vl150, _) = lmbda(150.0, 1.0);
-        close(&vl150, &[0.7651976866, 0.8801011715, 0.9192278795, 0.9390409912], "lmbda(150,1) v");
+        close(
+            &vl150,
+            &[0.7651976866, 0.8801011715, 0.9192278795, 0.9390409912],
+            "lmbda(150,1) v",
+        );
         // x = 0 edges: SciPy's specfun result (integer-v quirk reproduced).
         let (vl, dl) = lmbda(3.0, 0.0);
         assert_eq!(vl, vec![1.0, 0.0, 0.0, 0.0], "lmbda(3,0) v");
@@ -4729,16 +4769,30 @@ mod tests {
             }
         };
         close(&jn, &[5.1356223018, 8.4172441404, 11.6198411721], "jnyn jn");
-        close(&jnp, &[3.0542369282, 6.7061331942, 9.9694678231], "jnyn jnp");
+        close(
+            &jnp,
+            &[3.0542369282, 6.7061331942, 9.9694678231],
+            "jnyn jnp",
+        );
         close(&yn, &[3.3842417671, 6.7938075133, 10.0234779794], "jnyn yn");
-        close(&ynp, &[5.0025829314, 8.3507247014, 11.5741954652], "jnyn ynp");
+        close(
+            &ynp,
+            &[5.0025829314, 8.3507247014, 11.5741954652],
+            "jnyn ynp",
+        );
 
         let (zo, n, m, t) = jnjnp_zeros(8);
         close(
             &zo,
             &[
-                0.0, 1.8411837813, 2.4048255577, 3.0542369282, 3.8317059702, 3.8317059702,
-                4.2011889412, 5.1356223018,
+                0.0,
+                1.8411837813,
+                2.4048255577,
+                3.0542369282,
+                3.8317059702,
+                3.8317059702,
+                4.2011889412,
+                5.1356223018,
             ],
             "jnjnp zo",
         );
@@ -4759,7 +4813,11 @@ mod tests {
                 let direct = ive_scalar(v, z);
                 if direct > 0.0 && direct.is_finite() {
                     let rel = (li - direct.ln()).abs() / direct.ln().abs().max(1.0);
-                    assert!(rel <= 1e-6, "log_ive({v},{z})={li} vs ln(ive)={}", direct.ln());
+                    assert!(
+                        rel <= 1e-6,
+                        "log_ive({v},{z})={li} vs ln(ive)={}",
+                        direct.ln()
+                    );
                 }
             }
         }
@@ -4769,7 +4827,10 @@ mod tests {
             let li = log_ive_scalar(1.0, z);
             let approx = -0.5 * (2.0 * PI * z).ln();
             assert!(li.is_finite(), "log_ive(1,{z}) not finite");
-            assert!((li - approx).abs() < 0.05, "log_ive(1,{z})={li} vs ~{approx}");
+            assert!(
+                (li - approx).abs() < 0.05,
+                "log_ive(1,{z})={li} vs ~{approx}"
+            );
         }
         assert_eq!(log_ive_scalar(0.0, 0.0), 0.0);
         assert_eq!(log_ive_scalar(1.0, 0.0), f64::NEG_INFINITY);
@@ -4800,7 +4861,10 @@ mod tests {
             let z = Complex64::new(re, im);
             let y = complex_yv_scalar(v, z, RuntimeMode::Strict).unwrap();
             let err = (y.re - yr).hypot(y.im - yi) / yr.hypot(yi);
-            assert!(err <= 1e-7, "yv({v},{re}{im:+}i) = {y:?}, scipy ({yr},{yi}), rel {err:e}");
+            assert!(
+                err <= 1e-7,
+                "yv({v},{re}{im:+}i) = {y:?}, scipy ({yr},{yi}), rel {err:e}"
+            );
         }
     }
 
@@ -4816,24 +4880,69 @@ mod tests {
         // reflected via K_v(we^{±iπ})=e^{∓ivπ}K_v(w)∓iπI_v(w).
         // (v, re, im, K.re, K.im) — scipy 1.17.1.
         let cases: [(f64, f64, f64, f64, f64); 11] = [
-            (10.5, 30.0, 9.3, -9.37954079129976e-14, 5.344341257316493e-14),
-            (20.5, 25.0, 9.0, 2.080674029070471e-09, 3.6929289885929565e-09),
-            (30.5, 45.0, 11.0, 4.9377593759569705e-17, -4.154102966627179e-17),
-            (50.5, 55.0, 18.0, 5.0678599670482056e-17, 9.429501885540872e-17),
-            (5.5, 15.0, 5.0, 1.5307782517384106e-07, 1.7251233742654897e-07),
-            (20.5, 15.0, 12.0, 0.0003422838796743065, 0.00031697965000494787),
+            (
+                10.5,
+                30.0,
+                9.3,
+                -9.37954079129976e-14,
+                5.344341257316493e-14,
+            ),
+            (
+                20.5,
+                25.0,
+                9.0,
+                2.080674029070471e-09,
+                3.6929289885929565e-09,
+            ),
+            (
+                30.5,
+                45.0,
+                11.0,
+                4.9377593759569705e-17,
+                -4.154102966627179e-17,
+            ),
+            (
+                50.5,
+                55.0,
+                18.0,
+                5.0678599670482056e-17,
+                9.429501885540872e-17,
+            ),
+            (
+                5.5,
+                15.0,
+                5.0,
+                1.5307782517384106e-07,
+                1.7251233742654897e-07,
+            ),
+            (
+                20.5,
+                15.0,
+                12.0,
+                0.0003422838796743065,
+                0.00031697965000494787,
+            ),
             // Re(z) < 0 (branch-cut reflection):
             (0.5, -3.0, 2.0, -13.136389329139432, 1.7869727121447632),
             (5.5, -20.0, 8.0, -66248408.63984236, 14978308.422065388),
             (10.5, -25.0, 15.0, 1037005.5000110489, 3260618052.855438),
-            (2.5, -50.0, -10.0, 4.0274493691085514e20, -7.581988572080506e20),
+            (
+                2.5,
+                -50.0,
+                -10.0,
+                4.0274493691085514e20,
+                -7.581988572080506e20,
+            ),
             (20.5, -30.0, -12.0, -5781507165.759946, 200323296.50961077),
         ];
         for (v, re, im, kr, ki) in cases {
             let z = Complex64::new(re, im);
             let k = complex_kv_scalar(v, z, RuntimeMode::Strict).unwrap();
             let err = (k.re - kr).hypot(k.im - ki) / kr.hypot(ki);
-            assert!(err <= 1e-7, "kv({v},{re}{im:+}i) = {k:?}, scipy ({kr},{ki}), rel {err:e}");
+            assert!(
+                err <= 1e-7,
+                "kv({v},{re}{im:+}i) = {k:?}, scipy ({kr},{ki}), rel {err:e}"
+            );
         }
     }
 
@@ -4847,12 +4956,48 @@ mod tests {
         // Exercised through the public `kve` dispatcher (real order, complex z).
         // (v, re, im, kve.re, kve.im) — scipy 1.17.1.
         let cases: [(f64, f64, f64, f64, f64); 6] = [
-            (0.5, 3.0, -2.5, 5.9634253363884471e-01, 2.1590577564981434e-01),
-            (2.0, -1.5, 2.0, -1.6263736917360888e-01, -5.1718320252846783e-01),
-            (0.0, 0.2, 4.0, 4.6416194753566503e-01, -4.1575423635924635e-01),
-            (1.0, 5.0, 0.0, 6.0027385878831252e-01, 0.0000000000000000e+00),
-            (3.5, 0.0, 2.0, -2.4282961410487816e+00, 1.0183177365688443e+00),
-            (0.5, -4.0, -1.0, 7.5415294229784310e-02, 6.1260640081557272e-01),
+            (
+                0.5,
+                3.0,
+                -2.5,
+                5.9634253363884471e-01,
+                2.1590577564981434e-01,
+            ),
+            (
+                2.0,
+                -1.5,
+                2.0,
+                -1.6263736917360888e-01,
+                -5.1718320252846783e-01,
+            ),
+            (
+                0.0,
+                0.2,
+                4.0,
+                4.6416194753566503e-01,
+                -4.1575423635924635e-01,
+            ),
+            (
+                1.0,
+                5.0,
+                0.0,
+                6.0027385878831252e-01,
+                0.0000000000000000e+00,
+            ),
+            (
+                3.5,
+                0.0,
+                2.0,
+                -2.4282961410487816e+00,
+                1.0183177365688443e+00,
+            ),
+            (
+                0.5,
+                -4.0,
+                -1.0,
+                7.5415294229784310e-02,
+                6.1260640081557272e-01,
+            ),
         ];
         for (v, re, im, kr, ki) in cases {
             let out = kve(
@@ -4865,7 +5010,10 @@ mod tests {
                 panic!("kve complex scalar input must yield a complex scalar, got {out:?}");
             };
             let err = (k.re - kr).hypot(k.im - ki) / kr.hypot(ki);
-            assert!(err <= 1e-9, "kve({v},{re}{im:+}i) = {k:?}, scipy ({kr},{ki}), rel {err:e}");
+            assert!(
+                err <= 1e-9,
+                "kve({v},{re}{im:+}i) = {k:?}, scipy ({kr},{ki}), rel {err:e}"
+            );
         }
     }
 
@@ -4879,11 +5027,51 @@ mod tests {
         // by a small-order asymptotic) is stable; I follows via I_v(z)=
         // e^{-iπv/2}J_v(iz). (v, re, im, J.re,J.im, I.re,I.im) from scipy 1.17.1.
         let cases: [(f64, f64, f64, f64, f64, f64, f64); 5] = [
-            (10.5, 30.0, 9.3, -197.02815202783466, -425.31457727367575, -136745728601.30203, -34365056209.05175),
-            (20.5, 25.0, 9.0, 31.831636545639334, 1.7443462385888058, 1050761.4293616053, -3459922.56166499),
-            (30.5, 38.0, 11.0, 28.8899240212221, -89.82134451310553, 9940418282.002474, 30996195925.81287),
-            (50.5, 55.0, 18.0, -900.4238940608079, 26.820654557258933, 19190288570304.97, -59319339392746.0),
-            (20.5, -50.0, 35.0, -10625161413727.812, 2880710047906.2197, -1.3356153802331707e19, 7.901885428551122e18),
+            (
+                10.5,
+                30.0,
+                9.3,
+                -197.02815202783466,
+                -425.31457727367575,
+                -136745728601.30203,
+                -34365056209.05175,
+            ),
+            (
+                20.5,
+                25.0,
+                9.0,
+                31.831636545639334,
+                1.7443462385888058,
+                1050761.4293616053,
+                -3459922.56166499,
+            ),
+            (
+                30.5,
+                38.0,
+                11.0,
+                28.8899240212221,
+                -89.82134451310553,
+                9940418282.002474,
+                30996195925.81287,
+            ),
+            (
+                50.5,
+                55.0,
+                18.0,
+                -900.4238940608079,
+                26.820654557258933,
+                19190288570304.97,
+                -59319339392746.0,
+            ),
+            (
+                20.5,
+                -50.0,
+                35.0,
+                -10625161413727.812,
+                2880710047906.2197,
+                -1.3356153802331707e19,
+                7.901885428551122e18,
+            ),
         ];
         for (v, re, im, jr, ji, ir, ii) in cases {
             let z = Complex64::new(re, im);
@@ -4891,8 +5079,14 @@ mod tests {
             let i = complex_iv_scalar(v, z);
             let je = (j.re - jr).hypot(j.im - ji) / jr.hypot(ji);
             let ie = (i.re - ir).hypot(i.im - ii) / ir.hypot(ii);
-            assert!(je <= 1e-7, "jv({v},{re}{im:+}i) = {j:?}, scipy ({jr},{ji}), rel {je:e}");
-            assert!(ie <= 1e-7, "iv({v},{re}{im:+}i) = {i:?}, scipy ({ir},{ii}), rel {ie:e}");
+            assert!(
+                je <= 1e-7,
+                "jv({v},{re}{im:+}i) = {j:?}, scipy ({jr},{ji}), rel {je:e}"
+            );
+            assert!(
+                ie <= 1e-7,
+                "iv({v},{re}{im:+}i) = {i:?}, scipy ({ir},{ii}), rel {ie:e}"
+            );
         }
     }
 
@@ -4906,23 +5100,96 @@ mod tests {
         // asymptotic (with the Re<0 reflection), I via J(iz), and the direct K
         // asymptotic. (v, re, im, J.re,J.im, I.re,I.im, K.re,K.im, Y.re,Y.im) — scipy 1.17.1.
         let cases: [(f64, f64, f64, f64, f64, f64, f64, f64, f64, f64, f64); 5] = [
-            (0.5, 20.0, 5.0, 12.466521336498948, 3.8267134139998005, 7006986.415091062, -42048916.84546594, 2.2684059886175998e-10, 5.21771888934066e-10, -3.8273250606136826, 12.465507499599681),
-            (2.5, -15.0, 25.0, 4820258766.728313, -670823000.802485, -121420.56920674515, 194474.00807032152, 381453.9682146355, -610958.115067951, 670823000.802485, 4820258766.728313),
-            (3.5, 40.0, -10.0, -1109.4573598197273, 720.8276509954086, -1.119458545990043e16, 5954167327505190.0, -7.091076212196013e-19, -6.373437988023484e-19, 720.8276552862686, 1109.4573558385662),
-            (0.5, 3.0, 80.0, -1.4455656554351904e33, -2.0033277552023882e33, -0.6900384488490181, -0.5742502926122344, 0.004254020290227443, 0.005526238447046366, 2.0033277552023882e33, -1.4455656554351904e33),
-            (2.5, 50.0, 3.0, 0.19792798151697677, -1.1086923774604178, -2.7126068652301323e20, 4.59770369446714e19, -3.6026674628426933e-23, -3.9101945736867964e-24, 1.1141728356305414, 0.19661157971907242),
+            (
+                0.5,
+                20.0,
+                5.0,
+                12.466521336498948,
+                3.8267134139998005,
+                7006986.415091062,
+                -42048916.84546594,
+                2.2684059886175998e-10,
+                5.21771888934066e-10,
+                -3.8273250606136826,
+                12.465507499599681,
+            ),
+            (
+                2.5,
+                -15.0,
+                25.0,
+                4820258766.728313,
+                -670823000.802485,
+                -121420.56920674515,
+                194474.00807032152,
+                381453.9682146355,
+                -610958.115067951,
+                670823000.802485,
+                4820258766.728313,
+            ),
+            (
+                3.5,
+                40.0,
+                -10.0,
+                -1109.4573598197273,
+                720.8276509954086,
+                -1.119458545990043e16,
+                5954167327505190.0,
+                -7.091076212196013e-19,
+                -6.373437988023484e-19,
+                720.8276552862686,
+                1109.4573558385662,
+            ),
+            (
+                0.5,
+                3.0,
+                80.0,
+                -1.4455656554351904e33,
+                -2.0033277552023882e33,
+                -0.6900384488490181,
+                -0.5742502926122344,
+                0.004254020290227443,
+                0.005526238447046366,
+                2.0033277552023882e33,
+                -1.4455656554351904e33,
+            ),
+            (
+                2.5,
+                50.0,
+                3.0,
+                0.19792798151697677,
+                -1.1086923774604178,
+                -2.7126068652301323e20,
+                4.59770369446714e19,
+                -3.6026674628426933e-23,
+                -3.9101945736867964e-24,
+                1.1141728356305414,
+                0.19661157971907242,
+            ),
         ];
         for (v, re, im, jr, ji, ir, ii, kr, ki, yr, yi) in cases {
             let z = Complex64::new(re, im);
             let checks = [
                 (complex_jv_scalar(v, z), jr, ji, "jv"),
                 (complex_iv_scalar(v, z), ir, ii, "iv"),
-                (complex_kv_scalar(v, z, RuntimeMode::Strict).unwrap(), kr, ki, "kv"),
-                (complex_yv_scalar(v, z, RuntimeMode::Strict).unwrap(), yr, yi, "yv"),
+                (
+                    complex_kv_scalar(v, z, RuntimeMode::Strict).unwrap(),
+                    kr,
+                    ki,
+                    "kv",
+                ),
+                (
+                    complex_yv_scalar(v, z, RuntimeMode::Strict).unwrap(),
+                    yr,
+                    yi,
+                    "yv",
+                ),
             ];
             for (got, wr, wi, name) in checks {
                 let err = (got.re - wr).hypot(got.im - wi) / wr.hypot(wi);
-                assert!(err <= 1e-7, "{name}({v},{re}{im:+}i) = {got:?}, scipy ({wr},{wi}), rel {err:e}");
+                assert!(
+                    err <= 1e-7,
+                    "{name}({v},{re}{im:+}i) = {got:?}, scipy ({wr},{wi}), rel {err:e}"
+                );
             }
         }
     }
@@ -4939,14 +5206,78 @@ mod tests {
         // with the stable upward recurrence for n≥2.
         // (v, re, im, K.re, K.im, Y.re, Y.im) from scipy.special 1.17.1.
         let cases: [(u32, f64, f64, f64, f64, f64, f64); 8] = [
-            (0, 2.0, 1.0, 0.037987722915986476, -0.10171357546139093, 0.800451120409994, 0.07563855028639382),
-            (1, 1.5, 2.5, -0.17583976180149624, -0.005975889337860949, -0.6409702450434701, 2.4512074350972797),
-            (2, 3.0, 1.0, 0.015275965061514699, -0.05547174952705652, -0.1433635707870101, 0.4576996364039667),
-            (2, 0.5, 4.0, 0.18495000454282312, 0.38087077161509364, -3.137626774336867, -5.632589456759534),
-            (5, 8.0, 3.0, -0.000460035945850506, 0.00023640292674529355, 1.4290304684892552, 0.9410036389912462),
-            (0, 15.0, 5.0, 4.129869836775042e-08, 8.634770156118545e-08, 14.529566891182334, -3.4121917632978587),
-            (1, 5.0, 30.0, 0.001172778369302158, 0.0009898467040185962, -157028907008.00497, -747235851320.0383),
-            (3, 2.0, -3.0, -0.06909578637591238, -0.1727382937957655, -1.0614832363273328, 0.8158048933143148),
+            (
+                0,
+                2.0,
+                1.0,
+                0.037987722915986476,
+                -0.10171357546139093,
+                0.800451120409994,
+                0.07563855028639382,
+            ),
+            (
+                1,
+                1.5,
+                2.5,
+                -0.17583976180149624,
+                -0.005975889337860949,
+                -0.6409702450434701,
+                2.4512074350972797,
+            ),
+            (
+                2,
+                3.0,
+                1.0,
+                0.015275965061514699,
+                -0.05547174952705652,
+                -0.1433635707870101,
+                0.4576996364039667,
+            ),
+            (
+                2,
+                0.5,
+                4.0,
+                0.18495000454282312,
+                0.38087077161509364,
+                -3.137626774336867,
+                -5.632589456759534,
+            ),
+            (
+                5,
+                8.0,
+                3.0,
+                -0.000460035945850506,
+                0.00023640292674529355,
+                1.4290304684892552,
+                0.9410036389912462,
+            ),
+            (
+                0,
+                15.0,
+                5.0,
+                4.129869836775042e-08,
+                8.634770156118545e-08,
+                14.529566891182334,
+                -3.4121917632978587,
+            ),
+            (
+                1,
+                5.0,
+                30.0,
+                0.001172778369302158,
+                0.0009898467040185962,
+                -157028907008.00497,
+                -747235851320.0383,
+            ),
+            (
+                3,
+                2.0,
+                -3.0,
+                -0.06909578637591238,
+                -0.1727382937957655,
+                -1.0614832363273328,
+                0.8158048933143148,
+            ),
         ];
         for (v, re, im, kr, ki, yr, yi) in cases {
             let z = Complex64::new(re, im);
@@ -4954,8 +5285,14 @@ mod tests {
             let y = complex_yv_scalar(v as f64, z, RuntimeMode::Strict).unwrap();
             let ke = (k.re - kr).hypot(k.im - ki) / kr.hypot(ki);
             let ye = (y.re - yr).hypot(y.im - yi) / yr.hypot(yi);
-            assert!(ke <= 1e-7, "kv({v},{re}{im:+}i) = {k:?}, scipy ({kr},{ki}), rel {ke:e}");
-            assert!(ye <= 1e-7, "yv({v},{re}{im:+}i) = {y:?}, scipy ({yr},{yi}), rel {ye:e}");
+            assert!(
+                ke <= 1e-7,
+                "kv({v},{re}{im:+}i) = {k:?}, scipy ({kr},{ki}), rel {ke:e}"
+            );
+            assert!(
+                ye <= 1e-7,
+                "yv({v},{re}{im:+}i) = {y:?}, scipy ({yr},{yi}), rel {ye:e}"
+            );
         }
     }
 
@@ -4980,7 +5317,10 @@ mod tests {
             let w = crate::convenience::wofz_scalar(Complex64::new(re, im), RuntimeMode::Strict)
                 .unwrap();
             let err = (w.re - wr).hypot(w.im - wi) / wr.hypot(wi);
-            assert!(err <= 1e-9, "wofz({re}{im:+}i) = {w:?}, scipy ({wr},{wi}), rel {err:e}");
+            assert!(
+                err <= 1e-9,
+                "wofz({re}{im:+}i) = {w:?}, scipy ({wr},{wi}), rel {err:e}"
+            );
         }
     }
 
@@ -5009,8 +5349,14 @@ mod tests {
         for (v, z, jref, yref) in cases {
             let j = jv_scalar(v, z);
             let y = yv_scalar(v, z, RuntimeMode::Strict).unwrap();
-            assert!((j - jref).abs() <= 1e-9 * jref.abs().max(1e-12), "jv({v},{z}) = {j:e}, scipy {jref:e}");
-            assert!((y - yref).abs() <= 1e-9 * yref.abs().max(1e-12), "yv({v},{z}) = {y:e}, scipy {yref:e}");
+            assert!(
+                (j - jref).abs() <= 1e-9 * jref.abs().max(1e-12),
+                "jv({v},{z}) = {j:e}, scipy {jref:e}"
+            );
+            assert!(
+                (y - yref).abs() <= 1e-9 * yref.abs().max(1e-12),
+                "yv({v},{z}) = {y:e}, scipy {yref:e}"
+            );
         }
     }
 
@@ -5037,8 +5383,14 @@ mod tests {
         for (v, z, jref, yref) in cases {
             let j = jv_scalar(v, z);
             let y = yv_scalar(v, z, RuntimeMode::Strict).unwrap();
-            assert!((j - jref).abs() <= 1e-9 * jref.abs().max(1e-3), "jv({v},{z}) = {j}, scipy {jref}");
-            assert!((y - yref).abs() <= 1e-9 * yref.abs().max(1e-3), "yv({v},{z}) = {y}, scipy {yref}");
+            assert!(
+                (j - jref).abs() <= 1e-9 * jref.abs().max(1e-3),
+                "jv({v},{z}) = {j}, scipy {jref}"
+            );
+            assert!(
+                (y - yref).abs() <= 1e-9 * yref.abs().max(1e-3),
+                "yv({v},{z}) = {y}, scipy {yref}"
+            );
         }
     }
 
@@ -5084,12 +5436,20 @@ mod tests {
             (10.5, 400.0, 0.03650518806158982, -0.016108011911492963),
         ];
         for (v, z, jref, yref) in cases {
-            let jval = real_value(tensor_result(jv(&scalar(v), &scalar(z), RuntimeMode::Strict)).unwrap())
-                .unwrap();
-            let yval = real_value(tensor_result(yv(&scalar(v), &scalar(z), RuntimeMode::Strict)).unwrap())
-                .unwrap();
-            assert!(((jval - jref) / jref).abs() < 1e-10, "jv({v},{z})={jval:e} vs {jref:e}");
-            assert!(((yval - yref) / yref).abs() < 1e-10, "yv({v},{z})={yval:e} vs {yref:e}");
+            let jval =
+                real_value(tensor_result(jv(&scalar(v), &scalar(z), RuntimeMode::Strict)).unwrap())
+                    .unwrap();
+            let yval =
+                real_value(tensor_result(yv(&scalar(v), &scalar(z), RuntimeMode::Strict)).unwrap())
+                    .unwrap();
+            assert!(
+                ((jval - jref) / jref).abs() < 1e-10,
+                "jv({v},{z})={jval:e} vs {jref:e}"
+            );
+            assert!(
+                ((yval - yref) / yref).abs() < 1e-10,
+                "yv({v},{z})={yval:e} vs {yref:e}"
+            );
         }
     }
 
@@ -5117,8 +5477,14 @@ mod tests {
         for (v, z, kref, keref) in cases {
             let kval = rv(kv(&s(v), &s(z), m));
             let keval = rv(kve(&s(v), &s(z), m));
-            assert!(((kval - kref) / kref).abs() < 1e-10, "kv({v},{z})={kval:e} vs {kref:e}");
-            assert!(((keval - keref) / keref).abs() < 1e-10, "kve({v},{z})={keval:e} vs {keref:e}");
+            assert!(
+                ((kval - kref) / kref).abs() < 1e-10,
+                "kv({v},{z})={kval:e} vs {kref:e}"
+            );
+            assert!(
+                ((keval - keref) / keref).abs() < 1e-10,
+                "kve({v},{z})={keval:e} vs {keref:e}"
+            );
         }
     }
 
@@ -5144,8 +5510,14 @@ mod tests {
         for (v, z, kref, keref) in cases {
             let kval = rv(kv(&s(v), &s(z), m));
             let keval = rv(kve(&s(v), &s(z), m));
-            assert!(((kval - kref) / kref).abs() < 1e-10, "kv({v},{z})={kval:e} vs {kref:e}");
-            assert!(((keval - keref) / keref).abs() < 1e-10, "kve({v},{z})={keval:e} vs {keref:e}");
+            assert!(
+                ((kval - kref) / kref).abs() < 1e-10,
+                "kv({v},{z})={kval:e} vs {kref:e}"
+            );
+            assert!(
+                ((keval - keref) / keref).abs() < 1e-10,
+                "kve({v},{z})={keval:e} vs {keref:e}"
+            );
         }
         // z > 745: kv underflows to 0 (matching scipy), kve stays finite.
         for (v, z, keref) in [
@@ -5153,9 +5525,16 @@ mod tests {
             (2.0, 800.0, 0.04441525775942454),
             (1.0, 900.0, 0.04179453901303371),
         ] {
-            assert_eq!(rv(kv(&s(v), &s(z), m)), 0.0, "kv({v},{z}) should underflow to 0");
+            assert_eq!(
+                rv(kv(&s(v), &s(z), m)),
+                0.0,
+                "kv({v},{z}) should underflow to 0"
+            );
             let keval = rv(kve(&s(v), &s(z), m));
-            assert!(((keval - keref) / keref).abs() < 1e-10, "kve({v},{z})={keval:e} vs {keref:e}");
+            assert!(
+                ((keval - keref) / keref).abs() < 1e-10,
+                "kve({v},{z})={keval:e} vs {keref:e}"
+            );
         }
     }
 

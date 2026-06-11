@@ -484,7 +484,8 @@ fn carlson_rd(mut x: f64, mut y: f64, mut z: f64) -> f64 {
             let ee = ed + ec + ec;
             return 3.0 * s
                 + fac
-                    * (1.0 + ed * (-C1 + C5 * ed - C6 * dz * ee)
+                    * (1.0
+                        + ed * (-C1 + C5 * ed - C6 * dz * ee)
                         + dz * (C2 * ee + dz * (-C3 * ec + dz * C4 * ea)))
                     / (ave * ave.sqrt());
         }
@@ -774,16 +775,10 @@ fn lambertw_complex_initial_guess(z: Complex64) -> Complex64 {
         return Complex64::from_real(-1.0) + p - p2 / 3.0 + p3 * (11.0 / 72.0);
     }
 
-    if -1.0 < z.re
-        && z.re < 1.5
-        && z.im.abs() < 1.0
-        && z.re > -2.5 * z.im.abs() - 0.2
-    {
+    if -1.0 < z.re && z.re < 1.5 && z.im.abs() < 1.0 && z.re > -2.5 * z.im.abs() - 0.2 {
         // Empirically good region near 0: [2/2] Padé approximant of W₀.
         let z2 = z * z;
-        let num = z * (Complex64::from_real(60.0)
-            + z * 114.0
-            + z2 * 17.0);
+        let num = z * (Complex64::from_real(60.0) + z * 114.0 + z2 * 17.0);
         let den = Complex64::from_real(60.0) + z * 174.0 + z2 * 101.0;
         return num / den;
     }
@@ -1158,7 +1153,8 @@ where
         }
         (SpecialTensor::RealScalar(left), SpecialTensor::RealVec(right)) => {
             let left = *left;
-            par_map_indices(right.len(), |i| real_kernel(left, right[i])).map(SpecialTensor::RealVec)
+            par_map_indices(right.len(), |i| real_kernel(left, right[i]))
+                .map(SpecialTensor::RealVec)
         }
         (SpecialTensor::RealVec(left), SpecialTensor::RealVec(right)) => {
             if left.len() != right.len() {
@@ -1983,7 +1979,8 @@ mod tests {
     use super::*;
 
     #[test]
-    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
+    #[allow(clippy::excessive_precision)]
+    // golden constants verbatim from scipy
     // φ test inputs 1.5707/1.5707963 are deliberate angles near (but not equal
     // to) π/2 with their own scipy reference values — not FRAC_PI_2.
     #[allow(clippy::approx_constant)]
@@ -2011,8 +2008,14 @@ mod tests {
             let e = g(ellipeinc(&s(phi), &s(mm), m));
             // ~3e-12 at the most extreme m→1, φ→π/2 corner (Carlson ERRTOL
             // floor); the prior fixed-quadrature error there was ~0.9%.
-            assert!(((f - f_ref) / f_ref).abs() < 1e-11, "ellipkinc({phi},{mm}) = {f}, scipy {f_ref}");
-            assert!(((e - e_ref) / e_ref).abs() < 1e-11, "ellipeinc({phi},{mm}) = {e}, scipy {e_ref}");
+            assert!(
+                ((f - f_ref) / f_ref).abs() < 1e-11,
+                "ellipkinc({phi},{mm}) = {f}, scipy {f_ref}"
+            );
+            assert!(
+                ((e - e_ref) / e_ref).abs() < 1e-11,
+                "ellipeinc({phi},{mm}) = {e}, scipy {e_ref}"
+            );
         }
     }
 
@@ -2558,7 +2561,12 @@ mod tests {
             (0.2, 4.0, 1.073_172_875_178_164, 0.850_615_061_208_774_6),
             (-0.4, 0.0, -0.944_089_738_264_935_8, 0.407_267_964_032_857_8),
             (0.0, 1.5, 0.545_153_223_345_237_3, 0.677_542_092_022_338_5),
-            (10.0, -3.0, 1.769_471_344_173_386_3, -0.186_465_225_817_075_56),
+            (
+                10.0,
+                -3.0,
+                1.769_471_344_173_386_3,
+                -0.186_465_225_817_075_56,
+            ),
         ];
         for &(re, im, wre, wim) in cases {
             let w = eval_complex_scalar(lambertw(
@@ -3033,7 +3041,10 @@ mod tests {
             );
             // identity ellipkm1(p) == ellipk(1-p)
             let k = ellipk_scalar(1.0 - p, RuntimeMode::Strict).unwrap();
-            assert!((got - k).abs() <= 1e-12 * k.abs().max(1.0), "ellipkm1({p}) != ellipk(1-{p})");
+            assert!(
+                (got - k).abs() <= 1e-12 * k.abs().max(1.0),
+                "ellipkm1({p}) != ellipk(1-{p})"
+            );
         }
         // p < 0 (m > 1) is outside the real domain -> NaN, matching scipy.
         assert!(ellipkm1_scalar(-1.0, RuntimeMode::Strict).unwrap().is_nan());
@@ -3555,15 +3566,48 @@ mod tests {
     fn elliprj_negative_p_cauchy_principal_value() {
         // frankenscipy-vrikc: p < 0 is the Cauchy-PV branch. scipy.special 1.17.1
         // computes a finite value; fsci previously failed closed to NaN.
-        assert_close(elliprj(1.0, 2.0, 3.0, -1.0), -0.0932404524386764, 1e-6, "rj(1,2,3,-1)");
-        assert_close(elliprj(0.5, 1.0, 2.0, -0.5), -0.16068487318451444, 1e-6, "rj(.5,1,2,-.5)");
-        assert_close(elliprj(2.0, 3.0, 4.0, -1.0), 0.05098889152113835, 1e-6, "rj(2,3,4,-1)");
-        assert_close(elliprj(0.1, 0.5, 1.0, -0.3), -1.9602030387320362, 1e-6, "rj(.1,.5,1,-.3)");
+        assert_close(
+            elliprj(1.0, 2.0, 3.0, -1.0),
+            -0.0932404524386764,
+            1e-6,
+            "rj(1,2,3,-1)",
+        );
+        assert_close(
+            elliprj(0.5, 1.0, 2.0, -0.5),
+            -0.16068487318451444,
+            1e-6,
+            "rj(.5,1,2,-.5)",
+        );
+        assert_close(
+            elliprj(2.0, 3.0, 4.0, -1.0),
+            0.05098889152113835,
+            1e-6,
+            "rj(2,3,4,-1)",
+        );
+        assert_close(
+            elliprj(0.1, 0.5, 1.0, -0.3),
+            -1.9602030387320362,
+            1e-6,
+            "rj(.1,.5,1,-.3)",
+        );
         // a single zero argument resolves through RC's diagonal / positive branch
-        assert_close(elliprj(0.0, 2.0, 3.0, -1.0), -0.8732889802533521, 1e-6, "rj(0,2,3,-1)");
-        assert_close(elliprj(1.0, 0.0, 3.0, -1.0), -1.3022045412166559, 1e-6, "rj(1,0,3,-1)");
+        assert_close(
+            elliprj(0.0, 2.0, 3.0, -1.0),
+            -0.8732889802533521,
+            1e-6,
+            "rj(0,2,3,-1)",
+        );
+        assert_close(
+            elliprj(1.0, 0.0, 3.0, -1.0),
+            -1.3022045412166559,
+            1e-6,
+            "rj(1,0,3,-1)",
+        );
         // p == 0 is a genuine pole (scipy → NaN); two zeros diverge (→ inf)
         assert!(elliprj(1.0, 2.0, 3.0, 0.0).is_nan(), "rj(1,2,3,0) is NaN");
-        assert!(elliprj(0.0, 0.0, 3.0, -1.0).is_infinite(), "rj(0,0,3,-1) is inf");
+        assert!(
+            elliprj(0.0, 0.0, 3.0, -1.0).is_infinite(),
+            "rj(0,0,3,-1) is inf"
+        );
     }
 }
