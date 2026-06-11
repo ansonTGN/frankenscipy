@@ -30420,6 +30420,46 @@ fn kendall_inv_sort(a: &mut [f64], tmp: &mut [f64]) -> i64 {
     inv
 }
 
+/// Per-variable tie statistics for Kendall's tau-b asymptotic variance:
+/// `(Σ t(t-1)/2, Σ t(t-1)(t-2), Σ t(t-1)(2t+5))` over tie groups of size `t`
+/// (matches scipy's `count_rank_tie`). frankenscipy-56tq3
+fn kendall_tie_stats(v: &[f64]) -> (f64, f64, f64) {
+    let mut s: Vec<f64> = v.to_vec();
+    s.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let (mut xtie, mut x0, mut x1) = (0.0, 0.0, 0.0);
+    let mut i = 0;
+    while i < s.len() {
+        let mut j = i + 1;
+        while j < s.len() && s[j] == s[i] {
+            j += 1;
+        }
+        let t = (j - i) as f64;
+        if t > 1.0 {
+            xtie += t * (t - 1.0) / 2.0;
+            x0 += t * (t - 1.0) * (t - 2.0);
+            x1 += t * (t - 1.0) * (2.0 * t + 5.0);
+        }
+        i = j;
+    }
+    (xtie, x0, x1)
+}
+
+/// Two-sided asymptotic p-value for Kendall's tau using scipy's TIE-CORRECTED
+/// variance of S = C − D (not the untied variance of tau). Reduces exactly to
+/// the untied normal approximation when there are no ties. frankenscipy-56tq3
+fn kendalltau_asymptotic_z(x: &[f64], y: &[f64], concordant: i64, discordant: i64) -> f64 {
+    let n_f = x.len() as f64;
+    let (xtie, x0, x1) = kendall_tie_stats(x);
+    let (ytie, y0, y1) = kendall_tie_stats(y);
+    let s = (concordant - discordant) as f64;
+    let m = n_f * (n_f - 1.0);
+    let mut var = (m * (2.0 * n_f + 5.0) - x1 - y1) / 18.0 + (2.0 * xtie * ytie) / m;
+    if n_f > 2.0 {
+        var += (x0 * y0) / (9.0 * m * (n_f - 2.0));
+    }
+    s / var.sqrt()
+}
+
 pub fn kendalltau(x: &[f64], y: &[f64]) -> CorrelationResult {
     let n = x.len();
     if n < 2 || x.len() != y.len() {
@@ -30447,12 +30487,17 @@ pub fn kendalltau(x: &[f64], y: &[f64]) -> CorrelationResult {
     // br-hx5t: scipy uses exact-distribution pvalue when n is small and
     // the data is untied. For tied data or large n, fall back to the
     // normal approximation.
-    let pvalue = if x_ties == 0 && y_ties == 0 && n <= 25 {
+    // scipy uses the exact null distribution for untied data up to n = 33 (its
+    // Mahonian table; u128 holds n! through n = 34). Below 26 the old code stopped
+    // early and fell back to the asymptotic, diverging from scipy for n in 26..=33.
+    // frankenscipy-56tq3
+    let pvalue = if x_ties == 0 && y_ties == 0 && n <= 33 {
         kendalltau_exact_two_sided_pvalue(n, discordant)
     } else {
-        let n_f = n as f64;
-        let var = (2.0 * (2.0 * n_f + 5.0)) / (9.0 * n_f * (n_f - 1.0));
-        let z = tau / var.sqrt();
+        // Tie-corrected asymptotic variance of S = C − D (scipy's `asymptotic`
+        // method); the old untied tau-variance gave wrong p-values whenever ties
+        // were present (kendalltau_ties p was ~2× too small). frankenscipy-56tq3
+        let z = kendalltau_asymptotic_z(x, y, concordant, discordant);
         2.0 * (1.0 - standard_normal_cdf(z.abs()))
     };
 
@@ -30532,12 +30577,17 @@ pub fn kendalltau_alternative(x: &[f64], y: &[f64], alternative: &str) -> Correl
     let tau = (concordant - discordant) as f64 / denom;
 
     // br-hx5t: exact path for untied small n; otherwise asymptotic.
-    let pvalue = if x_ties == 0 && y_ties == 0 && n <= 25 {
+    // scipy uses the exact null distribution for untied data up to n = 33 (its
+    // Mahonian table; u128 holds n! through n = 34). Below 26 the old code stopped
+    // early and fell back to the asymptotic, diverging from scipy for n in 26..=33.
+    // frankenscipy-56tq3
+    let pvalue = if x_ties == 0 && y_ties == 0 && n <= 33 {
         kendalltau_exact_alternative_pvalue(n, discordant, alternative)
     } else {
-        let n_f = n as f64;
-        let var = (2.0 * (2.0 * n_f + 5.0)) / (9.0 * n_f * (n_f - 1.0));
-        let z = tau / var.sqrt();
+        // Tie-corrected asymptotic z (scipy `asymptotic` method); S = C − D keeps
+        // the same sign as tau so the one-sided alternatives are unchanged.
+        // frankenscipy-56tq3
+        let z = kendalltau_asymptotic_z(x, y, concordant, discordant);
         normal_alternative_pvalue(z, alternative)
     };
 
@@ -59618,6 +59668,30 @@ mod tests {
             1e-6,
             "less + greater ≈ 1 (exact discrete adds P(D'=d_obs))",
         );
+    }
+
+    #[test]
+    fn kendalltau_tie_corrected_pvalue_matches_scipy() {
+        // Regression (frankenscipy-56tq3): with ties the asymptotic p-value used
+        // the UNTIED variance of tau, giving ~2× too-small p; and the exact path
+        // stopped at n <= 25 while scipy uses n <= 33, so n in 26..=33 untied
+        // diverged. Golden values from scipy.stats.kendalltau 1.17.1.
+        let ties_x = [1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0];
+        let ties_y = [1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 5.0];
+        let r = kendalltau(&ties_x, &ties_y);
+        assert_close(r.statistic, 0.857_321_409_974_112_4, 1e-12, "ties tau");
+        assert_close(r.pvalue, 0.006_153_264_693_374_078, 1e-9, "ties p (tie-corrected)");
+
+        let hx = [1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0];
+        let hy = [1.0, 1.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 4.0];
+        let r = kendalltau(&hx, &hy);
+        assert_close(r.pvalue, 0.005_971_920_866_157_016, 1e-9, "heavy-ties p");
+
+        // n = 30, untied → scipy uses the EXACT null distribution (n <= 33).
+        let lx: Vec<f64> = (0..30).map(|i| (i as f64 * 0.37).sin()).collect();
+        let ly: Vec<f64> = (0..30).map(|i| (i as f64 * 0.29).cos()).collect();
+        let r = kendalltau(&lx, &ly);
+        assert_close(r.pvalue, 8.428_296_862_924_907e-5, 1e-9, "n=30 untied exact p");
     }
 
     #[test]
