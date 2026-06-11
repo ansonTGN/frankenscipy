@@ -704,6 +704,99 @@ pub fn fresnel(z: f64) -> (f64, f64) {
     if z < 0.0 { (-s, -c) } else { (s, c) }
 }
 
+/// First `nt` complex zeros of `erf` in the first quadrant, ordered by absolute
+/// value, matching `scipy.special.erf_zeros`.
+///
+/// Each zero is found by Newton iteration `z ← z − erf(z)/erf'(z)`
+/// (`erf'(z) = (2/√π) e^{-z²}`) from the Zhang–Jin specfun initial estimate
+/// `z₀ = (½pu − ½ln(pv)/pu) + i(½pu + ½ln(pv)/pu)`, `pu = √(π(4nr−½))`,
+/// `pv = π√(2nr−¼)`.
+#[must_use]
+pub fn erf_zeros(nt: usize) -> Vec<Complex64> {
+    let two_over_sqrt_pi = 2.0 / PI.sqrt();
+    let mut out = Vec::with_capacity(nt);
+    for nr in 1..=nt {
+        let nrf = nr as f64;
+        let pu = (PI * (4.0 * nrf - 0.5)).sqrt();
+        let pv = PI * (2.0 * nrf - 0.25).sqrt();
+        let ln_pv = pv.ln();
+        let mut z = Complex64::new(0.5 * pu - 0.5 * ln_pv / pu, 0.5 * pu + 0.5 * ln_pv / pu);
+        for _ in 0..60 {
+            let f = crate::error::erf_complex_scalar(z);
+            let fp = Complex64::from_real(two_over_sqrt_pi) * (-(z * z)).exp();
+            let dz = f / fp;
+            z = z - dz;
+            if dz.abs() < 1e-15 * z.abs() {
+                break;
+            }
+        }
+        out.push(z);
+    }
+    out
+}
+
+/// Complex Fresnel integrals `(S(z), C(z))` via the error function:
+/// `C(z) + i S(z) = ½(1+i) erf((√π/2)(1−i) z)` and its conjugate companion.
+fn fresnel_complex(z: Complex64) -> (Complex64, Complex64) {
+    let h = PI.sqrt() / 2.0;
+    let e1 = crate::error::erf_complex_scalar(Complex64::new(h, -h) * z);
+    let e2 = crate::error::erf_complex_scalar(Complex64::new(h, h) * z);
+    let p = Complex64::new(0.5, 0.5); // (1+i)/2
+    let pc = Complex64::new(0.5, -0.5); // (1-i)/2
+    let c = (p * e1 + pc * e2) / 2.0;
+    // S = (p·e1 − pc·e2) / (2i) = (p·e1 − pc·e2) · (−i/2).
+    let s = (p * e1 - pc * e2) * Complex64::new(0.0, -0.5);
+    (s, c)
+}
+
+/// First `nt` complex zeros of the Fresnel integral `C` (`is_c = true`) or `S`
+/// (`is_c = false`) in the first quadrant, ordered by absolute value.
+fn fresnel_zeros_kind(nt: usize, is_c: bool) -> Vec<Complex64> {
+    let mut out = Vec::with_capacity(nt);
+    for nr in 1..=nt {
+        let nrf = nr as f64;
+        // C zeros cluster near √(4nr−1), S zeros near √(4nr) (where C'/S' vanish).
+        let psq = if is_c { 4.0 * nrf - 1.0 } else { 4.0 * nrf }.sqrt();
+        let ln_term = (PI * psq).ln();
+        let px = psq - ln_term / (PI * PI * psq.powi(3));
+        let py = ln_term / (PI * psq);
+        let mut z = Complex64::new(px, py);
+        for _ in 0..60 {
+            let (s, c) = fresnel_complex(z);
+            let arg = z * z * Complex64::from_real(PI / 2.0);
+            let (f, fp) = if is_c { (c, arg.cos()) } else { (s, arg.sin()) };
+            let dz = f / fp;
+            z = z - dz;
+            if dz.abs() < 1e-15 * z.abs() {
+                break;
+            }
+        }
+        out.push(z);
+    }
+    out
+}
+
+/// First `nt` complex zeros of the Fresnel cosine integral `C`, matching
+/// `scipy.special.fresnelc_zeros`.
+#[must_use]
+pub fn fresnelc_zeros(nt: usize) -> Vec<Complex64> {
+    fresnel_zeros_kind(nt, true)
+}
+
+/// First `nt` complex zeros of the Fresnel sine integral `S`, matching
+/// `scipy.special.fresnels_zeros`.
+#[must_use]
+pub fn fresnels_zeros(nt: usize) -> Vec<Complex64> {
+    fresnel_zeros_kind(nt, false)
+}
+
+/// First `nt` complex zeros of the Fresnel `S` and `C` integrals as
+/// `(zeros_of_S, zeros_of_C)`, matching `scipy.special.fresnel_zeros`.
+#[must_use]
+pub fn fresnel_zeros(nt: usize) -> (Vec<Complex64>, Vec<Complex64>) {
+    (fresnels_zeros(nt), fresnelc_zeros(nt))
+}
+
 /// Power series for Fresnel integrals (small arguments).
 fn fresnel_series(x: f64) -> (f64, f64) {
     fresnel_taylor(x)
@@ -7079,6 +7172,53 @@ pub fn binary_cross_entropy_scalar(p: f64, q: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn erf_and_fresnel_zeros_match_scipy() {
+        // frankenscipy: golden complex zeros from scipy.special.erf_zeros / fresnelc_zeros /
+        // fresnels_zeros (1.17.1), first quadrant ordered by |z|.
+        let close = |got: &[Complex64], want: &[(f64, f64)], msg: &str| {
+            assert_eq!(got.len(), want.len(), "{msg}: len");
+            for (g, &(re, im)) in got.iter().zip(want.iter()) {
+                assert!(
+                    (g.re - re).abs() < 1e-9 && (g.im - im).abs() < 1e-9,
+                    "{msg}: got {}+{}i, want {re}+{im}i",
+                    g.re,
+                    g.im
+                );
+            }
+        };
+        close(
+            &erf_zeros(3),
+            &[
+                (1.4506161632, 1.8809430002),
+                (2.2446592738, 2.6165751407),
+                (2.8397410469, 3.1756280996),
+            ],
+            "erf_zeros",
+        );
+        close(
+            &fresnelc_zeros(3),
+            &[
+                (1.7436674862, 0.3057350636),
+                (2.6514595973, 0.2529039555),
+                (3.3203593363, 0.2239534581),
+            ],
+            "fresnelc_zeros",
+        );
+        close(
+            &fresnels_zeros(3),
+            &[
+                (2.0092570118, 0.2885478973),
+                (2.8334772325, 0.2442852408),
+                (3.4675330835, 0.2184926805),
+            ],
+            "fresnels_zeros",
+        );
+        let (zs, zc) = fresnel_zeros(2);
+        assert!((zs[0].re - 2.0092570118).abs() < 1e-9, "fresnel_zeros S");
+        assert!((zc[0].re - 1.7436674862).abs() < 1e-9, "fresnel_zeros C");
+    }
 
     #[test]
     #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
