@@ -1,0 +1,9 @@
+b9edacff48fd082f76d111005867df799e502abe3a4a346c118583b6e72ee95f  tests/artifacts/perf/2026-06-11-linalg-8l8r1-86/after_blocked_full_to_band_perf_probe_rch.txt
+1e6b6c7b8bdeff671ef565b3130f14f675d6b7cc588d3c23c679abd58d79a34c  tests/artifacts/perf/2026-06-11-linalg-8l8r1-86/baseline_contract.md
+56c01fa0e88b07525727b26ef3de59efe189ec9645b3b53c7372a70cef3a9742  tests/artifacts/perf/2026-06-11-linalg-8l8r1-86/baseline_eigh_dense_rch.txt
+56c01fa0e88b07525727b26ef3de59efe189ec9645b3b53c7372a70cef3a9742  tests/artifacts/perf/2026-06-11-linalg-8l8r1-86/baseline_eigh_dense_rch_retry1.txt
+77ffa06fdc6336e3f19ce993917e98c2101d05f9bfeaafebd3e24f2f493f88a8  tests/artifacts/perf/2026-06-11-linalg-8l8r1-86/baseline_eigh_dense_rch_retry2.txt
+51482260bc4b856eba3617fe37ce0a0f9aa870b25be8ad6b7b6d85587c55dc91  tests/artifacts/perf/2026-06-11-linalg-8l8r1-86/list_tests_after_blocked_full_to_band_rch.txt
+83cfcd92c8bc82ba065d84d2fa4d8a1faf5e305f025173df2cf9012e288bd9a6  tests/artifacts/perf/2026-06-11-linalg-8l8r1-86/proof_blocked_full_to_band_probe_rch.txt
+58b623e2e51891e5487202579d4efdda0cc1109ae55c23db6e053dc302cf0bdb  tests/artifacts/perf/2026-06-11-linalg-8l8r1-86/proof_public_eigh_golden_rch.txt
+3ec9c9c4f69fb1dbb077e4af779f46426758f1bee6643729308daf6927901f2c  tests/artifacts/perf/2026-06-11-linalg-8l8r1-86/reject_scalar_panel_full_to_band_probe.md
