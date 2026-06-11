@@ -4,6 +4,7 @@ pub mod api;
 pub mod bdf;
 pub mod bvp;
 pub mod quad;
+pub mod radau;
 pub mod rk;
 pub mod solver;
 pub mod step_size;

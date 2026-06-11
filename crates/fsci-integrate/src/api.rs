@@ -334,6 +334,45 @@ where
     }
 }
 
+impl<F> IvpSolver<F> for crate::radau::RadauSolver
+where
+    F: FnMut(f64, &[f64]) -> Vec<f64>,
+{
+    fn step_with(&mut self, fun: &mut F) -> Result<StepOutcome, crate::solver::StepFailure> {
+        self.step_with(fun)
+    }
+    fn t(&self) -> f64 {
+        self.t()
+    }
+    fn y(&self) -> &[f64] {
+        self.y()
+    }
+    fn f(&self) -> &[f64] {
+        self.f()
+    }
+    fn t_old(&self) -> Option<f64> {
+        self.t_old()
+    }
+    fn y_old(&self) -> Option<&[f64]> {
+        self.y_old()
+    }
+    fn f_old(&self) -> Option<&[f64]> {
+        self.f_old()
+    }
+    fn nfev(&self) -> usize {
+        self.nfev()
+    }
+    fn njev(&self) -> usize {
+        self.njev()
+    }
+    fn nlu(&self) -> usize {
+        self.nlu()
+    }
+    fn ivp_state(&self) -> OdeSolverState {
+        self.state()
+    }
+}
+
 enum LsodaMode {
     Adams(RkSolver),
     Bdf(BdfSolver),
@@ -864,9 +903,22 @@ where
             let solver = RkSolver::new(fun, config)?;
             solve_ivp_core(fun, solver, &resolved_options)
         }
-        // NOTE (frankenscipy-3y5p9): Radau is currently a BDF alias (true Radau IIA
-        // pending); the BDF solver is genuine variable-order 1-5 — see bdf.rs.
-        SolverKind::Radau | SolverKind::Bdf => {
+        SolverKind::Radau => {
+            // Genuine Radau IIA (3-stage, order 5) — see radau.rs (frankenscipy-3y5p9).
+            let config = crate::radau::RadauSolverConfig {
+                t0,
+                y0: resolved_options.y0,
+                t_bound: tf,
+                rtol,
+                atol,
+                max_step,
+                first_step,
+                mode: resolved_options.mode,
+            };
+            let solver = crate::radau::RadauSolver::new(fun, config)?;
+            solve_ivp_core(fun, solver, &resolved_options)
+        }
+        SolverKind::Bdf => {
             let config = BdfSolverConfig {
                 t0,
                 y0: resolved_options.y0,
@@ -1563,6 +1615,79 @@ mod tests {
             result.y[2][0].abs() < 1e-6,
             "y[1.0] should be within atol of zero: {}",
             result.y[2][0]
+        );
+    }
+
+    #[test]
+    fn solve_ivp_radau_matches_scipy_reference() {
+        // Genuine Radau IIA (frankenscipy-3y5p9), no longer a BDF alias.
+        // (1) exp decay y' = -y: y(5) = exp(-5) to tolerance.
+        let decay = solve_ivp(
+            &mut |_t, y| vec![-y[0]],
+            &SolveIvpOptions {
+                t_span: (0.0, 5.0),
+                y0: &[1.0],
+                method: SolverKind::Radau,
+                t_eval: Some(&[5.0]),
+                rtol: 1e-8,
+                atol: ToleranceValue::Scalar(1e-10),
+                ..SolveIvpOptions::default()
+            },
+        )
+        .expect("Radau decay");
+        assert!(
+            (decay.y[0][0] - (-5.0_f64).exp()).abs() < 1e-7,
+            "Radau y(5) = {}, want {}",
+            decay.y[0][0],
+            (-5.0_f64).exp()
+        );
+
+        // (2) 2-D stiff linear y1' = -100 y1 + y2, y2' = -y2; scipy Radau golden.
+        let stiff = solve_ivp(
+            &mut |_t, y| vec![-100.0 * y[0] + y[1], -y[1]],
+            &SolveIvpOptions {
+                t_span: (0.0, 2.0),
+                y0: &[1.0, 1.0],
+                method: SolverKind::Radau,
+                t_eval: Some(&[2.0]),
+                rtol: 1e-8,
+                atol: ToleranceValue::Scalar(1e-10),
+                ..SolveIvpOptions::default()
+            },
+        )
+        .expect("Radau stiff 2D");
+        assert!(
+            (stiff.y[0][0] - 0.001_367_023_063_007_146_6).abs() < 1e-8,
+            "Radau stiff y1(2) = {}",
+            stiff.y[0][0]
+        );
+        assert!(
+            (stiff.y[0][1] - (-2.0_f64).exp()).abs() < 1e-8,
+            "Radau stiff y2(2) = {}",
+            stiff.y[0][1]
+        );
+
+        // (3) stiff van der Pol (mu=10): final state matches scipy Radau golden.
+        let mu = 10.0;
+        let vdp = solve_ivp(
+            &mut |_t, y| vec![y[1], mu * (1.0 - y[0] * y[0]) * y[1] - y[0]],
+            &SolveIvpOptions {
+                t_span: (0.0, 20.0),
+                y0: &[2.0, 0.0],
+                method: SolverKind::Radau,
+                rtol: 1e-6,
+                atol: ToleranceValue::Scalar(1e-9),
+                ..SolveIvpOptions::default()
+            },
+        )
+        .expect("Radau vdp");
+        let last = vdp.y.len() - 1;
+        assert!(
+            (vdp.y[last][0] - 1.939_359).abs() < 1e-4
+                && (vdp.y[last][1] - (-0.070_082)).abs() < 1e-4,
+            "Radau vdp final = [{}, {}], want ~[1.939359, -0.070082]",
+            vdp.y[last][0],
+            vdp.y[last][1]
         );
     }
 }

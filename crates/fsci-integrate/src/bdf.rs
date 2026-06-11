@@ -8,8 +8,8 @@
 //! `(I − c·J)` with a lazily-refreshed finite-difference Jacobian, and combined
 //! error/step/order control via `change_D`. Order and step are reconsidered after
 //! `n_equal_steps >= order + 1` accepted steps by comparing the local error at
-//! orders `k-1`, `k`, `k+1` (frankenscipy-3y5p9). `SolverKind::Radau` is still
-//! routed here as a BDF alias pending a true Radau IIA method.
+//! orders `k-1`, `k`, `k+1` (frankenscipy-3y5p9). `SolverKind::Radau` now has its
+//! own genuine Radau IIA solver (see `radau.rs`).
 
 use crate::solver::{OdeSolverState, StepFailure, StepOutcome};
 use crate::validation::{ToleranceValue, validate_first_step, validate_max_step, validate_tol};
@@ -618,7 +618,7 @@ impl BdfSolver {
 }
 
 /// Select initial step size for BDF solver.
-fn select_initial_step_bdf<F>(
+pub(crate) fn select_initial_step_bdf<F>(
     fun: &mut F,
     t0: f64,
     y0: &[f64],
