@@ -309,8 +309,13 @@ fn ellipkm1_scalar(p: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
     if p.is_nan() {
         return Ok(f64::NAN);
     }
-    if !(0.0..=1.0).contains(&p) {
-        return domain_error("ellipkm1", mode, "p must be in [0, 1]");
+    // scipy.special.ellipkm1(p) = K(1 - p) is defined for every p >= 0 (m = 1-p
+    // <= 1): the AGM below converges for any sqrt(p), so p > 1 (negative m) is a
+    // finite value (ellipkm1(2) = K(-1) = 1.3110), NOT a domain error. Only p < 0
+    // (m > 1, outside the real domain) is NaN, matching scipy. The previous
+    // [0, 1] guard wrongly rejected p > 1. frankenscipy-35272
+    if p < 0.0 {
+        return domain_error("ellipkm1", mode, "p must be >= 0 (m = 1-p must be <= 1)");
     }
     if p == 0.0 {
         return Ok(f64::INFINITY);
@@ -2983,6 +2988,32 @@ mod tests {
         // ellipkm1(0) = ellipk(1) = infinity
         let result = ellipkm1_scalar(0.0, RuntimeMode::Strict).unwrap();
         assert!(result.is_infinite() && result.is_sign_positive());
+    }
+
+    #[test]
+    fn ellipkm1_accepts_p_greater_than_one_match_scipy() {
+        // Regression (frankenscipy-35272): ellipkm1(p) = K(1-p) is defined for
+        // every p >= 0, so p > 1 (negative m) is finite, not a domain error. The
+        // old [0,1] guard returned NaN. Values from scipy.special.ellipkm1 1.17.1.
+        let cases = [
+            (1.5_f64, 1.415_737_208_425_956_f64),
+            (2.0, 1.311_028_777_146_059_8),
+            (5.0, 1.009_452_909_989_211_3),
+            (10.0, 0.815_264_309_589_721_3),
+            (100.0, 0.369_563_736_298_987_5),
+        ];
+        for (p, want) in cases {
+            let got = ellipkm1_scalar(p, RuntimeMode::Strict).unwrap();
+            assert!(
+                (got - want).abs() <= 1e-9 * want.abs().max(1.0),
+                "ellipkm1({p}) = {got}, want {want}"
+            );
+            // identity ellipkm1(p) == ellipk(1-p)
+            let k = ellipk_scalar(1.0 - p, RuntimeMode::Strict).unwrap();
+            assert!((got - k).abs() <= 1e-12 * k.abs().max(1.0), "ellipkm1({p}) != ellipk(1-{p})");
+        }
+        // p < 0 (m > 1) is outside the real domain -> NaN, matching scipy.
+        assert!(ellipkm1_scalar(-1.0, RuntimeMode::Strict).unwrap().is_nan());
     }
 
     #[test]
