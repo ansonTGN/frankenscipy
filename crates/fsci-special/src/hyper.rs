@@ -1401,7 +1401,7 @@ fn hyp2f1_dispatch(
 ///
 /// 1F1(a; b; z) = Σ_{n=0}^∞ (a)_n z^n / ((b)_n n!)
 /// where (a)_n = a(a+1)...(a+n-1) is the Pochhammer symbol.
-fn hyp1f1_scalar(a: f64, b: f64, z: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
+pub(crate) fn hyp1f1_scalar(a: f64, b: f64, z: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
     // A nonpositive-integer a terminates 1F1 into a degree-|a| polynomial that
     // is EXACT for every z. This must be decided before the b-pole guard and
     // before the large-|z| asymptotic, both of which mishandle it:
@@ -2651,9 +2651,66 @@ fn ln_gamma_with_sign(x: f64) -> (f64, f64) {
     (val, 1.0)
 }
 
+/// Parabolic cylinder function `D_v(x)` (Whittaker's notation).
+///
+/// For `x ≥ 0` uses the recessive Tricomi `U` representation
+/// `D_v(x) = 2^{v/2} e^{-x²/4} U(-v/2, 1/2, x²/2)`, which has no cancellation.
+/// For `x < 0` (where `D_v` grows) uses the two-term Kummer `M` representation
+/// `D_v(x) = 2^{v/2} e^{-x²/4} √π [ M(-v/2,1/2,x²/2)/Γ((1-v)/2)
+///          − √2 x M((1-v)/2,3/2,x²/2)/Γ(-v/2) ]`, where the `1/Γ` factors come
+/// from `rgamma` so integer `v` (poles) are handled cleanly.
+fn parabolic_cylinder_d(v: f64, x: f64) -> f64 {
+    let coef = 2.0_f64.powf(v / 2.0) * (-x * x / 4.0).exp();
+    let z = x * x / 2.0;
+    if x >= 0.0 {
+        coef * hyperu_scalar(-v / 2.0, 0.5, z, RuntimeMode::Strict).unwrap_or(f64::NAN)
+    } else {
+        let m1 = hyp1f1_scalar(-v / 2.0, 0.5, z, RuntimeMode::Strict).unwrap_or(f64::NAN);
+        let m2 = hyp1f1_scalar((1.0 - v) / 2.0, 1.5, z, RuntimeMode::Strict).unwrap_or(f64::NAN);
+        let r1 = crate::gamma::rgamma_scalar((1.0 - v) / 2.0, RuntimeMode::Strict)
+            .unwrap_or(f64::NAN);
+        let r2 = crate::gamma::rgamma_scalar(-v / 2.0, RuntimeMode::Strict).unwrap_or(f64::NAN);
+        let term = m1 * r1 - std::f64::consts::SQRT_2 * x * m2 * r2;
+        coef * std::f64::consts::PI.sqrt() * term
+    }
+}
+
+/// Parabolic cylinder function `D_v(x)` and its derivative `D_v'(x)`.
+///
+/// Matches `scipy.special.pbdv(v, x)`, returning `(D_v(x), D_v'(x))`. The
+/// derivative uses the recurrence `D_v'(x) = (x/2) D_v(x) − D_{v+1}(x)`.
+#[must_use]
+pub fn pbdv(v: f64, x: f64) -> (f64, f64) {
+    let d = parabolic_cylinder_d(v, x);
+    let d_next = parabolic_cylinder_d(v + 1.0, x);
+    (d, 0.5 * x * d - d_next)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pbdv_matches_scipy() {
+        // frankenscipy: golden (D_v(x), D_v'(x)) from scipy.special.pbdv 1.17.1.
+        let cases: [(f64, f64, f64, f64); 9] = [
+            (2.0, 1.5, 0.7122285309136537, 1.1751770760075286),
+            (0.0, 0.0, 1.0, 0.0),
+            (0.5, 2.0, 0.534013946067451, -0.4125044990856509),
+            (-1.5, 3.0, 0.017224293634324823, -0.032920107277806664),
+            (3.5, -2.0, -2.2950733289932232, 0.49690682562607025),
+            (0.5, -5.0, -35.75408540424763, 77.14642550476076),
+            (5.0, 8.0, 0.0031248767316043877, -0.01040916605600731),
+            (-2.0, -3.0, 71.35576920962079, -130.78377714278415),
+            (1.0, 0.0, 0.0, 1.0),
+        ];
+        for (v, x, wd, wdp) in cases {
+            let (d, dp) = pbdv(v, x);
+            let tol = |w: f64| 1e-6 * w.abs().max(1.0);
+            assert!((d - wd).abs() < tol(wd), "pbdv({v},{x}) D: got {d}, want {wd}");
+            assert!((dp - wdp).abs() < tol(wdp), "pbdv({v},{x}) D': got {dp}, want {wdp}");
+        }
+    }
 
     #[test]
     #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy

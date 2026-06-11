@@ -1183,7 +1183,7 @@ fn polygamma_higher_scalar(order: usize, x: f64, mode: RuntimeMode) -> Result<f6
     Ok(value)
 }
 
-fn rgamma_scalar(x: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
+pub(crate) fn rgamma_scalar(x: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
     if is_negative_integer_pole(x) {
         return Ok(0.0);
     }
