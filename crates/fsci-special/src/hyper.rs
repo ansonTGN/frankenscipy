@@ -2790,9 +2790,81 @@ pub fn pbwa(a: f64, x: f64) -> (f64, f64) {
     (norm * (c1 * y1 - c2 * y2), norm * (c1 * y1p - c2 * y2p))
 }
 
+/// Number of entries in a parabolic-cylinder sequence for parameter `v ≥ 0`:
+/// SciPy's specfun always returns at least two (it advances by recurrence), so
+/// `max(⌊v⌋ + 1, 2)`.
+fn pb_seq_len(v: f64) -> usize {
+    (v.floor().max(1.0) as usize) + 1
+}
+
+/// Parabolic cylinder functions `D_{v_i}(x)` and their derivatives for the
+/// orders `v_i = v − ⌊v⌋, 1 + v − ⌊v⌋, …, v` (`v ≥ 0`), returned as
+/// `(values, derivatives)`.
+///
+/// Matches `scipy.special.pbdv_seq(v, x)`. Each entry is one [`pbdv`] evaluation.
+/// (SciPy's `v < 0` results are unreliable, so this targets `v ≥ 0`.)
+#[must_use]
+pub fn pbdv_seq(v: f64, x: f64) -> (Vec<f64>, Vec<f64>) {
+    let count = pb_seq_len(v);
+    let v0 = v - v.floor();
+    let mut values = Vec::with_capacity(count);
+    let mut derivs = Vec::with_capacity(count);
+    for k in 0..count {
+        let (d, d1) = pbdv(v0 + k as f64, x);
+        values.push(d);
+        derivs.push(d1);
+    }
+    (values, derivs)
+}
+
+/// Parabolic cylinder functions `V_{v_i}(x)` and their derivatives for the
+/// orders `v_i = v − ⌊v⌋, 1 + v − ⌊v⌋, …, v` (`v ≥ 0`), returned as
+/// `(values, derivatives)`.
+///
+/// Matches `scipy.special.pbvv_seq(v, x)`. Each entry is one [`pbvv`] evaluation.
+#[must_use]
+pub fn pbvv_seq(v: f64, x: f64) -> (Vec<f64>, Vec<f64>) {
+    let count = pb_seq_len(v);
+    let v0 = v - v.floor();
+    let mut values = Vec::with_capacity(count);
+    let mut derivs = Vec::with_capacity(count);
+    for k in 0..count {
+        let (d, d1) = pbvv(v0 + k as f64, x);
+        values.push(d);
+        derivs.push(d1);
+    }
+    (values, derivs)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pbdv_pbvv_seq_match_scipy() {
+        // frankenscipy: golden from scipy.special.pbdv_seq / pbvv_seq 1.17.1.
+        let close = |got: &[f64], want: &[f64], msg: &str| {
+            assert_eq!(got.len(), want.len(), "{msg}: len");
+            for (g, w) in got.iter().zip(want.iter()) {
+                assert!((g - w).abs() < 1e-7 * w.abs().max(1.0), "{msg}: got {g}, want {w}");
+            }
+        };
+        let (dv, dp) = pbdv_seq(2.0, 1.5);
+        close(&dv, &[0.569782824730923, 0.8546742370963845, 0.7122285309136537], "pbdv_seq(2,1.5) v");
+        close(&dp, &[-0.42733711854819223, -0.07122285309136533, 1.1751770760075286], "pbdv_seq(2,1.5) d");
+        let (dv, dp) = pbdv_seq(2.5, -1.0);
+        close(&dv, &[-0.19500101822336233, -0.7201956895827357, 1.0126972169177793], "pbdv_seq(2.5,-1) v");
+        close(&dp, &[0.8176961986944169, -0.6525993721264114, -1.2941406154979496], "pbdv_seq(2.5,-1) d");
+        let (dv, dp) = pbdv_seq(0.0, 2.0);
+        close(&dv, &[0.36787944117144233, 0.7357588823428847], "pbdv_seq(0,2) v");
+        close(&dp, &[-0.36787944117144233, -0.36787944117144233], "pbdv_seq(0,2) d");
+        let (vv, vp) = pbvv_seq(2.0, 1.5);
+        close(&vv, &[1.0532396617590685, 0.17952847848481102, -0.391973472015926], "pbvv_seq(2,1.5) v");
+        close(&vp, &[0.6104012678344903, 0.9185933028954603, 0.47350858249675554], "pbvv_seq(2,1.5) d");
+        let (vv, vp) = pbvv_seq(1.5, 2.0);
+        close(&vv, &[1.021133116771255, 0.21052729729833977], "pbvv_seq(1.5,2) v");
+        close(&vp, &[0.7053421708237453, 0.8106058194729152], "pbvv_seq(1.5,2) d");
+    }
 
     #[test]
     fn pbwa_matches_scipy() {
