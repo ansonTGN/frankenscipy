@@ -656,6 +656,67 @@ pub fn legendre_p_all(n: u32, z: f64, diff_n: usize) -> Vec<Vec<f64>> {
     table
 }
 
+/// `(n − |m|)! / (n + |m|)!`, evaluated as `1 / ∏_{k=n−|m|+1}^{n+|m|} k` to stay
+/// finite for large `n`. Requires `|m| ≤ n`.
+fn assoc_inverse_factorial_ratio(n: u32, abs_m: u32) -> f64 {
+    let mut denom = 1.0_f64;
+    for k in (n - abs_m + 1)..=(n + abs_m) {
+        denom *= f64::from(k);
+    }
+    1.0 / denom
+}
+
+/// Associated Legendre function of the first kind `P_n^m(z)`, optionally
+/// normalized, matching `scipy.special.assoc_legendre_p(n, m, z, norm=norm)`
+/// (the default `branch_cut=2`, `diff_n=0` case for real `z`).
+///
+/// With `norm = false` this is exactly [`lpmv`]`(m, n, z)`. With `norm = true`
+/// it carries the additional factor `√((2n+1)/2 · (n−|m|)!/(n+|m|)!)`, and for
+/// `m < 0` the sign `(−1)^|m|` relative to the `|m|` value (SciPy's convention).
+/// `|m| > n` gives `0`.
+#[must_use]
+pub fn assoc_legendre_p(n: u32, m: i32, z: f64, norm: bool) -> f64 {
+    if !norm {
+        return lpmv(m, n, z);
+    }
+    let abs_m = m.unsigned_abs();
+    if abs_m > n {
+        return 0.0;
+    }
+    let factor =
+        ((2.0 * f64::from(n) + 1.0) / 2.0 * assoc_inverse_factorial_ratio(n, abs_m)).sqrt();
+    let base = factor * lpmv(abs_m as i32, n, z);
+    if m < 0 && abs_m % 2 == 1 {
+        -base
+    } else {
+        base
+    }
+}
+
+/// Spherical Legendre function `Y_n^m`-style normalized associated Legendre
+/// polynomial evaluated at the polar angle `theta`, matching
+/// `scipy.special.sph_legendre_p(n, m, theta)` (the `diff_n = 0` case).
+///
+/// Equals `√((2n+1)/(4π) · (n−|m|)!/(n+|m|)!) · P_|m|^n(cos θ)` with the
+/// `(−1)^|m|` sign for `m < 0`, the angular factor used to build real spherical
+/// harmonics. `|m| > n` gives `0`.
+#[must_use]
+pub fn sph_legendre_p(n: u32, m: i32, theta: f64) -> f64 {
+    let abs_m = m.unsigned_abs();
+    if abs_m > n {
+        return 0.0;
+    }
+    let factor = ((2.0 * f64::from(n) + 1.0) / (4.0 * PI)
+        * assoc_inverse_factorial_ratio(n, abs_m))
+    .sqrt();
+    let base = factor * lpmv(abs_m as i32, n, theta.cos());
+    if m < 0 && abs_m % 2 == 1 {
+        -base
+    } else {
+        base
+    }
+}
+
 /// Evaluate the shifted Legendre polynomial P_n*(x) = P_n(2x - 1).
 ///
 /// The shifted Legendre polynomials are orthogonal on [0, 1] instead of [-1, 1].
@@ -2018,6 +2079,29 @@ mod tests {
             ],
             "all(4,-0.6,2)",
         );
+    }
+
+    #[test]
+    fn assoc_and_sph_legendre_p_match_scipy() {
+        // frankenscipy: golden from scipy.special.assoc_legendre_p / sph_legendre_p (1.17.1).
+        let c = |got: f64, want: f64, msg: &str| {
+            assert!((got - want).abs() < 1e-12, "{msg}: got {got}, want {want}");
+        };
+        // assoc, unnormalized == lpmv(m, n, z) including signed negative m
+        c(assoc_legendre_p(3, 2, 0.4, false), 5.04, "assocF(3,2,0.4)");
+        c(assoc_legendre_p(4, -1, -0.3, false), 0.08478134652593106, "assocF(4,-1,-0.3)");
+        // assoc, normalized
+        c(assoc_legendre_p(3, 2, 0.4, true), 0.8607438643406062, "assocN(3,2,0.4)");
+        c(assoc_legendre_p(3, -1, 0.4, true), -0.14849242404917484, "assocN(3,-1,0.4)");
+        c(assoc_legendre_p(4, -3, 0.5, true), 1.0189249274664447, "assocN(4,-3,0.5)");
+        c(assoc_legendre_p(0, 0, 0.5, true), 0.7071067811865475, "assocN(0,0,0.5)");
+        c(assoc_legendre_p(2, 3, 0.5, true), 0.0, "assocN m>n -> 0");
+        // spherical
+        c(sph_legendre_p(3, 2, 0.7), 0.324400748475796, "sph(3,2,0.7)");
+        c(sph_legendre_p(3, -1, 0.7), 0.4007648002460704, "sph(3,-1,0.7)");
+        c(sph_legendre_p(4, 0, 1.2), -0.03550969424401845, "sph(4,0,1.2)");
+        c(sph_legendre_p(5, 3, 2.0), -0.14528713144968125, "sph(5,3,2.0)");
+        c(sph_legendre_p(2, 3, 0.5), 0.0, "sph m>n -> 0");
     }
 
     #[test]
