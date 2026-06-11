@@ -1395,6 +1395,143 @@ pub fn it2i0k0(x: f64) -> (f64, f64) {
     (ii0, ik0)
 }
 
+/// Bessel-integral pair `(∫₀ˣ (1−J₀(t))/t dt, ∫ₓ^∞ Y₀(t)/t dt)`, matching
+/// `scipy.special.it2j0y0`.
+///
+/// For `x ≤ 20` both come from the alternating Maclaurin series:
+/// `∫(1−J₀)/t = Σ_{m≥1}(−1)^{m+1}(x²/4)ᵐ/(2m(m!)²)` and (via ODE-matching
+/// `d/dx[∫ₓ^∞ Y₀/t] = −Y₀(x)/x` against the Y₀ series)
+/// `∫ₓ^∞ Y₀/t = −L²/π + π/6 + Σ_{m≥1}(pₘL + qₘ)(x²/4)ᵐ`, with `L = ln(x/2)+γ`,
+/// `pₘ = (−1)^{m+1}/(πm(m!)²)`, `qₘ = (−1)ᵐ[Hₘ/(πm) + 1/(2πm²)]/(m!)²`. Beyond
+/// `x = 20` (where the alternating series cancels) both switch to oscillatory
+/// asymptotics: `∫(1−J₀)/t = γ + ln(x/2) + ∫ₓ^∞ J₀/t`, and the `Y₀`/`J₀` tails
+/// are the standard `√(2/πt)` asymptotic integrated by parts. `x = 0` returns
+/// scipy's `(0, −1e300)` sentinel; for `x < 0` the first integral is even and
+/// the `Y₀` tail is NaN.
+#[must_use]
+pub fn it2j0y0(x: f64) -> (f64, f64) {
+    if x.is_nan() {
+        return (f64::NAN, f64::NAN);
+    }
+    if x == 0.0 {
+        return (0.0, -1e300);
+    }
+    if x < 0.0 {
+        return (it2j0y0(-x).0, f64::NAN);
+    }
+    const EL: f64 = 0.577_215_664_901_532_9;
+    let pi = std::f64::consts::PI;
+
+    if x <= 20.0 {
+        let u = x * x / 4.0;
+        let l = (x / 2.0).ln() + EL;
+        // ∫(1−J₀)/t alternating series.
+        let mut a = 1.0_f64;
+        let mut ij0 = 0.0_f64;
+        let mut m = 0usize;
+        loop {
+            m += 1;
+            a *= u / (m * m) as f64;
+            let sgn = if m % 2 == 1 { 1.0 } else { -1.0 }; // (−1)^{m+1}
+            ij0 += sgn * a / (2 * m) as f64;
+            if (a.abs() / ((2 * m) as f64) < 1e-22 * ij0.abs().max(1.0) && (m as f64) > 2.5 * x)
+                || m > 2000
+            {
+                break;
+            }
+        }
+        // ∫ₓ^∞ Y₀/t series.
+        let mut a = 1.0_f64;
+        let mut h = 0.0_f64;
+        let mut s = 0.0_f64;
+        let mut m = 0usize;
+        loop {
+            m += 1;
+            a *= u / (m * m) as f64;
+            h += 1.0 / m as f64;
+            let mf = m as f64;
+            let alt = if m % 2 == 1 { 1.0 } else { -1.0 }; // (−1)^{m+1}
+            let pm = alt / (pi * mf) * a;
+            let qm = -alt * (h / (pi * mf) + 1.0 / (2.0 * pi * mf * mf)) * a;
+            s += pm * l + qm;
+            if (a.abs() < 1e-23 * s.abs().max(1.0) && (m as f64) > 2.5 * x) || m > 2000 {
+                break;
+            }
+        }
+        let iy0 = -(l * l) / pi + pi / 6.0 + s;
+        (ij0, iy0)
+    } else {
+        // Oscillatory asymptotics. AC[j] = (−1)^j (2j−1)!!²/(j!·8^j).
+        const AC: [f64; 16] = [
+            1.0,
+            -1.25e-1,
+            7.03125e-2,
+            -7.32421875e-2,
+            1.121_520_996_093_75e-1,
+            -2.271_080_017_089_843_8e-1,
+            5.725_014_209_747_314e-1,
+            -1.727_727_502_584_457_4,
+            6.074_042_001_273_483,
+            -2.438_052_969_955_606_4e1,
+            1.100_171_402_692_467_4e2,
+            -5.513_358_961_220_206e2,
+            3.038_090_510_922_384_5e3,
+            -1.825_775_547_429_317_5e4,
+            1.188_384_262_567_832_5e5,
+            -8.328_593_040_162_893e5,
+        ];
+        let phi = x - pi / 4.0;
+        let cphi = phi.cos();
+        let sphi = phi.sin();
+        let poch = |s: f64, j: usize| -> f64 {
+            let mut r = 1.0;
+            for t in 0..j {
+                r *= s + t as f64;
+            }
+            r
+        };
+        let a_of = |s: f64| -> f64 {
+            (0..8)
+                .map(|k| {
+                    let sg = if k % 2 == 0 { 1.0 } else { -1.0 };
+                    poch(s, 2 * k) * sg * x.powf(-(s + (2 * k) as f64))
+                })
+                .sum()
+        };
+        let b_of = |s: f64| -> f64 {
+            (0..8)
+                .map(|k| {
+                    let sg = if k % 2 == 0 { 1.0 } else { -1.0 };
+                    poch(s, 2 * k + 1) * sg * x.powf(-(s + (2 * k + 1) as f64))
+                })
+                .sum()
+        };
+        let rc = (2.0 / pi).sqrt();
+        // ∫ₓ^∞ J₀/t and ∫ₓ^∞ Y₀/t tails.
+        let mut jtot = 0.0_f64;
+        let mut ytot = 0.0_f64;
+        for k in 0..8 {
+            let sg = if k % 2 == 0 { 1.0 } else { -1.0 };
+            let s_sin = 1.5 + 2.0 * k as f64;
+            let s_cos = 2.5 + 2.0 * k as f64;
+            let (a_s, b_s) = (a_of(s_sin), b_of(s_sin));
+            let (a_c, b_c) = (a_of(s_cos), b_of(s_cos));
+            // I_s(s) = cφ·A + sφ·B,  I_c(s) = cφ·B − sφ·A
+            let is_s = cphi * a_s + sphi * b_s;
+            let ic_s = cphi * b_s - sphi * a_s;
+            let is_c = cphi * a_c + sphi * b_c;
+            let ic_c = cphi * b_c - sphi * a_c;
+            // Y₀ = √(2/πt)[P·sin + Q·cos]
+            ytot += sg * AC[2 * k] * is_s + sg * AC[2 * k + 1] * ic_c;
+            // J₀ = √(2/πt)[P·cos − Q·sin]
+            jtot += sg * AC[2 * k] * ic_s - sg * AC[2 * k + 1] * is_c;
+        }
+        let ij0 = EL + (x / 2.0).ln() + rc * jtot;
+        let iy0 = rc * ytot;
+        (ij0, iy0)
+    }
+}
+
 /// Integrals of the Bessel functions `J₀` and `Y₀` from 0 to `x`.
 ///
 /// Returns `(∫₀ˣ J₀(t) dt, ∫₀ˣ Y₀(t) dt)`, matching `scipy.special.itj0y0`.
@@ -11722,6 +11859,29 @@ mod tests {
             (result - 0.3068528194400546).abs() < 1e-6,
             "kl_div(1, 2) = {result}, expected 0.3068528194400546"
         );
+    }
+
+    #[test]
+    fn it2j0y0_matches_reference_values() {
+        // frankenscipy: the (∫(1-J0)/t, ∫Y0/t) pair was missing. Golden from
+        // scipy.special.it2j0y0 1.17.1.
+        let cases = [
+            (0.5_f64, 0.031006986350915297_f64, 0.26968853860900577_f64),
+            (1.0, 0.12116524699506871, 0.39527290169929336),
+            (2.0, 0.44191940220810466, 0.16650134540454314),
+            (5.0, 1.5403472199872168, -0.0463220552857449),
+            (10.0, 2.17786642009344, -0.022987933564673504), // x≤20 series
+            (25.0, 3.1082312595852026, 0.0035263393355635633), // x>20 asymptotic
+        ];
+        for (x, ij0, iy0) in cases {
+            let (gj, gy) = super::it2j0y0(x);
+            assert!((gj - ij0).abs() <= 1e-8 * ij0.abs().max(1.0), "ij0({x}) = {gj}, want {ij0}");
+            assert!((gy - iy0).abs() <= 1e-8 * iy0.abs().max(1.0), "iy0({x}) = {gy}, want {iy0}");
+        }
+        // x=0 → (0, -1e300 scipy sentinel); x<0 → ij0 even, iy0 NaN.
+        assert_eq!(super::it2j0y0(0.0), (0.0, -1e300));
+        let (n0, ny) = super::it2j0y0(-1.0);
+        assert!((n0 - 0.12116524699506871).abs() < 1e-9 && ny.is_nan());
     }
 
     #[test]
