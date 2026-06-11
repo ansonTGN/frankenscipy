@@ -1250,7 +1250,7 @@ fn beta_nonpos_integer_special(a: f64, b: f64) -> Option<f64> {
     Some(f64::INFINITY)
 }
 
-fn beta_scalar(a: f64, b: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
+pub(crate) fn beta_scalar(a: f64, b: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
     if let Some(v) = beta_nonpos_integer_special(a, b) {
         return Ok(v);
     }

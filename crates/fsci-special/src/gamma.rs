@@ -1839,51 +1839,78 @@ pub fn factorial2(n: i64) -> f64 {
 ///   the gamma reflection formula and is tracked as a follow-on under
 ///   `frankenscipy-b6z3m`.
 /// - NaN propagates.
-pub fn binom(x: f64, y: f64) -> f64 {
-    if x.is_nan() || y.is_nan() {
+pub fn binom(n: f64, k: f64) -> f64 {
+    // Faithful port of scipy.special.binom (xsf `binom`). Computes the
+    // generalized binomial coefficient C(n, k) = Γ(n+1)/(Γ(k+1)Γ(n-k+1)) over
+    // real arguments, choosing the formulation that minimizes rounding:
+    //   * integer k in [0, 20): the multiplicative product (signed, exact for
+    //     integer results — e.g. binom(0.5, 2) = -0.125, which the old gamma
+    //     formula wrongly collapsed to 0);
+    //   * n ≫ k: a betaln-based form avoiding overflow;
+    //   * k ≫ |n|: a Γ-reflection asymptotic;
+    //   * otherwise the signed beta-function form 1/((n+1)·B(n−k+1, k+1)),
+    //     which is finite (and 0 only at a genuine denominator pole), unlike
+    //     the old `x−y+1 ≤ 0 ⇒ 0` shortcut. frankenscipy-binom
+    if n.is_nan() || k.is_nan() {
         return f64::NAN;
     }
-    if x < 0.0 && y >= 0.0 {
-        // Negative-integer x is a pole of Γ(x+1) => NaN (scipy.special.binom).
-        if x == x.floor() {
-            return f64::NAN;
-        }
-        // Negative non-integer x: binom = Γ(x+1)/(Γ(y+1)Γ(x-y+1)) is SIGNED.
-        // gammaln gives ln|·|, so restore the sign from gammasgn (an x-y+1 pole
-        // gives a vanishing 0, matching scipy, e.g. binom(-4.5,2)=12.375).
-        let l = gammaln_scalar(x + 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN)
-            - gammaln_scalar(y + 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN)
-            - gammaln_scalar(x - y + 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN);
-        let sign = gammasgn_scalar(x + 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN)
-            * gammasgn_scalar(y + 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN)
-            * gammasgn_scalar(x - y + 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN);
-        return sign * l.exp();
-    }
-    if x < 0.0 || y < 0.0 {
+    if n < 0.0 && n == n.floor() {
+        // Negative-integer n is undefined (Γ(n+1) pole, no cancellation).
         return f64::NAN;
     }
-    if y > x {
-        // For integer overshoot (y > x with y, x both integers, or
-        // y - x integer such that x - y + 1 ≤ 0), the gamma formula
-        // hits a pole or negative argument that lngamma_positive
-        // can't handle without reflection. Return 0 in that
-        // vanishing-coefficient regime. For non-integer y > x where
-        // x - y + 1 > 0, fall through to the gamma formula — scipy
-        // returns the finite nonzero value (e.g. binom(0.5, 1) = 0.5).
-        // [frankenscipy-du5m4]
-        if x - y + 1.0 <= 0.0 || (y - x).fract() == 0.0 {
-            return 0.0;
+
+    let mut kx = k.floor();
+    if k == kx && (n.abs() > 1e-8 || n == 0.0) {
+        // Integer k: multiplicative form, less rounding than the gamma ratio.
+        let nx = n.floor();
+        if nx == n && kx > nx / 2.0 && nx > 0.0 {
+            kx = nx - kx; // reduce by symmetry C(n,k)=C(n,n-k)
         }
-        // else fall through
+        if (0.0..20.0).contains(&kx) {
+            let mut num = 1.0_f64;
+            let mut den = 1.0_f64;
+            let kxi = kx as i64;
+            for i in 1..(1 + kxi) {
+                num *= i as f64 + n - kx;
+                den *= i as f64;
+                if num.abs() > 1e50 {
+                    num /= den;
+                    den = 1.0;
+                }
+            }
+            return num / den;
+        }
     }
-    if y == 0.0 || y == x {
-        return 1.0;
+
+    // General case.
+    if n >= 1e10 * k && k > 0.0 {
+        // n ≫ k: avoid under/overflow via logarithms.
+        let bl = crate::beta::betaln_scalar(1.0 + n - k, 1.0 + k, RuntimeMode::Strict)
+            .unwrap_or(f64::NAN);
+        (-bl - (n + 1.0).ln()).exp()
+    } else if k > 1e8 * n.abs() {
+        // k ≫ |n|: Γ-reflection asymptotic (scipy xsf binom).
+        let g = gamma_core(1.0 + n);
+        let mut num = g / k.abs() + g * n / (2.0 * k * k);
+        num /= PI * k.abs().powf(n);
+        if k > 0.0 {
+            let (dk, sgn) = if k == k.floor() {
+                (0.0, if (k as i64) % 2 == 0 { 1.0 } else { -1.0 })
+            } else {
+                (k, 1.0)
+            };
+            num * ((dk - n) * PI).sin() * sgn
+        } else if k == k.floor() {
+            0.0
+        } else {
+            num * (k * PI).sin()
+        }
+    } else {
+        // Signed beta form, finite except at a genuine denominator pole.
+        let b = crate::beta::beta_scalar(1.0 + n - k, 1.0 + k, RuntimeMode::Strict)
+            .unwrap_or(f64::NAN);
+        1.0 / (n + 1.0) / b
     }
-    // Use lnΓ for large arguments; small / non-integer arguments still
-    // route through lngamma_positive which handles the (0, 8) branch via
-    // the reflection-free recurrence.
-    let l = lngamma_positive(x + 1.0) - lngamma_positive(y + 1.0) - lngamma_positive(x - y + 1.0);
-    l.exp()
 }
 
 /// k-step factorial: `n * (n − k) * (n − 2k) * … * r`, where the iteration
@@ -4448,10 +4475,9 @@ mod tests {
 
     #[test]
     fn binom_real_arguments_match_gamma_definition() {
-        // binom(0.5, 0.25) = Γ(1.5) / (Γ(1.25) · Γ(1.25))
+        // scipy.special.binom(0.5, 0.25) = 1.0787052023767587 (beta-form path).
         let b = binom(0.5, 0.25);
-        let lng = |x: f64| lngamma_positive(x);
-        let expected = (lng(1.5) - 2.0 * lng(1.25)).exp();
+        let expected = 1.0787052023767587_f64;
         assert!(
             (b - expected).abs() < 1e-12,
             "binom(0.5, 0.25) = {b}, expected {expected}"
@@ -4534,17 +4560,47 @@ mod tests {
     }
 
     #[test]
+    fn binom_integer_k_noninteger_n_matches_scipy() {
+        // frankenscipy-binom: the old gamma formula collapsed binom(n, k) to 0
+        // whenever n - k + 1 <= 0, even when Γ(n-k+1) is finite (not a pole).
+        // For integer k and non-integer n the result is a signed polynomial in
+        // n. Golden values from scipy.special.binom 1.17.1.
+        let cases = [
+            (0.5_f64, 2.0, -0.125_f64),
+            (0.5, 3.0, 0.0625),
+            (0.5, 5.0, 0.02734375),
+            (0.5, 7.0, 0.01611328125),
+            (2.5, 5.0, 0.01171875),
+            (2.5, 7.0, 0.00244140625),
+            (-0.5, 1.0, -0.5),
+            (2.0, -1.0, 0.0),  // negative integer k → 0
+        ];
+        for (n, k, want) in cases {
+            let got = binom(n, k);
+            assert!(
+                (got - want).abs() <= 1e-12 * want.abs().max(1.0),
+                "binom({n},{k}) got {got}, want {want}"
+            );
+        }
+    }
+
+    #[test]
     fn binom_endpoints_return_one() {
+        // Integer k uses the exact product form → exactly 1.0.
         assert_eq!(binom(5.0, 0.0), 1.0);
         assert_eq!(binom(5.0, 5.0), 1.0);
         assert_eq!(binom(2.5, 0.0), 1.0);
-        assert_eq!(binom(2.5, 2.5), 1.0);
+        // Non-integer k=n routes through the beta form; scipy.special.binom(2.5,2.5)
+        // = 0.9999999999999998 (NOT exactly 1.0 — matching scipy is the point).
+        assert!((binom(2.5, 2.5) - 1.0).abs() < 1e-12, "binom(2.5,2.5) = {}", binom(2.5, 2.5));
     }
 
     #[test]
     fn binom_negative_or_nan_propagates() {
+        // Negative-integer n is a genuine pole → NaN (scipy).
         assert!(binom(-1.0, 0.5).is_nan());
-        assert!(binom(2.0, -0.5).is_nan());
+        // Negative non-integer k is finite in scipy: binom(2, -0.5) = 0.33953054526271.
+        assert!((binom(2.0, -0.5) - 0.33953054526271004).abs() < 1e-12);
         assert!(binom(f64::NAN, 1.0).is_nan());
         assert!(binom(2.0, f64::NAN).is_nan());
     }
