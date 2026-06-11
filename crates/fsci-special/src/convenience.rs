@@ -4142,6 +4142,63 @@ pub fn wofz(z_tensor: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
     }
 }
 
+/// Modified Fresnel positive integrals `(F₊, K₊)`, matching
+/// `scipy.special.modfresnelp`.
+///
+/// `F₊(x) = ∫ₓ^∞ exp(i t²) dt` and the auxiliary
+/// `K₊(x) = F₊(x)·exp(−i(x²+π/4)) / √π`.
+///
+/// Evaluated in closed form via the complex complementary error function,
+/// `F₊(x) = (√π/2)·e^{iπ/4}·erfc(x·e^{−iπ/4})`, with `erfc(z) = e^{−z²}·w(iz)`
+/// (the Faddeeva function `wofz`). Matches scipy to ~1e-15 for `x ≥ 0`. For
+/// `x < 0` this returns the analytically-correct integral (scipy's specfun
+/// `FFK` is inaccurate for negative arguments). frankenscipy
+pub fn modfresnelp(x: f64) -> (Complex64, Complex64) {
+    modfresnel_impl(x, true)
+}
+
+/// Modified Fresnel negative integrals `(F₋, K₋)`, matching
+/// `scipy.special.modfresnelm`: `F₋(x) = ∫ₓ^∞ exp(−i t²) dt` and
+/// `K₋(x) = F₋(x)·exp(i(x²+π/4)) / √π`. See [`modfresnelp`].
+pub fn modfresnelm(x: f64) -> (Complex64, Complex64) {
+    modfresnel_impl(x, false)
+}
+
+fn modfresnel_impl(x: f64, positive: bool) -> (Complex64, Complex64) {
+    if x.is_nan() {
+        let nan = Complex64::new(f64::NAN, f64::NAN);
+        return (nan, nan);
+    }
+    let mode = RuntimeMode::Strict;
+    let sqrt_pi_2 = std::f64::consts::PI.sqrt() / 2.0;
+    let sqrt_pi = std::f64::consts::PI.sqrt();
+    // e^{±iπ/4}
+    let rot = Complex64::new(std::f64::consts::FRAC_1_SQRT_2, std::f64::consts::FRAC_1_SQRT_2);
+    let (front, arg_rot, k_phase_sign) = if positive {
+        (rot, rot.conj(), -1.0) // F₊: e^{iπ/4}·erfc(x·e^{-iπ/4})
+    } else {
+        (rot.conj(), rot, 1.0) // F₋: e^{-iπ/4}·erfc(x·e^{iπ/4})
+    };
+    let z = arg_rot * x;
+    let f = Complex64::new(sqrt_pi_2, 0.0) * front * erfc_via_wofz(z, mode);
+    // K = F · exp(∓i(x²+π/4)) / √π
+    let phase = Complex64::new(0.0, k_phase_sign * (x * x + std::f64::consts::FRAC_PI_4)).exp();
+    let k = f * phase / sqrt_pi;
+    (f, k)
+}
+
+/// Complex `erfc(z) = e^{−z²}·w(iz)` via the Faddeeva function, using the
+/// reflection `erfc(z) = 2 − erfc(−z)` for `Re(z) < 0` to avoid `e^{−z²}`
+/// overflow.
+fn erfc_via_wofz(z: Complex64, mode: RuntimeMode) -> Complex64 {
+    if z.re < 0.0 {
+        return Complex64::new(2.0, 0.0) - erfc_via_wofz(-z, mode);
+    }
+    let iz = Complex64::new(-z.im, z.re); // i·z
+    let w = wofz_scalar(iz, mode).unwrap_or(Complex64::new(f64::NAN, f64::NAN));
+    (-z * z).exp() * w
+}
+
 pub fn wofz_scalar(z: Complex64, mode: RuntimeMode) -> Result<Complex64, SpecialError> {
     if !z.is_finite() {
         if mode == RuntimeMode::Hardened {
@@ -11343,6 +11400,27 @@ mod tests {
             (result - 0.3068528194400546).abs() < 1e-6,
             "kl_div(1, 2) = {result}, expected 0.3068528194400546"
         );
+    }
+
+    #[test]
+    fn modfresnel_matches_scipy_reference_values() {
+        // frankenscipy: scipy.special.modfresnelp/modfresnelm were missing.
+        // Golden (fp.re, fp.im, kp.re, kp.im, fm.re, fm.im, km.re, km.im) from
+        // scipy 1.17.1 at x = 0, 1, 2.
+        let cases = [
+            (0.0_f64, 0.6266570686577501, 0.6266570686577501, 0.5, 0.0, 0.6266570686577501, -0.6266570686577501, 0.5, 0.0),
+            (1.0, -0.27786716924252197, 0.3163887669343689, 0.20779404795392425, 0.11515989377745535, -0.27786716924252197, -0.3163887669343689, 0.20779404795392425, -0.11515989377745535),
+            (2.0, 0.16519560622453383, -0.17811942068600597, 0.10702394153838506, 0.08562294793588794, 0.16519560622453383, 0.17811942068600597, 0.10702394153838506, -0.08562294793588794),
+        ];
+        for (x, fpr, fpi, kpr, kpi, fmr, fmi, kmr, kmi) in cases {
+            let (fp, kp) = super::modfresnelp(x);
+            let (fm, km) = super::modfresnelm(x);
+            let close = |a: f64, b: f64| (a - b).abs() <= 1e-12 * b.abs().max(1.0);
+            assert!(close(fp.re, fpr) && close(fp.im, fpi), "modfresnelp({x}).fp = {fp:?}");
+            assert!(close(kp.re, kpr) && close(kp.im, kpi), "modfresnelp({x}).kp = {kp:?}");
+            assert!(close(fm.re, fmr) && close(fm.im, fmi), "modfresnelm({x}).fm = {fm:?}");
+            assert!(close(km.re, kmr) && close(km.im, kmi), "modfresnelm({x}).km = {km:?}");
+        }
     }
 
     #[test]

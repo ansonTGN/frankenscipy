@@ -47,6 +47,8 @@ pub use convenience::{
     bernoulli,
     berp,
     besselpoly,
+    modfresnelm,
+    modfresnelp,
     // Convenience wrappers
     betaincinv,
     betaincinv_scalar,
