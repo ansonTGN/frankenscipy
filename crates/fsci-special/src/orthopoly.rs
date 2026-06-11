@@ -780,6 +780,141 @@ pub fn mathieu_b(m: u32, q: f64) -> f64 {
     }
 }
 
+/// Thomas algorithm: solve the tridiagonal system with sub-diagonal `sub`,
+/// diagonal `diag`, super-diagonal `sup`, and right-hand side `rhs`.
+fn thomas_solve(sub: &[f64], diag: &[f64], sup: &[f64], rhs: &[f64]) -> Vec<f64> {
+    let n = diag.len();
+    let mut c = vec![0.0_f64; n];
+    let mut d = vec![0.0_f64; n];
+    c[0] = sup[0] / diag[0];
+    d[0] = rhs[0] / diag[0];
+    for i in 1..n {
+        let denom = diag[i] - sub[i] * c[i - 1];
+        if i < n - 1 {
+            c[i] = sup[i] / denom;
+        }
+        d[i] = (rhs[i] - sub[i] * d[i - 1]) / denom;
+    }
+    let mut x = vec![0.0_f64; n];
+    x[n - 1] = d[n - 1];
+    for i in (0..n - 1).rev() {
+        x[i] = d[i] - c[i] * x[i + 1];
+    }
+    x
+}
+
+/// Unit eigenvector of a symmetric tridiagonal matrix for the known eigenvalue
+/// `lambda`, by inverse iteration with a tiny shift off the eigenvalue.
+fn tridiagonal_eigenvector(diag: &[f64], off: &[f64], lambda: f64) -> Vec<f64> {
+    let n = diag.len();
+    let mu = lambda + (lambda.abs() + 1.0) * 1e-11;
+    let sub: Vec<f64> = std::iter::once(0.0).chain(off.iter().copied()).collect();
+    let sup: Vec<f64> = off.iter().copied().chain(std::iter::once(0.0)).collect();
+    let shifted: Vec<f64> = diag.iter().map(|d| d - mu).collect();
+    let mut x = vec![1.0_f64; n];
+    for _ in 0..3 {
+        let y = thomas_solve(&sub, &shifted, &sup, &x);
+        let norm = y.iter().map(|v| v * v).sum::<f64>().sqrt();
+        for (xi, yi) in x.iter_mut().zip(y.iter()) {
+            *xi = yi / norm;
+        }
+    }
+    x
+}
+
+/// Fourier coefficients of a periodic Mathieu function and the harmonic offset
+/// `k0` (harmonics are `k0 + 2i`). `even = true` builds `ce_m` (cosine series,
+/// using `mathieu_a`), `even = false` builds `se_m` (sine series, `mathieu_b`).
+/// The coefficient vector is the unit eigenvector of the same recurrence matrix
+/// as the characteristic value, with SciPy's sign convention (the `k = m`
+/// harmonic coefficient is positive).
+fn mathieu_fourier(m: u32, q: f64, even: bool) -> (Vec<f64>, u32) {
+    let n = mathieu_matrix_dim(m, q);
+    let (diag, off, lambda, k0, undo_sqrt2): (Vec<f64>, Vec<f64>, f64, u32, bool) = if even {
+        if m % 2 == 0 {
+            let diag = (0..n).map(|k| (2 * k as i64).pow(2) as f64).collect();
+            let mut off = vec![q; n - 1];
+            off[0] = q * std::f64::consts::SQRT_2;
+            (diag, off, mathieu_a(m, q), 0, true)
+        } else {
+            let mut diag: Vec<f64> = (0..n).map(|k| (2 * k as i64 + 1).pow(2) as f64).collect();
+            diag[0] = 1.0 + q;
+            (diag, vec![q; n - 1], mathieu_a(m, q), 1, false)
+        }
+    } else if m % 2 == 0 {
+        let diag = (0..n).map(|k| (2 * k as i64 + 2).pow(2) as f64).collect();
+        (diag, vec![q; n - 1], mathieu_b(m, q), 2, false)
+    } else {
+        let mut diag: Vec<f64> = (0..n).map(|k| (2 * k as i64 + 1).pow(2) as f64).collect();
+        diag[0] = 1.0 - q;
+        (diag, vec![q; n - 1], mathieu_b(m, q), 1, false)
+    };
+    let mut v = tridiagonal_eigenvector(&diag, &off, lambda);
+    if undo_sqrt2 {
+        v[0] /= std::f64::consts::SQRT_2;
+    }
+    // Fix the global sign with the DLMF convention: ce_m(0,q) = Σ A_k > 0 for the
+    // cosine series, and se_m'(0,q) = Σ k·B_k > 0 for the sine series.
+    let sign_quantity: f64 = if even {
+        v.iter().sum()
+    } else {
+        v.iter()
+            .enumerate()
+            .map(|(i, &vi)| f64::from(k0 + 2 * i as u32) * vi)
+            .sum()
+    };
+    if sign_quantity < 0.0 {
+        for value in &mut v {
+            *value = -*value;
+        }
+    }
+    (v, k0)
+}
+
+/// Even periodic Mathieu function `ce_m(x, q)` and its derivative (w.r.t. the
+/// argument in radians), matching `scipy.special.mathieu_cem(m, q, x)`.
+///
+/// `x` is given in **degrees**, as SciPy requires. The function is the cosine
+/// Fourier series `ce_m(x) = Σ A_k cos(k x)` whose coefficients are obtained
+/// from [`mathieu_fourier`]; the returned derivative is `d ce_m / dx` with `x`
+/// in radians.
+#[must_use]
+pub fn mathieu_cem(m: u32, q: f64, x: f64) -> (f64, f64) {
+    let (a, k0) = mathieu_fourier(m, q, true);
+    let xr = x.to_radians();
+    let mut value = 0.0_f64;
+    let mut derivative = 0.0_f64;
+    for (i, &ai) in a.iter().enumerate() {
+        let k = f64::from(k0 + 2 * i as u32);
+        value += ai * (k * xr).cos();
+        derivative -= ai * k * (k * xr).sin();
+    }
+    (value, derivative)
+}
+
+/// Odd periodic Mathieu function `se_m(x, q)` (`m ≥ 1`) and its derivative
+/// (w.r.t. the argument in radians), matching `scipy.special.mathieu_sem(m, q, x)`.
+///
+/// `x` is given in **degrees**. The function is the sine Fourier series
+/// `se_m(x) = Σ B_k sin(k x)`; `se_0 ≡ 0`, so `m = 0` returns `(0, 0)` as SciPy
+/// does.
+#[must_use]
+pub fn mathieu_sem(m: u32, q: f64, x: f64) -> (f64, f64) {
+    if m == 0 {
+        return (0.0, 0.0);
+    }
+    let (b, k0) = mathieu_fourier(m, q, false);
+    let xr = x.to_radians();
+    let mut value = 0.0_f64;
+    let mut derivative = 0.0_f64;
+    for (i, &bi) in b.iter().enumerate() {
+        let k = f64::from(k0 + 2 * i as u32);
+        value += bi * (k * xr).sin();
+        derivative += bi * k * (k * xr).cos();
+    }
+    (value, derivative)
+}
+
 /// Evaluate the shifted Legendre polynomial P_n*(x) = P_n(2x - 1).
 ///
 /// The shifted Legendre polynomials are orthogonal on [0, 1] instead of [-1, 1].
@@ -2142,6 +2277,34 @@ mod tests {
             ],
             "all(4,-0.6,2)",
         );
+    }
+
+    #[test]
+    fn mathieu_cem_sem_match_scipy() {
+        // frankenscipy: golden (value, derivative) from scipy.special.mathieu_cem / mathieu_sem
+        // (1.17.1); x in degrees, derivative w.r.t. the radian argument.
+        let c = |got: (f64, f64), want: (f64, f64), msg: &str| {
+            assert!((got.0 - want.0).abs() < 1e-9, "{msg} value: got {} want {}", got.0, want.0);
+            assert!((got.1 - want.1).abs() < 1e-9, "{msg} deriv: got {} want {}", got.1, want.1);
+        };
+        c(mathieu_cem(0, 5.0, 30.0), (0.17026946498276374, 0.5821239463837029), "cem(0,5,30)");
+        c(mathieu_cem(1, 5.0, 30.0), (0.5522262635274278, 1.1204184009096463), "cem(1,5,30)");
+        c(mathieu_cem(2, 5.0, 30.0), (0.9065012518998091, 0.3020225775739051), "cem(2,5,30)");
+        c(mathieu_cem(3, 10.0, 70.0), (-0.6679194810078108, -1.8140894302215176), "cem(3,10,70)");
+        c(mathieu_cem(0, 0.0, 30.0), (0.7071067811865475, 0.0), "cem(0,0,30)");
+        c(mathieu_cem(1, -5.0, 30.0), (0.7616380565259091, -1.5978093281414765), "cem(1,-5,30)");
+        c(mathieu_sem(1, 5.0, 30.0), (0.16346317035467603, 0.6046025948049121), "sem(1,5,30)");
+        c(mathieu_sem(2, 5.0, 30.0), (0.5046345717209944, 1.343445828193893), "sem(2,5,30)");
+        c(mathieu_sem(3, 10.0, 70.0), (0.24404071190296778, -4.819189584712689), "sem(3,10,70)");
+        c(mathieu_sem(1, 0.0, 45.0), (0.7071067811865477, 0.7071067811865474), "sem(1,0,45)");
+        c(mathieu_sem(0, 5.0, 30.0), (0.0, 0.0), "sem(0) -> 0");
+        // Large-q cases that exercise the DLMF global-sign convention.
+        c(mathieu_cem(4, 50.0, 45.0), (1.1707453018410003, 3.034983794842312), "cem(4,50,45)");
+        c(mathieu_cem(3, 20.0, 45.0), (1.1751025369177404, 0.7073419712275579), "cem(3,20,45)");
+        c(mathieu_cem(2, 50.0, 60.0), (1.2957144976987285, 3.0058128316097212), "cem(2,50,60)");
+        c(mathieu_cem(6, 50.0, 30.0), (1.0228643512401936, 2.9714973827127293), "cem(6,50,30)");
+        c(mathieu_sem(3, 50.0, 45.0), (0.37420062721132025, 2.5337601186886447), "sem(3,50,45)");
+        c(mathieu_sem(4, 20.0, 60.0), (0.5398091214798074, -5.776690451353455), "sem(4,20,60)");
     }
 
     #[test]
