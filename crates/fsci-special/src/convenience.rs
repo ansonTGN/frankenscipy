@@ -2896,6 +2896,113 @@ pub fn kelvin(x: f64) -> (Complex64, Complex64, Complex64, Complex64) {
     )
 }
 
+/// First `nt` positive real zeros of a Kelvin function `f` (or its derivative).
+///
+/// All Kelvin functions are smooth and oscillatory on `x > 0` with simple zeros
+/// spaced asymptotically `π√2 ≈ 4.443` apart, so a forward sign-change scan
+/// (step `0.25`, far finer than the spacing) brackets every zero in order, and
+/// bisection refines each to machine precision. Robust and reference-free; the
+/// zeros are well-defined constants, so the result matches
+/// `scipy.special.*_zeros` independently of any seed table.
+fn kelvin_zeros_of(f: impl Fn(f64) -> f64, nt: u32) -> Vec<f64> {
+    let mut out = Vec::with_capacity(nt as usize);
+    if nt == 0 {
+        return out;
+    }
+    let h = 0.25_f64;
+    let limit = f64::from(nt) * 5.0 + 30.0;
+    let x0 = 1e-2_f64;
+    let mut x = x0;
+    let mut fx = f(x);
+    while (out.len() as u32) < nt && x < limit {
+        let xn = x + h;
+        let fn_ = f(xn);
+        if fx * fn_ < 0.0 {
+            // Bisect the sign-change bracket [x, xn].
+            let (mut a, mut b) = (x, xn);
+            let fa_pos = fx > 0.0;
+            for _ in 0..80 {
+                let m = 0.5 * (a + b);
+                if (f(m) > 0.0) == fa_pos {
+                    a = m;
+                } else {
+                    b = m;
+                }
+            }
+            out.push(0.5 * (a + b));
+        }
+        x = xn;
+        fx = fn_;
+    }
+    out
+}
+
+/// First `nt` positive zeros of `ber`. Matches `scipy.special.ber_zeros`.
+#[must_use]
+pub fn ber_zeros(nt: u32) -> Vec<f64> {
+    kelvin_zeros_of(ber, nt)
+}
+
+/// First `nt` positive zeros of `bei`. Matches `scipy.special.bei_zeros`.
+#[must_use]
+pub fn bei_zeros(nt: u32) -> Vec<f64> {
+    kelvin_zeros_of(bei, nt)
+}
+
+/// First `nt` positive zeros of `ker`. Matches `scipy.special.ker_zeros`.
+#[must_use]
+pub fn ker_zeros(nt: u32) -> Vec<f64> {
+    kelvin_zeros_of(ker, nt)
+}
+
+/// First `nt` positive zeros of `kei`. Matches `scipy.special.kei_zeros`.
+#[must_use]
+pub fn kei_zeros(nt: u32) -> Vec<f64> {
+    kelvin_zeros_of(kei, nt)
+}
+
+/// First `nt` positive zeros of `ber'`. Matches `scipy.special.berp_zeros`.
+#[must_use]
+pub fn berp_zeros(nt: u32) -> Vec<f64> {
+    kelvin_zeros_of(berp, nt)
+}
+
+/// First `nt` positive zeros of `bei'`. Matches `scipy.special.beip_zeros`.
+#[must_use]
+pub fn beip_zeros(nt: u32) -> Vec<f64> {
+    kelvin_zeros_of(beip, nt)
+}
+
+/// First `nt` positive zeros of `ker'`. Matches `scipy.special.kerp_zeros`.
+#[must_use]
+pub fn kerp_zeros(nt: u32) -> Vec<f64> {
+    kelvin_zeros_of(kerp, nt)
+}
+
+/// First `nt` positive zeros of `kei'`. Matches `scipy.special.keip_zeros`.
+#[must_use]
+pub fn keip_zeros(nt: u32) -> Vec<f64> {
+    kelvin_zeros_of(keip, nt)
+}
+
+/// First `nt` positive zeros of all eight Kelvin functions, returned in SciPy's
+/// order `(ber, bei, ker, kei, ber', bei', ker', kei')`.
+///
+/// Matches `scipy.special.kelvin_zeros`.
+#[must_use]
+pub fn kelvin_zeros(nt: u32) -> [Vec<f64>; 8] {
+    [
+        ber_zeros(nt),
+        bei_zeros(nt),
+        ker_zeros(nt),
+        kei_zeros(nt),
+        berp_zeros(nt),
+        beip_zeros(nt),
+        kerp_zeros(nt),
+        keip_zeros(nt),
+    ]
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Exponential Integral Variants
 // ══════════════════════════════════════════════════════════════════════
@@ -6972,6 +7079,36 @@ pub fn binary_cross_entropy_scalar(p: f64, q: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
+    fn kelvin_zeros_match_scipy() {
+        // frankenscipy: golden from scipy.special.{ber,bei,ker,kei,berp,beip,kerp,keip}_zeros
+        // (1.17.1). Our bisected zeros are at least as accurate as SciPy's specfun values
+        // (which leave ~1e-10 residuals), so compare with a 1e-8 tolerance.
+        let cases: [(fn(u32) -> Vec<f64>, [f64; 4]); 8] = [
+            (ber_zeros, [2.8489178207951396, 7.238829447632408, 11.673963549647077, 16.11356382738789]),
+            (bei_zeros, [5.026223951953151, 9.455406303277154, 13.893487852659412, 18.33398345577453]),
+            (ker_zeros, [1.7185429596232313, 6.127279134970337, 10.562942708257847, 15.002688121534597]),
+            (kei_zeros, [3.9146676068432655, 8.344225062948416, 12.782557148597336, 17.22314372343476]),
+            (berp_zeros, [6.038710806721278, 10.513642514770426, 14.968445421840928, 19.417574926000736]),
+            (beip_zeros, [3.772673304934953, 8.280987849760043, 12.742147523633703, 17.19343175251254]),
+            (kerp_zeros, [2.6658397930175615, 7.17212212474824, 11.632186394772816, 16.08312024940579]),
+            (keip_zeros, [4.93181194115222, 9.404054583281818, 13.858269159614109, 18.30717293559908]),
+        ];
+        for (f, golden) in cases {
+            let z = f(4);
+            assert_eq!(z.len(), 4, "expected 4 zeros");
+            for (got, want) in z.iter().zip(golden.iter()) {
+                assert!((got - want).abs() < 1e-8, "kelvin zero: got {got}, want {want}");
+            }
+        }
+        // kelvin_zeros stacks the eight families in SciPy's order.
+        let all = kelvin_zeros(4);
+        assert!((all[0][0] - 2.8489178207951396).abs() < 1e-8, "ber zero in kelvin_zeros");
+        assert!((all[7][3] - 18.30717293559908).abs() < 1e-8, "keip zero in kelvin_zeros");
+        assert!(ber_zeros(0).is_empty(), "nt=0 -> empty");
+    }
 
     #[test]
     #[allow(clippy::excessive_precision)] // golden constants verbatim from scipy
