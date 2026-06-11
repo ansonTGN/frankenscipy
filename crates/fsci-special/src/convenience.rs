@@ -1223,6 +1223,96 @@ pub fn itmodstruve0(x: f64) -> f64 {
     struve_integral_abs(x, |t| modstruve(0.0, t))
 }
 
+/// Integrals of the modified Bessel functions `I₀` and `K₀` from 0 to `x`.
+///
+/// Returns `(∫₀ˣ I₀(t) dt, ∫₀ˣ K₀(t) dt)`, matching `scipy.special.iti0k0`.
+///
+/// `∫I₀` is evaluated from its (all-positive) Maclaurin series, exact for every
+/// `x` — more accurate than scipy's large-`x` asymptotic. `∫K₀` uses the series
+/// for `x ≤ 12` and, beyond that (where the series cancels against the `log`
+/// term), the tail asymptotic `∫₀ˣ K₀ = π/2 − √(π/2x)·e^{−x}·Q(1/x)`. For `x < 0`
+/// the `I₀` integral is odd (so it negates) and `∫K₀` is NaN (`K₀` is undefined
+/// there), matching scipy.
+#[must_use]
+pub fn iti0k0(x: f64) -> (f64, f64) {
+    if x.is_nan() {
+        return (f64::NAN, f64::NAN);
+    }
+    if x == 0.0 {
+        return (0.0, 0.0);
+    }
+    if x < 0.0 {
+        return (-iti0k0(-x).0, f64::NAN);
+    }
+    const EL: f64 = 0.577_215_664_901_532_9;
+    let x24 = x * x / 4.0;
+
+    // ∫₀ˣ I₀ = Σ_m x·(x²/4)^m / ((m!)²·(2m+1)); all terms positive → no cancellation.
+    let mut term = x;
+    let mut ti = 0.0_f64;
+    let mut m = 0usize;
+    loop {
+        ti += term / (2 * m + 1) as f64;
+        m += 1;
+        term *= x24 / (m * m) as f64;
+        if (term / ((2 * m + 1) as f64) < 1e-18 * ti && (m as f64) > 2.0 * x) || m > 5000 {
+            break;
+        }
+    }
+
+    let tk = if x <= 12.0 {
+        // ∫₀ˣ K₀ = −(ln(x/2)+γ)·∫I₀ + Σ_m term_m/(2m+1)² + Σ_{m≥1} term_m·H_m/(2m+1).
+        let mut term = x;
+        let mut s2 = 0.0_f64;
+        let mut s3 = 0.0_f64;
+        let mut h = 0.0_f64;
+        let mut m = 0usize;
+        loop {
+            let d = (2 * m + 1) as f64;
+            s2 += term / (d * d);
+            if m >= 1 {
+                h += 1.0 / m as f64;
+                s3 += term * h / d;
+            }
+            m += 1;
+            term *= x24 / (m * m) as f64;
+            if (term.abs() / ((2 * m + 1) as f64) < 1e-18 * s2.abs().max(1.0)
+                && (m as f64) > 2.0 * x)
+                || m > 5000
+            {
+                break;
+            }
+        }
+        -((x / 2.0).ln() + EL) * ti + s2 + s3
+    } else {
+        // Tail asymptotic. Q(1/x) coefficients (q_n = a_n^K − q_{n-1}(n−½)).
+        const Q: [f64; 13] = [
+            1.0,
+            -6.25e-1,
+            1.0078125,
+            -2.592_773_437_5,
+            9.186_859_130_859_375,
+            -4.156_797_409_057_617e1,
+            2.291_963_589_191_436_8e2,
+            -1.491_504_060_477_018_4e3,
+            1.119_235_449_557_891e4,
+            -9.515_939_374_212_03e4,
+            9.041_242_576_904_121e5,
+            -9.493_856_041_645_449e6,
+            1.091_823_825_694_336e8,
+        ];
+        let mut qx = 0.0_f64;
+        let mut inv = 1.0_f64;
+        for &c in &Q {
+            qx += c * inv;
+            inv /= x;
+        }
+        std::f64::consts::FRAC_PI_2
+            - (std::f64::consts::PI / (2.0 * x)).sqrt() * (-x).exp() * qx
+    };
+    (ti, tk)
+}
+
 /// Integral of H_0(t) / t from x to infinity.
 ///
 /// Matches `scipy.special.it2struve0`. The identity
@@ -11400,6 +11490,30 @@ mod tests {
             (result - 0.3068528194400546).abs() < 1e-6,
             "kl_div(1, 2) = {result}, expected 0.3068528194400546"
         );
+    }
+
+    #[test]
+    fn iti0k0_matches_scipy_reference_values() {
+        // frankenscipy: integrals of I0/K0 were missing. Golden (ti, tk) from
+        // scipy.special.iti0k0 1.17.1 (small/moderate x where scipy is accurate).
+        let cases = [
+            (0.5_f64, 0.5105148087974031_f64, 0.9271025209311491_f64),
+            (1.0, 1.0865210970235892, 1.2425098486237771),
+            (2.0, 2.7750019054282458, 1.4736757343168283),
+            (5.0, 31.84866777616979, 1.567387390728352),
+            (8.0, 464.2437205810599, 1.5706574852890753),
+            (11.0, 7694.03629203664, 1.5707903308855293),
+            (15.0, 352620.47527856164, 1.5707962315468567), // x>12 → TK asymptotic
+        ];
+        for (x, ti, tk) in cases {
+            let (gi, gk) = super::iti0k0(x);
+            assert!((gi - ti).abs() <= 1e-9 * ti.abs(), "iti0k0({x}).0 = {gi}, want {ti}");
+            assert!((gk - tk).abs() <= 1e-9 * tk.abs().max(1.0), "iti0k0({x}).1 = {gk}, want {tk}");
+        }
+        // x < 0: I0 integral is odd, K0 integral undefined (NaN). x = 0 → (0, 0).
+        let (ni, nk) = super::iti0k0(-1.0);
+        assert!((ni + 1.0865210970235892).abs() < 1e-9 && nk.is_nan());
+        assert_eq!(super::iti0k0(0.0), (0.0, 0.0));
     }
 
     #[test]

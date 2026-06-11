@@ -134,6 +134,7 @@ pub use convenience::{
     isneginf,
     isposinf,
     it2struve0,
+    iti0k0,
     itmodstruve0,
     itstruve0,
     jacobian_approx,
