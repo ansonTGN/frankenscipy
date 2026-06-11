@@ -1,0 +1,4 @@
+bd4a33fe82de4dcc81addc1aa6c7088f62751eb1a904833e664f1aaff4e06c22  tests/artifacts/perf/2026-06-11-linalg-8l8r1-89/baseline_eigh_dense_rch_clean.txt
+60b00709273008b6d36f22c097caa806e3413c9e279917497f2aa8decd52ec7a  tests/artifacts/perf/2026-06-11-linalg-8l8r1-89/private_stage_probe_vmi1149989_rch_clean.txt
+8fcbcb42d5cf8f845c22cba4fc698276aa5bede4d50899a3c55f0c4c776ef553  tests/artifacts/perf/2026-06-11-linalg-8l8r1-89/proof_public_eigh_golden_baseline_rch_clean.txt
+5bb8c74047f6f6b90e3d67ac7d14266b7fb7ee8c1f36fda08a5ff38df9078352  tests/artifacts/perf/2026-06-11-linalg-8l8r1-89/reject_direct_public_wiring_route_deeper.md
