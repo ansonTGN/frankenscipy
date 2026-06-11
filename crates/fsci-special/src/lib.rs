@@ -134,6 +134,7 @@ pub use convenience::{
     isneginf,
     isposinf,
     it2struve0,
+    it2i0k0,
     iti0k0,
     itairy,
     itj0y0,

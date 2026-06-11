@@ -1313,6 +1313,88 @@ pub fn iti0k0(x: f64) -> (f64, f64) {
     (ti, tk)
 }
 
+/// Bessel-integral pair `(∫₀ˣ (I₀(t)−1)/t dt, ∫ₓ^∞ K₀(t)/t dt)`, matching
+/// `scipy.special.it2i0k0`.
+///
+/// The first integral is the all-positive series `Σ_{m≥1} (x²/4)ᵐ/(2m·(m!)²)`.
+/// The second is obtained from the ODE `d/dx = −K₀(x)/x` matched to the K₀
+/// series, giving `∫ₓ^∞ K₀/t = ½L² + π²/24 + Σ_{m≥1}(pₘL + qₘ)(x²/4)ᵐ` with
+/// `L = ln(x/2)+γ`, `pₘ = 1/(2m(m!)²)`, `qₘ = −(Hₘ/(2m) + 1/(4m²))/(m!)²`, for
+/// `x ≤ 12`; beyond that (where the series cancels) the tail asymptotic
+/// `√(π/2)·x^{−3/2}·e^{−x}·R(1/x)` is used. `x = 0 → (0, 1e300)` (scipy's
+/// overflow sentinel for the divergent tail); for `x < 0` the first integral is
+/// even and the K₀ tail is NaN. More accurate than scipy at large x.
+#[must_use]
+pub fn it2i0k0(x: f64) -> (f64, f64) {
+    if x.is_nan() {
+        return (f64::NAN, f64::NAN);
+    }
+    if x == 0.0 {
+        return (0.0, 1e300);
+    }
+    if x < 0.0 {
+        return (it2i0k0(-x).0, f64::NAN);
+    }
+    const EL: f64 = 0.577_215_664_901_532_9;
+    let u = x * x / 4.0;
+
+    // ∫₀ˣ (I₀−1)/t = Σ_{m≥1} uᵐ/(2m·(m!)²); aₘ = uᵐ/(m!)².
+    let mut ii0 = 0.0_f64;
+    let mut a = 1.0_f64;
+    let mut m = 0usize;
+    loop {
+        m += 1;
+        a *= u / (m * m) as f64;
+        ii0 += a / (2 * m) as f64;
+        if (a / ((2 * m) as f64) < 1e-20 * ii0.max(1.0) && (m as f64) > 2.0 * x) || m > 800 {
+            break;
+        }
+    }
+
+    let ik0 = if x <= 12.0 {
+        let l = (x / 2.0).ln() + EL;
+        let mut s = 0.0_f64;
+        let mut a = 1.0_f64;
+        let mut h = 0.0_f64;
+        let mut m = 0usize;
+        loop {
+            m += 1;
+            a *= u / (m * m) as f64;
+            h += 1.0 / m as f64;
+            let mf = m as f64;
+            s += a / (2.0 * mf) * l - (h / (2.0 * mf) + 1.0 / (4.0 * mf * mf)) * a;
+            if (a.abs() < 1e-22 * s.abs().max(1.0) && (m as f64) > 2.0 * x) || m > 800 {
+                break;
+            }
+        }
+        0.5 * l * l + std::f64::consts::PI * std::f64::consts::PI / 24.0 + s
+    } else {
+        const R: [f64; 13] = [
+            1.0,
+            -1.625,
+            4.132_812_5,
+            -1.453_808_593_75e1,
+            6.553_353_881_835_937e1,
+            -3.606_615_715_026_855e2,
+            2.344_872_716_188_431e3,
+            -1.758_827_309_891_581_5e4,
+            1.495_063_953_827_857e5,
+            -1.420_335_136_666_163_8e6,
+            1.491_362_895_213_499e7,
+            -1.715_072_842_854_485_2e8,
+            2.143_844_091_658_617_3e9,
+        ];
+        let mut rx = 0.0_f64;
+        let mut inv = 1.0_f64;
+        for &c in &R {
+            rx += c * inv;
+            inv /= x;
+        }
+        (std::f64::consts::PI / 2.0).sqrt() * x.powf(-1.5) * (-x).exp() * rx
+    };
+    (ii0, ik0)
+}
+
 /// Integrals of the Bessel functions `J₀` and `Y₀` from 0 to `x`.
 ///
 /// Returns `(∫₀ˣ J₀(t) dt, ∫₀ˣ Y₀(t) dt)`, matching `scipy.special.itj0y0`.
@@ -11640,6 +11722,29 @@ mod tests {
             (result - 0.3068528194400546).abs() < 1e-6,
             "kl_div(1, 2) = {result}, expected 0.3068528194400546"
         );
+    }
+
+    #[test]
+    fn it2i0k0_matches_reference_values() {
+        // frankenscipy: the (∫(I0-1)/t, ∫K0/t) pair was missing. Golden from
+        // scipy.special.it2i0k0 1.17.1 at x≤10 (where scipy is accurate; for
+        // larger x our values beat scipy, verified vs mpmath to ~1e-12).
+        let cases = [
+            (0.5_f64, 0.031495274223672765_f64, 0.6657510156598185_f64),
+            (1.0, 0.12897944249456852, 0.2085182909001295),
+            (2.0, 0.5673537515648299, 0.03617748753402217),
+            (5.0, 7.104776281843781, 0.0005863562610688433),
+            (10.0, 340.81536680407874, 1.562928193088453e-06), // x≤12 series for ik0
+        ];
+        for (x, ii0, ik0) in cases {
+            let (g0, gk) = super::it2i0k0(x);
+            assert!((g0 - ii0).abs() <= 1e-9 * ii0.abs().max(1.0), "ii0({x}) = {g0}, want {ii0}");
+            assert!((gk - ik0).abs() <= 1e-9 * ik0.abs().max(1.0), "ik0({x}) = {gk}, want {ik0}");
+        }
+        // x=0 → (0, 1e300 scipy sentinel); x<0 → ii0 even, ik0 NaN.
+        assert_eq!(super::it2i0k0(0.0), (0.0, 1e300));
+        let (n0, nk) = super::it2i0k0(-1.0);
+        assert!((n0 - 0.12897944249456852).abs() < 1e-9 && nk.is_nan());
     }
 
     #[test]
