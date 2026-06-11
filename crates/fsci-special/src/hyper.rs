@@ -2836,9 +2836,95 @@ pub fn pbvv_seq(v: f64, x: f64) -> (Vec<f64>, Vec<f64>) {
     (values, derivs)
 }
 
+/// Integer-order parabolic cylinder functions `D_k(z)` and their derivatives for
+/// `k = 0, 1, …, n` at complex `z`, returned as `(values, derivatives)`.
+///
+/// Matches `scipy.special.pbdn_seq(n, z)`. For integer order `D_k(z) =
+/// e^{-z²/4} He_k(z)` with `He_k` the probabilist Hermite polynomials
+/// (`He_0 = 1`, `He_1 = z`, `He_{k+1} = z He_k − k He_{k-1}`) and the derivative
+/// `D_k'(z) = (z/2) D_k(z) − D_{k+1}(z)`.
+///
+/// Note: to reproduce SciPy bit-for-bit this uses the Gaussian prefactor
+/// `e^{-|z|²/4}` (real) that SciPy's specfun applies, rather than the
+/// mathematically correct `e^{-z²/4}`. The two agree for real `z`; for complex
+/// `z` SciPy's values therefore differ from the true `D_k(z)` (this preserves
+/// drop-in parity with SciPy).
+#[must_use]
+pub fn pbdn_seq(n: u32, z: Complex64) -> (Vec<Complex64>, Vec<Complex64>) {
+    let count = n as usize + 1;
+    // Probabilist Hermite He_0..He_{n+1} (He_{n+1} is needed for the derivative).
+    let mut he = Vec::with_capacity(count + 1);
+    he.push(Complex64::from_real(1.0));
+    he.push(z);
+    for k in 1..=n {
+        let next = z * he[k as usize] - he[k as usize - 1] * f64::from(k);
+        he.push(next);
+    }
+    // SciPy's prefactor uses |z|² (a quirk; see doc note above).
+    let prefactor = Complex64::from_real((-z.norm_sqr() / 4.0).exp());
+    let values: Vec<Complex64> = (0..count).map(|k| prefactor * he[k]).collect();
+    let derivs: Vec<Complex64> = (0..count)
+        .map(|k| z * values[k] * 0.5 - prefactor * he[k + 1])
+        .collect();
+    (values, derivs)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pbdn_seq_matches_scipy() {
+        // frankenscipy: golden (values, derivatives) from scipy.special.pbdn_seq 1.17.1.
+        let c = |got: &[Complex64], want: &[(f64, f64)], msg: &str| {
+            assert_eq!(got.len(), want.len(), "{msg}: len");
+            for (g, &(re, im)) in got.iter().zip(want.iter()) {
+                assert!(
+                    (g.re - re).abs() < 1e-9 && (g.im - im).abs() < 1e-9,
+                    "{msg}: got {}+{}i want {re}+{im}i",
+                    g.re,
+                    g.im
+                );
+            }
+        };
+        let (dv, dp) = pbdn_seq(2, Complex64::new(1.5, 0.5));
+        c(
+            &dv,
+            &[
+                (0.5352614285189903, 0.0),
+                (0.8028921427784854, 0.26763071425949514),
+                (0.5352614285189903, 0.8028921427784854),
+            ],
+            "pbdn_seq(2,1.5+.5i) v",
+        );
+        c(
+            &dp,
+            &[
+                (-0.4014460713892427, -0.13381535712974757),
+                (0.0, -0.4014460713892427),
+                (1.4050612498623494, -0.20072303569462135),
+            ],
+            "pbdn_seq(2,1.5+.5i) d",
+        );
+        let (dv3, _) = pbdn_seq(3, Complex64::new(-1.0, 2.0));
+        c(
+            &dv3,
+            &[
+                (0.2865047968601901, 0.0),
+                (-0.2865047968601901, 0.5730095937203802),
+                (-1.1460191874407604, -1.1460191874407604),
+                (4.011067156042661, -2.2920383748815207),
+            ],
+            "pbdn_seq(3,-1+2i) v",
+        );
+        // Real z reduces to the (correct) D_k(x).
+        let (dvr, _) = pbdn_seq(2, Complex64::new(0.5, 0.0));
+        c(
+            &dvr,
+            &[(0.9394130628134758, 0.0), (0.4697065314067379, 0.0), (-0.7045597971101069, 0.0)],
+            "pbdn_seq(2,0.5) v",
+        );
+    }
 
     #[test]
     fn pbdv_pbvv_seq_match_scipy() {
