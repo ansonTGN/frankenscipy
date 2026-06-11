@@ -1710,6 +1710,101 @@ pub fn jacobi(n: u32, alpha: f64, beta: f64) -> Vec<f64> {
     }))
 }
 
+/// Compose `p(a·x + b)` for `p` given in ascending-power coefficients, returning
+/// ascending-power coefficients of the same degree (`a ≠ 0`). Horner over the
+/// degree-1 inner polynomial `a·x + b`.
+fn compose_linear(ascending: &[f64], a: f64, b: f64) -> Vec<f64> {
+    let mut res = vec![*ascending.last().expect("polynomial has at least one coeff")];
+    for &c in ascending.iter().rev().skip(1) {
+        let mut next = vec![0.0_f64; res.len() + 1];
+        for (i, &v) in res.iter().enumerate() {
+            next[i] += b * v; // (a·x + b) · res
+            next[i + 1] += a * v;
+        }
+        next[0] += c;
+        res = next;
+    }
+    res
+}
+
+/// Ascending-power coefficients of one of the base constructors (which return
+/// descending order).
+fn ascending_of(descending: Vec<f64>) -> Vec<f64> {
+    let mut a = descending;
+    a.reverse();
+    a
+}
+
+/// Chebyshev polynomial of the first kind on `[-2, 2]`, `C_n(x) = 2·T_n(x/2)`,
+/// coefficients highest degree first.
+///
+/// Matches `scipy.special.chebyc(n).c`.
+#[must_use]
+pub fn chebyc(n: u32) -> Vec<f64> {
+    let mut c = compose_linear(&ascending_of(chebyt(n)), 0.5, 0.0);
+    for v in &mut c {
+        *v *= 2.0;
+    }
+    to_descending(c)
+}
+
+/// Chebyshev polynomial of the second kind on `[-2, 2]`, `S_n(x) = U_n(x/2)`,
+/// coefficients highest degree first.
+///
+/// Matches `scipy.special.chebys(n).c`.
+#[must_use]
+pub fn chebys(n: u32) -> Vec<f64> {
+    to_descending(compose_linear(&ascending_of(chebyu(n)), 0.5, 0.0))
+}
+
+/// Shifted Legendre polynomial `P*_n(x) = P_n(2x − 1)` coefficients, highest
+/// degree first.
+///
+/// Matches `scipy.special.sh_legendre(n).c`.
+#[must_use]
+pub fn sh_legendre(n: u32) -> Vec<f64> {
+    to_descending(compose_linear(&ascending_of(legendre(n)), 2.0, -1.0))
+}
+
+/// Shifted Chebyshev polynomial of the first kind `T*_n(x) = T_n(2x − 1)`
+/// coefficients, highest degree first.
+///
+/// Matches `scipy.special.sh_chebyt(n).c`.
+#[must_use]
+pub fn sh_chebyt(n: u32) -> Vec<f64> {
+    to_descending(compose_linear(&ascending_of(chebyt(n)), 2.0, -1.0))
+}
+
+/// Shifted Chebyshev polynomial of the second kind `U*_n(x) = U_n(2x − 1)`
+/// coefficients, highest degree first.
+///
+/// Matches `scipy.special.sh_chebyu(n).c`.
+#[must_use]
+pub fn sh_chebyu(n: u32) -> Vec<f64> {
+    to_descending(compose_linear(&ascending_of(chebyu(n)), 2.0, -1.0))
+}
+
+/// Shifted Jacobi polynomial `G_n^{(p,q)}(x)` coefficients, highest degree
+/// first.
+///
+/// Matches `scipy.special.sh_jacobi(n, p, q).c`:
+/// `G_n^{(p,q)}(x) = P_n^{(p−q, q−1)}(2x − 1) / C(2n+p−1, n)`, the same
+/// `C(2n+p−1, n) = Π_{j<n}(2n+p−1−j)/(j+1)` normalization used by
+/// [`eval_sh_jacobi`].
+#[must_use]
+pub fn sh_jacobi(n: u32, p: f64, q: f64) -> Vec<f64> {
+    let a = 2.0 * f64::from(n) + p - 1.0;
+    let mut norm = 1.0_f64;
+    for j in 0..n {
+        norm *= (a - f64::from(j)) / (f64::from(j) + 1.0);
+    }
+    let mut c = compose_linear(&ascending_of(jacobi(n, p - q, q - 1.0)), 2.0, -1.0);
+    for v in &mut c {
+        *v /= norm;
+    }
+    to_descending(c)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1822,6 +1917,28 @@ mod tests {
             &jacobi(4, 0.5, 0.5),
             &[7.875, 0.0, -5.906_25, 0.0, 0.492_187_5],
             "jacobi(4,0.5,0.5)",
+        );
+    }
+
+    #[test]
+    fn shifted_polynomial_coeffs_match_scipy() {
+        // frankenscipy: golden from scipy.special.{chebyc,chebys,sh_*}(n, ...).c (1.17.1),
+        // highest-degree-first. These are linear-argument compositions of the base
+        // polynomials: chebyc=2·T_n(x/2), chebys=U_n(x/2), sh_*=base(2x−1).
+        assert_coeffs(&chebyc(4), &[1.0, 0.0, -4.0, 0.0, 2.0], "chebyc4");
+        assert_coeffs(&chebys(4), &[1.0, 0.0, -3.0, 0.0, 1.0], "chebys4");
+        assert_coeffs(&sh_legendre(3), &[20.0, -30.0, 12.0, -1.0], "sh_legendre3");
+        assert_coeffs(&sh_chebyt(3), &[32.0, -48.0, 18.0, -1.0], "sh_chebyt3");
+        assert_coeffs(&sh_chebyu(3), &[64.0, -96.0, 40.0, -4.0], "sh_chebyu3");
+        assert_coeffs(
+            &sh_jacobi(3, 2.0, 1.0),
+            &[1.0, -1.285_714_285_714, 0.428_571_428_571, -0.028_571_428_571],
+            "sh_jacobi(3,2,1)",
+        );
+        assert_coeffs(
+            &sh_jacobi(4, 3.0, 2.0),
+            &[1.0, -2.0, 1.333_333_333_333, -0.333_333_333_333, 0.023_809_523_81],
+            "sh_jacobi(4,3,2)",
         );
     }
 
