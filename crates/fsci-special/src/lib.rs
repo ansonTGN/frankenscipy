@@ -46,6 +46,7 @@ pub use convenience::{
     ber,
     bernoulli,
     berp,
+    besselpoly,
     // Convenience wrappers
     betaincinv,
     betaincinv_scalar,

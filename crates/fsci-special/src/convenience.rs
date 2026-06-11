@@ -2373,6 +2373,57 @@ pub fn keip(x: f64) -> f64 {
     kelvin_derivatives(x).3
 }
 
+/// Weighted integral of the Bessel function of the first kind,
+/// `besselpoly(a, λ, ν) = ∫₀¹ xˡ Jᵥ(2·a·x) dx`.
+///
+/// Matches `scipy.special.besselpoly` (cephes `besselpoly`). Evaluated by the
+/// term-by-term integration of the `Jᵥ` series:
+///
+/// ```text
+///   besselpoly(a, λ, ν) = Σ_{m≥0} (−1)ᵐ a^{2m+ν}
+///                                  / (m! · Γ(ν+m+1) · (λ+2m+ν+1))
+/// ```
+///
+/// Special cases mirror cephes: `a = 0` gives `1/(λ+1)` for `ν = 0` and `0`
+/// otherwise; a negative-integer `ν` is folded to `−ν` with an overall sign
+/// `(−1)^ν` (Γ(ν+1) is a pole there). For negative non-integer `ν` the signed
+/// Γ keeps the correct sign — hence `gammasgn·exp(gammaln)`, not `exp(gammaln)`.
+#[must_use]
+pub fn besselpoly(a: f64, lambda: f64, nu: f64) -> f64 {
+    if a.is_nan() || lambda.is_nan() || nu.is_nan() {
+        return f64::NAN;
+    }
+    if a == 0.0 {
+        return if nu == 0.0 { 1.0 / (lambda + 1.0) } else { 0.0 };
+    }
+    // Negative-integer ν: reflect to −ν and carry the (−1)^ν sign.
+    let mut nu = nu;
+    let mut factor = false;
+    if nu < 0.0 && nu.floor() == nu {
+        nu = -nu;
+        factor = (nu as i64) % 2 != 0;
+    }
+
+    let mode = fsci_runtime::RuntimeMode::Strict;
+    let g = nu + 1.0;
+    let signed_gamma = crate::gammasgn_scalar(g, mode).unwrap_or(f64::NAN)
+        * crate::gammaln_scalar(g, mode).unwrap_or(f64::NAN).exp();
+
+    const EPS: f64 = 1e-17;
+    let mut sm = (nu * a.ln()).exp() / (signed_gamma * (lambda + nu + 1.0));
+    let mut sum = 0.0_f64;
+    for m in 0..1000 {
+        sum += sm;
+        let mf = m as f64;
+        sm *= -a * a * (lambda + nu + 1.0 + 2.0 * mf)
+            / ((nu + mf + 1.0) * (mf + 1.0) * (lambda + nu + 3.0 + 2.0 * mf));
+        if sm.abs() <= EPS * sum.abs() {
+            break;
+        }
+    }
+    if factor { -sum } else { sum }
+}
+
 /// Combined Kelvin functions `(Be, Ke, Be', Ke')`.
 ///
 /// Matches `scipy.special.kelvin`, where `Be = ber + i bei` and
@@ -11292,6 +11343,30 @@ mod tests {
             (result - 0.3068528194400546).abs() < 1e-6,
             "kl_div(1, 2) = {result}, expected 0.3068528194400546"
         );
+    }
+
+    #[test]
+    fn besselpoly_matches_scipy_reference_values() {
+        // frankenscipy-6ccul: besselpoly(a,λ,ν) = ∫₀¹ xˡ Jᵥ(2ax) dx was missing.
+        // Golden values from scipy.special.besselpoly 1.17.1.
+        let cases = [
+            (0.5, 1.5, 2.0, 0.026212998037515905_f64),
+            (1.0, 1.0, 1.0, 0.24449718372863877),
+            (0.0, 1.0, 0.0, 0.5),       // a=0, ν=0 → 1/(λ+1)
+            (0.0, 2.0, 1.0, 0.0),       // a=0, ν≠0 → 0
+            (2.0, 0.5, 0.0, 0.05519113378203583),
+            (0.5, 1.0, -0.5, 0.4238384194901922), // negative non-integer ν (signed Γ)
+            (0.5, 1.0, -1.0, -0.15453272353179368), // negative integer ν (reflection)
+            (0.5, 1.0, -2.0, 0.02955404113913338),
+            (3.0, 2.0, 3.0, 0.1026791022945383),
+        ];
+        for (a, lam, nu, want) in cases {
+            let got = super::besselpoly(a, lam, nu);
+            assert!(
+                (got - want).abs() <= 1e-10 * want.abs().max(1.0),
+                "besselpoly({a},{lam},{nu}) = {got}, expected {want}"
+            );
+        }
     }
 
     #[test]
