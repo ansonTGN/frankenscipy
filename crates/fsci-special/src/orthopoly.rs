@@ -24,8 +24,8 @@
 use std::f64::consts::PI;
 
 use crate::bessel::{jv_scalar, spherical_jn_scalar};
+use fsci_integrate::{QuadOptions, quad};
 use fsci_runtime::RuntimeMode;
-
 
 /// Evaluate the Legendre polynomial P_n(x) of degree n at point x.
 ///
@@ -689,11 +689,7 @@ pub fn assoc_legendre_p(n: u32, m: i32, z: f64, norm: bool) -> f64 {
     let factor =
         ((2.0 * f64::from(n) + 1.0) / 2.0 * assoc_inverse_factorial_ratio(n, abs_m)).sqrt();
     let base = factor * lpmv(abs_m as i32, n, z);
-    if m < 0 && abs_m % 2 == 1 {
-        -base
-    } else {
-        base
-    }
+    if m < 0 && abs_m % 2 == 1 { -base } else { base }
 }
 
 /// Spherical Legendre function `Y_n^m`-style normalized associated Legendre
@@ -709,15 +705,10 @@ pub fn sph_legendre_p(n: u32, m: i32, theta: f64) -> f64 {
     if abs_m > n {
         return 0.0;
     }
-    let factor = ((2.0 * f64::from(n) + 1.0) / (4.0 * PI)
-        * assoc_inverse_factorial_ratio(n, abs_m))
-    .sqrt();
+    let factor =
+        ((2.0 * f64::from(n) + 1.0) / (4.0 * PI) * assoc_inverse_factorial_ratio(n, abs_m)).sqrt();
     let base = factor * lpmv(abs_m as i32, n, theta.cos());
-    if m < 0 && abs_m % 2 == 1 {
-        -base
-    } else {
-        base
-    }
+    if m < 0 && abs_m % 2 == 1 { -base } else { base }
 }
 
 /// Ascending eigenvalues of a symmetric tridiagonal matrix (the Mathieu
@@ -931,9 +922,8 @@ fn bessel_j_and_deriv(n: u32, u: f64) -> (f64, f64) {
 
 /// Bessel `Y_n(u)` and its derivative `Y_n'(u) = (Y_{n-1}(u) − Y_{n+1}(u))/2`.
 fn bessel_y_and_deriv(n: u32, u: f64) -> (f64, f64) {
-    let yv = |order: f64| {
-        crate::bessel::yv_scalar(order, u, RuntimeMode::Strict).unwrap_or(f64::NAN)
-    };
+    let yv =
+        |order: f64| crate::bessel::yv_scalar(order, u, RuntimeMode::Strict).unwrap_or(f64::NAN);
     let y = yv(f64::from(n));
     let deriv = if n == 0 {
         -yv(1.0)
@@ -1114,9 +1104,8 @@ fn spheroidal_cv(m: u32, n: u32, c: f64, prolate: bool) -> f64 {
                 / ((2.0 * mf + 2.0 * r - 1.0) * (2.0 * mf + 2.0 * r + 3.0))
                 * cc
     };
-    let c_coef = |r: f64| {
-        r * (r - 1.0) / ((2.0 * mf + 2.0 * r - 3.0) * (2.0 * mf + 2.0 * r - 1.0)) * cc
-    };
+    let c_coef =
+        |r: f64| r * (r - 1.0) / ((2.0 * mf + 2.0 * r - 3.0) * (2.0 * mf + 2.0 * r - 1.0)) * cc;
     let diag: Vec<f64> = (0..dim).map(|k| b_coef(r_of(k))).collect();
     let off: Vec<f64> = (0..dim - 1)
         .map(|k| (a_coef(r_of(k)) * c_coef(r_of(k + 1))).sqrt())
@@ -1201,9 +1190,8 @@ fn spheroidal_coefficients(m: u32, n: u32, c: f64, prolate: bool, cv: f64) -> (V
                 / ((2.0 * mf + 2.0 * r - 1.0) * (2.0 * mf + 2.0 * r + 3.0))
                 * cc
     };
-    let c_coef = |r: f64| {
-        r * (r - 1.0) / ((2.0 * mf + 2.0 * r - 3.0) * (2.0 * mf + 2.0 * r - 1.0)) * cc
-    };
+    let c_coef =
+        |r: f64| r * (r - 1.0) / ((2.0 * mf + 2.0 * r - 3.0) * (2.0 * mf + 2.0 * r - 1.0)) * cc;
     let diag: Vec<f64> = (0..dim).map(|k| b_coef(r_of(k))).collect();
     let sub: Vec<f64> = (0..dim).map(|k| c_coef(r_of(k))).collect();
     let sup: Vec<f64> = (0..dim).map(|k| a_coef(r_of(k))).collect();
@@ -1324,7 +1312,11 @@ fn spheroidal_rad1(m: u32, n: u32, c: f64, x: f64, prolate: bool, cv: f64) -> (f
         }
         // φ_k = (−1)^{(l−n)/2}; l−n is even, but can be negative, so use i64.
         let exponent = (i64::from(l) - i64::from(n)) / 2;
-        let phase = if exponent.rem_euclid(2) == 0 { 1.0 } else { -1.0 };
+        let phase = if exponent.rem_euclid(2) == 0 {
+            1.0
+        } else {
+            -1.0
+        };
         let wd = w * dk;
         norm += wd;
         series += phase * wd * sph_jn(l, z);
@@ -2485,14 +2477,19 @@ pub fn laguerre(n: u32) -> Vec<f64> {
 /// `L_1^α = 1 + α − x`. (Mirrors [`eval_genlaguerre`].)
 #[must_use]
 pub fn genlaguerre(n: u32, alpha: f64) -> Vec<f64> {
-    to_descending(recurrence_coeffs(n, vec![1.0], vec![1.0 + alpha, -1.0], |k| {
-        let kf = k as f64;
-        (
-            -1.0 / (kf + 1.0),
-            (2.0 * kf + 1.0 + alpha) / (kf + 1.0),
-            -(kf + alpha) / (kf + 1.0),
-        )
-    }))
+    to_descending(recurrence_coeffs(
+        n,
+        vec![1.0],
+        vec![1.0 + alpha, -1.0],
+        |k| {
+            let kf = k as f64;
+            (
+                -1.0 / (kf + 1.0),
+                (2.0 * kf + 1.0 + alpha) / (kf + 1.0),
+                -(kf + alpha) / (kf + 1.0),
+            )
+        },
+    ))
 }
 
 /// Gegenbauer (ultraspherical) polynomial `C_n^α` coefficients, highest degree
@@ -2504,14 +2501,19 @@ pub fn genlaguerre(n: u32, alpha: f64) -> Vec<f64> {
 /// polynomial for `n ≥ 1`, as SciPy does.)
 #[must_use]
 pub fn gegenbauer(n: u32, alpha: f64) -> Vec<f64> {
-    to_descending(recurrence_coeffs(n, vec![1.0], vec![0.0, 2.0 * alpha], |k| {
-        let kf = k as f64;
-        (
-            2.0 * (kf + alpha) / (kf + 1.0),
-            0.0,
-            -(kf + 2.0 * alpha - 1.0) / (kf + 1.0),
-        )
-    }))
+    to_descending(recurrence_coeffs(
+        n,
+        vec![1.0],
+        vec![0.0, 2.0 * alpha],
+        |k| {
+            let kf = k as f64;
+            (
+                2.0 * (kf + alpha) / (kf + 1.0),
+                0.0,
+                -(kf + 2.0 * alpha - 1.0) / (kf + 1.0),
+            )
+        },
+    ))
 }
 
 /// Jacobi polynomial `P_n^{α,β}` coefficients, highest degree first.
@@ -2678,7 +2680,14 @@ fn dense_solve(mut mat: Vec<Vec<f64>>, mut rhs: Vec<f64>) -> Vec<f64> {
 /// `E = |s²−h²|^{e1/2} |s²−k²|^{e2/2} s^σ · Σ b_j s^{2j}`. Each column is the
 /// polynomial `−L₀[ρ s^{2j}]/ρ` (`L₀` = Lamé operator minus the `a` term),
 /// recovered from `d+1` exact evaluations via a Vandermonde solve.
-fn lame_matrix(n: u32, e1: u32, e2: u32, sigma: u32, h2: f64, k2: f64) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+fn lame_matrix(
+    n: u32,
+    e1: u32,
+    e2: u32,
+    sigma: u32,
+    h2: f64,
+    k2: f64,
+) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
     let d = ((n - e1 - e2 - sigma) / 2) as usize;
     let nb = d + 1;
     let nf = f64::from(n);
@@ -2691,8 +2700,16 @@ fn lame_matrix(n: u32, e1: u32, e2: u32, sigma: u32, h2: f64, k2: f64) -> (Vec<f
         let b = s * s - k2;
         let jf = j as f64;
         let q = s.powi(2 * j as i32);
-        let qp = if j > 0 { 2.0 * jf * s.powi(2 * j as i32 - 1) } else { 0.0 };
-        let qpp = if j >= 1 { 2.0 * jf * (2.0 * jf - 1.0) * s.powi(2 * j as i32 - 2) } else { 0.0 };
+        let qp = if j > 0 {
+            2.0 * jf * s.powi(2 * j as i32 - 1)
+        } else {
+            0.0
+        };
+        let qpp = if j >= 1 {
+            2.0 * jf * (2.0 * jf - 1.0) * s.powi(2 * j as i32 - 2)
+        } else {
+            0.0
+        };
         let (e1f, e2f, sf) = (f64::from(e1), f64::from(e2), f64::from(sigma));
         let r1 = e1f * s / a + e2f * s / b + sf / s;
         let dr1 = -e1f * (s * s + h2) / (a * a) - e2f * (s * s + k2) / (b * b) - sf / (s * s);
@@ -2855,6 +2872,92 @@ pub fn ellip_harm(h2: f64, k2: f64, n: u32, p: u32, s: f64, signm: i32, signn: i
     f64::NAN
 }
 
+/// Ellipsoidal harmonic function of the second kind (Lamé function of the
+/// second kind) `F^p_n(s)`.
+///
+/// Matches `scipy.special.ellip_harm_2(h2, k2, n, p, s)`. Related to the
+/// first-kind harmonic `E^p_n` (see [`ellip_harm`]) by
+///
+/// ```text
+/// F^p_n(s) = (2n+1) E^p_n(s) ∫_0^{1/s} du / [ (E^p_n(1/u))² √((1−u²h²)(1−u²k²)) ]
+/// ```
+///
+/// (DLMF 29.12). The integrand is smooth on `[0, 1/s]` for `s` in the outer
+/// region (`s > k`), so the integral is evaluated by adaptive Gauss–Kronrod
+/// quadrature, mirroring SciPy's QUADPACK-backed implementation.
+#[must_use]
+pub fn ellip_harm_2(h2: f64, k2: f64, n: u32, p: u32, s: f64) -> f64 {
+    let integrand = |u: f64| {
+        let e = ellip_harm(h2, k2, n, p, 1.0 / u, 1, 1);
+        let u2 = u * u;
+        let radical = ((1.0 - u2 * h2) * (1.0 - u2 * k2)).abs().sqrt();
+        1.0 / (e * e * radical)
+    };
+    let opts = QuadOptions {
+        epsabs: 0.0,
+        epsrel: 1e-13,
+        limit: 200,
+    };
+    let integral = match quad(integrand, 0.0, 1.0 / s, opts) {
+        Ok(r) => r.integral,
+        Err(_) => return f64::NAN,
+    };
+    f64::from(2 * n + 1) * ellip_harm(h2, k2, n, p, s, 1, 1) * integral
+}
+
+/// Ellipsoidal harmonic normalization constant `γ^p_n`.
+///
+/// Matches `scipy.special.ellip_normal(h2, k2, n, p)`, defined (DLMF 29.12) as
+///
+/// ```text
+/// γ^p_n = 8 ∫_0^h dx ∫_h^k dy (y²−x²)(E^p_n(y) E^p_n(x))²
+///           / √((k²−y²)(y²−h²)(h²−x²)(k²−x²))
+/// ```
+///
+/// with `h = √h2`, `k = √k2`. The integrand has integrable inverse-square-root
+/// singularities at every endpoint. They are removed with the trigonometric
+/// substitutions `x = h·sin a` and `y² = h² + (k²−h²)·sin² b`, leaving a smooth
+/// integrand over `[0, π/2]²` that adaptive Gauss–Kronrod quadrature resolves to
+/// SciPy's accuracy (`rtol ≈ 1e-12`).
+#[must_use]
+pub fn ellip_normal(h2: f64, k2: f64, n: u32, p: u32) -> f64 {
+    let h = h2.sqrt();
+    let d = k2 - h2;
+    let opts = QuadOptions {
+        epsabs: 0.0,
+        epsrel: 1e-13,
+        limit: 200,
+    };
+    // After x = h·sin a, the dx/√(h²−x²) factor cancels the substitution
+    // Jacobian exactly; after y² = h² + d·sin² b, the dy/√((k²−y²)(y²−h²))
+    // factor reduces to db/y. What remains is smooth on [0, π/2]².
+    let outer = |a: f64| {
+        let x = h * a.sin();
+        let x2 = x * x;
+        let ex2 = {
+            let e = ellip_harm(h2, k2, n, p, x, 1, 1);
+            e * e
+        };
+        let inv_k2_x2 = 1.0 / (k2 - x2).sqrt();
+        let inner = |b: f64| {
+            let sb = b.sin();
+            let y2 = h2 + d * sb * sb;
+            let y = y2.sqrt();
+            let ey = ellip_harm(h2, k2, n, p, y, 1, 1);
+            (y2 - x2) * ey * ey * ex2 * inv_k2_x2 / y
+        };
+        match quad(inner, 0.0, std::f64::consts::FRAC_PI_2, opts) {
+            Ok(r) => r.integral,
+            Err(_) => f64::NAN,
+        }
+    };
+    let val = match quad(outer, 0.0, std::f64::consts::FRAC_PI_2, opts) {
+        Ok(r) => r.integral,
+        Err(_) => return f64::NAN,
+    };
+    8.0 * val
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2863,19 +2966,127 @@ mod tests {
     fn ellip_harm_matches_scipy() {
         // frankenscipy: golden from scipy.special.ellip_harm (h2=5, k2=8, 1.17.1).
         let c = |got: f64, want: f64, msg: &str| {
-            assert!((got - want).abs() < 1e-7 * want.abs().max(1.0), "{msg}: got {got}, want {want}");
+            assert!(
+                (got - want).abs() < 1e-7 * want.abs().max(1.0),
+                "{msg}: got {got}, want {want}"
+            );
         };
         c(ellip_harm(5.0, 8.0, 0, 1, 2.5, 1, 1), 1.0, "(0,1)");
         c(ellip_harm(5.0, 8.0, 1, 1, 2.5, 1, 1), 2.5, "(1,1)");
-        c(ellip_harm(5.0, 8.0, 1, 2, 2.5, 1, 1), 1.118033988749895, "(1,2)");
-        c(ellip_harm(5.0, 8.0, 1, 3, 2.5, 1, 1), 1.3228756555322954, "(1,3)");
-        c(ellip_harm(5.0, 8.0, 2, 1, 2.5, 1, 1), -0.41666666666666696, "(2,1)");
-        c(ellip_harm(5.0, 8.0, 2, 5, 2.5, 1, 1), 1.479019945774904, "(2,5)");
-        c(ellip_harm(5.0, 8.0, 3, 4, 4.0, 1, 1), 49.43374505567852, "(3,4)");
-        c(ellip_harm(5.0, 8.0, 4, 7, 6.0, 1, 1), 1052.2530928576887, "(4,7)");
+        c(
+            ellip_harm(5.0, 8.0, 1, 2, 2.5, 1, 1),
+            1.118033988749895,
+            "(1,2)",
+        );
+        c(
+            ellip_harm(5.0, 8.0, 1, 3, 2.5, 1, 1),
+            1.3228756555322954,
+            "(1,3)",
+        );
+        c(
+            ellip_harm(5.0, 8.0, 2, 1, 2.5, 1, 1),
+            -0.41666666666666696,
+            "(2,1)",
+        );
+        c(
+            ellip_harm(5.0, 8.0, 2, 5, 2.5, 1, 1),
+            1.479019945774904,
+            "(2,5)",
+        );
+        c(
+            ellip_harm(5.0, 8.0, 3, 4, 4.0, 1, 1),
+            49.43374505567852,
+            "(3,4)",
+        );
+        c(
+            ellip_harm(5.0, 8.0, 4, 7, 6.0, 1, 1),
+            1052.2530928576887,
+            "(4,7)",
+        );
         // signm / signn flip the L/M/N prefactor signs.
-        c(ellip_harm(5.0, 8.0, 2, 3, 2.5, -1, 1), -2.7950849718747373, "(2,3) signm=-1");
-        c(ellip_harm(5.0, 8.0, 1, 2, 2.5, -1, 1), -1.118033988749895, "(1,2) signm=-1");
+        c(
+            ellip_harm(5.0, 8.0, 2, 3, 2.5, -1, 1),
+            -2.7950849718747373,
+            "(2,3) signm=-1",
+        );
+        c(
+            ellip_harm(5.0, 8.0, 1, 2, 2.5, -1, 1),
+            -1.118033988749895,
+            "(1,2) signm=-1",
+        );
+    }
+
+    #[test]
+    fn ellip_harm_2_matches_scipy() {
+        // frankenscipy: golden from scipy.special.ellip_harm_2(5, 8, n, p, 10) (1.17.1).
+        // Integration-based; SciPy's own tests compare at rtol/atol ~1.5e-7.
+        let c = |got: f64, want: f64, msg: &str| {
+            assert!(
+                (got - want).abs() < 1e-9 * want.abs() + 1e-12,
+                "{msg}: got {got}, want {want}"
+            );
+        };
+        let g = [
+            (0, 1, 1.022_578_978_023_613_44e-1),
+            (1, 1, 1.040_963_797_361_420_25e-2),
+            (1, 2, 1.046_423_520_750_292_16e-2),
+            (1, 3, 1.049_709_155_109_706_04e-2),
+            (2, 1, 1.080_568_533_824_304_49e-3),
+            (2, 2, 1.058_205_138_089_390_61e-3),
+            (2, 3, 1.060_583_847_432_556_78e-3),
+            (2, 4, 1.067_744_923_063_821_37e-3),
+            (2, 5, 1.079_763_564_540_068_20e-3),
+            (3, 1, 1.096_347_977_297_452_45e-4),
+            (3, 7, 1.093_527_309_234_484_68e-4),
+        ];
+        for (n, p, want) in g {
+            c(
+                ellip_harm_2(5.0, 8.0, n, p, 10.0),
+                want,
+                &format!("F^{p}_{n}(10)"),
+            );
+        }
+    }
+
+    #[test]
+    fn ellip_normal_matches_scipy() {
+        // frankenscipy: golden from scipy.special.ellip_normal(5, 8, n, p) (1.17.1).
+        // Matches SciPy and the closed-form normalization constants to ~1e-12.
+        let c = |got: f64, want: f64, msg: &str| {
+            assert!(
+                (got - want).abs() < 1e-11 * want.abs(),
+                "{msg}: got {got}, want {want}"
+            );
+        };
+        let g = [
+            (0, 1, 1.256_637_061_435_917_96e1),
+            (1, 1, 1.675_516_081_914_554_72e2),
+            (1, 2, 6.283_185_307_179_589_07e1),
+            (1, 3, 1.005_309_649_148_733_51e2),
+            (2, 1, 3.475_144_466_193_153_22e2),
+            (2, 2, 8.444_601_052_849_371_85e2),
+            (2, 3, 5.026_548_245_743_669_55e2),
+            (2, 4, 8.042_477_193_189_877_20e2),
+            (2, 5, 3.015_928_947_446_200_82e2),
+            (3, 1, 2.379_974_907_028_108_19e3),
+            (3, 5, 1.339_846_879_272_535_72e3),
+            (3, 7, 1.723_387_969_969_257_48e3),
+        ];
+        for (n, p, want) in g {
+            c(
+                ellip_normal(5.0, 8.0, n, p),
+                want,
+                &format!("gamma^{p}_{n}"),
+            );
+        }
+        // Closed-form checks (test_ellip_harm.py): γ^1_0 = 4π, γ^1_1 = 4π h²k²/3.
+        let four_pi = 4.0 * std::f64::consts::PI;
+        c(ellip_normal(5.0, 8.0, 0, 1), four_pi, "4pi");
+        c(
+            ellip_normal(5.0, 8.0, 1, 1),
+            four_pi * 5.0 * 8.0 / 3.0,
+            "4pi h2 k2/3",
+        );
     }
 
     fn assert_coeffs(actual: &[f64], expected: &[f64], msg: &str) {
@@ -2895,7 +3106,11 @@ mod tests {
         // highest-degree-first. SciPy's near-zero noise (~1e-15) is absorbed by tol.
         assert_coeffs(&legendre(0), &[1.0], "legendre0");
         assert_coeffs(&legendre(1), &[1.0, 0.0], "legendre1");
-        assert_coeffs(&legendre(5), &[7.875, 0.0, -8.75, 0.0, 1.875, 0.0], "legendre5");
+        assert_coeffs(
+            &legendre(5),
+            &[7.875, 0.0, -8.75, 0.0, 1.875, 0.0],
+            "legendre5",
+        );
         assert_coeffs(
             &legendre(6),
             &[14.4375, 0.0, -19.6875, 0.0, 6.5625, 0.0, -0.3125],
@@ -2914,12 +3129,12 @@ mod tests {
             "chebyu6",
         );
         assert_coeffs(&hermite(3), &[8.0, 0.0, -12.0, 0.0], "hermite3");
-        assert_coeffs(&hermite(5), &[32.0, 0.0, -160.0, 0.0, 120.0, 0.0], "hermite5");
         assert_coeffs(
-            &hermitenorm(4),
-            &[1.0, 0.0, -6.0, 0.0, 3.0],
-            "hermitenorm4",
+            &hermite(5),
+            &[32.0, 0.0, -160.0, 0.0, 120.0, 0.0],
+            "hermite5",
         );
+        assert_coeffs(&hermitenorm(4), &[1.0, 0.0, -6.0, 0.0, 3.0], "hermitenorm4");
         assert_coeffs(
             &hermitenorm(6),
             &[1.0, 0.0, -15.0, 0.0, 45.0, 0.0, -15.0],
@@ -2927,12 +3142,7 @@ mod tests {
         );
         assert_coeffs(
             &laguerre(3),
-            &[
-                -0.166_666_666_666_666_66,
-                1.5,
-                -3.0,
-                1.0,
-            ],
+            &[-0.166_666_666_666_666_66, 1.5, -3.0, 1.0],
             "laguerre3",
         );
         assert_coeffs(
@@ -2969,14 +3179,22 @@ mod tests {
             ],
             "genlaguerre(4,1.5)",
         );
-        assert_coeffs(&gegenbauer(3, 2.0), &[32.0, 0.0, -12.0, 0.0], "gegenbauer(3,2.0)");
+        assert_coeffs(
+            &gegenbauer(3, 2.0),
+            &[32.0, 0.0, -12.0, 0.0],
+            "gegenbauer(3,2.0)",
+        );
         assert_coeffs(
             &gegenbauer(4, 0.5),
             &[4.375, 0.0, -3.75, 0.0, 0.375],
             "gegenbauer(4,0.5)",
         );
         // α = 0 degenerates to the zero polynomial (length n+1), as SciPy does.
-        assert_coeffs(&gegenbauer(3, 0.0), &[0.0, 0.0, 0.0, 0.0], "gegenbauer(3,0.0)");
+        assert_coeffs(
+            &gegenbauer(3, 0.0),
+            &[0.0, 0.0, 0.0, 0.0],
+            "gegenbauer(3,0.0)",
+        );
         assert_coeffs(
             &jacobi(3, 1.0, 2.0),
             &[10.5, -3.5, -3.5, 0.5],
@@ -3001,7 +3219,11 @@ mod tests {
         // value only
         close(&legendre_p(3, 0.4, 0), &[-0.44], "P_3(0.4)");
         // value + first + second derivative
-        close(&legendre_p(5, 0.3, 2), &[0.34538625, -0.16856249999999984, -11.4975], "P_5(0.3) d2");
+        close(
+            &legendre_p(5, 0.3, 2),
+            &[0.34538625, -0.16856249999999984, -11.4975],
+            "P_5(0.3) d2",
+        );
         close(&legendre_p(2, 1.0, 2), &[1.0, 3.0, 3.0], "P_2(1) d2");
         close(&legendre_p(6, -1.0, 2), &[1.0, -21.0, 210.0], "P_6(-1) d2");
         // diff_n exceeding the degree -> trailing zero derivatives
@@ -3054,41 +3276,112 @@ mod tests {
         };
         seq_close(
             &pro_cv_seq(0, 3, 2.0),
-            &[1.127734064849933, 4.287128543955809, 8.225713001105891, 14.100203876205317],
+            &[
+                1.127734064849933,
+                4.287128543955809,
+                8.225713001105891,
+                14.100203876205317,
+            ],
             "pro_cv_seq(0,3,2)",
         );
         seq_close(
             &obl_cv_seq(1, 4, 2.0),
-            &[1.1185533907435148, 4.222747333357612, 10.163245057199756, 18.09765523018453],
+            &[
+                1.1185533907435148,
+                4.222747333357612,
+                10.163245057199756,
+                18.09765523018453,
+            ],
             "obl_cv_seq(1,4,2)",
         );
         // The _cv variants must reproduce the base functions when fed the matching cv.
         let pair_eq = |a: (f64, f64), b: (f64, f64), msg: &str| {
-            assert!((a.0 - b.0).abs() < 1e-12 && (a.1 - b.1).abs() < 1e-12, "{msg}");
+            assert!(
+                (a.0 - b.0).abs() < 1e-12 && (a.1 - b.1).abs() < 1e-12,
+                "{msg}"
+            );
         };
         let cv = pro_cv(1, 2, 2.0);
-        pair_eq(pro_ang1_cv(1, 2, 2.0, cv, 0.3), pro_ang1(1, 2, 2.0, 0.3), "pro_ang1_cv");
-        pair_eq(pro_rad1_cv(1, 2, 2.0, cv, 1.3), pro_rad1(1, 2, 2.0, 1.3), "pro_rad1_cv");
+        pair_eq(
+            pro_ang1_cv(1, 2, 2.0, cv, 0.3),
+            pro_ang1(1, 2, 2.0, 0.3),
+            "pro_ang1_cv",
+        );
+        pair_eq(
+            pro_rad1_cv(1, 2, 2.0, cv, 1.3),
+            pro_rad1(1, 2, 2.0, 1.3),
+            "pro_rad1_cv",
+        );
         let ocv = obl_cv(2, 5, 3.0);
-        pair_eq(obl_ang1_cv(2, 5, 3.0, ocv, 0.2), obl_ang1(2, 5, 3.0, 0.2), "obl_ang1_cv");
-        pair_eq(obl_rad1_cv(2, 5, 3.0, ocv, 1.0), obl_rad1(2, 5, 3.0, 1.0), "obl_rad1_cv");
+        pair_eq(
+            obl_ang1_cv(2, 5, 3.0, ocv, 0.2),
+            obl_ang1(2, 5, 3.0, 0.2),
+            "obl_ang1_cv",
+        );
+        pair_eq(
+            obl_rad1_cv(2, 5, 3.0, ocv, 1.0),
+            obl_rad1(2, 5, 3.0, 1.0),
+            "obl_rad1_cv",
+        );
     }
 
     #[test]
     fn spheroidal_rad1_match_scipy() {
         // frankenscipy: golden (value, derivative) from scipy.special.pro_rad1 / obl_rad1 (1.17.1).
         let c = |got: (f64, f64), want: (f64, f64), msg: &str| {
-            assert!((got.0 - want.0).abs() < 1e-8, "{msg} value: got {} want {}", got.0, want.0);
-            assert!((got.1 - want.1).abs() < 1e-8, "{msg} deriv: got {} want {}", got.1, want.1);
+            assert!(
+                (got.0 - want.0).abs() < 1e-8,
+                "{msg} value: got {} want {}",
+                got.0,
+                want.0
+            );
+            assert!(
+                (got.1 - want.1).abs() < 1e-8,
+                "{msg} deriv: got {} want {}",
+                got.1,
+                want.1
+            );
         };
-        c(pro_rad1(0, 1, 1.0, 1.5), (0.4138205450234367, 0.14462549507897315), "pro(0,1,1,1.5)");
-        c(pro_rad1(1, 2, 2.0, 1.3), (0.20800143088699186, 0.38525174496351966), "pro(1,2,2,1.3)");
-        c(pro_rad1(0, 2, 3.0, 1.4), (0.3427807385468018, -0.2848804090728431), "pro(0,2,3,1.4)");
-        c(pro_rad1(2, 3, 2.0, 1.6), (0.12304660475662652, 0.2341694344697482), "pro(2,3,2,1.6)");
-        c(pro_rad1(0, 3, 5.0, 2.5), (0.08751848334486662, -0.041034086997124256), "pro(0,3,5,2.5)");
-        c(obl_rad1(0, 1, 1.0, 0.5), (0.15622885398178357, 0.29654103600390647), "obl(0,1,1,0.5)");
-        c(obl_rad1(1, 2, 2.0, 0.8), (0.19179313880509874, 0.2380821457479905), "obl(1,2,2,0.8)");
-        c(obl_rad1(2, 5, 3.0, 1.0), (0.03647796691020278, 0.09888356007741966), "obl(2,5,3,1.0)");
+        c(
+            pro_rad1(0, 1, 1.0, 1.5),
+            (0.4138205450234367, 0.14462549507897315),
+            "pro(0,1,1,1.5)",
+        );
+        c(
+            pro_rad1(1, 2, 2.0, 1.3),
+            (0.20800143088699186, 0.38525174496351966),
+            "pro(1,2,2,1.3)",
+        );
+        c(
+            pro_rad1(0, 2, 3.0, 1.4),
+            (0.3427807385468018, -0.2848804090728431),
+            "pro(0,2,3,1.4)",
+        );
+        c(
+            pro_rad1(2, 3, 2.0, 1.6),
+            (0.12304660475662652, 0.2341694344697482),
+            "pro(2,3,2,1.6)",
+        );
+        c(
+            pro_rad1(0, 3, 5.0, 2.5),
+            (0.08751848334486662, -0.041034086997124256),
+            "pro(0,3,5,2.5)",
+        );
+        c(
+            obl_rad1(0, 1, 1.0, 0.5),
+            (0.15622885398178357, 0.29654103600390647),
+            "obl(0,1,1,0.5)",
+        );
+        c(
+            obl_rad1(1, 2, 2.0, 0.8),
+            (0.19179313880509874, 0.2380821457479905),
+            "obl(1,2,2,0.8)",
+        );
+        c(
+            obl_rad1(2, 5, 3.0, 1.0),
+            (0.03647796691020278, 0.09888356007741966),
+            "obl(2,5,3,1.0)",
+        );
         let (nv, nd) = pro_rad1(3, 1, 2.0, 1.5);
         assert!(nv.is_nan() && nd.is_nan(), "pro_rad1 n<m -> NaN");
     }
@@ -3097,17 +3390,59 @@ mod tests {
     fn spheroidal_ang1_match_scipy() {
         // frankenscipy: golden (value, derivative) from scipy.special.pro_ang1 / obl_ang1 (1.17.1).
         let c = |got: (f64, f64), want: (f64, f64), msg: &str| {
-            assert!((got.0 - want.0).abs() < 1e-8, "{msg} value: got {} want {}", got.0, want.0);
-            assert!((got.1 - want.1).abs() < 1e-8, "{msg} deriv: got {} want {}", got.1, want.1);
+            assert!(
+                (got.0 - want.0).abs() < 1e-8,
+                "{msg} value: got {} want {}",
+                got.0,
+                want.0
+            );
+            assert!(
+                (got.1 - want.1).abs() < 1e-8,
+                "{msg} deriv: got {} want {}",
+                got.1,
+                want.1
+            );
         };
-        c(pro_ang1(0, 1, 1.0, 0.5), (0.4877531776005848, 0.9269534809430655), "pro(0,1,1,.5)");
-        c(pro_ang1(1, 2, 2.0, 0.3), (0.8374625906386085, 2.37627584419033), "pro(1,2,2,.3)");
-        c(pro_ang1(0, 2, 3.0, 0.4), (-0.0913823901653181, 1.854929773816917), "pro(0,2,3,.4)");
-        c(pro_ang1(2, 3, 2.0, 0.6), (5.325478515120345, -2.511554419239202), "pro(2,3,2,.6)");
-        c(pro_ang1(0, 3, 5.0, -0.7), (-0.21455871795642947, 2.0630078366395237), "pro(0,3,5,-.7)");
-        c(obl_ang1(0, 1, 1.0, 0.5), (0.5127556415606529, 1.0769923985071272), "obl(0,1,1,.5)");
-        c(obl_ang1(1, 2, 2.0, 0.3), (0.8816684962327807, 2.803968096264711), "obl(1,2,2,.3)");
-        c(obl_ang1(2, 5, 3.0, 0.2), (-9.117409468924578, -32.01395997554938), "obl(2,5,3,.2)");
+        c(
+            pro_ang1(0, 1, 1.0, 0.5),
+            (0.4877531776005848, 0.9269534809430655),
+            "pro(0,1,1,.5)",
+        );
+        c(
+            pro_ang1(1, 2, 2.0, 0.3),
+            (0.8374625906386085, 2.37627584419033),
+            "pro(1,2,2,.3)",
+        );
+        c(
+            pro_ang1(0, 2, 3.0, 0.4),
+            (-0.0913823901653181, 1.854929773816917),
+            "pro(0,2,3,.4)",
+        );
+        c(
+            pro_ang1(2, 3, 2.0, 0.6),
+            (5.325478515120345, -2.511554419239202),
+            "pro(2,3,2,.6)",
+        );
+        c(
+            pro_ang1(0, 3, 5.0, -0.7),
+            (-0.21455871795642947, 2.0630078366395237),
+            "pro(0,3,5,-.7)",
+        );
+        c(
+            obl_ang1(0, 1, 1.0, 0.5),
+            (0.5127556415606529, 1.0769923985071272),
+            "obl(0,1,1,.5)",
+        );
+        c(
+            obl_ang1(1, 2, 2.0, 0.3),
+            (0.8816684962327807, 2.803968096264711),
+            "obl(1,2,2,.3)",
+        );
+        c(
+            obl_ang1(2, 5, 3.0, 0.2),
+            (-9.117409468924578, -32.01395997554938),
+            "obl(2,5,3,.2)",
+        );
         let (nan_v, nan_d) = pro_ang1(3, 1, 2.0, 0.5);
         assert!(nan_v.is_nan() && nan_d.is_nan(), "pro_ang1 n<m -> NaN");
     }
@@ -3138,31 +3473,60 @@ mod tests {
         let head = |got: &[f64], len: usize, want: &[f64], msg: &str| {
             assert_eq!(got.len(), len, "{msg}: length");
             for (i, w) in want.iter().enumerate() {
-                assert!((got[i] - w).abs() < 1e-9, "{msg}[{i}]: got {} want {w}", got[i]);
+                assert!(
+                    (got[i] - w).abs() < 1e-9,
+                    "{msg}[{i}]: got {} want {w}",
+                    got[i]
+                );
             }
         };
         head(
             &mathieu_even_coef(2, 5.0),
             24,
-            &[0.438737166377, 0.65364025983, -0.426578935488, 0.075885673127, -0.00674176967, 0.000364942223],
+            &[
+                0.438737166377,
+                0.65364025983,
+                -0.426578935488,
+                0.075885673127,
+                -0.00674176967,
+                0.000364942223,
+            ],
             "even_coef(2,5)",
         );
         head(
             &mathieu_even_coef(0, 1.0),
             19,
-            &[0.672989672316, -0.306303580037, 0.018645559365, -0.000511683672],
+            &[
+                0.672989672316,
+                -0.306303580037,
+                0.018645559365,
+                -0.000511683672,
+            ],
             "even_coef(0,1)",
         );
         head(
             &mathieu_odd_coef(1, 5.0),
             23,
-            &[0.940019021698, -0.336541962618, 0.055477528692, -0.00508955335, 0.000293878955, -1.160229e-05],
+            &[
+                0.940019021698,
+                -0.336541962618,
+                0.055477528692,
+                -0.00508955335,
+                0.000293878955,
+                -1.160229e-05,
+            ],
             "odd_coef(1,5)",
         );
         head(
             &mathieu_odd_coef(2, 10.0),
             26,
-            &[0.833907355976, -0.532212869997, 0.144414763173, -0.022082159176, 0.002171375286],
+            &[
+                0.833907355976,
+                -0.532212869997,
+                0.144414763173,
+                -0.022082159176,
+                0.002171375286,
+            ],
             "odd_coef(2,10)",
         );
         assert!(mathieu_even_coef(0, -1.0).is_empty(), "q<0 -> empty");
@@ -3173,18 +3537,64 @@ mod tests {
         // frankenscipy: golden (value, derivative) from scipy.special.mathieu_modcem2 /
         // mathieu_modsem2 (1.17.1).
         let c = |got: (f64, f64), want: (f64, f64), msg: &str| {
-            assert!((got.0 - want.0).abs() < 1e-8, "{msg} value: got {} want {}", got.0, want.0);
-            assert!((got.1 - want.1).abs() < 1e-8, "{msg} deriv: got {} want {}", got.1, want.1);
+            assert!(
+                (got.0 - want.0).abs() < 1e-8,
+                "{msg} value: got {} want {}",
+                got.0,
+                want.0
+            );
+            assert!(
+                (got.1 - want.1).abs() < 1e-8,
+                "{msg} deriv: got {} want {}",
+                got.1,
+                want.1
+            );
         };
-        c(mathieu_modcem2(0, 5.0, 1.0), (-0.3098478966967045, 0.2892426788675346), "modcem2(0,5,1)");
-        c(mathieu_modcem2(1, 2.0, 0.8), (0.41883560714518514, 0.3749613562208406), "modcem2(1,2,.8)");
-        c(mathieu_modcem2(2, 5.0, 1.2), (-0.223222487396622, -1.294791228368353), "modcem2(2,5,1.2)");
-        c(mathieu_modcem2(3, 10.0, 0.5), (0.3533587183946641, 0.47921495133204084), "modcem2(3,10,.5)");
-        c(mathieu_modcem2(4, 5.0, 0.8), (-0.16647578434559257, 1.5026205209406587), "modcem2(4,5,.8)");
-        c(mathieu_modsem2(1, 5.0, 1.0), (-0.02439050803625239, -2.031734804654101), "modsem2(1,5,1)");
-        c(mathieu_modsem2(2, 5.0, 1.2), (-0.13332259687016562, -1.858676693837855), "modsem2(2,5,1.2)");
-        c(mathieu_modsem2(3, 10.0, 0.5), (0.12405724933779706, 1.577371648267307), "modsem2(3,10,.5)");
-        c(mathieu_modsem2(4, 5.0, 0.8), (-0.1844650329919173, 1.4984981369987092), "modsem2(4,5,.8)");
+        c(
+            mathieu_modcem2(0, 5.0, 1.0),
+            (-0.3098478966967045, 0.2892426788675346),
+            "modcem2(0,5,1)",
+        );
+        c(
+            mathieu_modcem2(1, 2.0, 0.8),
+            (0.41883560714518514, 0.3749613562208406),
+            "modcem2(1,2,.8)",
+        );
+        c(
+            mathieu_modcem2(2, 5.0, 1.2),
+            (-0.223222487396622, -1.294791228368353),
+            "modcem2(2,5,1.2)",
+        );
+        c(
+            mathieu_modcem2(3, 10.0, 0.5),
+            (0.3533587183946641, 0.47921495133204084),
+            "modcem2(3,10,.5)",
+        );
+        c(
+            mathieu_modcem2(4, 5.0, 0.8),
+            (-0.16647578434559257, 1.5026205209406587),
+            "modcem2(4,5,.8)",
+        );
+        c(
+            mathieu_modsem2(1, 5.0, 1.0),
+            (-0.02439050803625239, -2.031734804654101),
+            "modsem2(1,5,1)",
+        );
+        c(
+            mathieu_modsem2(2, 5.0, 1.2),
+            (-0.13332259687016562, -1.858676693837855),
+            "modsem2(2,5,1.2)",
+        );
+        c(
+            mathieu_modsem2(3, 10.0, 0.5),
+            (0.12405724933779706, 1.577371648267307),
+            "modsem2(3,10,.5)",
+        );
+        c(
+            mathieu_modsem2(4, 5.0, 0.8),
+            (-0.1844650329919173, 1.4984981369987092),
+            "modsem2(4,5,.8)",
+        );
     }
 
     #[test]
@@ -3192,18 +3602,64 @@ mod tests {
         // frankenscipy: golden (value, derivative) from scipy.special.mathieu_modcem1 /
         // mathieu_modsem1 (1.17.1).
         let c = |got: (f64, f64), want: (f64, f64), msg: &str| {
-            assert!((got.0 - want.0).abs() < 1e-9, "{msg} value: got {} want {}", got.0, want.0);
-            assert!((got.1 - want.1).abs() < 1e-9, "{msg} deriv: got {} want {}", got.1, want.1);
+            assert!(
+                (got.0 - want.0).abs() < 1e-9,
+                "{msg} value: got {} want {}",
+                got.0,
+                want.0
+            );
+            assert!(
+                (got.1 - want.1).abs() < 1e-9,
+                "{msg} deriv: got {} want {}",
+                got.1,
+                want.1
+            );
         };
-        c(mathieu_modcem1(0, 5.0, 1.0), (0.024144064633139083, 2.03208182190974), "modcem1(0,5,1)");
-        c(mathieu_modcem1(1, 2.0, 0.8), (0.21245270237182737, -1.329777625044168), "modcem1(1,2,.8)");
-        c(mathieu_modcem1(2, 5.0, 1.2), (-0.20381071990853145, 1.6697575783227967), "modcem1(2,5,1.2)");
-        c(mathieu_modcem1(3, 10.0, 0.5), (0.1830202349061459, -1.5534178465951263), "modcem1(3,10,.5)");
-        c(mathieu_modcem1(4, 5.0, 0.8), (0.40727697154630377, 0.1479917173082351), "modcem1(4,5,.8)");
-        c(mathieu_modsem1(1, 5.0, 1.0), (-0.30984611185156535, 0.29087720606156564), "modsem1(1,5,1)");
-        c(mathieu_modsem1(2, 5.0, 1.2), (-0.26281891612299607, 1.111022300400359), "modsem1(2,5,1.2)");
-        c(mathieu_modsem1(3, 10.0, 0.5), (0.3426517831198076, -0.7748887304796102), "modsem1(3,10,.5)");
-        c(mathieu_modsem1(4, 5.0, 0.8), (0.3957103341885613, 0.23662248116583467), "modsem1(4,5,.8)");
+        c(
+            mathieu_modcem1(0, 5.0, 1.0),
+            (0.024144064633139083, 2.03208182190974),
+            "modcem1(0,5,1)",
+        );
+        c(
+            mathieu_modcem1(1, 2.0, 0.8),
+            (0.21245270237182737, -1.329777625044168),
+            "modcem1(1,2,.8)",
+        );
+        c(
+            mathieu_modcem1(2, 5.0, 1.2),
+            (-0.20381071990853145, 1.6697575783227967),
+            "modcem1(2,5,1.2)",
+        );
+        c(
+            mathieu_modcem1(3, 10.0, 0.5),
+            (0.1830202349061459, -1.5534178465951263),
+            "modcem1(3,10,.5)",
+        );
+        c(
+            mathieu_modcem1(4, 5.0, 0.8),
+            (0.40727697154630377, 0.1479917173082351),
+            "modcem1(4,5,.8)",
+        );
+        c(
+            mathieu_modsem1(1, 5.0, 1.0),
+            (-0.30984611185156535, 0.29087720606156564),
+            "modsem1(1,5,1)",
+        );
+        c(
+            mathieu_modsem1(2, 5.0, 1.2),
+            (-0.26281891612299607, 1.111022300400359),
+            "modsem1(2,5,1.2)",
+        );
+        c(
+            mathieu_modsem1(3, 10.0, 0.5),
+            (0.3426517831198076, -0.7748887304796102),
+            "modsem1(3,10,.5)",
+        );
+        c(
+            mathieu_modsem1(4, 5.0, 0.8),
+            (0.3957103341885613, 0.23662248116583467),
+            "modsem1(4,5,.8)",
+        );
     }
 
     #[test]
@@ -3211,27 +3667,101 @@ mod tests {
         // frankenscipy: golden (value, derivative) from scipy.special.mathieu_cem / mathieu_sem
         // (1.17.1); x in degrees, derivative w.r.t. the radian argument.
         let c = |got: (f64, f64), want: (f64, f64), msg: &str| {
-            assert!((got.0 - want.0).abs() < 1e-9, "{msg} value: got {} want {}", got.0, want.0);
-            assert!((got.1 - want.1).abs() < 1e-9, "{msg} deriv: got {} want {}", got.1, want.1);
+            assert!(
+                (got.0 - want.0).abs() < 1e-9,
+                "{msg} value: got {} want {}",
+                got.0,
+                want.0
+            );
+            assert!(
+                (got.1 - want.1).abs() < 1e-9,
+                "{msg} deriv: got {} want {}",
+                got.1,
+                want.1
+            );
         };
-        c(mathieu_cem(0, 5.0, 30.0), (0.17026946498276374, 0.5821239463837029), "cem(0,5,30)");
-        c(mathieu_cem(1, 5.0, 30.0), (0.5522262635274278, 1.1204184009096463), "cem(1,5,30)");
-        c(mathieu_cem(2, 5.0, 30.0), (0.9065012518998091, 0.3020225775739051), "cem(2,5,30)");
-        c(mathieu_cem(3, 10.0, 70.0), (-0.6679194810078108, -1.8140894302215176), "cem(3,10,70)");
-        c(mathieu_cem(0, 0.0, 30.0), (0.7071067811865475, 0.0), "cem(0,0,30)");
-        c(mathieu_cem(1, -5.0, 30.0), (0.7616380565259091, -1.5978093281414765), "cem(1,-5,30)");
-        c(mathieu_sem(1, 5.0, 30.0), (0.16346317035467603, 0.6046025948049121), "sem(1,5,30)");
-        c(mathieu_sem(2, 5.0, 30.0), (0.5046345717209944, 1.343445828193893), "sem(2,5,30)");
-        c(mathieu_sem(3, 10.0, 70.0), (0.24404071190296778, -4.819189584712689), "sem(3,10,70)");
-        c(mathieu_sem(1, 0.0, 45.0), (0.7071067811865477, 0.7071067811865474), "sem(1,0,45)");
+        c(
+            mathieu_cem(0, 5.0, 30.0),
+            (0.17026946498276374, 0.5821239463837029),
+            "cem(0,5,30)",
+        );
+        c(
+            mathieu_cem(1, 5.0, 30.0),
+            (0.5522262635274278, 1.1204184009096463),
+            "cem(1,5,30)",
+        );
+        c(
+            mathieu_cem(2, 5.0, 30.0),
+            (0.9065012518998091, 0.3020225775739051),
+            "cem(2,5,30)",
+        );
+        c(
+            mathieu_cem(3, 10.0, 70.0),
+            (-0.6679194810078108, -1.8140894302215176),
+            "cem(3,10,70)",
+        );
+        c(
+            mathieu_cem(0, 0.0, 30.0),
+            (0.7071067811865475, 0.0),
+            "cem(0,0,30)",
+        );
+        c(
+            mathieu_cem(1, -5.0, 30.0),
+            (0.7616380565259091, -1.5978093281414765),
+            "cem(1,-5,30)",
+        );
+        c(
+            mathieu_sem(1, 5.0, 30.0),
+            (0.16346317035467603, 0.6046025948049121),
+            "sem(1,5,30)",
+        );
+        c(
+            mathieu_sem(2, 5.0, 30.0),
+            (0.5046345717209944, 1.343445828193893),
+            "sem(2,5,30)",
+        );
+        c(
+            mathieu_sem(3, 10.0, 70.0),
+            (0.24404071190296778, -4.819189584712689),
+            "sem(3,10,70)",
+        );
+        c(
+            mathieu_sem(1, 0.0, 45.0),
+            (0.7071067811865477, 0.7071067811865474),
+            "sem(1,0,45)",
+        );
         c(mathieu_sem(0, 5.0, 30.0), (0.0, 0.0), "sem(0) -> 0");
         // Large-q cases that exercise the DLMF global-sign convention.
-        c(mathieu_cem(4, 50.0, 45.0), (1.1707453018410003, 3.034983794842312), "cem(4,50,45)");
-        c(mathieu_cem(3, 20.0, 45.0), (1.1751025369177404, 0.7073419712275579), "cem(3,20,45)");
-        c(mathieu_cem(2, 50.0, 60.0), (1.2957144976987285, 3.0058128316097212), "cem(2,50,60)");
-        c(mathieu_cem(6, 50.0, 30.0), (1.0228643512401936, 2.9714973827127293), "cem(6,50,30)");
-        c(mathieu_sem(3, 50.0, 45.0), (0.37420062721132025, 2.5337601186886447), "sem(3,50,45)");
-        c(mathieu_sem(4, 20.0, 60.0), (0.5398091214798074, -5.776690451353455), "sem(4,20,60)");
+        c(
+            mathieu_cem(4, 50.0, 45.0),
+            (1.1707453018410003, 3.034983794842312),
+            "cem(4,50,45)",
+        );
+        c(
+            mathieu_cem(3, 20.0, 45.0),
+            (1.1751025369177404, 0.7073419712275579),
+            "cem(3,20,45)",
+        );
+        c(
+            mathieu_cem(2, 50.0, 60.0),
+            (1.2957144976987285, 3.0058128316097212),
+            "cem(2,50,60)",
+        );
+        c(
+            mathieu_cem(6, 50.0, 30.0),
+            (1.0228643512401936, 2.9714973827127293),
+            "cem(6,50,30)",
+        );
+        c(
+            mathieu_sem(3, 50.0, 45.0),
+            (0.37420062721132025, 2.5337601186886447),
+            "sem(3,50,45)",
+        );
+        c(
+            mathieu_sem(4, 20.0, 60.0),
+            (0.5398091214798074, -5.776690451353455),
+            "sem(4,20,60)",
+        );
     }
 
     #[test]
@@ -3266,7 +3796,11 @@ mod tests {
         let want_a = [
             [1.0, 0.0, 0.0],
             [0.4, -0.916515138991168, 0.458257569495584],
-            [-0.25999999999999995, -1.0998181667894018, 0.1833030277982336],
+            [
+                -0.25999999999999995,
+                -1.0998181667894018,
+                0.1833030277982336,
+            ],
         ];
         assert_eq!(a.len(), 3);
         for (row, w) in a.iter().zip(want_a.iter()) {
@@ -3278,7 +3812,11 @@ mod tests {
         let s = sph_legendre_p_all(2, 1, 0.7);
         let want_s = [
             [0.28209479177387814, 0.0, 0.0],
-            [0.3737038139165246, -0.22257344192657688, 0.22257344192657688],
+            [
+                0.3737038139165246,
+                -0.22257344192657688,
+                0.22257344192657688,
+            ],
             [0.23810508748746873, -0.3806538080852601, 0.3806538080852601],
         ];
         for (row, w) in s.iter().zip(want_s.iter()) {
@@ -3295,7 +3833,10 @@ mod tests {
             (0.19532657137468346, -0.10670739227464042),
         ];
         for (g, (re, im)) in y[1].iter().zip(want_y1.iter()) {
-            assert!((g.re - re).abs() < 1e-12 && (g.im - im).abs() < 1e-12, "sph_harm_all");
+            assert!(
+                (g.re - re).abs() < 1e-12 && (g.im - im).abs() < 1e-12,
+                "sph_harm_all"
+            );
         }
     }
 
@@ -3307,18 +3848,50 @@ mod tests {
         };
         // assoc, unnormalized == lpmv(m, n, z) including signed negative m
         c(assoc_legendre_p(3, 2, 0.4, false), 5.04, "assocF(3,2,0.4)");
-        c(assoc_legendre_p(4, -1, -0.3, false), 0.08478134652593106, "assocF(4,-1,-0.3)");
+        c(
+            assoc_legendre_p(4, -1, -0.3, false),
+            0.08478134652593106,
+            "assocF(4,-1,-0.3)",
+        );
         // assoc, normalized
-        c(assoc_legendre_p(3, 2, 0.4, true), 0.8607438643406062, "assocN(3,2,0.4)");
-        c(assoc_legendre_p(3, -1, 0.4, true), -0.14849242404917484, "assocN(3,-1,0.4)");
-        c(assoc_legendre_p(4, -3, 0.5, true), 1.0189249274664447, "assocN(4,-3,0.5)");
-        c(assoc_legendre_p(0, 0, 0.5, true), 0.7071067811865475, "assocN(0,0,0.5)");
+        c(
+            assoc_legendre_p(3, 2, 0.4, true),
+            0.8607438643406062,
+            "assocN(3,2,0.4)",
+        );
+        c(
+            assoc_legendre_p(3, -1, 0.4, true),
+            -0.14849242404917484,
+            "assocN(3,-1,0.4)",
+        );
+        c(
+            assoc_legendre_p(4, -3, 0.5, true),
+            1.0189249274664447,
+            "assocN(4,-3,0.5)",
+        );
+        c(
+            assoc_legendre_p(0, 0, 0.5, true),
+            0.7071067811865475,
+            "assocN(0,0,0.5)",
+        );
         c(assoc_legendre_p(2, 3, 0.5, true), 0.0, "assocN m>n -> 0");
         // spherical
         c(sph_legendre_p(3, 2, 0.7), 0.324400748475796, "sph(3,2,0.7)");
-        c(sph_legendre_p(3, -1, 0.7), 0.4007648002460704, "sph(3,-1,0.7)");
-        c(sph_legendre_p(4, 0, 1.2), -0.03550969424401845, "sph(4,0,1.2)");
-        c(sph_legendre_p(5, 3, 2.0), -0.14528713144968125, "sph(5,3,2.0)");
+        c(
+            sph_legendre_p(3, -1, 0.7),
+            0.4007648002460704,
+            "sph(3,-1,0.7)",
+        );
+        c(
+            sph_legendre_p(4, 0, 1.2),
+            -0.03550969424401845,
+            "sph(4,0,1.2)",
+        );
+        c(
+            sph_legendre_p(5, 3, 2.0),
+            -0.14528713144968125,
+            "sph(5,3,2.0)",
+        );
         c(sph_legendre_p(2, 3, 0.5), 0.0, "sph m>n -> 0");
     }
 
@@ -3334,12 +3907,23 @@ mod tests {
         assert_coeffs(&sh_chebyu(3), &[64.0, -96.0, 40.0, -4.0], "sh_chebyu3");
         assert_coeffs(
             &sh_jacobi(3, 2.0, 1.0),
-            &[1.0, -1.285_714_285_714, 0.428_571_428_571, -0.028_571_428_571],
+            &[
+                1.0,
+                -1.285_714_285_714,
+                0.428_571_428_571,
+                -0.028_571_428_571,
+            ],
             "sh_jacobi(3,2,1)",
         );
         assert_coeffs(
             &sh_jacobi(4, 3.0, 2.0),
-            &[1.0, -2.0, 1.333_333_333_333, -0.333_333_333_333, 0.023_809_523_81],
+            &[
+                1.0,
+                -2.0,
+                1.333_333_333_333,
+                -0.333_333_333_333,
+                0.023_809_523_81,
+            ],
             "sh_jacobi(4,3,2)",
         );
     }

@@ -1025,6 +1025,7 @@ name = "fsci-special"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "fsci-integrate",
  "fsci-linalg",
  "fsci-runtime",
 ]
