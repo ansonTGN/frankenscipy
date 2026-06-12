@@ -31924,25 +31924,31 @@ fn trunc_weibull_min_moment(c: f64, a: f64, b: f64, k: u32) -> f64 {
 fn exponpow_moment(b: f64, k: u32) -> f64 {
     let kf = f64::from(k);
     let exponent = kf / b;
-    let t_max = 10.0_f64;
+    // E[X^k] = e · ∫₀^∞ t^{k/b} e^{t−e^t} dt (t = x^b). The t^{k/b} factor with
+    // k/b < 1 has unbounded higher derivatives at t = 0, so plain Simpson on t
+    // loses ~1e-6..1e-4. Substitute t = u²: the Jacobian (2u) raises the
+    // endpoint power so the integrand is smooth at u = 0 (err → ~1e-13).
+    // frankenscipy-0lkim
+    let u_max = 10.0_f64.sqrt(); // t_max = 10
     let steps = 60_000usize;
-    let h = t_max / steps as f64;
-    let integrand = |t: f64| -> f64 {
-        if t <= 0.0 {
-            // t^{k/b} → 0 for k/b > 0, t→0; safe to clamp to 0.
+    let h = u_max / steps as f64;
+    let integrand = |u: f64| -> f64 {
+        if u <= 0.0 {
             return 0.0;
         }
+        let t = u * u;
         let exponent_term = t - t.exp();
         if exponent_term < -700.0 {
             return 0.0;
         }
-        t.powf(exponent) * exponent_term.exp()
+        // t^{k/b} · e^{t−e^t} · dt/du, with dt/du = 2u.
+        t.powf(exponent) * exponent_term.exp() * 2.0 * u
     };
-    let mut sum = integrand(0.0) + integrand(t_max);
+    let mut sum = integrand(0.0) + integrand(u_max);
     for i in 1..steps {
-        let t = i as f64 * h;
+        let u = i as f64 * h;
         let coef = if i % 2 == 0 { 2.0 } else { 4.0 };
-        sum += coef * integrand(t);
+        sum += coef * integrand(u);
     }
     (sum * h / 3.0) * std::f64::consts::E
 }
@@ -37558,31 +37564,36 @@ impl ContinuousDistribution for ExponPow {
     }
 
     fn entropy(&self) -> f64 {
-        // ExponPow has a 1/x^{1−b} singularity at x = 0 for b < 1
-        // that defeats direct adaptive Simpson on x. Substitute
-        // u = x^b ⇒ X = U^{1/b}; then U ~ Gompertz(c=1) and the
-        // Jacobian-transformed entropy is
-        //   h(X) = h(U) − ln b − (b − 1)/b · E_U[ln U],
-        // with both U-side quadratures done on the gompertz pdf
-        // (which is smooth at u = 0).
-        let u_dist = Gompertz::new(1.0);
-        let h_u = u_dist.entropy();
-        let e_ln_u = simpson_integrate_adaptive(
-            |u| {
-                if u <= 0.0 {
-                    return 0.0;
-                }
-                let p = u_dist.pdf(u);
-                if p > 0.0 { p * u.ln() } else { 0.0 }
-            },
-            1e-12,
-            35.0,
-            4_096,
-            1e-12,
-            1e-12,
-            10,
-        );
-        h_u - self.b.ln() - (self.b - 1.0) / self.b * e_ln_u
+        // h(X) = −∫ pdf·ln pdf dx. The old Gompertz decomposition needed
+        // E_U[ln U] = ∫ gompertz_pdf(u)·ln(u) du, whose ln(u) singularity at
+        // u = 0 left adaptive Simpson ~9.5e-4 off scipy. Substitute t = x^b = u²:
+        // pdf·dx = 2u·e^{1+u²−e^{u²}} du, and ln pdf(x) = ln b + 2(b−1)/b·ln u +
+        // 1 + u² − e^{u²}. The 2u Jacobian turns the u·ln u term smooth at u = 0,
+        // so plain Simpson on the u-grid is accurate (~1e-9). frankenscipy-0lkim
+        let b = self.b;
+        let u_max = 10.0_f64.sqrt();
+        let steps = 60_000usize;
+        let h = u_max / steps as f64;
+        let integrand = |u: f64| -> f64 {
+            if u <= 0.0 {
+                return 0.0;
+            }
+            let t = u * u;
+            let exponent_term = t - t.exp();
+            if exponent_term < -700.0 {
+                return 0.0;
+            }
+            let dens = 2.0 * u * (1.0 + exponent_term).exp();
+            let ln_pdf = b.ln() + (2.0 * (b - 1.0) / b) * u.ln() + 1.0 + exponent_term;
+            -ln_pdf * dens
+        };
+        let mut sum = integrand(0.0) + integrand(u_max);
+        for i in 1..steps {
+            let u = i as f64 * h;
+            let coef = if i % 2 == 0 { 2.0 } else { 4.0 };
+            sum += coef * integrand(u);
+        }
+        sum * h / 3.0
     }
 
     fn try_fit(data: &[f64]) -> Result<Self, FitError> {
