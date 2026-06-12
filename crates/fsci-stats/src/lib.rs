@@ -5073,6 +5073,17 @@ impl ContinuousDistribution for Lomax {
         }
     }
 
+    fn logsf(&self, x: f64) -> f64 {
+        // ln sf = −c·ln(1+x). The default ln(sf) returns −inf once sf=(1+x)^−c
+        // underflows below ~1e-308 (lomax(3).logsf(1e150) was −inf vs −1036.16).
+        // frankenscipy-zghyi
+        if x < 0.0 {
+            0.0
+        } else {
+            -self.c * x.ln_1p()
+        }
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
@@ -16829,6 +16840,19 @@ impl ContinuousDistribution for GenLogistic {
 
     fn cdf(&self, x: f64) -> f64 {
         1.0 / (1.0 + (-x).exp()).powf(self.c)
+    }
+
+    fn logcdf(&self, x: f64) -> f64 {
+        // ln cdf = −c·ln(1+e^{−x}) = −c·softplus(−x). The default ln(cdf)
+        // returns −inf once cdf=(1+e^{−x})^{−c} underflows in the deep left
+        // tail (genlogistic(2).logcdf(−700) was −inf vs −1400). frankenscipy-zghyi
+        let neg_x = -x;
+        let softplus = if neg_x > 0.0 {
+            neg_x + (-neg_x).exp().ln_1p()
+        } else {
+            neg_x.exp().ln_1p()
+        };
+        -self.c * softplus
     }
 
     fn sf(&self, x: f64) -> f64 {
