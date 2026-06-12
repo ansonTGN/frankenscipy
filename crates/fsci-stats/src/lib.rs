@@ -2111,23 +2111,26 @@ impl ContinuousDistribution for NoncentralChiSquared {
             return ChiSquared::new(self.df).cdf(x);
         }
 
-        // Use series expansion: sum of Poisson-weighted central chi-squared CDFs
-        // P(X <= x) = Σ_{j=0}^∞ e^{-λ/2} (λ/2)^j / j! * P(χ²_{k+2j} <= x)
+        // Series: P(X ≤ x) = Σ_{j≥0} Pois(j; λ/2) · P(χ²_{k+2j} ≤ x). The old
+        // recurrence seeded with e^{−λ/2} underflowed for large λ and broke at
+        // j>10 — long before the Poisson peak at j≈λ/2 — so it returned ~0 for
+        // large nc (e.g. ncx2(2,400)). Sum log-space weights over a window
+        // centred on the peak instead. frankenscipy-tvfae
         let half_lam = self.nc / 2.0;
+        let ln_half_lam = half_lam.ln();
+        let peak = half_lam.floor().max(0.0);
+        let spread = 10.0_f64.mul_add(half_lam.sqrt(), 60.0).ceil();
+        let j_lo = (peak - spread).max(0.0) as u64;
+        let j_hi = (peak + spread) as u64;
         let mut sum = 0.0;
-        let mut term = (-half_lam).exp(); // Poisson(λ/2) pmf at j=0
-
-        for j in 0..200 {
-            let df_j = self.df + 2.0 * j as f64;
-            let chi2_cdf = lower_regularized_gamma(0.5 * df_j, 0.5 * x);
-            sum += term * chi2_cdf;
-
-            // Next Poisson term
-            term *= half_lam / (j + 1) as f64;
-
-            if term < 1e-16 && j > 10 {
-                break;
+        for j in j_lo..=j_hi {
+            let jf = j as f64;
+            let log_pois = -half_lam + jf * ln_half_lam - ln_gamma(jf + 1.0);
+            if log_pois < -745.0 {
+                continue; // weight underflows; negligible
             }
+            let df_j = self.df + 2.0 * jf;
+            sum += log_pois.exp() * lower_regularized_gamma(0.5 * df_j, 0.5 * x);
         }
 
         sum.clamp(0.0, 1.0)
@@ -12600,17 +12603,12 @@ impl ContinuousDistribution for Rice {
         if x <= 0.0 {
             return 0.0;
         }
-        // Adaptive Simpson's rule — use more points for wider intervals
-        let n = (200.0 * (1.0 + x / 5.0).min(10.0)) as usize;
-        let n = n + (n % 2); // ensure even for Simpson
-        let h = x / n as f64;
-        let mut sum = self.pdf(0.0) + self.pdf(x);
-        for i in 1..n {
-            let t = i as f64 * h;
-            let w = if i % 2 == 0 { 2.0 } else { 4.0 };
-            sum += w * self.pdf(t);
-        }
-        (sum * h / 3.0).clamp(0.0, 1.0)
+        // Rice² ~ noncentral χ²(2 dof, nc = b²): F_Rice(x) = F_ncx2(x²). This is
+        // exact (= 1 − Q₁(b, x), Marcum Q) and replaces the fixed-grid Simpson
+        // over the pdf, which carried a ~1e-7 error. frankenscipy-tvfae
+        NoncentralChiSquared::new(2.0, self.b * self.b)
+            .cdf(x * x)
+            .clamp(0.0, 1.0)
     }
 
     fn mean(&self) -> f64 {
@@ -19862,6 +19860,13 @@ impl Argus {
     }
 }
 
+/// Ψ(z) = Φ(z) − z·φ(z) − ½, the Argus normalization/CDF auxiliary
+/// (Φ standard normal CDF, φ standard normal PDF). frankenscipy-tvfae
+fn argus_psi(z: f64) -> f64 {
+    let phi = (-0.5 * z * z).exp() / (2.0 * PI).sqrt();
+    standard_normal_cdf(z) - z * phi - 0.5
+}
+
 impl ContinuousDistribution for Argus {
     fn pdf(&self, x: f64) -> f64 {
         if x <= 0.0 || x >= 1.0 {
@@ -19890,16 +19895,12 @@ impl ContinuousDistribution for Argus {
         if x >= 1.0 {
             return 1.0;
         }
-        // Numerical CDF via Simpson's rule — scale grid for accuracy
-        let n = 400;
-        let h = x / n as f64;
-        let mut sum = self.pdf(0.0) + self.pdf(x);
-        for i in 1..n {
-            let t = i as f64 * h;
-            let w = if i % 2 == 0 { 2.0 } else { 4.0 };
-            sum += w * self.pdf(t);
-        }
-        (sum * h / 3.0).clamp(0.0, 1.0)
+        // Closed form: F(x) = 1 − Ψ(χ·√(1−x²))/Ψ(χ), Ψ(z) = Φ(z) − z·φ(z) − ½.
+        // The old 400-point Simpson over the pdf lost accuracy as χ grew
+        // (≈1e-7 at χ=8); this matches scipy to ~3e-14. frankenscipy-tvfae
+        let chi = self.chi;
+        let z = chi * (1.0 - x * x).sqrt();
+        (1.0 - argus_psi(z) / argus_psi(chi)).clamp(0.0, 1.0)
     }
 
     fn mean(&self) -> f64 {
