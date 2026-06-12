@@ -7320,6 +7320,20 @@ impl DiscreteDistribution for Bernoulli {
         if k == 0 { 1.0 - self.p } else { 1.0 }
     }
 
+    fn sf(&self, k: u64) -> f64 {
+        // P(X > k): p at k=0, else 0. The default 1−cdf at k=0 is
+        // 1−(1−p)=p but cancels; the closed form is exact. frankenscipy-k0sce
+        if k == 0 { self.p } else { 0.0 }
+    }
+
+    fn logsf(&self, k: u64) -> f64 {
+        if k == 0 {
+            self.p.ln()
+        } else {
+            f64::NEG_INFINITY
+        }
+    }
+
     fn mean(&self) -> f64 {
         self.p
     }
@@ -7431,6 +7445,25 @@ impl DiscreteDistribution for Boltzmann {
         let kp1 = (k + 1) as f64;
         // (1 − e^(−λ(k+1))) / (1 − e^(−λn))
         (-(-self.lambda * kp1).exp_m1()) / self.z()
+    }
+
+    fn sf(&self, k: u64) -> f64 {
+        // P(X > k) = (e^(−λ(k+1)) − e^(−λn)) / z. The default 1−cdf cancels near
+        // the upper edge (k → n−1). Factor as e^(−λ(k+1))·(1−e^(−λ(n−k−1))) so the
+        // last terms stay exact (sf(n−1)=0). frankenscipy-k0sce
+        if k >= self.n as u64 {
+            return 0.0;
+        }
+        let m = (self.n as u64 - 1 - k) as f64; // n−(k+1) ≥ 0
+        (-self.lambda * (k + 1) as f64).exp() * (-(-self.lambda * m).exp_m1()) / self.z()
+    }
+
+    fn logsf(&self, k: u64) -> f64 {
+        if k >= self.n as u64 {
+            return f64::NEG_INFINITY;
+        }
+        let m = (self.n as u64 - 1 - k) as f64;
+        -self.lambda * (k + 1) as f64 + (-(-self.lambda * m).exp_m1()).ln() - self.z().ln()
     }
 
     fn mean(&self) -> f64 {
@@ -7787,6 +7820,17 @@ impl DiscreteDistribution for Planck {
         -(-self.lambda * kp1).exp_m1()
     }
 
+    fn sf(&self, k: u64) -> f64 {
+        // P(X > k) = e^(−λ(k+1)). The default 1−cdf underflows to 0 in the
+        // right tail (sf(150,0.5) gave 0 vs scipy 1.6e-33). frankenscipy-k0sce
+        (-self.lambda * (k + 1) as f64).exp()
+    }
+
+    fn logsf(&self, k: u64) -> f64 {
+        // ln(sf) = −λ(k+1); finite where sf underflows (default gave −inf).
+        -self.lambda * (k + 1) as f64
+    }
+
     fn mean(&self) -> f64 {
         1.0 / self.lambda.exp_m1()
     }
@@ -7846,6 +7890,18 @@ impl DiscreteDistribution for Geometric {
             return 0.0;
         }
         1.0 - (1.0 - self.p).powi(k as i32)
+    }
+
+    fn sf(&self, k: u64) -> f64 {
+        // P(X > k) = (1−p)^k. The default 1−cdf underflows to 0 in the right
+        // tail (sf(700,0.1) gave 0 vs scipy 9.3e-33) and cancels mid-tail
+        // (sf(300) was 1.25e-3 off). frankenscipy-k0sce
+        (1.0 - self.p).powi(k as i32)
+    }
+
+    fn logsf(&self, k: u64) -> f64 {
+        // ln(sf) = k·ln(1−p); finite where sf underflows (default gave −inf).
+        k as f64 * (-self.p).ln_1p()
     }
 
     fn mean(&self) -> f64 {
