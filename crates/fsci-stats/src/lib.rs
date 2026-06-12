@@ -2160,7 +2160,28 @@ impl ContinuousDistribution for NoncentralChiSquared {
     }
 
     fn entropy(&self) -> f64 {
-        f64::NAN
+        // No closed form; scipy evaluates it numerically. h = −∫ pdf·ln pdf dx
+        // over the bulk (mean + ~14σ captures the tail; the integrable x→0
+        // behaviour for df<2 is handled by the adaptive refinement from a small
+        // lower bound). Matches scipy to ~1e-8. frankenscipy-8qidg
+        let mean = self.df + self.nc;
+        let std = (2.0 * (self.df + 2.0 * self.nc)).sqrt();
+        let hi = mean + 14.0 * std;
+        simpson_integrate_adaptive(
+            |x| {
+                if x <= 0.0 {
+                    return 0.0;
+                }
+                let p = self.pdf(x);
+                if p > 0.0 { -p * p.ln() } else { 0.0 }
+            },
+            1e-12,
+            hi,
+            4_096,
+            1e-12,
+            1e-12,
+            12,
+        )
     }
 
     fn fit(_data: &[f64]) -> Self {
@@ -2209,9 +2230,12 @@ impl ContinuousDistribution for NoncentralChiSquared {
     }
 
     fn skewness(&self) -> f64 {
+        // scipy: γ₁ = 2^{3/2}·(k + 3λ)/(k + 2λ)^{3/2}. The old
+        // √(8(k+3λ))/(k+2λ) square-rooted (k+3λ) and used the wrong denominator
+        // power, leaving skew(4,2) at 1.118 vs scipy 1.25. frankenscipy-8qidg
         let k = self.df;
         let lam = self.nc;
-        (8.0 * (k + 3.0 * lam)).sqrt() / (k + 2.0 * lam)
+        2.0_f64.powf(1.5) * (k + 3.0 * lam) / (k + 2.0 * lam).powf(1.5)
     }
 
     fn kurtosis(&self) -> f64 {
