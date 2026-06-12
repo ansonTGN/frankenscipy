@@ -1,0 +1,3 @@
+4783bba47a5dd4c1fad7cab0a842a7f6f20ddc5c289e86288113bfc5cd6a7832  tests/artifacts/perf/2026-06-11-linalg-8l8r1-90/baseline_eigh_dense_criterion_rch.txt
+3fdbd698b60bce05128dbecc9c3215e4b3199326dec2b43444ec029a149cd3cc  tests/artifacts/perf/2026-06-11-linalg-8l8r1-90/proof_public_eigh_golden_rch.txt
+96eb0aeb91909bdb5203e420cf2f12fb08e3b86b29d020638970763dbdcc6fa5  tests/artifacts/perf/2026-06-11-linalg-8l8r1-90/baseline_contract.md
