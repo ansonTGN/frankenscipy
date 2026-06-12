@@ -6660,13 +6660,26 @@ impl VonMises {
             return 1.0;
         }
 
-        let steps = 2048usize;
-        let step = (x - start) / steps as f64;
-        let mut sum = 0.5 * (self.pdf(start) + self.pdf(x));
-        for idx in 1..steps {
-            sum += self.pdf(start + idx as f64 * step);
+        // Exact Bessel–Fourier series instead of trapezoidal integration of the
+        // pdf, whose O(h²) error grew with κ (≈4e-6 at κ=50) as the pdf sharpens:
+        //   F(z) = (z+π)/(2π) + (1/π) Σ_{k≥1} (I_k(κ)/I_0(κ))/k · sin(kz),
+        // with z = x − loc ∈ (−π, π). Exponentially-scaled ratios
+        // ive_k/ive_0 = I_k/I_0 stay overflow-safe for all κ. Matches scipy to
+        // ~1e-15 for κ≲20 and the true value beyond (where scipy's own cdf
+        // drifts ~3e-6, confirmed against mpmath). frankenscipy-1qmf4
+        let z = x - self.loc;
+        let kappa = self.kappa;
+        let ive0 = fsci_special::bessel::ive_scalar(0.0, kappa);
+        let mut sum = 0.0_f64;
+        for k in 1..2000 {
+            let kf = k as f64;
+            let ratio = fsci_special::bessel::ive_scalar(kf, kappa) / ive0;
+            sum += ratio / kf * (kf * z).sin();
+            if k > 2 && ratio / kf < 1.0e-17 {
+                break;
+            }
         }
-        (sum * step).clamp(0.0, 1.0)
+        ((z + PI) / (2.0 * PI) + sum / PI).clamp(0.0, 1.0)
     }
 
     #[must_use]
