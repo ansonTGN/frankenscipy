@@ -688,19 +688,7 @@ pub fn fresnel(z: f64) -> (f64, f64) {
     if z.is_nan() {
         return (f64::NAN, f64::NAN);
     }
-    let ax = z.abs();
-    if ax < 1e-15 {
-        return (0.0, 0.0);
-    }
-
-    let (s, c) = if ax < 1.6 {
-        fresnel_series(ax)
-    } else if ax < 6.0 {
-        fresnel_mid(ax)
-    } else {
-        fresnel_asymptotic(ax)
-    };
-
+    let (s, c) = cephes_fresnl(z.abs());
     if z < 0.0 { (-s, -c) } else { (s, c) }
 }
 
@@ -810,124 +798,151 @@ pub fn fresnel_zeros(nt: usize) -> (Vec<Complex64>, Vec<Complex64>) {
     (fresnels_zeros(nt), fresnelc_zeros(nt))
 }
 
-/// Power series for Fresnel integrals (small arguments).
-fn fresnel_series(x: f64) -> (f64, f64) {
-    fresnel_taylor(x)
+// ── cephes fresnl.c port ──────────────────────────────────────────────────
+// scipy.special.fresnel uses cephes for real arguments: small-x rational
+// approximations, a large-x sentinel, and a single rational auxiliary-function
+// branch for the wide middle range. Reproducing it gives parity with scipy
+// (the prior 200-point Simpson mid-branch was ~1e-5 off near x∈[2.5,5]).
+
+/// Horner evaluation of a polynomial with all coefficients listed,
+/// `coef[0]` the highest degree (cephes `polevl`).
+fn fresnel_polevl(x: f64, coef: &[f64]) -> f64 {
+    let mut acc = coef[0];
+    for &c in &coef[1..] {
+        acc = acc * x + c;
+    }
+    acc
 }
 
-/// Taylor series computation of Fresnel integrals.
-fn fresnel_taylor(x: f64) -> (f64, f64) {
+/// Like [`fresnel_polevl`] but with an implied leading coefficient of 1.0
+/// (cephes `p1evl`).
+fn fresnel_p1evl(x: f64, coef: &[f64]) -> f64 {
+    let mut acc = x + coef[0];
+    for &c in &coef[1..] {
+        acc = acc * x + c;
+    }
+    acc
+}
+
+#[allow(clippy::excessive_precision)]
+const FRESNEL_SN: [f64; 6] = [
+    -2.991_819_194_010_198_537_26e3,
+    7.088_400_452_577_385_768_63e5,
+    -6.297_414_862_058_625_065_37e7,
+    2.548_908_805_733_763_591_04e9,
+    -4.429_795_180_596_977_791_03e10,
+    3.180_162_978_765_678_179_86e11,
+];
+#[allow(clippy::excessive_precision)]
+const FRESNEL_SD: [f64; 6] = [
+    2.813_762_688_899_943_156_96e2,
+    4.558_478_108_065_325_816_75e4,
+    5.173_438_887_700_964_007_30e6,
+    4.193_202_458_981_112_311_29e8,
+    2.244_117_956_453_409_209_40e10,
+    6.073_663_894_900_846_390_49e11,
+];
+#[allow(clippy::excessive_precision)]
+const FRESNEL_CN: [f64; 6] = [
+    -4.988_431_145_735_735_486_51e-8,
+    9.504_280_628_298_596_051_34e-6,
+    -6.451_914_356_839_650_509_62e-4,
+    1.888_433_193_967_038_500_64e-2,
+    -2.055_259_009_550_138_917_93e-1,
+    9.999_999_999_999_999_988_22e-1,
+];
+#[allow(clippy::excessive_precision)]
+const FRESNEL_CD: [f64; 7] = [
+    3.999_829_689_724_959_803_67e-12,
+    9.154_392_157_746_574_787_99e-10,
+    1.250_018_624_795_988_214_74e-7,
+    1.222_627_890_241_790_309_97e-5,
+    8.680_295_429_417_843_006_06e-4,
+    4.121_420_907_221_997_929_36e-2,
+    1.000_000_000_000_000_001_18e0,
+];
+#[allow(clippy::excessive_precision)]
+const FRESNEL_FN: [f64; 10] = [
+    4.215_435_550_436_775_465_06e-1,
+    1.434_079_197_807_588_852_61e-1,
+    1.152_209_550_735_857_588_35e-2,
+    3.450_179_397_825_740_279_00e-4,
+    4.636_137_492_878_673_220_88e-6,
+    3.055_689_837_902_576_058_27e-8,
+    1.023_045_141_649_072_334_65e-10,
+    1.720_107_432_681_618_288_79e-13,
+    1.342_832_762_330_627_589_25e-16,
+    3.763_297_112_699_878_890_06e-20,
+];
+#[allow(clippy::excessive_precision)]
+const FRESNEL_FD: [f64; 10] = [
+    7.515_863_983_533_789_471_75e-1,
+    1.168_889_258_591_913_821_42e-1,
+    6.440_515_265_088_586_110_05e-3,
+    1.559_344_091_641_530_208_73e-4,
+    1.846_275_673_489_305_458_70e-6,
+    1.126_992_247_639_990_352_61e-8,
+    3.601_400_295_893_713_704_04e-11,
+    5.887_545_336_215_784_100_10e-14,
+    4.520_014_340_741_297_014_96e-17,
+    1.254_432_370_900_112_643_84e-20,
+];
+#[allow(clippy::excessive_precision)]
+const FRESNEL_GN: [f64; 11] = [
+    5.044_420_736_433_832_658_87e-1,
+    1.971_028_335_255_234_117_09e-1,
+    1.876_485_840_925_752_492_93e-2,
+    6.840_793_809_153_930_901_72e-4,
+    1.151_388_261_118_842_809_31e-5,
+    9.828_524_436_884_222_238_54e-8,
+    4.453_444_158_617_501_447_38e-10,
+    1.082_680_411_390_208_703_18e-12,
+    1.375_554_606_332_617_998_68e-15,
+    8.363_544_356_306_774_215_31e-19,
+    1.869_587_101_627_832_351_06e-22,
+];
+#[allow(clippy::excessive_precision)]
+const FRESNEL_GD: [f64; 11] = [
+    1.474_957_599_251_283_245_29e0,
+    3.377_489_891_200_199_704_51e-1,
+    2.536_037_414_203_387_951_22e-2,
+    8.146_791_071_843_061_790_49e-4,
+    1.275_450_756_677_291_187_02e-5,
+    1.043_145_896_575_719_905_85e-7,
+    4.606_807_281_465_204_282_11e-10,
+    1.102_732_150_662_402_707_57e-12,
+    1.387_965_312_595_788_712_58e-15,
+    8.391_588_162_831_187_073_63e-19,
+    1.869_587_101_627_832_363_42e-22,
+];
+
+/// Real Fresnel integrals `(S(x), C(x))` for `x >= 0`, ported from cephes
+/// `fresnl.c` (the implementation behind `scipy.special.fresnel`).
+fn cephes_fresnl(x: f64) -> (f64, f64) {
     let x2 = x * x;
-    let t = std::f64::consts::FRAC_PI_2 * x2;
+    if x2 < 2.5625 {
+        let t = x2 * x2;
+        let ss = x * x2 * fresnel_polevl(t, &FRESNEL_SN) / fresnel_p1evl(t, &FRESNEL_SD);
+        let cc = x * fresnel_polevl(t, &FRESNEL_CN) / fresnel_polevl(t, &FRESNEL_CD);
+        (ss, cc)
+    } else {
+        // Asymptotic auxiliary functions for x >= 1.6. cephes truncates to
+        // (0.5, 0.5) for x > 36974, but scipy keeps the 1/(πx) correction
+        // there, so we retain this branch for all large x to match scipy.
+        let t = std::f64::consts::PI * x2;
+        let u = 1.0 / (t * t);
+        let t_inv = 1.0 / t;
+        let f = 1.0 - u * fresnel_polevl(u, &FRESNEL_FN) / fresnel_p1evl(u, &FRESNEL_FD);
+        let g = t_inv * fresnel_polevl(u, &FRESNEL_GN) / fresnel_p1evl(u, &FRESNEL_GD);
 
-    // S(x) = x * Σ (-1)^n t^{2n+1} / ((2n+1)!(4n+3))  where t = πx²/2
-    // C(x) = x * Σ (-1)^n t^{2n} / ((2n)!(4n+1))
-    let mut s = 0.0;
-    let mut c = 0.0;
-    let mut s_term = t / 3.0; // n=0: t/(1!*3)
-    let mut c_term = 1.0; // n=0: 1/(0!*1)
-
-    s += s_term;
-    c += c_term;
-
-    for n in 1..60 {
-        let nf = n as f64;
-        c_term *= -t * t / ((2.0 * nf) * (2.0 * nf - 1.0));
-        c_term *= (4.0 * nf - 3.0) / (4.0 * nf + 1.0);
-        c += c_term;
-
-        s_term *= -t * t / ((2.0 * nf + 1.0) * (2.0 * nf));
-        s_term *= (4.0 * nf - 1.0) / (4.0 * nf + 3.0);
-        s += s_term;
-
-        if s_term.abs() < 1e-16 && c_term.abs() < 1e-16 {
-            break;
-        }
+        let t = std::f64::consts::FRAC_PI_2 * x2;
+        let c = t.cos();
+        let s = t.sin();
+        let t = std::f64::consts::PI * x;
+        let cc = 0.5 + (f * s - g * c) / t;
+        let ss = 0.5 - (f * c + g * s) / t;
+        (ss, cc)
     }
-
-    (x * s, x * c)
-}
-
-/// Asymptotic expansion for Fresnel integrals (large arguments).
-fn fresnel_asymptotic(x: f64) -> (f64, f64) {
-    // Asymptotic: S(x) ≈ 1/2 - f(x)cos(πx²/2) - g(x)sin(πx²/2)
-    //             C(x) ≈ 1/2 + f(x)sin(πx²/2) - g(x)cos(πx²/2)
-
-    // A&S 7.3.27/7.3.28 auxiliary functions (the previous coefficients were
-    // wrong — (2n)(2n-1) instead of (4m-1)(4m-3) for f, (2n+1)(2n) instead of
-    // (4m+1)(4m-1) for g — and g was scaled by πx² instead of π²x³, leaving
-    // C off ~1e-3 at large x). frankenscipy-2fpck.
-    //   f(x) = 1/(πx)  Σ_m (-1)^m (4m-1)!! / (πx²)^{2m}
-    //   g(x) = 1/(π²x³) Σ_m (-1)^m (4m+1)!! / (πx²)^{2m}
-    let pix = std::f64::consts::PI * x;
-    let pix2 = pix * x; // π x²
-    let half_pix2 = std::f64::consts::FRAC_PI_2 * x * x;
-    let inv_sq = 1.0 / (pix2 * pix2); // 1/(πx²)²
-
-    let mut f_term = 1.0;
-    let mut g_term = 1.0;
-    let mut f = f_term;
-    let mut g = g_term;
-    let mut f_prev = 1.0;
-    let mut g_prev = 1.0;
-
-    for m in 1..40 {
-        let mf = m as f64;
-        // (4m-1)!!/(4m-5)!! = (4m-1)(4m-3);  (4m+1)!!/(4m-3)!! = (4m+1)(4m-1).
-        f_term *= -(4.0 * mf - 1.0) * (4.0 * mf - 3.0) * inv_sq;
-        g_term *= -(4.0 * mf + 1.0) * (4.0 * mf - 1.0) * inv_sq;
-        // Asymptotic series: stop once a term stops shrinking.
-        if f_term.abs() > f_prev && g_term.abs() > g_prev {
-            break;
-        }
-        f += f_term;
-        g += g_term;
-        f_prev = f_term.abs();
-        g_prev = g_term.abs();
-        if f_term.abs() < 1e-18 && g_term.abs() < 1e-18 {
-            break;
-        }
-    }
-
-    f /= pix; // 1/(πx)
-    g /= pix2 * pix; // 1/(π²x³)
-
-    let sin_t = half_pix2.sin();
-    let cos_t = half_pix2.cos();
-
-    let s = 0.5 - f * cos_t - g * sin_t;
-    let c = 0.5 + f * sin_t - g * cos_t;
-    (s, c)
-}
-
-/// Mid-range Fresnel integrals (bridge between series and asymptotic).
-fn fresnel_mid(x: f64) -> (f64, f64) {
-    // For moderate x, use numerical integration via composite Simpson
-    let n = 200;
-    let h = x / n as f64;
-    let half_pi = std::f64::consts::FRAC_PI_2;
-
-    let mut s = 0.0;
-    let mut c = 0.0;
-
-    // Simpson's rule
-    for i in 0..=n {
-        let t = i as f64 * h;
-        let arg = half_pi * t * t;
-        let w = if i == 0 || i == n {
-            1.0
-        } else if i % 2 == 1 {
-            4.0
-        } else {
-            2.0
-        };
-        s += w * arg.sin();
-        c += w * arg.cos();
-    }
-
-    s *= h / 3.0;
-    c *= h / 3.0;
-    (s, c)
 }
 
 // ══════════════════════════════════════════════════════════════════════
