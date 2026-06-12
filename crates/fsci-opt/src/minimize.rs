@@ -738,7 +738,10 @@ where
 /// Nelder-Mead simplex (downhill simplex) method for derivative-free optimization.
 ///
 /// Matches `scipy.optimize.minimize(f, x0, method='Nelder-Mead')`.
-/// Uses adaptive parameters when n >= 2 (matching SciPy's `adaptive=True` default for n>=2).
+/// Uses the standard simplex coefficients (rho=1, chi=2, psi=0.5, sigma=0.5),
+/// which is SciPy's default (`adaptive=False`). SciPy's adaptive Gao-Han
+/// coefficients are an opt-in and are NOT the default — using them for n>=2
+/// reproduces SciPy's `adaptive=True` stagnation on higher-dim Rosenbrock.
 pub fn nelder_mead<F>(
     fun: &F,
     x0: &[f64],
@@ -771,18 +774,8 @@ where
     let maxfev = options.maxfev.unwrap_or(200 * n);
     let mut objective = Objective::new(fun, options.mode, maxfev);
 
-    // Adaptive parameters (SciPy convention for n >= 2)
-    let (rho, chi, psi, sigma) = if n >= 2 {
-        let dim = n as f64;
-        (
-            1.0,
-            1.0 + 2.0 / dim,
-            0.75 - 1.0 / (2.0 * dim),
-            1.0 - 1.0 / dim,
-        )
-    } else {
-        (1.0, 2.0, 0.5, 0.5) // standard parameters
-    };
+    // Standard simplex coefficients — SciPy's default (adaptive=False) for all n.
+    let (rho, chi, psi, sigma) = (1.0, 2.0, 0.5, 0.5);
 
     // Build initial simplex: n+1 vertices
     let mut simplex: Vec<Vec<f64>> = Vec::with_capacity(n + 1);
