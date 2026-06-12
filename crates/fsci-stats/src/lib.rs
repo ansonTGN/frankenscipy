@@ -1662,14 +1662,17 @@ impl ContinuousDistribution for NoncentralT {
             }
         }
 
-        // Bisection.
+        // Bisection. Converge on the BRACKET WIDTH, not |cdf−q|: an absolute cdf
+        // tolerance (the old 1e-10) is the same order as q itself for extreme
+        // quantiles, so it returned the first mid with cdf<2·q — far out in the
+        // tail — instead of the crossing point (nct(10,5).ppf(1e-10) gave −12.96
+        // vs −1.81). frankenscipy-ybqjc
         for _ in 0..120 {
             let mid = 0.5 * (lo + hi);
-            let cdf_mid = self.cdf(mid);
-            if (cdf_mid - q).abs() < 1e-10 || (hi - lo).abs() < 1e-12 {
+            if (hi - lo).abs() <= 1e-13 * mid.abs().max(1.0) {
                 return mid;
             }
-            if cdf_mid < q {
+            if self.cdf(mid) < q {
                 lo = mid;
             } else {
                 hi = mid;
