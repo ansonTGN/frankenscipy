@@ -5551,37 +5551,27 @@ pub fn smirnovi(n: i32, p: f64) -> f64 {
         return 0.0;
     }
 
-    let nf = n as f64;
-
-    // Initial guess from asymptotic: p = exp(-2 * n * d^2) => d = sqrt(-ln(p) / (2n))
-    let d0 = (-(p.ln()) / (2.0 * nf)).sqrt().min(0.99);
-
-    // Newton-Raphson iteration
-    let mut d = d0;
-    for _ in 0..50 {
-        let f = smirnov(n, d) - p;
-        if f.abs() < 1e-14 {
+    // smirnov(n, ·) is continuous and strictly decreasing from 1 (at d=0) to 0
+    // (at d=1), so invert by bisection on [0, 1]. The previous Newton iteration
+    // overshot catastrophically when seeded in the flat upper tail (e.g. p=1e-6,
+    // n=5: d0≈0.99 where d/dd smirnov ≈ −5e-8, so the step was ≈20, clamping to
+    // the 1e-15 floor and returning ~0 instead of 0.937). Bisection is
+    // unconditionally convergent here. frankenscipy-e6i43
+    let mut lo = 0.0_f64; // smirnov(lo) = 1 ≥ p
+    let mut hi = 1.0_f64; // smirnov(hi) = 0 ≤ p
+    for _ in 0..100 {
+        let mid = 0.5 * (lo + hi);
+        if mid == lo || mid == hi {
             break;
         }
-
-        // Numerical derivative
-        let h = 1e-8 * d.max(1e-8);
-        let df = (smirnov(n, d + h) - smirnov(n, d - h)) / (2.0 * h);
-
-        if df.abs() < 1e-30 {
-            break;
-        }
-
-        let delta = f / df;
-        d -= delta;
-        d = d.clamp(1e-15, 1.0 - 1e-15);
-
-        if delta.abs() < 1e-14 * d {
-            break;
+        if smirnov(n, mid) > p {
+            // survival still above target → need a larger d.
+            lo = mid;
+        } else {
+            hi = mid;
         }
     }
-
-    d
+    0.5 * (lo + hi)
 }
 
 /// Cosine of angle given in degrees.
