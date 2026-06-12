@@ -956,6 +956,24 @@ impl ContinuousDistribution for Normal {
         Normal::ppf(self, q)
     }
 
+    fn isf(&self, q: f64) -> f64 {
+        if !(0.0..=1.0).contains(&q) {
+            return f64::NAN;
+        }
+        if q == 0.0 {
+            return f64::INFINITY;
+        }
+        if q == 1.0 {
+            return f64::NEG_INFINITY;
+        }
+        // Normal is symmetric: isf(q)=ppf(1−q)=loc−scale·ndtri(q). The trait
+        // default computes 1−q first, and ndtri near 1 is ill-conditioned, so a
+        // ~1e-16 error in 1−q blew up to ~4.4e-7 at q=1e-12. ndtri(q) on the
+        // small argument is well-conditioned and matches scipy.stats.norm.isf.
+        // frankenscipy-d2gag
+        self.loc - self.scale * fsci_special::ndtri_scalar(q)
+    }
+
     fn mean(&self) -> f64 {
         self.loc
     }
@@ -1132,6 +1150,29 @@ impl ContinuousDistribution for StudentT {
             }
         }
         x
+    }
+
+    fn isf(&self, q: f64) -> f64 {
+        // Student's t is symmetric about 0: isf(q)=ppf(1−q)=−ppf(q). For
+        // representable 1−q, route through −ppf(q) to avoid the trait default's
+        // 1−q cancellation (isf(1e-12) was ~4.4e-6 off scipy). In the ultra-deep
+        // tail (q ≲ 1e-16, 1−q underflows to 1.0) ppf's betaincinv seed can't
+        // reach, so fall back to direct sf-inversion as the default does.
+        // frankenscipy-d2gag
+        if !(0.0..=1.0).contains(&q) {
+            return f64::NAN;
+        }
+        if q == 0.0 {
+            return f64::INFINITY;
+        }
+        if q == 1.0 {
+            return f64::NEG_INFINITY;
+        }
+        if 1.0 - q < 1.0 {
+            -self.ppf(q)
+        } else {
+            isf_bisection(|x| self.sf(x), q, 0.0, 1.0)
+        }
     }
 
     fn mean(&self) -> f64 {
@@ -2402,6 +2443,22 @@ impl ContinuousDistribution for Exponential {
 
     fn ppf(&self, q: f64) -> f64 {
         Exponential::ppf(self, q)
+    }
+
+    fn isf(&self, q: f64) -> f64 {
+        if !(0.0..=1.0).contains(&q) {
+            return f64::NAN;
+        }
+        if q == 0.0 {
+            return f64::INFINITY;
+        }
+        if q == 1.0 {
+            return 0.0;
+        }
+        // sf(x)=exp(−λx)=q ⇒ x=−ln(q)/λ. The trait default ppf(1−q) recomputes
+        // 1−(1−q) and cancels for small q (isf(1e-12) was ~8e-7 off scipy).
+        // frankenscipy-d2gag
+        -q.ln() / self.lambda
     }
 
     fn mean(&self) -> f64 {
@@ -4108,6 +4165,22 @@ impl ContinuousDistribution for Weibull {
         Weibull::ppf(self, q)
     }
 
+    fn isf(&self, q: f64) -> f64 {
+        if !(0.0..=1.0).contains(&q) {
+            return f64::NAN;
+        }
+        if q == 0.0 {
+            return f64::INFINITY;
+        }
+        if q == 1.0 {
+            return 0.0;
+        }
+        // sf(x)=exp(−(x/scale)^c)=q ⇒ x=scale·(−ln q)^(1/c). The trait default
+        // ppf(1−q) recomputes 1−(1−q) and cancels for small q (isf(1e-12) was
+        // ~5e-7 off scipy). Matches scipy.stats.weibull_min.isf. frankenscipy-d2gag
+        self.scale * (-q.ln()).powf(1.0 / self.c)
+    }
+
     fn mean(&self) -> f64 {
         self.scale * ln_gamma(1.0 + 1.0 / self.c).exp()
     }
@@ -5449,6 +5522,22 @@ impl ContinuousDistribution for Rayleigh {
         self.scale * (-2.0 * (-q).ln_1p()).sqrt()
     }
 
+    fn isf(&self, q: f64) -> f64 {
+        if !(0.0..=1.0).contains(&q) {
+            return f64::NAN;
+        }
+        if q == 0.0 {
+            return f64::INFINITY;
+        }
+        if q == 1.0 {
+            return 0.0;
+        }
+        // sf(x)=exp(−x²/(2σ²))=q ⇒ x=σ·sqrt(−2·ln q). The trait default ppf(1−q)
+        // recomputes 1−(1−q) and cancels for small q (isf(1e-12) was ~4e-7 off
+        // scipy). Matches scipy.stats.rayleigh.isf. frankenscipy-d2gag
+        self.scale * (-2.0 * q.ln()).sqrt()
+    }
+
     fn mean(&self) -> f64 {
         self.scale * (PI / 2.0).sqrt()
     }
@@ -5583,6 +5672,22 @@ impl ContinuousDistribution for Gumbel {
             return f64::INFINITY;
         }
         self.loc - self.scale * (-q.ln()).ln()
+    }
+
+    fn isf(&self, q: f64) -> f64 {
+        if !(0.0..=1.0).contains(&q) {
+            return f64::NAN;
+        }
+        if q == 0.0 {
+            return f64::INFINITY;
+        }
+        if q == 1.0 {
+            return f64::NEG_INFINITY;
+        }
+        // isf(q)=ppf(1−q)=loc − scale·ln(−ln(1−q)); −ln(1−q) via −ln_1p(−q)
+        // avoids the 1−q cancellation in the trait default (isf(1e-12) was
+        // ~8e-7 off scipy). Matches scipy.stats.gumbel_r.isf. frankenscipy-d2gag
+        self.loc - self.scale * (-(-q).ln_1p()).ln()
     }
 
     fn mean(&self) -> f64 {
@@ -5843,6 +5948,23 @@ impl ContinuousDistribution for Logistic {
         self.loc + self.scale * (q / (1.0 - q)).ln()
     }
 
+    fn isf(&self, q: f64) -> f64 {
+        if !(0.0..=1.0).contains(&q) {
+            return f64::NAN;
+        }
+        if q == 0.0 {
+            return f64::INFINITY;
+        }
+        if q == 1.0 {
+            return f64::NEG_INFINITY;
+        }
+        // isf(q)=ppf(1−q)=loc + scale·ln((1−q)/q)=loc + scale·(ln(1−q) − ln q).
+        // ln(1−q) via ln_1p(−q) avoids the trait default's 1−q cancellation
+        // (isf(1e-12) was ~8e-7 off scipy). Matches scipy.stats.logistic.isf.
+        // frankenscipy-d2gag
+        self.loc + self.scale * ((-q).ln_1p() - q.ln())
+    }
+
     fn mean(&self) -> f64 {
         self.loc
     }
@@ -6083,6 +6205,37 @@ impl ContinuousDistribution for Maxwell {
             let dx = self.pdf(x);
             if dx > 1e-30 {
                 x = (x - err / dx).max(0.0);
+            }
+        }
+        x
+    }
+
+    fn isf(&self, q: f64) -> f64 {
+        if !(0.0..=1.0).contains(&q) {
+            return f64::NAN;
+        }
+        if q == 0.0 {
+            return f64::INFINITY;
+        }
+        if q == 1.0 {
+            return 0.0;
+        }
+        // sf(x)=Q(3/2, x²/(2σ²))=q ⇒ x=σ·sqrt(2·gammainccinv(3/2,q)). The trait
+        // default ppf(1−q)→gammaincinv near 1 is ill-conditioned (isf(1e-12) was
+        // ~1.2e-5 off); gammainccinv is well-conditioned. frankenscipy-d2gag
+        let mut x = self.scale * (2.0 * fsci_special::gammainccinv_scalar(1.5, q)).sqrt();
+        if x <= 0.0 || !x.is_finite() || (self.sf(x) - q).abs() > 0.1 {
+            return isf_bisection(|v| self.sf(v), q, self.mean(), self.std());
+        }
+        for _ in 0..8 {
+            let err = self.sf(x) - q;
+            if err.abs() < 1e-14 {
+                break;
+            }
+            let dx = self.pdf(x);
+            if dx > 1e-30 {
+                // sf decreasing: d(sf)/dx = −pdf, so x += err/pdf.
+                x = (x + err / dx).max(0.0);
             }
         }
         x
@@ -8986,6 +9139,26 @@ impl ContinuousDistribution for Laplace {
         }
     }
 
+    fn isf(&self, q: f64) -> f64 {
+        if !(0.0..=1.0).contains(&q) {
+            return f64::NAN;
+        }
+        if q == 0.0 {
+            return f64::INFINITY;
+        }
+        if q == 1.0 {
+            return f64::NEG_INFINITY;
+        }
+        // isf(q)=ppf(1−q); computing 1−q first cancels for small q. Use q
+        // directly: right tail (q≤0.5) is loc − scale·ln(2q), no cancellation.
+        // Matches scipy.stats.laplace.isf bit-for-bit. frankenscipy-d2gag
+        if q <= 0.5 {
+            self.loc - self.scale * (2.0 * q).ln()
+        } else {
+            self.loc + self.scale * (2.0 * (1.0 - q)).ln()
+        }
+    }
+
     fn mean(&self) -> f64 {
         self.loc
     }
@@ -9467,6 +9640,39 @@ impl ContinuousDistribution for InverseGamma {
         x
     }
 
+    fn isf(&self, q: f64) -> f64 {
+        if !(0.0..=1.0).contains(&q) {
+            return f64::NAN;
+        }
+        if q == 0.0 {
+            return f64::INFINITY;
+        }
+        if q == 1.0 {
+            return 0.0;
+        }
+        // isf(q)=ppf(1−q): 1/x = gammaincinv(a, 1−(1−q)) = gammaincinv(a, q).
+        // Seeding with gammaincinv(a, q) directly avoids the trait default's
+        // 1−q cancellation (isf(1e-12) was ~1.9e-6 off), then Newton-refine on
+        // the accurate sf. Matches scipy.stats.invgauss.isf. frankenscipy-d2gag
+        let g = fsci_special::gammaincinv_scalar(self.a, q);
+        if g <= 0.0 {
+            return isf_bisection(|v| self.sf(v), q, self.mean(), self.std());
+        }
+        let mut x = 1.0 / g;
+        for _ in 0..8 {
+            let err = self.sf(x) - q;
+            if err.abs() < 1e-14 {
+                break;
+            }
+            let dx = self.pdf(x);
+            if dx > 1e-30 {
+                // sf decreasing: d(sf)/dx = −pdf, so x += err/pdf.
+                x = (x + err / dx).max(0.0);
+            }
+        }
+        x
+    }
+
     fn mean(&self) -> f64 {
         if self.a > 1.0 {
             1.0 / (self.a - 1.0)
@@ -9616,6 +9822,35 @@ impl ContinuousDistribution for InverseGaussian {
 
     fn var(&self) -> f64 {
         self.mu.powi(3)
+    }
+
+    fn isf(&self, q: f64) -> f64 {
+        if !(0.0..=1.0).contains(&q) {
+            return f64::NAN;
+        }
+        if q == 0.0 {
+            return f64::INFINITY;
+        }
+        if q == 1.0 {
+            return 0.0;
+        }
+        // No closed-form inverse. The trait default routes ppf(1−q), inverting
+        // the cdf where it is flat (≈1) near the right tail — ill-conditioned,
+        // ~1.9e-6 off scipy at q=1e-12. Invert the steep, accurate sf instead
+        // (sf well away from 0/1 there), then Newton-polish. frankenscipy-d2gag
+        let mut x = isf_bisection(|v| self.sf(v), q, self.mean(), self.std());
+        for _ in 0..8 {
+            let err = self.sf(x) - q;
+            if err.abs() < 1e-14 {
+                break;
+            }
+            let dx = self.pdf(x);
+            if dx > 1e-30 {
+                // sf decreasing: d(sf)/dx = −pdf, so x += err/pdf.
+                x = (x + err / dx).max(0.0);
+            }
+        }
+        x
     }
 
     fn skewness(&self) -> f64 {
@@ -12350,6 +12585,16 @@ impl ContinuousDistribution for Nakagami {
             return f64::NAN;
         }
         (fsci_special::gammaincinv_scalar(self.nu, q) / self.nu).sqrt()
+    }
+
+    fn isf(&self, q: f64) -> f64 {
+        // sf(x)=Q(ν, ν·x²)=q ⇒ x=sqrt(gammainccinv(ν,q)/ν). The trait default
+        // ppf(1−q)→gammaincinv near 1 is ill-conditioned (isf(1e-12) was ~8.5e-6
+        // off scipy); gammainccinv is well-conditioned. frankenscipy-d2gag
+        if !(0.0..=1.0).contains(&q) {
+            return f64::NAN;
+        }
+        (fsci_special::gammainccinv_scalar(self.nu, q) / self.nu).sqrt()
     }
 
     fn logcdf(&self, x: f64) -> f64 {
@@ -16088,6 +16333,16 @@ impl ContinuousDistribution for Gompertz {
         a.ln_1p()
     }
 
+    fn isf(&self, q: f64) -> f64 {
+        // sf(x)=exp(−c·(e^x−1))=q ⇒ x=ln(1 − ln q / c)=ln_1p(−ln q / c). The
+        // trait default ppf(1−q) cancels 1−q for small q (isf(1e-12) was ~2.6e-7
+        // off scipy). Matches scipy.stats.gompertz.isf. frankenscipy-d2gag
+        if !(0.0..=1.0).contains(&q) {
+            return f64::NAN;
+        }
+        (-q.ln() / self.c).ln_1p()
+    }
+
     fn sf(&self, x: f64) -> f64 {
         // Closed-form survival exp(−c(eˣ−1)) — the default 1−cdf returned 0 in
         // the tail (gompertz.sf(5,1) scipy 9.5e-65). frankenscipy-8y248
@@ -16353,7 +16608,12 @@ impl ContinuousDistribution for GenLogistic {
         if q == 1.0 {
             return f64::INFINITY;
         }
-        -(q.powf(-1.0 / self.c) - 1.0).ln()
+        // x = -ln(q^(-1/c) − 1). The naive q.powf(-1/c) − 1 cancels for q→1
+        // (q^(-1/c) ≈ 1), so isf(q)=ppf(1−q) lost precision in the right tail
+        // (~3.9e-6 off scipy at q=1e-12). q^(-1/c) − 1 = expm1(−ln(q)/c) is exact;
+        // this matches scipy.stats.genlogistic.ppf (and isf via ppf(1−q))
+        // bit-for-bit. frankenscipy-d2gag
+        -((-q.ln() / self.c).exp_m1()).ln()
     }
 
     fn mean(&self) -> f64 {
@@ -18392,16 +18652,31 @@ impl ContinuousDistribution for GenNorm {
     }
 
     fn ppf(&self, q: f64) -> f64 {
-        // |x|^β = gammaincinv(1/β, |2q−1|), sign from q≷½; direct inverse. frankenscipy-ld94y
+        // |x|^β = gammaincinv(1/β, |2q−1|), sign from q≷½. frankenscipy-ld94y
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
         }
         let b = self.beta;
+        // Use the gammainccinv reflection (gammaincinv(a,1−y)=gammainccinv(a,y))
+        // so the tail argument stays small: gammaincinv(1/β, 1−2q) near 1 is
+        // ill-conditioned and disagreed with scipy by ~7.8e-7 at q=1e-12.
+        // gammainccinv(1/β, 2·min(q,1−q)) is well-conditioned and matches
+        // scipy.stats.gennorm.ppf bit-for-bit. frankenscipy-d2gag
         if q >= 0.5 {
-            fsci_special::gammaincinv_scalar(1.0 / b, 2.0 * q - 1.0).powf(1.0 / b)
+            fsci_special::gammainccinv_scalar(1.0 / b, 2.0 * (1.0 - q)).powf(1.0 / b)
         } else {
-            -fsci_special::gammaincinv_scalar(1.0 / b, 1.0 - 2.0 * q).powf(1.0 / b)
+            -fsci_special::gammainccinv_scalar(1.0 / b, 2.0 * q).powf(1.0 / b)
         }
+    }
+
+    fn isf(&self, q: f64) -> f64 {
+        // GenNorm is symmetric about 0: isf(q)=ppf(1−q)=−ppf(q). Routing through
+        // −ppf(q) avoids the 1−q cancellation; matches scipy.stats.gennorm.isf
+        // bit-for-bit. frankenscipy-d2gag
+        if !(0.0..=1.0).contains(&q) {
+            return f64::NAN;
+        }
+        -self.ppf(q)
     }
 
     fn sf(&self, x: f64) -> f64 {
@@ -48584,15 +48859,29 @@ mod tests {
 
     #[test]
     fn isf_common_range_unchanged_from_ppf() {
-        // For q where 1 - q is representable, isf must remain byte-identical to
-        // the historical ppf(1 - q) route (no regression on tested cases).
+        // Normal isf now uses the symmetric −ndtri(q) form (matching
+        // scipy.stats.norm.isf), which is NOT byte-identical to ppf(1−q): the
+        // trait default forms 1−q first and ndtri near 1 is ill-conditioned, so
+        // the two differ by a few ULPs (and ppf(1−q) was ~4.4e-7 off scipy at
+        // q=1e-12). Assert scipy golden isf values instead of self-consistency.
         let n = Normal::new(0.0, 1.0);
-        for &q in &[1e-6, 1e-3, 0.1, 0.5, 0.9, 0.999, 0.999_999] {
-            assert_eq!(
-                n.isf(q).to_bits(),
-                n.ppf(1.0 - q).to_bits(),
-                "norm isf({q})"
-            );
+        let norm_isf_golden = [
+            (1e-6, 4.753424308822899),
+            (1e-3, 3.090232306167813),
+            (0.1, 1.2815515655446004),
+            (0.5, 0.0),
+            (0.9, -1.2815515655446004),
+            (0.999, -3.090232306167813),
+            (0.999_999, -4.753424308817087),
+        ];
+        for &(q, golden) in &norm_isf_golden {
+            let got = n.isf(q);
+            let rel = if golden == 0.0 {
+                got.abs()
+            } else {
+                (got - golden).abs() / golden.abs()
+            };
+            assert!(rel < 1e-12, "norm isf({q}) = {got} vs scipy {golden} (rel {rel:.3e})");
         }
         // Gamma isf delegates to gammainccinv (matching scipy.stats.gamma.isf),
         // which is NOT byte-identical to ppf(1-q) — scipy itself differs here by
