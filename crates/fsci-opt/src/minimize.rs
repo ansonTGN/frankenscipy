@@ -2882,7 +2882,14 @@ where
     let maxfev = options.maxfev.unwrap_or((2000 * n).max(400));
     let mut objective = Objective::new(fun, options.mode, maxfev);
 
+    // TNC is a *bound-constrained* truncated-Newton method: honour options.bounds.
+    // Previously bounds were ignored entirely, so TNC returned the unconstrained
+    // optimum (e.g. [3,3] for a [0,2]² box instead of [2,2]).
+    let bounds = options.bounds;
     let mut x = x0.to_vec();
+    if let Some(b) = bounds {
+        project_onto_bounds(&mut x, b);
+    }
     let mut f = objective.eval(&x)?;
     let mut njev = 0usize;
 
@@ -2897,7 +2904,12 @@ where
     }
 
     for iteration in 0..maxiter {
-        let grad_norm = l2_norm(&grad);
+        let proj_grad = if let Some(b) = bounds {
+            projected_gradient(&x, &grad, b)
+        } else {
+            grad.clone()
+        };
+        let grad_norm = l2_norm(&proj_grad);
         if grad_norm < tol {
             log_completion(
                 OptimizeMethod::Tnc,
@@ -2937,31 +2949,55 @@ where
         let direction = conjugate_gradient_solve(&hess_approx, &grad, tol, n.min(50));
         let direction: Vec<f64> = direction.iter().map(|d| -d).collect();
 
-        let search = match armijo_backtracking(&mut objective, &x, f, &grad, &direction) {
-            Ok(Some(value)) => value,
-            Ok(None) => {
-                return Ok(OptimizeResult {
-                    x,
-                    fun: Some(f),
-                    success: false,
-                    status: ConvergenceStatus::PrecisionLoss,
-                    message: String::from("line search failed"),
-                    nfev: objective.nfev,
-                    njev,
-                    nhev: 0,
-                    nit: iteration,
-                    jac: Some(grad),
-                    hess_inv: None,
-                    maxcv: None,
-                });
+        // Bound-projected backtracking line search. With bounds present each trial
+        // point is clipped into the box, so the accepted step (and thus x) always
+        // stays feasible; the Armijo test uses the *actual* (post-projection) step.
+        let (x_new, f_new, s) = {
+            let mut alpha = 1.0;
+            let mut accepted: Option<(Vec<f64>, f64, Vec<f64>)> = None;
+            for _ in 0..30 {
+                let mut cand: Vec<f64> = x
+                    .iter()
+                    .zip(direction.iter())
+                    .map(|(xi, di)| xi + alpha * di)
+                    .collect();
+                if let Some(b) = bounds {
+                    project_onto_bounds(&mut cand, b);
+                }
+                let step: Vec<f64> = cand.iter().zip(x.iter()).map(|(c, xi)| c - xi).collect();
+                let fv = objective.eval(&cand)?;
+                let dd = dot(&grad, &step);
+                if fv <= f + 1.0e-4 * dd {
+                    accepted = Some((cand, fv, step));
+                    break;
+                }
+                alpha *= 0.5;
+                if alpha < 1.0e-12 {
+                    break;
+                }
             }
-            Err(e) => return Ok(result_from_error(&x, iteration, objective.nfev, njev, e)),
+            match accepted {
+                Some(t) => t,
+                None => {
+                    // No feasible decrease found; the bound-constrained optimum is
+                    // already handled by the projected-gradient check at loop top.
+                    return Ok(OptimizeResult {
+                        x,
+                        fun: Some(f),
+                        success: false,
+                        status: ConvergenceStatus::PrecisionLoss,
+                        message: String::from("line search failed"),
+                        nfev: objective.nfev,
+                        njev,
+                        nhev: 0,
+                        nit: iteration,
+                        jac: Some(grad),
+                        hess_inv: None,
+                        maxcv: None,
+                    });
+                }
+            }
         };
-
-        let alpha = search.alpha;
-        let f_new = search.f;
-        let s: Vec<f64> = direction.iter().map(|d| alpha * d).collect();
-        let x_new: Vec<f64> = x.iter().zip(s.iter()).map(|(xi, si)| xi + si).collect();
 
         let grad_new = match finite_diff_gradient(&mut objective, &x_new, options.gradient_eps) {
             Ok(v) => {
@@ -5325,6 +5361,39 @@ mod tests {
             result.fun.is_some_and(|v| v < 1e-5),
             "tnc f={:?} should be ~0",
             result.fun
+        );
+    }
+
+    #[test]
+    fn tnc_respects_box_bounds() {
+        // (x-3)² + (y-3)² with x,y ∈ [0,2] → constrained optimum at [2,2] (f=2).
+        // TNC previously ignored bounds and returned the unconstrained [3,3].
+        static BOUNDS: [(Option<f64>, Option<f64>); 2] =
+            [(Some(0.0), Some(2.0)), (Some(0.0), Some(2.0))];
+        let f = |x: &[f64]| (x[0] - 3.0).powi(2) + (x[1] - 3.0).powi(2);
+        let options = MinimizeOptions {
+            method: Some(OptimizeMethod::Tnc),
+            tol: Some(1e-8),
+            maxiter: Some(500),
+            bounds: Some(&BOUNDS),
+            ..MinimizeOptions::default()
+        };
+        let result = tnc(&f, &[0.0, 0.0], options).expect("tnc run");
+        assert!(
+            result.success,
+            "tnc bounded should converge: {}",
+            result.message
+        );
+        assert!(
+            (result.x[0] - 2.0).abs() < 1e-4 && (result.x[1] - 2.0).abs() < 1e-4,
+            "tnc must stay within bounds at [2,2], got {:?}",
+            result.x
+        );
+        // Feasibility: every component within the box.
+        assert!(
+            result.x.iter().all(|&v| (0.0..=2.0).contains(&v)),
+            "tnc returned an out-of-bounds point: {:?}",
+            result.x
         );
     }
 
