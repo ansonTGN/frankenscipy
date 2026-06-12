@@ -6963,7 +6963,22 @@ impl DiscreteDistribution for Skellam {
     }
 
     fn entropy(&self) -> f64 {
-        f64::NAN
+        // Skellam has no closed-form entropy; scipy evaluates it numerically
+        // over the (bi-infinite) integer support. Sum −Σ p·ln(p) across the same
+        // window the cdf uses (mean ± 12σ ± 40), which captures the support to
+        // machine precision. frankenscipy-3zent
+        let mean = self.mu1 - self.mu2;
+        let std = (self.mu1 + self.mu2).sqrt();
+        let lo = (mean - 12.0 * std - 40.0).floor() as i64;
+        let hi = (mean + 12.0 * std + 40.0).ceil() as i64;
+        let mut acc = 0.0_f64;
+        for j in lo..=hi {
+            let p = self.pmf_signed(j);
+            if p > 0.0 {
+                acc -= p * p.ln();
+            }
+        }
+        acc
     }
 }
 
