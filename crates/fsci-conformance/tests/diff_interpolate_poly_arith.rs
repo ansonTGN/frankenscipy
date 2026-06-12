@@ -32,9 +32,9 @@ struct PointCase {
     /// For pade: ignored.
     /// For ratval: q (LOW-FIRST denominator).
     b: Vec<f64>,
-    /// For pade: m (numerator degree). For ratval: ignored.
+    /// For pade: m (denominator order, scipy convention). For ratval: ignored.
     m: usize,
-    /// For pade: n (denominator degree). For ratval: x.
+    /// For pade: n (numerator order, scipy convention). For ratval: x.
     n: usize,
     x: f64,
 }
@@ -48,10 +48,10 @@ struct OracleQuery {
 struct PointArm {
     case_id: String,
     /// For polyadd/polysub: result vector (HIGH-FIRST).
-    /// For pade: numerator coeffs (LOW-FIRST, length m+1).
+    /// For pade: numerator coeffs (LOW-FIRST, length n+1).
     /// For ratval: not used.
     vec_value: Option<Vec<f64>>,
-    /// For pade: denominator coeffs (LOW-FIRST, length n+1).
+    /// For pade: denominator coeffs (LOW-FIRST, length m+1).
     /// For ratval: scalar value.
     aux_vec: Option<Vec<f64>>,
     scalar_value: Option<f64>,
@@ -139,12 +139,15 @@ fn generate_query() -> OracleQuery {
             2,
             2,
         ),
-        // sin(x) ≈ x - x³/6 + x⁵/120  →  pade(3,2)
+        // sin(x) ≈ x - x³/6 + x⁵/120. scipy.pade(an, m, n) uses m=denominator
+        // order, n=numerator order; request the [num=3/denom=2] approximant as
+        // (m=2, n=3). The previous (3,2) asked scipy for [num=2/denom=3], which is
+        // singular for a series with a0=0 and crashed the oracle.
         (
-            "sin_3_2",
+            "sin_2_3",
             vec![0.0, 1.0, 0.0, -1.0 / 6.0, 0.0, 1.0 / 120.0],
-            3,
             2,
+            3,
         ),
     ];
     for (name, taylor, m, n) in pade_cases {

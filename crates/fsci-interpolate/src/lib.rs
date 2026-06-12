@@ -4150,7 +4150,10 @@ pub fn sproot(tck: &(Vec<f64>, Vec<f64>, usize)) -> Result<Vec<f64>, InterpError
     // polynomial. Recover that cubic from a Taylor expansion at the left
     // knot and solve it exactly, instead of scanning a fixed grid (which
     // misses closely spaced roots and double-counts roots near knots).
-    let n_coeff = c.len(); // == t.len() - k - 1 for the tight BSpline tck
+    // The real coefficient count is t.len()-k-1; derive it from the knots rather
+    // than c.len() so a scipy-style padded tck (len(c)==len(t)) does not push the
+    // interval loop and the `t[n_coeff]` access out of bounds.
+    let n_coeff = t.len() - k - 1;
     let mut roots: Vec<f64> = Vec::new();
     for l in *k..n_coeff {
         let a = t[l];
@@ -4388,13 +4391,12 @@ fn solve_normal(a: &[Vec<f64>], b: &[f64]) -> Result<Vec<f64>, InterpError> {
     Ok(x)
 }
 
-/// Padé approximation: compute rational function p(x)/q(x) coefficients
-/// from a Taylor series.
+/// Padé approximation: compute rational function `p(x)/q(x)` coefficients from a
+/// Taylor series, matching `scipy.interpolate.pade(an, m, n)`.
 ///
-/// Given Taylor coefficients [a0, a1, ..., a_{m+n}], returns (p_coeffs, q_coeffs)
-/// of degrees m and n respectively such that p(x)/q(x) ≈ Σ a_k x^k.
-///
-/// Matches `scipy.interpolate.pade`.
+/// Following scipy's argument convention, `m` is the order of the **denominator**
+/// `q` and `n` is the order of the **numerator** `p` (so `p(x)/q(x) ≈ Σ a_k x^k`).
+/// Returns `(p_coeffs, q_coeffs)` low-first, of lengths `n+1` and `m+1`.
 pub fn pade(
     taylor_coeffs: &[f64],
     m: usize,
@@ -4406,6 +4408,11 @@ pub fn pade(
             actual: taylor_coeffs.len(),
         });
     }
+
+    // scipy: m = denominator order, n = numerator order. The solver below builds
+    // the numerator of degree `m` and denominator of degree `n` (its own internal
+    // convention), so swap to honour scipy's argument order.
+    let (m, n) = (n, m);
 
     // Solve for q coefficients from the system:
     // Σ_{j=0}^{n} q_j * a_{m+1+i-j} = 0 for i = 0..n-1 (with q_0 = 1)
