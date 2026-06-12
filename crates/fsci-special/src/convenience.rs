@@ -5704,29 +5704,53 @@ pub fn sindg(x: f64) -> f64 {
     if sign < 0.0 { -y } else { y }
 }
 
+/// Cephes `tancot`: tangent (`cotflg=false`) or cotangent (`cotflg=true`)
+/// of an angle in degrees, via exact modulo-180 octant reduction.
+///
+/// Mirrors `scipy/special/cephes/tandg.c` so the only floating-point rounding
+/// is the final `tan` over the reduced argument in `[0, 90)`, matching scipy
+/// bit-for-bit on the same libm. The naive `(x*pi/180).tan()` lost up to
+/// ~1000 ULP because the degrees→radians scaling amplified the argument error.
+fn degtrig_tancot(xx: f64, cotflg: bool) -> f64 {
+    if xx.is_nan() {
+        return f64::NAN;
+    }
+    let mut sign = if xx < 0.0 { -1.0_f64 } else { 1.0_f64 };
+    let mut x = xx.abs();
+    if x > DEGTRIG_LOSSTH {
+        return 0.0;
+    }
+    // Reduce modulo 180 degrees (tan/cot have period 180).
+    x -= 180.0 * (x / 180.0).floor();
+    if cotflg {
+        if x <= 90.0 {
+            x = 90.0 - x;
+        } else {
+            x -= 90.0;
+            sign = -sign;
+        }
+    } else if x > 90.0 {
+        x = 180.0 - x;
+        sign = -sign;
+    }
+    // x is now folded into [0, 90]; the endpoints are exact.
+    if x == 0.0 {
+        return 0.0;
+    } else if x == 45.0 {
+        return sign;
+    } else if x == 90.0 {
+        // Singularity: scipy returns +inf regardless of the original sign.
+        return f64::INFINITY;
+    }
+    sign * (x * DEGTRIG_PI180).tan()
+}
+
 /// Tangent of angle given in degrees.
 ///
 /// Matches `scipy.special.tandg(x)`.
 #[must_use]
 pub fn tandg(x: f64) -> f64 {
-    if x.is_nan() {
-        return f64::NAN;
-    }
-    // Handle exact values for common angles
-    let x_mod = x.rem_euclid(180.0);
-    if x_mod == 0.0 {
-        return 0.0;
-    }
-    if x_mod == 90.0 {
-        return f64::INFINITY;
-    }
-    if x_mod == 45.0 {
-        return 1.0;
-    }
-    if x_mod == 135.0 {
-        return -1.0;
-    }
-    (x * std::f64::consts::PI / 180.0).tan()
+    degtrig_tancot(x, false)
 }
 
 /// Cotangent of angle given in degrees.
@@ -5734,24 +5758,7 @@ pub fn tandg(x: f64) -> f64 {
 /// Matches `scipy.special.cotdg(x)`.
 #[must_use]
 pub fn cotdg(x: f64) -> f64 {
-    if x.is_nan() {
-        return f64::NAN;
-    }
-    // Handle exact values for common angles
-    let x_mod = x.rem_euclid(180.0);
-    if x_mod == 0.0 {
-        return f64::INFINITY;
-    }
-    if x_mod == 90.0 {
-        return 0.0;
-    }
-    if x_mod == 45.0 {
-        return 1.0;
-    }
-    if x_mod == 135.0 {
-        return -1.0;
-    }
-    1.0 / (x * std::f64::consts::PI / 180.0).tan()
+    degtrig_tancot(x, true)
 }
 
 /// Convert angle from degrees to radians.
