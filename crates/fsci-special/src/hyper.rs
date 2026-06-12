@@ -2708,6 +2708,22 @@ pub fn pbdv(v: f64, x: f64) -> (f64, f64) {
 /// (the `sin`/`cos`·`rgamma` products stay finite).
 fn parabolic_cylinder_v(v: f64, x: f64) -> f64 {
     use std::f64::consts::{PI, SQRT_2};
+    // For x < 0 the Kummer-M form below catastrophically cancels: its two M-terms
+    // are nearly equal and opposite, so for large |x| all accuracy is lost (the
+    // true V is ~1e-11 at x=-10 while each term is ~1e19). SciPy's specfun PBVV is
+    // itself wrong there (verified vs mpmath). Use the cancellation-free
+    // D-connection V_v(x) = (Γ(-v)/π)(D_v(-x) − cos(πv) D_v(x)) built from the
+    // accurate parabolic_cylinder_d; cospi gives an exact 0 at half-integer v, so
+    // no spurious cos(πv)·D_v(x) term survives. Non-negative integer v hits the
+    // Γ(-v) pole and stays on the M-form. ~1e-11 vs mpmath. frankenscipy.
+    if x < 0.0 && !(v >= 0.0 && v.fract() == 0.0) {
+        let gamma_neg_v =
+            1.0 / crate::gamma::rgamma_scalar(-v, RuntimeMode::Strict).unwrap_or(f64::NAN);
+        let cos_pi_v = crate::convenience::cospi(v);
+        let d_neg_x = parabolic_cylinder_d(v, -x);
+        let d_x = parabolic_cylinder_d(v, x);
+        return gamma_neg_v / PI * (d_neg_x - cos_pi_v * d_x);
+    }
     let z = x * x / 2.0;
     let two_neg_v = 2.0_f64.powf(-v);
     let p = -two_neg_v
