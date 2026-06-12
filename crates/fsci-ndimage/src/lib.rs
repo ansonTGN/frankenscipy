@@ -482,12 +482,11 @@ fn wrap_interpolation_index(idx: i64, len: usize) -> usize {
     if len <= 1 {
         return 0;
     }
+    // scipy `mode='wrap'` has period len-1 (the endpoints are identified), so the
+    // last index len-1 maps to 0. Wrap with period len-1 for every index — the
+    // previous in-range short-circuit wrongly returned len-1 unchanged.
     let period = (len - 1) as i64;
-    if (0..len as i64).contains(&idx) {
-        idx as usize
-    } else {
-        idx.rem_euclid(period) as usize
-    }
+    idx.rem_euclid(period) as usize
 }
 
 fn fold_wrap_cubic_index(idx: isize, max: usize) -> usize {
@@ -852,17 +851,31 @@ fn sample_interpolated(
     cval: f64,
 ) -> f64 {
     if order == 0 {
+        // scipy rounds the (unmapped) coordinate via floor(coord + 0.5) — half
+        // toward +∞, which differs from Rust's round() at negative half-integers.
+        let round0 = |c: f64| (c + 0.5).floor() as i64;
+        if mode == BoundaryMode::Constant {
+            // scipy applies 'constant' on the FLOAT coordinate: a point outside
+            // [0, len-1] is out of range (→ cval) even if it would round back to a
+            // valid index (e.g. coord 4.3 with len 5 rounds to 4 but is outside).
+            for (axis, &coord) in coords.iter().enumerate() {
+                let hi = (input.shape[axis] as f64) - 1.0;
+                if coord < 0.0 || coord > hi {
+                    return cval;
+                }
+            }
+            let idx: Vec<i64> = coords.iter().map(|&c| round0(c)).collect();
+            return input.get_boundary(&idx, mode, cval);
+        }
         if mode == BoundaryMode::Wrap {
             let idx: Vec<usize> = coords
                 .iter()
                 .enumerate()
-                .map(|(axis, coord)| {
-                    wrap_interpolation_index(coord.round() as i64, input.shape[axis])
-                })
+                .map(|(axis, &coord)| wrap_interpolation_index(round0(coord), input.shape[axis]))
                 .collect();
             return input.get(&idx);
         }
-        let idx: Vec<i64> = coords.iter().map(|coord| coord.round() as i64).collect();
+        let idx: Vec<i64> = coords.iter().map(|&coord| round0(coord)).collect();
         return input.get_boundary(&idx, mode, cval);
     }
 
@@ -7658,6 +7671,24 @@ fn compute_structure_offsets(struct_shape: &[usize], struct_data: &[f64]) -> Vec
 mod tests {
     use super::*;
 
+    #[test]
+    fn shift_order0_boundary_matches_scipy() {
+        // Golden values from scipy.ndimage.shift(order=0). order-0 uses
+        // floor(coord+0.5) rounding, applies 'constant' on the FLOAT coordinate
+        // (out of [0,len-1] → cval), and 'wrap' with period len-1.
+        let img = NdArray::new(vec![0.0, 1.0, 2.0, 3.0, 4.0], vec![5]).unwrap();
+        // constant cval=-9, shift -1.3: src 4.3/5.3 are outside [0,4] → cval, even
+        // though 4.3 rounds to the valid index 4.
+        let c = shift(&img, &[-1.3], 0, BoundaryMode::Constant, -9.0).unwrap();
+        assert_eq!(c.data, vec![1.0, 2.0, 3.0, -9.0, -9.0]);
+        // wrap, shift -1.3: index 4 (=len-1) wraps to 0; index 5 wraps to 1.
+        let w = shift(&img, &[-1.3], 0, BoundaryMode::Wrap, 0.0).unwrap();
+        assert_eq!(w.data, vec![1.0, 2.0, 3.0, 0.0, 1.0]);
+        // shift +0.5: src -0.5 < 0 → cval; src 0.5 → floor(1.0)=1 (half toward +∞).
+        let h = shift(&img, &[0.5], 0, BoundaryMode::Constant, -9.0).unwrap();
+        assert_eq!(h.data, vec![-9.0, 1.0, 2.0, 3.0, 4.0]);
+    }
+
     /// The multithreaded separable filters must be BIT-IDENTICAL to the sequential
     /// pixel-by-pixel computation. Uses an image large enough to cross the parallel
     /// gate and compares `correlate1d_with_origin` to a verbatim sequential loop.
@@ -8103,14 +8134,21 @@ mod tests {
 
         let g = gaussian_filter1d(&input, 1.0, 0, 0, m, 0.0).unwrap();
         let g_ref = [
-            1.861607317776, 2.526828635116, 4.039436351458, 5.108236282683, 5.599415285308,
-            6.377488592219, 6.612007542601, 6.611567303452,
+            1.861607317776,
+            2.526828635116,
+            4.039436351458,
+            5.108236282683,
+            5.599415285308,
+            6.377488592219,
+            6.612007542601,
+            6.611567303452,
         ];
         for (a, b) in g.data.iter().zip(g_ref.iter()) {
             assert!((a - b).abs() < 1e-9, "gaussian mirror {a} vs {b}");
         }
 
-        let mc = map_coordinates(&input, &[vec![-0.7, 0.5, 2.3, 5.5, 7.9, 9.0]], 1, m, 0.0).unwrap();
+        let mc =
+            map_coordinates(&input, &[vec![-0.7, 0.5, 2.3, 5.5, 7.9, 9.0]], 1, m, 0.0).unwrap();
         let mc_ref = [1.7, 1.5, 4.9, 7.0, 5.3, 9.0];
         for (a, b) in mc.iter().zip(mc_ref.iter()) {
             assert!((a - b).abs() < 1e-9, "map_coordinates mirror {a} vs {b}");
@@ -8127,7 +8165,10 @@ mod tests {
             4.996_015_802_129_852,
         ];
         for (a, b) in mc3.iter().zip(mc3_ref.iter()) {
-            assert!((a - b).abs() < 1e-9, "map_coordinates mirror order3 {a} vs {b}");
+            assert!(
+                (a - b).abs() < 1e-9,
+                "map_coordinates mirror order3 {a} vs {b}"
+            );
         }
         // An axis too short for the order's stencil still fails closed.
         let short = NdArray::new(vec![1.0, 2.0, 3.0], vec![3]).unwrap();
