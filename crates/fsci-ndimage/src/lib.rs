@@ -1969,34 +1969,61 @@ pub fn median_filter_with_origins(
 /// neighbourhood values (with the same boundary/origin handling) and return the
 /// `rank`-th order statistic via `select_total_rank`. Pure read over `input`.
 #[allow(clippy::too_many_arguments)]
-fn rank_filter_pixel(
-    flat_out: usize,
+/// Reference old per-pixel rank-filter path (alloc-per-element gather), retained for the
+/// same-process A/B benchmark and byte-identity proof only.
+#[doc(hidden)]
+pub fn rank_filter_perpixel_ref(
     input: &NdArray,
-    ndim: usize,
-    kernel_total: usize,
-    kernel_strides: &[usize],
-    offsets: &[i64],
-    origins: &[i64],
+    size: usize,
+    rank: usize,
     mode: BoundaryMode,
     cval: f64,
-    rank: usize,
-) -> f64 {
-    let out_idx = input.unravel(flat_out);
-    let mut neighborhood = Vec::with_capacity(kernel_total);
-    for flat_k in 0..kernel_total {
-        let mut k_idx = vec![0usize; ndim];
-        let mut rem = flat_k;
-        for d in 0..ndim {
-            k_idx[d] = rem / kernel_strides[d];
-            rem %= kernel_strides[d];
+) -> NdArray {
+    let ndim = input.ndim();
+    let offsets: Vec<i64> = vec![size as i64 / 2; ndim];
+    let kernel_shape: Vec<usize> = vec![size; ndim];
+    let kernel_total: usize = kernel_shape.iter().product();
+    let kernel_strides = compute_strides(&kernel_shape);
+    let mut output = NdArray::zeros(input.shape.clone());
+    let n = input.size();
+    let pixel = |flat_out: usize| -> f64 {
+        let out_idx = input.unravel(flat_out);
+        let mut neighborhood = Vec::with_capacity(kernel_total);
+        for flat_k in 0..kernel_total {
+            let mut k_idx = vec![0usize; ndim];
+            let mut rem = flat_k;
+            for d in 0..ndim {
+                k_idx[d] = rem / kernel_strides[d];
+                rem %= kernel_strides[d];
+            }
+            let mut in_idx = vec![0i64; ndim];
+            for d in 0..ndim {
+                in_idx[d] = out_idx[d] as i64 + k_idx[d] as i64 - offsets[d];
+            }
+            neighborhood.push(input.get_boundary(&in_idx, mode, cval));
         }
-        let mut in_idx = vec![0i64; ndim];
-        for d in 0..ndim {
-            in_idx[d] = out_idx[d] as i64 + k_idx[d] as i64 - offsets[d] - origins[d];
+        select_total_rank(&mut neighborhood, rank)
+    };
+    // Parallel like the old fill_rank_filter, so the A/B measures the alloc-reduction only.
+    let nthreads = ndimage_filter_thread_count(n, kernel_total);
+    if nthreads <= 1 {
+        for (flat_out, slot) in output.data.iter_mut().enumerate() {
+            *slot = pixel(flat_out);
         }
-        neighborhood.push(input.get_boundary(&in_idx, mode, cval));
+    } else {
+        let chunk = n.div_ceil(nthreads);
+        let pixel = &pixel;
+        std::thread::scope(|scope| {
+            for (t, oc) in output.data.chunks_mut(chunk).enumerate() {
+                scope.spawn(move || {
+                    for (li, slot) in oc.iter_mut().enumerate() {
+                        *slot = pixel(t * chunk + li);
+                    }
+                });
+            }
+        });
     }
-    select_total_rank(&mut neighborhood, rank)
+    output
 }
 
 /// Worker count for a parallel rank/median filter: 1 (sequential) unless the total
@@ -2065,44 +2092,82 @@ fn fill_rank_filter(
     rank: usize,
 ) {
     let n = input.size();
+    let shape = &input.shape;
+    let strides = &input.strides;
+    // Precompute each footprint element's per-dim index delta + flat delta ONCE (the old
+    // path re-derived k_idx and allocated k_idx + in_idx Vecs PER element PER pixel).
+    let mut tap_delta: Vec<Vec<i64>> = Vec::with_capacity(kernel_total);
+    for flat_k in 0..kernel_total {
+        let mut rem = flat_k;
+        let mut delta = vec![0i64; ndim];
+        for d in 0..ndim {
+            let k = (rem / kernel_strides[d]) as i64;
+            rem %= kernel_strides[d];
+            delta[d] = k - offsets[d] - origins[d];
+        }
+        tap_delta.push(delta);
+    }
+    let tap_flat: Vec<i64> = tap_delta
+        .iter()
+        .map(|d| (0..ndim).map(|i| d[i] * strides[i] as i64).sum())
+        .collect();
+    // Interior box [lo[d], hi[d)): every footprint element stays in-bounds along dim d.
+    let mut lo = vec![0i64; ndim];
+    let mut hi: Vec<i64> = shape.iter().map(|&s| s as i64).collect();
+    for d in 0..ndim {
+        let mut mn = 0i64;
+        let mut mx = 0i64;
+        for t in &tap_delta {
+            mn = mn.min(t[d]);
+            mx = mx.max(t[d]);
+        }
+        lo[d] = -mn;
+        hi[d] = shape[d] as i64 - mx;
+    }
+    // Per pixel: gather the footprint (interior → direct flat gather, no boundary/allocs;
+    // border → get_boundary) into a reused buffer in the same flat_k order, then rank-select.
+    // Byte-identical to the old per-pixel loop (same gather order, same select_total_rank).
+    let work = |start: usize, os: &mut [f64]| {
+        let mut out_idx = vec![0i64; ndim];
+        let mut in_idx = vec![0i64; ndim];
+        let mut nb = vec![0.0f64; kernel_total];
+        for (li, slot) in os.iter_mut().enumerate() {
+            let p = start + li;
+            let mut rem = p;
+            let mut interior = true;
+            for d in 0..ndim {
+                let c = (rem / strides[d]) as i64;
+                rem %= strides[d];
+                out_idx[d] = c;
+                if c < lo[d] || c >= hi[d] {
+                    interior = false;
+                }
+            }
+            if interior {
+                for (k, slot) in nb.iter_mut().enumerate() {
+                    *slot = input.data[(p as i64 + tap_flat[k]) as usize];
+                }
+            } else {
+                for (k, slot) in nb.iter_mut().enumerate() {
+                    for d in 0..ndim {
+                        in_idx[d] = out_idx[d] + tap_delta[k][d];
+                    }
+                    *slot = input.get_boundary(&in_idx, mode, cval);
+                }
+            }
+            *slot = select_total_rank(&mut nb, rank);
+        }
+    };
     let nthreads = ndimage_filter_thread_count(n, kernel_total);
     if nthreads <= 1 {
-        for (flat_out, slot) in output.data.iter_mut().enumerate() {
-            *slot = rank_filter_pixel(
-                flat_out,
-                input,
-                ndim,
-                kernel_total,
-                kernel_strides,
-                offsets,
-                origins,
-                mode,
-                cval,
-                rank,
-            );
-        }
+        work(0, &mut output.data);
         return;
     }
     let chunk = n.div_ceil(nthreads);
+    let work = &work;
     std::thread::scope(|scope| {
         for (t, out_chunk) in output.data.chunks_mut(chunk).enumerate() {
-            let start = t * chunk;
-            scope.spawn(move || {
-                for (li, slot) in out_chunk.iter_mut().enumerate() {
-                    *slot = rank_filter_pixel(
-                        start + li,
-                        input,
-                        ndim,
-                        kernel_total,
-                        kernel_strides,
-                        offsets,
-                        origins,
-                        mode,
-                        cval,
-                        rank,
-                    );
-                }
-            });
+            scope.spawn(move || work(t * chunk, out_chunk));
         }
     });
 }
