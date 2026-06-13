@@ -1,3 +1,4 @@
+#![feature(portable_simd)]
 #![forbid(unsafe_code)]
 
 //! Spatial data structures and algorithms for FrankenSciPy.
@@ -80,19 +81,40 @@ fn sparse_error_to_spatial(err: impl std::fmt::Display) -> SpatialError {
 
 /// Euclidean distance between two points.
 pub fn euclidean(a: &[f64], b: &[f64]) -> f64 {
-    a.iter()
-        .zip(b.iter())
-        .map(|(ai, bi)| (ai - bi) * (ai - bi))
-        .sum::<f64>()
-        .sqrt()
+    sqeuclidean(a, b).sqrt()
 }
 
-/// Squared Euclidean distance (avoids sqrt for comparisons).
+/// Squared Euclidean distance (avoids sqrt for comparisons). The reduction
+/// `Σ (aᵢ-bᵢ)²` runs as two 8-wide SIMD accumulators (the scalar `.sum()` fold is
+/// not auto-vectorized), with a scalar tail — the dominant inner kernel of
+/// `cdist`/`pdist`/nearest-neighbour searches.
 pub fn sqeuclidean(a: &[f64], b: &[f64]) -> f64 {
-    a.iter()
-        .zip(b.iter())
-        .map(|(ai, bi)| (ai - bi) * (ai - bi))
-        .sum()
+    use std::simd::{Simd, num::SimdFloat};
+    const L: usize = 8;
+    let n = a.len().min(b.len());
+    let mut acc0 = Simd::<f64, L>::splat(0.0);
+    let mut acc1 = Simd::<f64, L>::splat(0.0);
+    let mut i = 0;
+    while i + 2 * L <= n {
+        let d0 = Simd::<f64, L>::from_slice(&a[i..i + L]) - Simd::from_slice(&b[i..i + L]);
+        let d1 = Simd::<f64, L>::from_slice(&a[i + L..i + 2 * L])
+            - Simd::from_slice(&b[i + L..i + 2 * L]);
+        acc0 += d0 * d0;
+        acc1 += d1 * d1;
+        i += 2 * L;
+    }
+    if i + L <= n {
+        let d = Simd::<f64, L>::from_slice(&a[i..i + L]) - Simd::from_slice(&b[i..i + L]);
+        acc0 += d * d;
+        i += L;
+    }
+    let mut s = (acc0 + acc1).reduce_sum();
+    while i < n {
+        let d = a[i] - b[i];
+        s += d * d;
+        i += 1;
+    }
+    s
 }
 
 /// Manhattan (L1) distance.
