@@ -126,6 +126,17 @@ fn gaussian_filter1d_axis(
 ) -> Result<NdArray, NdimageError> {
     let radius = gaussian_kernel_radius(sigma);
     let kernel_1d = gaussian_kernel1d(sigma, order, radius);
+    if input.size() == 0 {
+        return Err(NdimageError::EmptyInput);
+    }
+    // The 1-D-embedded kernel convolution is the slab line walk; on the outermost axis
+    // (too few slabs) fall back to the N-D `convolve` which parallelizes per pixel. Both
+    // are byte-identical (convolve1d_along_axis reproduces convolve's flip/offset/order).
+    let outer: usize = input.shape[..axis].iter().product();
+    let nthreads = ndimage_filter_thread_count(input.size(), kernel_1d.len());
+    if outer >= nthreads {
+        return Ok(convolve1d_along_axis(input, &kernel_1d, axis, 0, mode, cval));
+    }
     let mut kernel_shape = vec![1usize; input.ndim()];
     kernel_shape[axis] = kernel_1d.len();
     let kernel = NdArray::new(kernel_1d, kernel_shape)?;
@@ -1511,6 +1522,69 @@ fn correlate1d_along_axis(
     out
 }
 
+// 1-D convolution along `axis` via the same slab line walk, but reproducing the N-D
+// `convolve` semantics for a 1-D-embedded kernel exactly: the kernel is FLIPPED
+// (k_flipped = len-1-k), offset = (len-1)/2, origin ADDED, and the per-output dot is
+// summed in the SAME k=0..len order with the SAME boundary values — so the result is
+// BYTE-IDENTICAL to `convolve(input, embedded_kernel)`, only the per-pixel index/alloc
+// overhead is removed. Lets `gaussian_filter1d_axis` skip the heavy N-D convolve path.
+fn convolve1d_along_axis(
+    arr: &NdArray,
+    weights: &[f64],
+    axis: usize,
+    origin: i64,
+    mode: BoundaryMode,
+    cval: f64,
+) -> NdArray {
+    let mid = arr.shape[axis];
+    let inner: usize = arr.shape[axis + 1..].iter().product();
+    let outer: usize = arr.shape[..axis].iter().product();
+    let slab = mid * inner;
+    let klen = weights.len() as i64;
+    let offset = (klen - 1) / 2;
+    let mut out = NdArray::zeros(arr.shape.clone());
+    let do_slab = |is: &[f64], os: &mut [f64]| {
+        let val_at = |i: usize, a: i64| -> f64 {
+            match boundary_index_1d(a, mid as i64, mode) {
+                Some(m) => is[i + (m as usize) * inner],
+                None => cval,
+            }
+        };
+        for i in 0..inner {
+            for a in 0..mid as i64 {
+                let mut sum = 0.0;
+                for (k, &w) in weights.iter().enumerate() {
+                    sum += w * val_at(i, a + (klen - 1 - k as i64) - offset + origin);
+                }
+                os[i + (a as usize) * inner] = sum;
+            }
+        }
+    };
+    let nthreads = ndimage_filter_thread_count(arr.size(), weights.len()).min(outer.max(1));
+    if nthreads <= 1 || outer < 2 {
+        for (is, os) in arr.data.chunks(slab).zip(out.data.chunks_mut(slab)) {
+            do_slab(is, os);
+        }
+    } else {
+        let slabs_per = outer.div_ceil(nthreads);
+        let do_slab = &do_slab;
+        std::thread::scope(|scope| {
+            for (in_chunk, out_chunk) in arr
+                .data
+                .chunks(slab * slabs_per)
+                .zip(out.data.chunks_mut(slab * slabs_per))
+            {
+                scope.spawn(move || {
+                    for (is, os) in in_chunk.chunks(slab).zip(out_chunk.chunks_mut(slab)) {
+                        do_slab(is, os);
+                    }
+                });
+            }
+        });
+    }
+    out
+}
+
 /// Uniform (box) filter.
 ///
 /// Matches `scipy.ndimage.uniform_filter`.
@@ -1671,6 +1745,25 @@ pub fn gaussian_filter1d(
     }
 
     gaussian_filter1d_axis(input, sigma, axis, order, mode, cval)
+}
+
+/// Reference old gaussian_filter1d path (1-D kernel embedded into an N-D `convolve`),
+/// retained for the same-process A/B benchmark / byte-identity proof only.
+#[doc(hidden)]
+pub fn gaussian_filter1d_via_convolve_ref(
+    input: &NdArray,
+    sigma: f64,
+    axis: usize,
+    order: usize,
+    mode: BoundaryMode,
+    cval: f64,
+) -> Result<NdArray, NdimageError> {
+    let radius = gaussian_kernel_radius(sigma);
+    let kernel_1d = gaussian_kernel1d(sigma, order, radius);
+    let mut kernel_shape = vec![1usize; input.ndim()];
+    kernel_shape[axis] = kernel_1d.len();
+    let kernel = NdArray::new(kernel_1d, kernel_shape)?;
+    convolve(input, &kernel, mode, cval)
 }
 
 /// One-dimensional Gaussian filter with SciPy-style signed axis normalization.
@@ -7964,6 +8057,40 @@ mod tests {
         let result = uniform_filter(&input, 3, BoundaryMode::Constant, 0.0).unwrap();
         // Center should be average of [0, 1, 0] = 1/3
         assert!((result.data[2] - 1.0 / 3.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn convolve1d_line_walk_is_byte_identical_to_nd_convolve() {
+        // convolve1d_along_axis must equal the N-D convolve on a 1-D-embedded kernel,
+        // bit-for-bit (the gaussian reroute relies on this).
+        let (rows, cols) = (41usize, 37usize);
+        let data: Vec<f64> = (0..rows * cols)
+            .map(|i| ((i * 40503usize) % 911) as f64 / 90.0 - 5.0)
+            .collect();
+        let arr = NdArray::new(data, vec![rows, cols]).unwrap();
+        for mode in [
+            BoundaryMode::Nearest,
+            BoundaryMode::Reflect,
+            BoundaryMode::Constant,
+            BoundaryMode::Wrap,
+            BoundaryMode::Mirror,
+        ] {
+            for klen in [2usize, 3, 6, 9] {
+                let w: Vec<f64> = (0..klen).map(|k| (k as f64 * 0.9 + 0.3).sin()).collect();
+                for axis in [0usize, 1usize] {
+                    let mut kshape = vec![1usize; 2];
+                    kshape[axis] = klen;
+                    let kernel = NdArray::new(w.clone(), kshape).unwrap();
+                    let nd = convolve(&arr, &kernel, mode, 0.4).unwrap();
+                    let line = convolve1d_along_axis(&arr, &w, axis, 0, mode, 0.4);
+                    assert_eq!(
+                        line.data.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+                        nd.data.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+                        "mode={mode:?} klen={klen} axis={axis}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
