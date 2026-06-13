@@ -28,7 +28,7 @@ fn powell_singular(x: &[f64]) -> f64 {
     acc
 }
 
-fn run(name: &str, f: fn(&[f64]) -> f64, x0: &[f64]) {
+fn run(name: &str, f: fn(&[f64]) -> f64, x0: &[f64], opt: &[f64]) {
     let options = MinimizeOptions {
         method: Some(OptimizeMethod::TrustExact),
         tol: Some(1e-8),
@@ -37,12 +37,16 @@ fn run(name: &str, f: fn(&[f64]) -> f64, x0: &[f64]) {
         ..MinimizeOptions::default()
     };
     let r = minimize(f, x0, options).expect("minimize");
-    let h = r.x.iter().fold(1469598103934665603u64, |acc, v| {
-        (acc ^ v.to_bits()).wrapping_mul(1099511628211)
-    });
+    let dist: f64 = r
+        .x
+        .iter()
+        .zip(opt.iter())
+        .map(|(a, b)| (a - b) * (a - b))
+        .sum::<f64>()
+        .sqrt();
     println!(
-        "{name}: nit={} nfev={} njev={} nhev={} fun={:.6e} xhash={:016x}",
-        r.nit, r.nfev, r.njev, r.nhev, r.fun.unwrap_or(f64::NAN), h
+        "{name}: nfev={} njev={} nhev={} fun={:.10e} dist_to_opt={:.4e}",
+        r.nfev, r.njev, r.nhev, r.fun.unwrap_or(f64::NAN), dist
     );
 }
 
@@ -57,7 +61,10 @@ fn main() {
             _ => 1.0,
         })
         .collect();
-    run("rosenbrock_n10", rosenbrock_nd, &rb10);
-    run("rosenbrock_n20", rosenbrock_nd, &rb20);
-    run("powell_n12", powell_singular, &pw);
+    let ones10 = vec![1.0; 10];
+    let ones20 = vec![1.0; 20];
+    let zeros12 = vec![0.0; 12];
+    run("rosenbrock_n10", rosenbrock_nd, &rb10, &ones10);
+    run("rosenbrock_n20", rosenbrock_nd, &rb20, &ones20);
+    run("powell_n12", powell_singular, &pw, &zeros12);
 }
