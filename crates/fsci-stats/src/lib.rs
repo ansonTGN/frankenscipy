@@ -5373,7 +5373,26 @@ impl ContinuousDistribution for NormInvGauss {
     }
 
     fn entropy(&self) -> f64 {
-        f64::NAN
+        // Differential entropy h = −∫ f ln f has no closed form for NIG; scipy
+        // computes it by numerical integration too. Integrate over a wide window
+        // (the tails decay exponentially at rate a∓b), using the accurate logpdf
+        // so the −f·ln f integrand stays valid deep in the tails. frankenscipy.
+        let sigma = self.var().sqrt();
+        let mu = self.mean();
+        let lo = mu - 60.0 * sigma;
+        let hi = mu + 60.0 * sigma;
+        simpson_integrate_adaptive(
+            |x| {
+                let f = self.pdf(x);
+                if f > 0.0 { -f * self.logpdf(x) } else { 0.0 }
+            },
+            lo,
+            hi,
+            128,
+            1e-11,
+            1e-14,
+            16,
+        )
     }
 
     fn mode(&self) -> f64 {
