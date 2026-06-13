@@ -1,0 +1,9 @@
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  tests/artifacts/perf/2026-06-13-linalg-8l8r1-101-solve/rustfmt_linalg_lib_check.txt
+0c49c8932a71679bb651e4d138768ee3aa25e5a65cbabd5f25ca02cf9c725555  tests/artifacts/perf/2026-06-13-linalg-8l8r1-101-solve/check_fsci_linalg_rch.txt
+cf0da55dcf9f73919acb3ba4a586a587a262ca6a853115de4b46157ce145c963  tests/artifacts/perf/2026-06-13-linalg-8l8r1-101-solve/baseline_solve_2000_rch.txt
+826f46a2e09f50fd49cf51c295e540829ae1541b69c2e48e7fdc660833f0e015  tests/artifacts/perf/2026-06-13-linalg-8l8r1-101-solve/after_solve_2000_u12_16_rch.txt
+992c4caea4eef7c2fea0f92ec23ead3dcfa1060b8705d281963b67b3141f9d7c  tests/artifacts/perf/2026-06-13-linalg-8l8r1-101-solve/EVIDENCE.md
+ae418beeb9661ba048cb5cd5d9668b5885544f01a3c56719d34716f27c3a5cb5  tests/artifacts/perf/2026-06-13-linalg-8l8r1-101-solve/proof_flat_lu_golden_digest_ignored_rch.txt
+a9d46cc9694710528120dbf393a6c717ce70c126164279d814f2b2f97a5b9307  tests/artifacts/perf/2026-06-13-linalg-8l8r1-101-solve/proof_mixed_lu_u12_16_rch.txt
+45b1b77b811d5481e7cac50c3f6306e4d0709ea5443facf6640a29d64549c96b  tests/artifacts/perf/2026-06-13-linalg-8l8r1-101-solve/clippy_fsci_linalg_no_deps_rch.txt
+cd8bf0aed7da4360941597e6c533eae247659b016a6e3e55e8f8ca7f92238081  tests/artifacts/perf/2026-06-13-linalg-8l8r1-101-solve/proof_flat_lu_golden_digest_rch.txt
