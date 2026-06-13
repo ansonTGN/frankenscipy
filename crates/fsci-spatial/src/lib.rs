@@ -3633,6 +3633,73 @@ pub fn mahalanobis(x: &[f64], y: &[f64], vi: &[Vec<f64>]) -> f64 {
     result.max(0.0).sqrt()
 }
 
+/// Pairwise Mahalanobis distance matrix between the rows of `xa` and `xb` given the inverse
+/// covariance matrix `vi` (d×d, symmetric).
+///
+/// Matches `scipy.spatial.distance.cdist(XA, XB, 'mahalanobis', VI=vi)`.
+///
+/// The naive form evaluates the quadratic `(xᵢ−yⱼ)ᵀ·VI·(xᵢ−yⱼ)` for every one of the na·nb
+/// pairs — O(na·nb·d²). Instead expand it:
+///   (x−y)ᵀ VI (x−y) = xᵀVIx + yᵀVIy − 2·(VIx)ᵀy
+/// and share `VIxᵢ` across all pairs. `U = XA·VI` and `W = XB·VI` (two blocked GEMMs,
+/// O((na+nb)·d²)) give the per-row quadratic forms `qx[i]=xᵢ·Uᵢ`, `qy[j]=yⱼ·Wⱼ`; the cross
+/// term is the single GEMM `C = U·XBᵀ` (O(na·nb·d)). Total O((na+nb)·d² + na·nb·d) — a ~d×
+/// reduction over the per-pair form. Tolerance-parity with the direct quadratic (the cross
+/// term reassociates), ~1e-12, far inside distance tolerance; clamped at 0 like
+/// [`mahalanobis`] before the sqrt.
+pub fn cdist_mahalanobis(
+    xa: &[Vec<f64>],
+    xb: &[Vec<f64>],
+    vi: &[Vec<f64>],
+) -> Result<Vec<Vec<f64>>, SpatialError> {
+    if xa.is_empty() || xb.is_empty() {
+        return Err(SpatialError::EmptyData);
+    }
+    let d = xa[0].len();
+    let dim_err = |actual: usize| SpatialError::DimensionMismatch { expected: d, actual };
+    if vi.len() != d {
+        return Err(dim_err(vi.len()));
+    }
+    for row in vi {
+        if row.len() != d {
+            return Err(dim_err(row.len()));
+        }
+    }
+    for row in xa.iter().chain(xb.iter()) {
+        if row.len() != d {
+            return Err(dim_err(row.len()));
+        }
+    }
+    let na = xa.len();
+    let nb = xb.len();
+
+    // U[i] = VI·xᵢ (VI symmetric ⇒ XA·VI gives rows VI·xᵢ); likewise W[j] = VI·yⱼ.
+    let map_err = |_| SpatialError::InvalidArgument("matmul shape error".to_string());
+    let u = fsci_linalg::matmul(xa, vi).map_err(map_err)?;
+    let w = fsci_linalg::matmul(xb, vi).map_err(map_err)?;
+    let qx: Vec<f64> = xa.iter().zip(u.iter()).map(|(x, ui)| simd_dot(x, ui)).collect();
+    let qy: Vec<f64> = xb.iter().zip(w.iter()).map(|(y, wj)| simd_dot(y, wj)).collect();
+
+    // Cross term C[i][j] = Uᵢ·yⱼ = xᵢᵀ VI yⱼ, via the blocked GEMM U·XBᵀ.
+    let mut xbt = vec![vec![0.0; nb]; d];
+    for (j, row) in xb.iter().enumerate() {
+        for (k, &v) in row.iter().enumerate() {
+            xbt[k][j] = v;
+        }
+    }
+    let cross = fsci_linalg::matmul(&u, &xbt).map_err(map_err)?;
+
+    let mut out = vec![vec![0.0; nb]; na];
+    for (i, oi) in out.iter_mut().enumerate() {
+        let qxi = qx[i];
+        let ci = &cross[i];
+        for (j, o) in oi.iter_mut().enumerate() {
+            *o = (qxi + qy[j] - 2.0 * ci[j]).max(0.0).sqrt();
+        }
+    }
+    Ok(out)
+}
+
 /// Standardized Euclidean distance.
 ///
 /// d = sqrt(sum((x-y)² / v)) where v is the per-component variance.
@@ -7155,6 +7222,73 @@ mod tests {
             (result - 1.3619047619047617).abs() < 1e-10,
             "canberra got {result}, expected 1.3619047619047617"
         );
+    }
+
+    #[test]
+    fn cdist_mahalanobis_matches_per_pair() {
+        // The GEMM-expansion batch path must agree with the direct per-pair
+        // `mahalanobis` to within rounding, for every (i, j).
+        let mut s: u64 = 0x1234_5678_9abc_def0;
+        let mut rng = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((s >> 11) as f64) / (1u64 << 53) as f64
+        };
+        let d = 12usize;
+        let na = 23usize;
+        let nb = 17usize;
+        let xa: Vec<Vec<f64>> =
+            (0..na).map(|_| (0..d).map(|_| rng() * 2.0 - 1.0).collect()).collect();
+        let xb: Vec<Vec<f64>> =
+            (0..nb).map(|_| (0..d).map(|_| rng() * 2.0 - 1.0).collect()).collect();
+        // SPD inverse-covariance VI = M·Mᵀ/d + I.
+        let m: Vec<Vec<f64>> = (0..d).map(|_| (0..d).map(|_| rng() - 0.5).collect()).collect();
+        let mut vi = vec![vec![0.0; d]; d];
+        for i in 0..d {
+            for j in 0..d {
+                let dot: f64 = (0..d).map(|k| m[i][k] * m[j][k]).sum();
+                vi[i][j] = dot / d as f64 + if i == j { 1.0 } else { 0.0 };
+            }
+        }
+        let got = cdist_mahalanobis(&xa, &xb, &vi).expect("cdist_mahalanobis");
+        assert_eq!(got.len(), na);
+        for (i, row) in got.iter().enumerate() {
+            assert_eq!(row.len(), nb);
+            for (j, &g) in row.iter().enumerate() {
+                let want = mahalanobis(&xa[i], &xb[j], &vi);
+                assert!(
+                    (g - want).abs() < 1e-9,
+                    "cdist_mahalanobis[{i}][{j}] = {g}, per-pair = {want}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cdist_mahalanobis_matches_scipy_reference() {
+        // scipy.spatial.distance.cdist([[0,0],[1,1]], [[0,2],[2,0]], 'mahalanobis',
+        //   VI=[[1,0],[0,1]]) == [[2, 2], [sqrt(2), sqrt(2)]]
+        let xa = vec![vec![0.0, 0.0], vec![1.0, 1.0]];
+        let xb = vec![vec![0.0, 2.0], vec![2.0, 0.0]];
+        let vi = vec![vec![1.0, 0.0], vec![0.0, 1.0]];
+        let got = cdist_mahalanobis(&xa, &xb, &vi).expect("cdist_mahalanobis");
+        let want = [[2.0, 2.0], [2.0_f64.sqrt(), 2.0_f64.sqrt()]];
+        for (i, row) in got.iter().enumerate() {
+            for (j, &g) in row.iter().enumerate() {
+                assert!(
+                    (g - want[i][j]).abs() < 1e-10,
+                    "cdist_mahalanobis[{i}][{j}] = {g}, expected {}",
+                    want[i][j]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cdist_mahalanobis_rejects_bad_dims() {
+        let xa = vec![vec![0.0, 1.0]];
+        let xb = vec![vec![0.0, 1.0]];
+        let vi_bad = vec![vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0]]; // 2x3, not 2x2
+        assert!(cdist_mahalanobis(&xa, &xb, &vi_bad).is_err());
     }
 
     #[test]
