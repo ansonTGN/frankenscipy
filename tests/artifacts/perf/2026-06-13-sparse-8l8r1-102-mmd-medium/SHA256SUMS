@@ -1,0 +1,13 @@
+a6a8ac78090e7fe019b633c637d5aa22c60f1d18d44ae8860231c4fafc385d70  tests/artifacts/perf/2026-06-13-sparse-8l8r1-102-mmd-medium/EVIDENCE.md
+284f778c228ca277e8c4e77d809eba001fdf446d8774ed4366bef83eea20d5cd  tests/artifacts/perf/2026-06-13-sparse-8l8r1-102-mmd-medium/baseline_mmd_medium_vmi1153651_rch.txt
+0a75dac54dbbeccbd27b2f494658d680ad9d4126e4b0b3d32d1e45bf9d711c15  tests/artifacts/perf/2026-06-13-sparse-8l8r1-102-mmd-medium/baseline_mmd_medium_vmi1152480_rch.txt
+f0b7053e3bd57aad940d477af7f1ece15b46f1e0bee6f446005faa7d39906d7a  tests/artifacts/perf/2026-06-13-sparse-8l8r1-102-mmd-medium/after_mmd_medium_sorted_floor_vmi1152480_rch.txt
+8083953c30e81e4d8661eb935ac0738dba9e81aa3e4d42dca1a3c514e18ec95b  tests/artifacts/perf/2026-06-13-sparse-8l8r1-102-mmd-medium/after_mmd_medium_sorted_floor_repeat_vmi1152480_rch.txt
+79c4662ce206d9ab10c30b0721a6f89f586ca17ace2792cb259df1f0057040b4  tests/artifacts/perf/2026-06-13-sparse-8l8r1-102-mmd-medium/proof_mmd_btree_reference_vmi1152480_rch.txt
+be8631caa63976435c85d24ce0a5a3b518e39e5ca7c037869b30d46a97f5b758  tests/artifacts/perf/2026-06-13-sparse-8l8r1-102-mmd-medium/proof_mmd_laplacian_golden_payload_vmi1152480_rch.txt
+635d7ba71bbf819babd09e052215653144872af82630959b84a03912e0045431  tests/artifacts/perf/2026-06-13-sparse-8l8r1-102-mmd-medium/check_fsci_sparse_rch.txt
+0ea0b8b1b857145ee71163ada50f51ce9f57468f2323c73dad266581e0c6e95b  tests/artifacts/perf/2026-06-13-sparse-8l8r1-102-mmd-medium/clippy_fsci_sparse_no_deps_rch.txt
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  tests/artifacts/perf/2026-06-13-sparse-8l8r1-102-mmd-medium/git_diff_check_sparse_linalg.txt
+3275993a245ea18f096432e2b28b36b286816f13c3d7fdd4281c42fd26cb7d8d  tests/artifacts/perf/2026-06-13-sparse-8l8r1-102-mmd-medium/rustfmt_sparse_linalg_check.txt
+8b666db67a4fb393ebb6544932a29b8ebfc70379e8ec294073706cffae8dcf58  tests/artifacts/perf/2026-06-13-sparse-8l8r1-102-mmd-medium/ubs_sparse_linalg.txt
+084f12d7a8c325b39d17f90c0631939300fa0f4b30143244577f5580cba1c271  tests/artifacts/perf/2026-06-13-sparse-post-100-reprofile/mmd_ordering_perf_probe_rch.txt

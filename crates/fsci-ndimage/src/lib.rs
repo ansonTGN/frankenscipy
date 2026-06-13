@@ -890,158 +890,155 @@ fn sample_interpolated(
         return input.get_boundary(&idx, mode, cval);
     }
 
-    let mut bases = Vec::with_capacity(coords.len());
-    for (axis, &coord) in coords.iter().enumerate() {
-        let coeff_len = coeffs.shape[axis];
-        let Some(mapped) = map_interpolation_coordinate(coord, input.shape[axis], mode) else {
-            return cval;
-        };
-        let spline_coord = if coord_offsets[axis] > 0.0 {
-            match mode {
-                BoundaryMode::Nearest => {
-                    (coord + coord_offsets[axis]).clamp(0.0, (coeff_len - 1) as f64)
-                }
-                BoundaryMode::Wrap => {
-                    let mut wrapped = coord + coord_offsets[axis];
-                    let period = input.shape[axis] as f64;
-                    let padded_max = (coeff_len - 1) as f64;
-                    while wrapped < 0.0 {
-                        wrapped += period;
+    thread_local! {
+        static INTERP_SCRATCH: std::cell::RefCell<(Vec<Vec<(usize, f64)>>, Vec<usize>)> =
+            const { std::cell::RefCell::new((Vec::new(), Vec::new())) };
+    }
+    // Reuse per-thread B-spline support buffers (one Vec per axis) and the recursion index
+    // across pixels — the old path allocated `bases` + one `support` Vec per axis + `idx`
+    // every pixel (~5 heap allocs/pixel for a 2-D order-3 transform, and the geometric
+    // transforms run ~800 ns/pixel). The computed (index, weight) tuples and the recursion
+    // are unchanged, so the result is byte-identical; only the buffer lifetimes change.
+    INTERP_SCRATCH.with_borrow_mut(|(bases, idx)| -> f64 {
+        let n = coords.len();
+        if bases.len() < n {
+            bases.resize_with(n, Vec::new);
+        }
+        for axis in 0..n {
+            let coord = coords[axis];
+            let coeff_len = coeffs.shape[axis];
+            let support = &mut bases[axis];
+            support.clear();
+            let Some(mapped) = map_interpolation_coordinate(coord, input.shape[axis], mode) else {
+                return cval;
+            };
+            let spline_coord = if coord_offsets[axis] > 0.0 {
+                match mode {
+                    BoundaryMode::Nearest => {
+                        (coord + coord_offsets[axis]).clamp(0.0, (coeff_len - 1) as f64)
                     }
-                    while wrapped > padded_max {
-                        wrapped -= period;
+                    BoundaryMode::Wrap => {
+                        let mut wrapped = coord + coord_offsets[axis];
+                        let period = input.shape[axis] as f64;
+                        let padded_max = (coeff_len - 1) as f64;
+                        while wrapped < 0.0 {
+                            wrapped += period;
+                        }
+                        while wrapped > padded_max {
+                            wrapped -= period;
+                        }
+                        wrapped
                     }
-                    wrapped
+                    _ => mapped + coord_offsets[axis],
                 }
-                _ => mapped + coord_offsets[axis],
-            }
-        } else {
-            mapped
-        };
-        // Snap sub-ULP boundary excursions back into the valid spline
-        // domain. `map_reflect_coordinate` uses a half-pixel offset and
-        // can return values like -1.22e-15 for an input of essentially
-        // 0.0; without this clamp the B-spline basis at that coord is
-        // identically zero and sample_interpolated falls through to
-        // cval, dropping corner pixels under e.g. rotate(360°).
-        let spline_coord = match mode {
-            BoundaryMode::Wrap => spline_coord,
-            _ => {
-                let max = (coeff_len - 1) as f64;
-                let bound = 1.0e-9 * max.max(1.0);
-                if spline_coord < 0.0 && spline_coord > -bound {
-                    0.0
-                } else if spline_coord > max && spline_coord < max + bound {
-                    max
-                } else {
-                    spline_coord
+            } else {
+                mapped
+            };
+            // Snap sub-ULP boundary excursions back into the valid spline
+            // domain (see original note: prevents dropped corner pixels under
+            // e.g. rotate(360°)).
+            let spline_coord = match mode {
+                BoundaryMode::Wrap => spline_coord,
+                _ => {
+                    let max = (coeff_len - 1) as f64;
+                    let bound = 1.0e-9 * max.max(1.0);
+                    if spline_coord < 0.0 && spline_coord > -bound {
+                        0.0
+                    } else if spline_coord > max && spline_coord < max + bound {
+                        max
+                    } else {
+                        spline_coord
+                    }
                 }
-            }
-        };
-        let effective_order = order.min(coeff_len.saturating_sub(1));
-        // Constant and Wrap order-3 share `cubic_constant_wrap_coefficients`,
-        // which produces *cardinal* cubic B-spline coefficients with mirror
-        // boundary symmetry (scipy's constant-mode spline filter is mirror-
-        // based). They must be reconstructed with the cardinal cubic B-spline
-        // kernel and a mirror index fold — not the de Boor knot basis used by
-        // the Nearest/Reflect path, whose `make_interp_spline` coefficients are
-        // a different representation.
-        if matches!(mode, BoundaryMode::Wrap | BoundaryMode::Constant) && effective_order == 3 {
-            let base = spline_coord.floor() as isize - 1;
-            let t = spline_coord - spline_coord.floor();
-            let omt = 1.0 - t;
-            let max = coeff_len - 1;
-            let support = vec![
-                (fold_wrap_cubic_index(base, max), omt * omt * omt / 6.0),
-                (
+            };
+            let effective_order = order.min(coeff_len.saturating_sub(1));
+            // Constant/Wrap order-3: cardinal cubic B-spline with a mirror index fold.
+            if matches!(mode, BoundaryMode::Wrap | BoundaryMode::Constant) && effective_order == 3 {
+                let base = spline_coord.floor() as isize - 1;
+                let t = spline_coord - spline_coord.floor();
+                let omt = 1.0 - t;
+                let max = coeff_len - 1;
+                support.push((fold_wrap_cubic_index(base, max), omt * omt * omt / 6.0));
+                support.push((
                     fold_wrap_cubic_index(base + 1, max),
                     (3.0 * t * t * t - 6.0 * t * t + 4.0) / 6.0,
-                ),
-                (
+                ));
+                support.push((
                     fold_wrap_cubic_index(base + 2, max),
                     (-3.0 * t * t * t + 3.0 * t * t + 3.0 * t + 1.0) / 6.0,
-                ),
-                (fold_wrap_cubic_index(base + 3, max), t * t * t / 6.0),
-            ];
-            bases.push(support);
-            continue;
-        }
-        // Reflect / Nearest orders 2..=5: reconstruct from the exact
-        // `bspline_reflect_coefficients` with the cardinal B-spline kernel.
-        // scipy folds the support TAPS, not the coordinate, so the lookup
-        // coordinate is used directly (offset by SPLINE_NEAREST_PAD for the
-        // edge-padded `nearest` case) and each tap index is mapped back through
-        // the boundary rule — half-sample mirror for reflect, edge-clamp for
-        // nearest. The padded de Boor fallback for short reflect axes has
-        // coord_offsets > 0 and is excluded here so it keeps the de Boor path.
-        let cardinal_reflect_nearest = effective_order == order
-            && matches!(order, 2..=5)
-            && ((mode == BoundaryMode::Reflect && coord_offsets[axis] == 0.0)
-                || (mode == BoundaryMode::Mirror && coord_offsets[axis] == 0.0)
-                || mode == BoundaryMode::Nearest);
-        if cardinal_reflect_nearest {
-            let cc = coord + coord_offsets[axis];
-            let len = coeff_len as isize;
-            let fold = |i: isize| -> usize {
-                match mode {
-                    BoundaryMode::Nearest => i.clamp(0, len - 1) as usize,
-                    BoundaryMode::Mirror => {
-                        // Whole-sample fold, period 2(len-1).
-                        if len <= 1 {
-                            0
-                        } else {
-                            let period = 2 * (len - 1);
+                ));
+                support.push((fold_wrap_cubic_index(base + 3, max), t * t * t / 6.0));
+                continue;
+            }
+            // Reflect / Mirror / Nearest orders 2..=5: cardinal B-spline kernel with a
+            // per-tap boundary fold (matches scipy: fold the support TAPS, not the coord).
+            let cardinal_reflect_nearest = effective_order == order
+                && matches!(order, 2..=5)
+                && ((mode == BoundaryMode::Reflect && coord_offsets[axis] == 0.0)
+                    || (mode == BoundaryMode::Mirror && coord_offsets[axis] == 0.0)
+                    || mode == BoundaryMode::Nearest);
+            if cardinal_reflect_nearest {
+                let cc = coord + coord_offsets[axis];
+                let len = coeff_len as isize;
+                let fold = |i: isize| -> usize {
+                    match mode {
+                        BoundaryMode::Nearest => i.clamp(0, len - 1) as usize,
+                        BoundaryMode::Mirror => {
+                            if len <= 1 {
+                                0
+                            } else {
+                                let period = 2 * (len - 1);
+                                let mut m = i.rem_euclid(period);
+                                if m >= len {
+                                    m = period - m;
+                                }
+                                m as usize
+                            }
+                        }
+                        _ => {
+                            let period = 2 * len;
                             let mut m = i.rem_euclid(period);
                             if m >= len {
-                                m = period - m;
+                                m = period - 1 - m;
                             }
                             m as usize
                         }
                     }
-                    _ => {
-                        let period = 2 * len;
-                        let mut m = i.rem_euclid(period);
-                        if m >= len {
-                            m = period - 1 - m;
-                        }
-                        m as usize
+                };
+                let floor = cc.floor() as isize;
+                let span = order as isize;
+                for k in (floor - span)..=(floor + span) {
+                    let weight = cardinal_bspline(order, cc - k as f64);
+                    if weight != 0.0 {
+                        support.push((fold(k), weight));
                     }
                 }
-            };
-            let floor = cc.floor() as isize;
-            let span = order as isize;
-            let mut support = Vec::with_capacity(2 * order + 1);
-            for k in (floor - span)..=(floor + span) {
-                let weight = cardinal_bspline(order, cc - k as f64);
-                if weight != 0.0 {
-                    support.push((fold(k), weight));
-                }
+                continue;
             }
-            bases.push(support);
-            continue;
+            if effective_order == 0 {
+                support.push((
+                    spline_coord.round().clamp(0.0, (coeff_len - 1) as f64) as usize,
+                    1.0,
+                ));
+                continue;
+            }
+            let knots = uniform_interpolation_knots(coeff_len, effective_order);
+            let weights = eval_bspline_basis_all(&knots, spline_coord, effective_order, coeff_len);
+            support.extend(
+                weights
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(_, weight)| weight.abs() > 1e-12),
+            );
+            if support.is_empty() {
+                return cval;
+            }
         }
-        if effective_order == 0 {
-            bases.push(vec![(
-                spline_coord.round().clamp(0.0, (coeff_len - 1) as f64) as usize,
-                1.0,
-            )]);
-            continue;
-        }
-        let knots = uniform_interpolation_knots(coeff_len, effective_order);
-        let weights = eval_bspline_basis_all(&knots, spline_coord, effective_order, coeff_len);
-        let support: Vec<(usize, f64)> = weights
-            .into_iter()
-            .enumerate()
-            .filter(|(_, weight)| weight.abs() > 1e-12)
-            .collect();
-        if support.is_empty() {
-            return cval;
-        }
-        bases.push(support);
-    }
 
-    let mut idx = vec![0usize; coeffs.ndim()];
-    sample_spline_recursive(coeffs, &bases, 0, &mut idx)
+        idx.clear();
+        idx.resize(coeffs.ndim(), 0);
+        sample_spline_recursive(coeffs, &bases[..n], 0, idx.as_mut_slice())
+    })
 }
 
 // ══════════════════════════════════════════════════════════════════════

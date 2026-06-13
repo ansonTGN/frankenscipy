@@ -3422,7 +3422,7 @@ pub fn shortest_path(graph: &CsrMatrix, source: usize, target: usize) -> (f64, V
 // Deterministic (lowest-index tie-break). Opt-in via MmdAtPlusA/MmdAta.
 fn minimum_degree_ordering(a: &CsrMatrix) -> Vec<usize> {
     let rows = a.shape().rows;
-    if rows >= 1024 && a.nnz() <= rows.saturating_mul(8) && mmd_max_raw_row_width(a) <= 64 {
+    if rows >= 256 && a.nnz() <= rows.saturating_mul(8) && mmd_max_raw_row_width(a) <= 64 {
         minimum_degree_ordering_sorted_vec(a)
     } else {
         minimum_degree_ordering_hashset(a)

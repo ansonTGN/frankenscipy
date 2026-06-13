@@ -1,0 +1,120 @@
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/linalg.rs:581:
+     // Sparse by row density, OR narrowly banded (bw·32 ≤ n ⇒ fill ≤ O(n·bw), factor
+     // O(n·bw²) ≪ O(n³)) — banded systems with >16 nnz/row would otherwise densify to
+     // an O(n³) dense LU even though their sparse factor is tiny and fill-bounded.
+[31m-    let genuinely_sparse = n >= 256
+[m[31m-        && (a.nnz() <= n.saturating_mul(16) || csr_bandwidth(a).saturating_mul(32) <= n);
+[m[32m+    let genuinely_sparse =
+[m[32m+        n >= 256 && (a.nnz() <= n.saturating_mul(16) || csr_bandwidth(a).saturating_mul(32) <= n);
+[m     if over_dense_guard || genuinely_sparse {
+         let lu = NativeSparseLu::factorize_csr(a, 1.0, options.ordering)?;
+         let solution = lu.solve(b)?;
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/linalg.rs:634:
+     // densifying to an n×n dense matrix for O(n³) dense LU — see `spsolve` for the
+     // same routing. scipy's splu is always sparse; small/dense-pattern A keeps dense.
+     // Narrowly-banded A (bw·32 ≤ n) also routes sparse: fill is bounded by the band.
+[31m-    let genuinely_sparse = n >= 256
+[m[31m-        && (a.nnz() <= n.saturating_mul(16) || csc_bandwidth(a).saturating_mul(32) <= n);
+[m[32m+    let genuinely_sparse =
+[m[32m+        n >= 256 && (a.nnz() <= n.saturating_mul(16) || csc_bandwidth(a).saturating_mul(32) <= n);
+[m     let (backend_used, lu_internal) = if n > SPSOLVE_DENSE_MAX_N || genuinely_sparse {
+         let csr = a.to_csr()?;
+         (
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/linalg.rs:5490:
+         let x_nat = spsolve(
+             &a,
+             &b,
+[31m-            SolveOptions { ordering: PermutationOrdering::Natural, ..SolveOptions::default() },
+[m[32m+            SolveOptions {
+[m[32m+                ordering: PermutationOrdering::Natural,
+[m[32m+                ..SolveOptions::default()
+[m[32m+            },
+[m         )
+         .expect("natural")
+         .solution;
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/linalg.rs:5497:
+         let x_mmd = spsolve(
+             &a,
+             &b,
+[31m-            SolveOptions { ordering: PermutationOrdering::MmdAtPlusA, ..SolveOptions::default() },
+[m[32m+            SolveOptions {
+[m[32m+                ordering: PermutationOrdering::MmdAtPlusA,
+[m[32m+                ..SolveOptions::default()
+[m[32m+            },
+[m         )
+         .expect("min-degree")
+         .solution;
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/linalg.rs:5646:
+         let x = spsolve(
+             &a,
+             &b,
+[31m-            SolveOptions { ordering: PermutationOrdering::MmdAtPlusA, ..SolveOptions::default() },
+[m[32m+            SolveOptions {
+[m[32m+                ordering: PermutationOrdering::MmdAtPlusA,
+[m[32m+                ..SolveOptions::default()
+[m[32m+            },
+[m         )
+         .expect("mmd solve")
+         .solution;
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/linalg.rs:6701:
+             .enumerate()
+         {
+             assert!((re - 3.0).abs() < 1e-6, "re[{i}]={re} expected 3");
+[31m-            assert!((im.abs() - 4.0).abs() < 1e-6, "|im[{i}]|={} expected 4", im.abs());
+[m[32m+            assert!(
+[m[32m+                (im.abs() - 4.0).abs() < 1e-6,
+[m[32m+                "|im[{i}]|={} expected 4",
+[m[32m+                im.abs()
+[m[32m+            );
+[m         }
+         // The pair is conjugate: imaginary parts have opposite signs.
+         assert!(
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/linalg.rs:6715:
+             .eigenvalues
+             .iter()
+             .zip(result.eigenvalues_im.iter())
+[31m-            .zip(result.eigenvectors.iter().zip(result.eigenvectors_im.iter()))
+[m[32m+            .zip(
+[m[32m+                result
+[m[32m+                    .eigenvectors
+[m[32m+                    .iter()
+[m[32m+                    .zip(result.eigenvectors_im.iter()),
+[m[32m+            )
+[m         {
+             let axr = csr_matvec(&a, xr);
+             let axi = csr_matvec(&a, xi);
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/linalg.rs:6726:
+                 let lhs_i = axi[j] - (re * xi[j] + im * xr[j]);
+                 resid += lhs_r * lhs_r + lhs_i * lhs_i;
+             }
+[31m-            assert!(resid.sqrt() < 1e-6, "complex eigenpair residual {resid:.3e}");
+[m[32m+            assert!(
+[m[32m+                resid.sqrt() < 1e-6,
+[m[32m+                "complex eigenpair residual {resid:.3e}"
+[m[32m+            );
+[m         }
+     }
+ 
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/linalg.rs:8665:
+             if yr == 0.0 && yi == 0.0 {
+                 continue;
+             }
+[31m-            for ((xr, xi), &vji) in evec_re
+[m[31m-                .iter_mut()
+[m[31m-                .zip(evec_im.iter_mut())
+[m[31m-                .zip(v[j].iter())
+[m[31m-            {
+[m[32m+            for ((xr, xi), &vji) in evec_re.iter_mut().zip(evec_im.iter_mut()).zip(v[j].iter()) {
+[m                 *xr += yr * vji;
+                 *xi += yi * vji;
+             }
+Diff in /data/projects/frankenscipy/crates/fsci-sparse/src/linalg.rs:8973:
+                     break;
+                 }
+                 let u = a[mu][mu - 1].abs() * (q.abs() + r.abs());
+[31m-                let vv =
+[m[31m-                    p.abs() * (a[mu - 1][mu - 1].abs() + z.abs() + a[mu + 1][mu + 1].abs());
+[m[32m+                let vv = p.abs() * (a[mu - 1][mu - 1].abs() + z.abs() + a[mu + 1][mu + 1].abs());
+[m                 if u + vv == vv {
+                     break;
+                 }
