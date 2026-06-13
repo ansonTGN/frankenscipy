@@ -6368,6 +6368,16 @@ impl ContinuousDistribution for Maxwell {
         }
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // Closed form so the deep tail stays finite (default ln(pdf) → −inf once
+        // the Gaussian factor underflows, e.g. x≈41). frankenscipy.
+        if x < 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        let s = self.scale;
+        0.5 * (2.0 / PI).ln() + 2.0 * x.ln() - 3.0 * s.ln() - x * x / (2.0 * s * s)
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         if x <= 0.0 {
             0.0
@@ -10209,6 +10219,16 @@ impl ContinuousDistribution for InverseGaussian {
         }
         let mu = self.mu;
         (1.0 / (2.0 * PI * x.powi(3))).sqrt() * (-(x - mu).powi(2) / (2.0 * mu * mu * x)).exp()
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // −½ln(2π x³) − (x−μ)²/(2μ²x); closed form keeps the tail finite where
+        // the default ln(pdf) underflows (exp → 0 by x≈370). frankenscipy.
+        if x <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        let mu = self.mu;
+        -0.5 * ((2.0 * PI).ln() + 3.0 * x.ln()) - (x - mu).powi(2) / (2.0 * mu * mu * x)
     }
 
     fn cdf(&self, x: f64) -> f64 {
@@ -14201,6 +14221,14 @@ impl ContinuousDistribution for SkewNorm {
         let phi = standard_normal_pdf(x);
         let big_phi = standard_normal_cdf(self.a * x).clamp(0.0, 1.0);
         2.0 * phi * big_phi
+    }
+
+    fn logpdf(&self, x: f64) -> f64 {
+        // ln 2 + ln φ(x) + log Φ(a·x); the closed form stays finite in the tail
+        // where the default ln(pdf) underflows (φ(x) → 0 by x≈39). log_ndtr keeps
+        // the Φ factor accurate even for very negative a·x. frankenscipy.
+        std::f64::consts::LN_2 - 0.5 * x * x - 0.5 * (2.0 * PI).ln()
+            + fsci_special::log_ndtr_scalar(self.a * x)
     }
 
     fn cdf(&self, x: f64) -> f64 {
