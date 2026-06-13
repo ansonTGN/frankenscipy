@@ -628,6 +628,50 @@ pub fn ncfdtri(dfn: f64, dfd: f64, nc: f64, p: f64) -> f64 {
     0.5 * (lo + hi)
 }
 
+/// Inverse of [`ncfdtr`] in the non-centrality `nc`.
+///
+/// Returns `nc ≥ 0` such that `ncfdtr(dfn, dfd, nc, f) = p`, matching
+/// `scipy.special.ncfdtrinc(dfn, dfd, p, f)`. The non-central F CDF is decreasing
+/// in `nc`, so bracket-and-bisect on `[0, hi]`. If `p` exceeds the central
+/// (`nc = 0`) CDF, no non-negative `nc` solves it and the result is `0` (scipy's
+/// convention); `p = 0` needs `nc → ∞`. Agreement with scipy is limited by
+/// scipy's own DINVR tolerance (~1e-6); this root makes `ncfdtr(result) = p`
+/// tighter than that. frankenscipy.
+#[must_use]
+pub fn ncfdtrinc(dfn: f64, dfd: f64, p: f64, f: f64) -> f64 {
+    if dfn.is_nan() || dfd.is_nan() || p.is_nan() || f.is_nan() || !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    if dfn <= 0.0 || dfd <= 0.0 || f < 0.0 {
+        return f64::NAN;
+    }
+    // The CDF is largest at nc = 0; a target above it has no nc ≥ 0 solution.
+    if p >= ncfdtr(dfn, dfd, 0.0, f) {
+        return 0.0;
+    }
+    if p == 0.0 {
+        return f64::INFINITY;
+    }
+    let mut hi = 1.0_f64;
+    while ncfdtr(dfn, dfd, hi, f) > p {
+        hi *= 2.0;
+        if hi > 1e300 {
+            return f64::INFINITY;
+        }
+    }
+    let mut lo = 0.0_f64;
+    for _ in 0..100 {
+        let mid = 0.5 * (lo + hi);
+        // CDF decreasing in nc: value above target ⇒ nc too small.
+        if ncfdtr(dfn, dfd, mid, f) > p {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    0.5 * (lo + hi)
+}
+
 /// Inverse of [`nctdtr`] in the argument `t`.
 ///
 /// Returns `t` such that `nctdtr(df, nc, t) = p`, matching
@@ -663,6 +707,53 @@ pub fn nctdtrit(df: f64, nc: f64, p: f64) -> f64 {
     for _ in 0..100 {
         let mid = 0.5 * (lo + hi);
         if nctdtr(df, nc, mid) < p {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    0.5 * (lo + hi)
+}
+
+/// Inverse of [`nctdtr`] in the non-centrality `nc`.
+///
+/// Returns `nc` such that `nctdtr(df, nc, t) = p`, matching
+/// `scipy.special.nctdtrinc(df, p, t)`. The non-central t CDF is decreasing in
+/// `nc` (more non-centrality shifts mass right), solved by bracket-and-bisect
+/// over the whole real line; `p = 0 → +∞`, `p = 1 → −∞`. Matches scipy to ~1e-9.
+/// frankenscipy.
+#[must_use]
+pub fn nctdtrinc(df: f64, p: f64, t: f64) -> f64 {
+    if df.is_nan() || p.is_nan() || t.is_nan() {
+        return f64::NAN;
+    }
+    if df <= 0.0 || !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    if p <= 0.0 {
+        return f64::INFINITY;
+    }
+    if p >= 1.0 {
+        return f64::NEG_INFINITY;
+    }
+    // Decreasing in nc: large nc ⇒ CDF → 0, very negative nc ⇒ CDF → 1.
+    let mut hi = 1.0_f64;
+    while nctdtr(df, hi, t) > p {
+        hi *= 2.0;
+        if hi > 1e300 {
+            return f64::INFINITY;
+        }
+    }
+    let mut lo = -1.0_f64;
+    while nctdtr(df, lo, t) < p {
+        lo *= 2.0;
+        if lo < -1e300 {
+            return f64::NEG_INFINITY;
+        }
+    }
+    for _ in 0..100 {
+        let mid = 0.5 * (lo + hi);
+        if nctdtr(df, mid, t) > p {
             lo = mid;
         } else {
             hi = mid;
@@ -3375,6 +3466,23 @@ mod tests {
             );
         }
         assert_eq!(ncfdtr(5.0, 10.0, 3.0, 0.0), 0.0);
+    }
+
+    #[test]
+    fn nc_inverse_param_matches_scipy() {
+        // frankenscipy-lmffs (partial): invert the non-central F/t CDF on nc.
+        // Golden from scipy.special.ncfdtrinc/nctdtrinc 1.17.1. ncfdtrinc agrees
+        // only to scipy's DINVR tolerance (~1e-5); nctdtrinc to ~1e-8.
+        let nc = ncfdtrinc(5.0, 10.0, 0.7, 2.0);
+        assert!((nc - 2.062_739_479_639_603).abs() < 1e-4, "ncfdtrinc = {nc}");
+        // Round-trip is tight regardless of scipy's tolerance.
+        assert!((ncfdtr(5.0, 10.0, nc, 2.0) - 0.7).abs() < 1e-9);
+        // Target above the central CDF has no nc >= 0 solution → 0.
+        assert_eq!(ncfdtrinc(2.0, 5.0, 0.9, 0.8), 0.0);
+
+        let nct = nctdtrinc(10.0, 0.7, 1.5);
+        assert!((nct - 0.909_707_486_336_509_2).abs() < 1e-7, "nctdtrinc = {nct}");
+        assert!((nctdtr(10.0, nct, 1.5) - 0.7).abs() < 1e-9);
     }
 
     #[test]
