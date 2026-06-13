@@ -1,0 +1,496 @@
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_decomp2.rs:1:
+ //! Differential probe: pinv/lstsq/svdvals/null_space/orth/subspace_angles vs scipy.linalg
+ use fsci_linalg as la;
+[31m-fn m(name:&str, mat:&[Vec<f64>]){
+[m[31m-    let r=mat.len(); let c=if r>0 {mat[0].len()} else {0};
+[m[31m-    let mut s=Vec::new(); for row in mat { for &v in row { s.push(format!("{v:.17e}")); } }
+[m[32m+fn m(name: &str, mat: &[Vec<f64>]) {
+[m[32m+    let r = mat.len();
+[m[32m+    let c = if r > 0 { mat[0].len() } else { 0 };
+[m[32m+    let mut s = Vec::new();
+[m[32m+    for row in mat {
+[m[32m+        for &v in row {
+[m[32m+            s.push(format!("{v:.17e}"));
+[m[32m+        }
+[m[32m+    }
+[m     println!("{name}|{r}|{c}|{}", s.join(";"));
+ }
+[31m-fn v(name:&str, vec:&[f64]){
+[m[31m-    let s:Vec<String>=vec.iter().map(|x| format!("{x:.17e}")).collect();
+[m[32m+fn v(name: &str, vec: &[f64]) {
+[m[32m+    let s: Vec<String> = vec.iter().map(|x| format!("{x:.17e}")).collect();
+[m     println!("{name}|1|{}|{}", vec.len(), s.join(";"));
+ }
+[31m-fn main(){
+[m[32m+fn main() {
+[m     // matrices: square full, tall, wide, rank-deficient square, near-singular
+[31m-    let sq: Vec<Vec<f64>> = vec![vec![2.0,1.0,0.0],vec![1.0,3.0,1.0],vec![0.0,1.0,2.0]];
+[m[31m-    let tall: Vec<Vec<f64>> = vec![vec![1.0,2.0],vec![3.0,4.0],vec![5.0,6.0],vec![7.0,9.0]];
+[m[31m-    let wide: Vec<Vec<f64>> = vec![vec![1.0,2.0,3.0,4.0],vec![2.0,3.0,5.0,1.0]];
+[m[31m-    let rankdef: Vec<Vec<f64>> = vec![vec![1.0,2.0,3.0],vec![2.0,4.0,6.0],vec![1.0,1.0,1.0]];
+[m[31m-    let do_dec = |name:&str, a:&Vec<Vec<f64>>|{
+[m[31m-        if let Ok(p)=la::pinv(a, la::PinvOptions::default()){ m(&format!("pinv_{name}"), &p.pseudo_inverse); }
+[m[31m-        if let Ok(s)=la::svdvals(a, la::DecompOptions::default()){ v(&format!("svdvals_{name}"), &s); }
+[m[31m-        if let Ok(ns)=la::null_space(a, None, la::DecompOptions::default()){
+[m[31m-            let r=ns.len(); let c=if r>0 {ns[0].len()} else {0};
+[m[32m+    let sq: Vec<Vec<f64>> = vec![
+[m[32m+        vec![2.0, 1.0, 0.0],
+[m[32m+        vec![1.0, 3.0, 1.0],
+[m[32m+        vec![0.0, 1.0, 2.0],
+[m[32m+    ];
+[m[32m+    let tall: Vec<Vec<f64>> = vec![
+[m[32m+        vec![1.0, 2.0],
+[m[32m+        vec![3.0, 4.0],
+[m[32m+        vec![5.0, 6.0],
+[m[32m+        vec![7.0, 9.0],
+[m[32m+    ];
+[m[32m+    let wide: Vec<Vec<f64>> = vec![vec![1.0, 2.0, 3.0, 4.0], vec![2.0, 3.0, 5.0, 1.0]];
+[m[32m+    let rankdef: Vec<Vec<f64>> = vec![
+[m[32m+        vec![1.0, 2.0, 3.0],
+[m[32m+        vec![2.0, 4.0, 6.0],
+[m[32m+        vec![1.0, 1.0, 1.0],
+[m[32m+    ];
+[m[32m+    let do_dec = |name: &str, a: &Vec<Vec<f64>>| {
+[m[32m+        if let Ok(p) = la::pinv(a, la::PinvOptions::default()) {
+[m[32m+            m(&format!("pinv_{name}"), &p.pseudo_inverse);
+[m[32m+        }
+[m[32m+        if let Ok(s) = la::svdvals(a, la::DecompOptions::default()) {
+[m[32m+            v(&format!("svdvals_{name}"), &s);
+[m[32m+        }
+[m[32m+        if let Ok(ns) = la::null_space(a, None, la::DecompOptions::default()) {
+[m[32m+            let r = ns.len();
+[m[32m+            let c = if r > 0 { ns[0].len() } else { 0 };
+[m             println!("nulldim_{name}|1|1|{}", c as f64);
+         }
+[31m-        if let Ok(o)=la::orth(a, None, la::DecompOptions::default()){
+[m[31m-            let r=o.len(); let c=if r>0 {o[0].len()} else {0};
+[m[32m+        if let Ok(o) = la::orth(a, None, la::DecompOptions::default()) {
+[m[32m+            let r = o.len();
+[m[32m+            let c = if r > 0 { o[0].len() } else { 0 };
+[m             println!("orthdim_{name}|1|1|{}", c as f64);
+         }
+     };
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_decomp2.rs:30:
+[31m-    do_dec("sq",&sq); do_dec("tall",&tall); do_dec("wide",&wide); do_dec("rankdef",&rankdef);
+[m[32m+    do_dec("sq", &sq);
+[m[32m+    do_dec("tall", &tall);
+[m[32m+    do_dec("wide", &wide);
+[m[32m+    do_dec("rankdef", &rankdef);
+[m     // lstsq: solve A x = b
+[31m-    let b_sq=vec![1.0,2.0,3.0];
+[m[31m-    if let Ok(r)=la::lstsq(&sq,&b_sq, la::LstsqOptions::default()){ v("lstsq_sq_x",&r.x); println!("lstsq_sq_rank|1|1|{}", r.rank as f64); }
+[m[31m-    let b_tall=vec![1.0,2.0,2.0,3.0];
+[m[31m-    if let Ok(r)=la::lstsq(&tall,&b_tall, la::LstsqOptions::default()){ v("lstsq_tall_x",&r.x); v("lstsq_tall_res",&r.residuals); println!("lstsq_tall_rank|1|1|{}", r.rank as f64); }
+[m[31m-    let b_rd=vec![1.0,2.0,1.0];
+[m[31m-    if let Ok(r)=la::lstsq(&rankdef,&b_rd, la::LstsqOptions::default()){ v("lstsq_rd_x",&r.x); println!("lstsq_rd_rank|1|1|{}", r.rank as f64); }
+[m[32m+    let b_sq = vec![1.0, 2.0, 3.0];
+[m[32m+    if let Ok(r) = la::lstsq(&sq, &b_sq, la::LstsqOptions::default()) {
+[m[32m+        v("lstsq_sq_x", &r.x);
+[m[32m+        println!("lstsq_sq_rank|1|1|{}", r.rank as f64);
+[m[32m+    }
+[m[32m+    let b_tall = vec![1.0, 2.0, 2.0, 3.0];
+[m[32m+    if let Ok(r) = la::lstsq(&tall, &b_tall, la::LstsqOptions::default()) {
+[m[32m+        v("lstsq_tall_x", &r.x);
+[m[32m+        v("lstsq_tall_res", &r.residuals);
+[m[32m+        println!("lstsq_tall_rank|1|1|{}", r.rank as f64);
+[m[32m+    }
+[m[32m+    let b_rd = vec![1.0, 2.0, 1.0];
+[m[32m+    if let Ok(r) = la::lstsq(&rankdef, &b_rd, la::LstsqOptions::default()) {
+[m[32m+        v("lstsq_rd_x", &r.x);
+[m[32m+        println!("lstsq_rd_rank|1|1|{}", r.rank as f64);
+[m[32m+    }
+[m     // subspace_angles
+[31m-    let p=vec![vec![1.0,0.0],vec![0.0,1.0],vec![0.0,0.0]];
+[m[31m-    let q=vec![vec![1.0,0.0],vec![0.0,1.0],vec![1.0,1.0]];
+[m[31m-    if let Ok(ang)=la::subspace_angles(&p,&q, la::DecompOptions::default()){ v("subspace_angles",&ang); }
+[m[32m+    let p = vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![0.0, 0.0]];
+[m[32m+    let q = vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![1.0, 1.0]];
+[m[32m+    if let Ok(ang) = la::subspace_angles(&p, &q, la::DecompOptions::default()) {
+[m[32m+        v("subspace_angles", &ang);
+[m[32m+    }
+[m }
+
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_eig.rs:1:
+ //! Differential oracle probe: general eig eigenvalues vs scipy.linalg.eig (gitignored).
+ //! Lines: `name,ev,k,re,im` (sorted eigenvalues) and `name,resid,k,value` (real-ev residual).
+[31m-use fsci_linalg::{eig, DecompOptions};
+[m[32m+use fsci_linalg::{DecompOptions, eig};
+[m
+ fn main() {
+     let o = || DecompOptions::default();
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_eig.rs:7:
+     let mats: Vec<(&str, Vec<Vec<f64>>)> = vec![
+[31m-        ("sym", vec![vec![2.0, 1.0, 0.0], vec![1.0, 3.0, 1.0], vec![0.0, 1.0, 2.0]]),
+[m[31m-        ("real_nonsym", vec![vec![3.0, 0.4, 0.1], vec![0.0, 2.0, 0.3], vec![0.0, 0.0, 1.5]]),
+[m[32m+        (
+[m[32m+            "sym",
+[m[32m+            vec![
+[m[32m+                vec![2.0, 1.0, 0.0],
+[m[32m+                vec![1.0, 3.0, 1.0],
+[m[32m+                vec![0.0, 1.0, 2.0],
+[m[32m+            ],
+[m[32m+        ),
+[m[32m+        (
+[m[32m+            "real_nonsym",
+[m[32m+            vec![
+[m[32m+                vec![3.0, 0.4, 0.1],
+[m[32m+                vec![0.0, 2.0, 0.3],
+[m[32m+                vec![0.0, 0.0, 1.5],
+[m[32m+            ],
+[m[32m+        ),
+[m         ("rot", vec![vec![0.0, -1.0], vec![1.0, 0.0]]),
+[31m-        ("complex3", vec![vec![0.5, -1.2, 0.3], vec![1.1, 0.4, -0.2], vec![0.0, 0.6, 0.9]]),
+[m[31m-        ("scalerot", vec![vec![1.0, -2.0, 0.0], vec![2.0, 1.0, 0.0], vec![0.0, 0.0, 4.0]]),
+[m[32m+        (
+[m[32m+            "complex3",
+[m[32m+            vec![
+[m[32m+                vec![0.5, -1.2, 0.3],
+[m[32m+                vec![1.1, 0.4, -0.2],
+[m[32m+                vec![0.0, 0.6, 0.9],
+[m[32m+            ],
+[m[32m+        ),
+[m[32m+        (
+[m[32m+            "scalerot",
+[m[32m+            vec![
+[m[32m+                vec![1.0, -2.0, 0.0],
+[m[32m+                vec![2.0, 1.0, 0.0],
+[m[32m+                vec![0.0, 0.0, 4.0],
+[m[32m+            ],
+[m[32m+        ),
+[m     ];
+     for (name, a) in &mats {
+         let n = a.len();
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_eigvec_cplx.rs:1:
+[31m-use fsci_linalg::{eig, DecompOptions};
+[m[31m-fn main(){
+[m[31m-  // rot: eigenvalues ±i. dgeev packs complex eigvec as vr (col j) + i vi (col j+1).
+[m[31m-  let mats: Vec<(&str,Vec<Vec<f64>>)> = vec![
+[m[31m-    ("rot", vec![vec![0.0,-1.0],vec![1.0,0.0]]),
+[m[31m-    ("complex3", vec![vec![0.5,-1.2,0.3],vec![1.1,0.4,-0.2],vec![0.0,0.6,0.9]]),
+[m[31m-  ];
+[m[31m-  for (name,a) in &mats {
+[m[31m-    let n=a.len();
+[m[31m-    let r=eig(a,DecompOptions::default()).unwrap();
+[m[31m-    for j in 0..n {
+[m[31m-      println!("{name},lam,{j},{:.17e},{:.17e}",r.eigenvalues_re[j],r.eigenvalues_im[j]);
+[m[31m-      for i in 0..n { println!("{name},vec,{j}_{i},{:.17e}",r.eigenvectors[i][j]); }
+[m[31m-    }
+[m[31m-    // try to interpret as dgeev packing: for a conj pair (j, j+1), v = col_j + i col_{j+1}
+[m[31m-    // check residual ||A v - lam v|| for the first of each pair
+[m[31m-    let mut j=0;
+[m[31m-    while j<n {
+[m[31m-      if r.eigenvalues_im[j].abs()>1e-9 && j+1<n {
+[m[31m-        let lam=(r.eigenvalues_re[j], r.eigenvalues_im[j]);
+[m[31m-        let vr:Vec<f64>=(0..n).map(|i| r.eigenvectors[i][j]).collect();
+[m[31m-        let vi:Vec<f64>=(0..n).map(|i| r.eigenvectors[i][j+1]).collect();
+[m[31m-        // (A (vr+i vi) - (lr+i li)(vr+i vi))
+[m[31m-        let mut maxres=0.0f64;
+[m[31m-        for i in 0..n {
+[m[31m-          let avr:f64=(0..n).map(|k|a[i][k]*vr[k]).sum();
+[m[31m-          let avi:f64=(0..n).map(|k|a[i][k]*vi[k]).sum();
+[m[31m-          let re=avr-(lam.0*vr[i]-lam.1*vi[i]);
+[m[31m-          let im=avi-(lam.0*vi[i]+lam.1*vr[i]);
+[m[31m-          maxres=maxres.max((re*re+im*im).sqrt());
+[m[32m+use fsci_linalg::{DecompOptions, eig};
+[m[32m+fn main() {
+[m[32m+    // rot: eigenvalues ±i. dgeev packs complex eigvec as vr (col j) + i vi (col j+1).
+[m[32m+    let mats: Vec<(&str, Vec<Vec<f64>>)> = vec![
+[m[32m+        ("rot", vec![vec![0.0, -1.0], vec![1.0, 0.0]]),
+[m[32m+        (
+[m[32m+            "complex3",
+[m[32m+            vec![
+[m[32m+                vec![0.5, -1.2, 0.3],
+[m[32m+                vec![1.1, 0.4, -0.2],
+[m[32m+                vec![0.0, 0.6, 0.9],
+[m[32m+            ],
+[m[32m+        ),
+[m[32m+    ];
+[m[32m+    for (name, a) in &mats {
+[m[32m+        let n = a.len();
+[m[32m+        let r = eig(a, DecompOptions::default()).unwrap();
+[m[32m+        for j in 0..n {
+[m[32m+            println!(
+[m[32m+                "{name},lam,{j},{:.17e},{:.17e}",
+[m[32m+                r.eigenvalues_re[j], r.eigenvalues_im[j]
+[m[32m+            );
+[m[32m+            for i in 0..n {
+[m[32m+                println!("{name},vec,{j}_{i},{:.17e}", r.eigenvectors[i][j]);
+[m[32m+            }
+[m         }
+[31m-        println!("{name},packresid,{j},{maxres:.6e}");
+[m[31m-        j+=2;
+[m[31m-      } else { j+=1; }
+[m[32m+        // try to interpret as dgeev packing: for a conj pair (j, j+1), v = col_j + i col_{j+1}
+[m[32m+        // check residual ||A v - lam v|| for the first of each pair
+[m[32m+        let mut j = 0;
+[m[32m+        while j < n {
+[m[32m+            if r.eigenvalues_im[j].abs() > 1e-9 && j + 1 < n {
+[m[32m+                let lam = (r.eigenvalues_re[j], r.eigenvalues_im[j]);
+[m[32m+                let vr: Vec<f64> = (0..n).map(|i| r.eigenvectors[i][j]).collect();
+[m[32m+                let vi: Vec<f64> = (0..n).map(|i| r.eigenvectors[i][j + 1]).collect();
+[m[32m+                // (A (vr+i vi) - (lr+i li)(vr+i vi))
+[m[32m+                let mut maxres = 0.0f64;
+[m[32m+                for i in 0..n {
+[m[32m+                    let avr: f64 = (0..n).map(|k| a[i][k] * vr[k]).sum();
+[m[32m+                    let avi: f64 = (0..n).map(|k| a[i][k] * vi[k]).sum();
+[m[32m+                    let re = avr - (lam.0 * vr[i] - lam.1 * vi[i]);
+[m[32m+                    let im = avi - (lam.0 * vi[i] + lam.1 * vr[i]);
+[m[32m+                    maxres = maxres.max((re * re + im * im).sqrt());
+[m[32m+                }
+[m[32m+                println!("{name},packresid,{j},{maxres:.6e}");
+[m[32m+                j += 2;
+[m[32m+            } else {
+[m[32m+                j += 1;
+[m[32m+            }
+[m[32m+        }
+[m     }
+[31m-  }
+[m }
+
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_lyap_complex.rs:1:
+ //! Probe: Lyapunov/Sylvester/ARE with COMPLEX-eigenvalue A vs scipy.linalg (gitignored).
+ use fsci_linalg::{
+[31m-    solve_continuous_are, solve_continuous_lyapunov, solve_discrete_are, solve_discrete_lyapunov,
+[m[31m-    solve_sylvester, DecompOptions,
+[m[32m+    DecompOptions, solve_continuous_are, solve_continuous_lyapunov, solve_discrete_are,
+[m[32m+    solve_discrete_lyapunov, solve_sylvester,
+[m };
+
+ fn dump(name: &str, m: &[Vec<f64>]) {
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_lyap_complex.rs:40:
+     let bare = vec![vec![0.0], vec![1.0]];
+     let qare = vec![vec![1.0, 0.0], vec![0.0, 1.0]];
+     let rare = vec![vec![1.0]];
+[31m-    run("care_cplx", solve_continuous_are(&aare, &bare, &qare, &rare, o()));
+[m[32m+    run(
+[m[32m+        "care_cplx",
+[m[32m+        solve_continuous_are(&aare, &bare, &qare, &rare, o()),
+[m[32m+    );
+[m
+     // Discrete ARE with complex-eigenvalue A
+     let adare = vec![vec![0.3, -0.5], vec![0.5, 0.3]];
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_lyap_complex.rs:47:
+[31m-    run("dare_cplx", solve_discrete_are(&adare, &bare, &qare, &rare, o()));
+[m[32m+    run(
+[m[32m+        "dare_cplx",
+[m[32m+        solve_discrete_are(&adare, &bare, &qare, &rare, o()),
+[m[32m+    );
+[m }
+
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_matfunc2.rs:1:
+ //! Probe: logm/fracpow/signm on a complex-eigenvalue matrix vs scipy (gitignored).
+[31m-use fsci_linalg::{fractional_matrix_power, logm, signm, expm, DecompOptions};
+[m[32m+use fsci_linalg::{DecompOptions, expm, fractional_matrix_power, logm, signm};
+[m
+ fn dump(func: &str, m: &[Vec<f64>]) {
+     for (r, row) in m.iter().enumerate() {
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_matfunc2.rs:30:
+     ];
+     for (lbl, a) in [("m2", &m2), ("m4", &m4)] {
+         run(&format!("logm_{lbl}"), logm(a, o()));
+[31m-        run(&format!("fracpow0.5_{lbl}"), fractional_matrix_power(a, 0.5, o()));
+[m[32m+        run(
+[m[32m+            &format!("fracpow0.5_{lbl}"),
+[m[32m+            fractional_matrix_power(a, 0.5, o()),
+[m[32m+        );
+[m         run(&format!("signm_{lbl}"), signm(a, o()));
+         run(&format!("expm_{lbl}"), expm(a, o()));
+     }
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_matfuncs.rs:1:
+ //! Differential oracle probe: matrix functions vs scipy.linalg (gitignored).
+ //! Lines: `func,mat,r,c,value` or `func,mat,ERR`. Matrices defined identically in python cmp.
+[31m-use fsci_linalg::{coshm, cosm, expm, fractional_matrix_power, logm, signm, sinhm, sinm, sqrtm, DecompOptions};
+[m[32m+use fsci_linalg::{
+[m[32m+    DecompOptions, coshm, cosm, expm, fractional_matrix_power, logm, signm, sinhm, sinm, sqrtm,
+[m[32m+};
+[m
+ fn dump(func: &str, mat: &str, m: &[Vec<f64>]) {
+     for (r, row) in m.iter().enumerate() {
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_matsolvers.rs:1:
+ //! Differential oracle probe: matrix-equation solvers + polar vs scipy.linalg (gitignored).
+ //! Lines: `name,r,c,value`. Inputs match the python comparator.
+ use fsci_linalg::{
+[31m-    polar, solve_continuous_are, solve_continuous_lyapunov, solve_discrete_are,
+[m[31m-    solve_discrete_lyapunov, solve_sylvester, DecompOptions,
+[m[32m+    DecompOptions, polar, solve_continuous_are, solve_continuous_lyapunov, solve_discrete_are,
+[m[32m+    solve_discrete_lyapunov, solve_sylvester,
+[m };
+
+ fn dump(name: &str, m: &[Vec<f64>]) {
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_matsolvers.rs:42:
+     let bare = vec![vec![0.0], vec![1.0]];
+     let qare = vec![vec![1.0, 0.0], vec![0.0, 1.0]];
+     let rare = vec![vec![1.0]];
+[31m-    run("care", solve_continuous_are(&aare, &bare, &qare, &rare, o()));
+[m[32m+    run(
+[m[32m+        "care",
+[m[32m+        solve_continuous_are(&aare, &bare, &qare, &rare, o()),
+[m[32m+    );
+[m
+     // Discrete ARE
+     let adare = vec![vec![0.9, 0.1], vec![0.0, 0.8]];
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_signm.rs:1:
+[31m-use fsci_linalg::{signm, DecompOptions};
+[m[31m-fn run(l:&str,r:Result<Vec<Vec<f64>>,fsci_linalg::LinalgError>){match r{Ok(m)=>{for(i,row)in m.iter().enumerate(){for(j,&v)in row.iter().enumerate(){println!("{l},{i},{j},{v:.17e}");}}}Err(e)=>println!("{l},ERR,{e:?}")}}
+[m[31m-fn main(){
+[m[31m-  let o=||DecompOptions::default();
+[m[31m-  // s1: eigenvalues 1±3i (right half-plane) -> signm should be I
+[m[31m-  let s1=vec![vec![3.0,-5.0],vec![2.0,-1.0]];
+[m[31m-  // s2: eigenvalues -1±2i (left half-plane) -> signm should be -I
+[m[31m-  let s2=vec![vec![-1.0,-2.0],vec![2.0,-1.0]];
+[m[31m-  // s3: 3x3 mixed: block with Re>0 + real negative eigenvalue
+[m[31m-  let s3=vec![vec![0.5,-1.2,0.3],vec![1.1,0.4,-0.2],vec![0.0,0.0,-2.0]];
+[m[31m-  run("signm_s1",signm(&s1,o()));
+[m[31m-  run("signm_s2",signm(&s2,o()));
+[m[31m-  run("signm_s3",signm(&s3,o()));
+[m[32m+use fsci_linalg::{DecompOptions, signm};
+[m[32m+fn run(l: &str, r: Result<Vec<Vec<f64>>, fsci_linalg::LinalgError>) {
+[m[32m+    match r {
+[m[32m+        Ok(m) => {
+[m[32m+            for (i, row) in m.iter().enumerate() {
+[m[32m+                for (j, &v) in row.iter().enumerate() {
+[m[32m+                    println!("{l},{i},{j},{v:.17e}");
+[m[32m+                }
+[m[32m+            }
+[m[32m+        }
+[m[32m+        Err(e) => println!("{l},ERR,{e:?}"),
+[m[32m+    }
+[m[32m+}
+[m[32m+fn main() {
+[m[32m+    let o = || DecompOptions::default();
+[m[32m+    // s1: eigenvalues 1±3i (right half-plane) -> signm should be I
+[m[32m+    let s1 = vec![vec![3.0, -5.0], vec![2.0, -1.0]];
+[m[32m+    // s2: eigenvalues -1±2i (left half-plane) -> signm should be -I
+[m[32m+    let s2 = vec![vec![-1.0, -2.0], vec![2.0, -1.0]];
+[m[32m+    // s3: 3x3 mixed: block with Re>0 + real negative eigenvalue
+[m[32m+    let s3 = vec![
+[m[32m+        vec![0.5, -1.2, 0.3],
+[m[32m+        vec![1.1, 0.4, -0.2],
+[m[32m+        vec![0.0, 0.0, -2.0],
+[m[32m+    ];
+[m[32m+    run("signm_s1", signm(&s1, o()));
+[m[32m+    run("signm_s2", signm(&s2, o()));
+[m[32m+    run("signm_s3", signm(&s3, o()));
+[m }
+
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_specmat.rs:19:
+     dump("invhilbert5", &invhilbert(5));
+     dump("pascal_sym4", &pascal(4, true));
+     dump("pascal_low4", &pascal(4, false));
+[31m-    dump("toeplitz", &toeplitz(&[1.0, 2.0, 3.0, 4.0], Some(&[1.0, 5.0, 6.0])));
+[m[32m+    dump(
+[m[32m+        "toeplitz",
+[m[32m+        &toeplitz(&[1.0, 2.0, 3.0, 4.0], Some(&[1.0, 5.0, 6.0])),
+[m[32m+    );
+[m     dump("circulant", &circulant(&[1.0, 2.0, 3.0, 4.0]));
+[31m-    dump("hankel", &hankel(&[1.0, 2.0, 3.0, 4.0], Some(&[4.0, 7.0, 8.0, 9.0])));
+[m[32m+    dump(
+[m[32m+        "hankel",
+[m[32m+        &hankel(&[1.0, 2.0, 3.0, 4.0], Some(&[4.0, 7.0, 8.0, 9.0])),
+[m[32m+    );
+[m     dump("tri_5_4_1", &tri(5, 4, 1));
+     dump("tri_4_4_-1", &tri(4, 4, -1));
+     dump("vander_inc", &vander(&[1.0, 2.0, 3.0, 5.0], Some(4), true));
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_specmat.rs:29:
+     dump("helmert5", &helmert(5));
+     dump("helmert_full5", &helmert_full(5));
+     dump("fiedler", &fiedler(&[1.0, 4.0, 12.0, 45.0]));
+[31m-    dump("fiedler_companion", &fiedler_companion(&[1.0, -3.0, 2.0, -5.0, 7.0]));
+[m[32m+    dump(
+[m[32m+        "fiedler_companion",
+[m[32m+        &fiedler_companion(&[1.0, -3.0, 2.0, -5.0, 7.0]),
+[m[32m+    );
+[m     if let Ok(m) = hadamard(8) {
+         dump("hadamard8", &m);
+     }
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_specmat2.rs:1:
+ //! Differential probe: special-matrix constructors vs scipy.linalg (gitignored).
+ //! Lines: `name|rows|cols|v00;v01;...` row-major.
+ use fsci_linalg as la;
+[31m-fn dump(name:&str, m:&[Vec<f64>]){
+[m[31m-    let r=m.len(); let c=if r>0 {m[0].len()} else {0};
+[m[31m-    let mut s=Vec::new();
+[m[31m-    for row in m { for &v in row { s.push(format!("{v:.17e}")); } }
+[m[32m+fn dump(name: &str, m: &[Vec<f64>]) {
+[m[32m+    let r = m.len();
+[m[32m+    let c = if r > 0 { m[0].len() } else { 0 };
+[m[32m+    let mut s = Vec::new();
+[m[32m+    for row in m {
+[m[32m+        for &v in row {
+[m[32m+            s.push(format!("{v:.17e}"));
+[m[32m+        }
+[m[32m+    }
+[m     println!("{name}|{r}|{c}|{}", s.join(";"));
+ }
+[31m-fn main(){
+[m[31m-    for n in [2usize,3,4,5,6,7] {
+[m[32m+fn main() {
+[m[32m+    for n in [2usize, 3, 4, 5, 6, 7] {
+[m         dump(&format!("hilbert_{n}"), &la::hilbert(n));
+         dump(&format!("invhilbert_{n}"), &la::invhilbert(n));
+[31m-        dump(&format!("pascal_sym_{n}"), &la::pascal(n,true));
+[m[31m-        dump(&format!("pascal_low_{n}"), &la::pascal(n,false));
+[m[32m+        dump(&format!("pascal_sym_{n}"), &la::pascal(n, true));
+[m[32m+        dump(&format!("pascal_low_{n}"), &la::pascal(n, false));
+[m         dump(&format!("helmert_{n}"), &la::helmert(n));
+         dump(&format!("helmertfull_{n}"), &la::helmert_full(n));
+     }
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_specmat2.rs:19:
+     // toeplitz / circulant / hankel
+[31m-    dump("toeplitz", &la::toeplitz(&[1.0,2.0,3.0,4.0], Some(&[1.0,5.0,6.0])));
+[m[31m-    dump("circulant", &la::circulant(&[1.0,2.0,3.0,4.0]));
+[m[31m-    dump("hankel", &la::hankel(&[1.0,2.0,3.0,4.0], Some(&[4.0,7.0,8.0,9.0])));
+[m[32m+    dump(
+[m[32m+        "toeplitz",
+[m[32m+        &la::toeplitz(&[1.0, 2.0, 3.0, 4.0], Some(&[1.0, 5.0, 6.0])),
+[m[32m+    );
+[m[32m+    dump("circulant", &la::circulant(&[1.0, 2.0, 3.0, 4.0]));
+[m[32m+    dump(
+[m[32m+        "hankel",
+[m[32m+        &la::hankel(&[1.0, 2.0, 3.0, 4.0], Some(&[4.0, 7.0, 8.0, 9.0])),
+[m[32m+    );
+[m     // fiedler / fiedler_companion / companion / leslie
+[31m-    dump("fiedler", &la::fiedler(&[1.0,2.0,3.0,4.0]));
+[m[31m-    dump("fiedler_companion", &la::fiedler_companion(&[1.0,-3.0,2.0,5.0,1.0]));
+[m[31m-    dump("companion", &la::companion(&[1.0,-6.0,11.0,-6.0]).unwrap());
+[m[31m-    dump("leslie", &la::leslie(&[0.1,2.0,1.0,0.1], &[0.2,0.8,0.7]).unwrap());
+[m[32m+    dump("fiedler", &la::fiedler(&[1.0, 2.0, 3.0, 4.0]));
+[m[32m+    dump(
+[m[32m+        "fiedler_companion",
+[m[32m+        &la::fiedler_companion(&[1.0, -3.0, 2.0, 5.0, 1.0]),
+[m[32m+    );
+[m[32m+    dump(
+[m[32m+        "companion",
+[m[32m+        &la::companion(&[1.0, -6.0, 11.0, -6.0]).unwrap(),
+[m[32m+    );
+[m[32m+    dump(
+[m[32m+        "leslie",
+[m[32m+        &la::leslie(&[0.1, 2.0, 1.0, 0.1], &[0.2, 0.8, 0.7]).unwrap(),
+[m[32m+    );
+[m     // tri / convolution_matrix
+[31m-    dump("tri", &la::tri(4,5,1));
+[m[31m-    dump("convmat_full", &la::convolution_matrix(&[1.0,2.0,3.0], 4, "full"));
+[m[31m-    dump("convmat_same", &la::convolution_matrix(&[1.0,2.0,3.0], 4, "same"));
+[m[31m-    dump("convmat_valid", &la::convolution_matrix(&[1.0,2.0,3.0], 4, "valid"));
+[m[32m+    dump("tri", &la::tri(4, 5, 1));
+[m[32m+    dump(
+[m[32m+        "convmat_full",
+[m[32m+        &la::convolution_matrix(&[1.0, 2.0, 3.0], 4, "full"),
+[m[32m+    );
+[m[32m+    dump(
+[m[32m+        "convmat_same",
+[m[32m+        &la::convolution_matrix(&[1.0, 2.0, 3.0], 4, "same"),
+[m[32m+    );
+[m[32m+    dump(
+[m[32m+        "convmat_valid",
+[m[32m+        &la::convolution_matrix(&[1.0, 2.0, 3.0], 4, "valid"),
+[m[32m+    );
+[m }
+
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/bin/diff_sqrtm.rs:1:
+ //! Probe: sqrtm on complex-eigenvalue matrices vs scipy.linalg.sqrtm (gitignored).
+[31m-use fsci_linalg::{sqrtm, DecompOptions};
+[m[32m+use fsci_linalg::{DecompOptions, sqrtm};
+[m
+ fn dump(func: &str, m: &[Vec<f64>]) {
+     for (r, row) in m.iter().enumerate() {

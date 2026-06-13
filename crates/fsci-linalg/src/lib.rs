@@ -12163,44 +12163,18 @@ fn matmul_flat_compute_rows(
                     let packed_panel0_base = (j0 / NR) * ka * NR;
                     let packed_panel1_base = packed_panel0_base + ka * NR;
                     let packed_panel2_base = packed_panel1_base + ka * NR;
+                    let packed_panel0 = &packed_b[packed_panel0_base..packed_panel1_base];
+                    let packed_panel1 = &packed_b[packed_panel1_base..packed_panel2_base];
+                    let packed_panel2 = &packed_b[packed_panel2_base..packed_panel2_base + ka * NR];
                     for k in 0..ka {
                         let a0 = a_flat[a0_base + k];
                         let a1 = a_flat[a1_base + k];
                         let a2 = a_flat[a2_base + k];
                         let a3 = a_flat[a3_base + k];
-                        let b0_base = packed_panel0_base + k * NR;
-                        let b1_base = packed_panel1_base + k * NR;
-                        let b2_base = packed_panel2_base + k * NR;
-                        let b0_vec = Simd::from_array([
-                            packed_b[b0_base],
-                            packed_b[b0_base + 1],
-                            packed_b[b0_base + 2],
-                            packed_b[b0_base + 3],
-                            packed_b[b0_base + 4],
-                            packed_b[b0_base + 5],
-                            packed_b[b0_base + 6],
-                            packed_b[b0_base + 7],
-                        ]);
-                        let b1_vec = Simd::from_array([
-                            packed_b[b1_base],
-                            packed_b[b1_base + 1],
-                            packed_b[b1_base + 2],
-                            packed_b[b1_base + 3],
-                            packed_b[b1_base + 4],
-                            packed_b[b1_base + 5],
-                            packed_b[b1_base + 6],
-                            packed_b[b1_base + 7],
-                        ]);
-                        let b2_vec = Simd::from_array([
-                            packed_b[b2_base],
-                            packed_b[b2_base + 1],
-                            packed_b[b2_base + 2],
-                            packed_b[b2_base + 3],
-                            packed_b[b2_base + 4],
-                            packed_b[b2_base + 5],
-                            packed_b[b2_base + 6],
-                            packed_b[b2_base + 7],
-                        ]);
+                        let panel_row = k * NR;
+                        let b0_vec = Simd::from_slice(&packed_panel0[panel_row..panel_row + NR]);
+                        let b1_vec = Simd::from_slice(&packed_panel1[panel_row..panel_row + NR]);
+                        let b2_vec = Simd::from_slice(&packed_panel2[panel_row..panel_row + NR]);
                         acc0[0] += Simd::splat(a0) * b0_vec;
                         acc1[0] += Simd::splat(a0) * b1_vec;
                         acc2[0] += Simd::splat(a0) * b2_vec;
@@ -12227,22 +12201,14 @@ fn matmul_flat_compute_rows(
                     let a3_base = (i0 + 3) * ka;
                     let mut acc = [Simd::<f64, NR>::splat(0.0); MR];
                     let packed_panel_base = (j0 / NR) * ka * NR;
+                    let packed_panel = &packed_b[packed_panel_base..packed_panel_base + ka * NR];
                     for k in 0..ka {
                         let a0 = a_flat[a0_base + k];
                         let a1 = a_flat[a1_base + k];
                         let a2 = a_flat[a2_base + k];
                         let a3 = a_flat[a3_base + k];
-                        let b_base = packed_panel_base + k * NR;
-                        let b_vec = Simd::from_array([
-                            packed_b[b_base],
-                            packed_b[b_base + 1],
-                            packed_b[b_base + 2],
-                            packed_b[b_base + 3],
-                            packed_b[b_base + 4],
-                            packed_b[b_base + 5],
-                            packed_b[b_base + 6],
-                            packed_b[b_base + 7],
-                        ]);
+                        let panel_row = k * NR;
+                        let b_vec = Simd::from_slice(&packed_panel[panel_row..panel_row + NR]);
                         acc[0] += Simd::splat(a0) * b_vec;
                         acc[1] += Simd::splat(a1) * b_vec;
                         acc[2] += Simd::splat(a2) * b_vec;
