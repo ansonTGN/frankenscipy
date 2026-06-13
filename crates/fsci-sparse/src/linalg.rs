@@ -3423,7 +3423,7 @@ pub fn shortest_path(graph: &CsrMatrix, source: usize, target: usize) -> (f64, V
 fn minimum_degree_ordering(a: &CsrMatrix) -> Vec<usize> {
     let rows = a.shape().rows;
     if rows >= 1024 && a.nnz() <= rows.saturating_mul(8) && mmd_max_raw_row_width(a) <= 64 {
-        minimum_degree_ordering_btreeset(a)
+        minimum_degree_ordering_sorted_vec(a)
     } else {
         minimum_degree_ordering_hashset(a)
     }
@@ -3436,24 +3436,24 @@ fn mmd_max_raw_row_width(a: &CsrMatrix) -> usize {
         .unwrap_or(0)
 }
 
-fn minimum_degree_ordering_btreeset(a: &CsrMatrix) -> Vec<usize> {
+fn minimum_degree_ordering_sorted_vec(a: &CsrMatrix) -> Vec<usize> {
     use std::cmp::Reverse;
-    use std::collections::{BTreeSet, BinaryHeap};
+    use std::collections::BinaryHeap;
     let n = a.shape().rows;
     if n == 0 {
         return vec![];
     }
-    let mut adj: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); n];
+    let mut adj: Vec<Vec<usize>> = vec![Vec::new(); n];
     for i in 0..n {
         for idx in a.indptr()[i]..a.indptr()[i + 1] {
             let j = a.indices()[idx];
             if j != i && a.data()[idx] != 0.0 {
-                adj[i].insert(j);
-                adj[j].insert(i);
+                sorted_insert_unique(&mut adj[i], j);
+                sorted_insert_unique(&mut adj[j], i);
             }
         }
     }
-    let mut deg: Vec<usize> = adj.iter().map(BTreeSet::len).collect();
+    let mut deg: Vec<usize> = adj.iter().map(Vec::len).collect();
     let mut heap: BinaryHeap<Reverse<(usize, usize)>> =
         (0..n).map(|v| Reverse((deg[v], v))).collect();
     let mut eliminated = vec![false; n];
@@ -3469,13 +3469,13 @@ fn minimum_degree_ordering_btreeset(a: &CsrMatrix) -> Vec<usize> {
         order.push(u);
         let nbrs: Vec<usize> = adj[u].iter().copied().filter(|&w| !eliminated[w]).collect();
         for &w in &nbrs {
-            adj[w].remove(&u);
+            sorted_remove(&mut adj[w], u);
         }
         for ai in 0..nbrs.len() {
             for bi in (ai + 1)..nbrs.len() {
                 let (x, y) = (nbrs[ai], nbrs[bi]);
-                adj[x].insert(y);
-                adj[y].insert(x);
+                sorted_insert_unique(&mut adj[x], y);
+                sorted_insert_unique(&mut adj[y], x);
             }
         }
         for &w in &nbrs {
@@ -3487,6 +3487,18 @@ fn minimum_degree_ordering_btreeset(a: &CsrMatrix) -> Vec<usize> {
         }
     }
     order
+}
+
+fn sorted_insert_unique(values: &mut Vec<usize>, value: usize) {
+    if let Err(pos) = values.binary_search(&value) {
+        values.insert(pos, value);
+    }
+}
+
+fn sorted_remove(values: &mut Vec<usize>, value: usize) {
+    if let Ok(pos) = values.binary_search(&value) {
+        values.remove(pos);
+    }
 }
 
 fn minimum_degree_ordering_hashset(a: &CsrMatrix) -> Vec<usize> {
@@ -5409,6 +5421,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::needless_range_loop)]
     fn wide_banded_routes_to_native_sparse_lu() {
         // n=300, half-bandwidth 9 → 19 nnz/row (over the 16·n density gate) but bw·32=288≤n,
         // so the bandwidth gate routes it to the native sparse LU instead of densifying.
@@ -5446,6 +5459,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::needless_range_loop)]
     fn min_degree_ordering_solves_correctly_on_arrowhead() {
         // Arrowhead (dense hub through node 0) at n>=256 so the native sparse LU runs.
         // Min-degree (MmdAtPlusA) reorders via b->Pb, x[P[i]]=z[i]; the result must
@@ -5609,6 +5623,7 @@ mod tests {
         let cases = [
             laplacian_2d_for_mmd(8),
             laplacian_2d_for_mmd(16),
+            laplacian_2d_for_mmd(32),
             arrowhead_for_mmd(96),
             fragmented_pairs_graph(64),
         ];
