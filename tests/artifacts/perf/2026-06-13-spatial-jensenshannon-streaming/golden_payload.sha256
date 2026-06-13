@@ -1,0 +1,2 @@
+5ab6b7d54fc5a8e16d496e97cb7ee1211ac17d2abeb22c65299c46bdc7e3caf7  tests/artifacts/perf/2026-06-13-spatial-jensenshannon-streaming/baseline_golden_payload.txt
+5ab6b7d54fc5a8e16d496e97cb7ee1211ac17d2abeb22c65299c46bdc7e3caf7  tests/artifacts/perf/2026-06-13-spatial-jensenshannon-streaming/after_ordered_simd_golden_payload.txt

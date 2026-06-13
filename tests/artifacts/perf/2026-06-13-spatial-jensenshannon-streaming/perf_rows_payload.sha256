@@ -1,0 +1,2 @@
+b68f144a293e22b318bc037e3aa0a4c40b03ad22033fcf3158a5a9a822ff754f  tests/artifacts/perf/2026-06-13-spatial-jensenshannon-streaming/baseline_perf_rows_payload.txt
+dc8eacf62ed6e3010a569b4f2b929b4ede12020098ce75f1146895a1cc1292c5  tests/artifacts/perf/2026-06-13-spatial-jensenshannon-streaming/after_ordered_simd_perf_rows_payload.txt

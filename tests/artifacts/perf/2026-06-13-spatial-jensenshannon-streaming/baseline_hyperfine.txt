@@ -1,0 +1,3 @@
+Benchmark 1: rch exec -- cargo run --profile release-perf -p fsci-spatial --bin perf_cdist --locked --quiet -- jensenshannon
+  Time (mean ± σ):     162.139 s ± 27.509 s    [User: 1.251 s, System: 2.099 s]
+  Range (min … max):   132.986 s … 187.638 s    3 runs

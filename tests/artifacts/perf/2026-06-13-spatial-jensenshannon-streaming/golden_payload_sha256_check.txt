@@ -1,0 +1,2 @@
+tests/artifacts/perf/2026-06-13-spatial-jensenshannon-streaming/baseline_golden_payload.txt: OK
+tests/artifacts/perf/2026-06-13-spatial-jensenshannon-streaming/after_ordered_simd_golden_payload.txt: OK

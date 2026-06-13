@@ -1,0 +1,4 @@
+jensenshannon n=256: per_call=0.005708ms checksum=2.73049734656508699e4
+jensenshannon n=1024: per_call=0.025082ms checksum=2.73015036350897935e4
+jensenshannon n=4096: per_call=0.101914ms checksum=6.81428092905769699e3
+jensenshannon n=16384: per_call=0.422666ms checksum=1.70433153929124728e3

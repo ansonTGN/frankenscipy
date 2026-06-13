@@ -5,7 +5,8 @@ use std::hint::black_box;
 use std::time::Instant;
 
 use fsci_spatial::{
-    DistanceMetric, canberra, cdist_metric, mahalanobis, metric_distance, pdist, seuclidean,
+    DistanceMetric, canberra, cdist_metric, jensenshannon, mahalanobis, metric_distance, pdist,
+    seuclidean,
 };
 
 fn grid(n: usize, dim: usize, seed: f64) -> Vec<Vec<f64>> {
@@ -34,6 +35,11 @@ fn time_it(iters: usize, mut f: impl FnMut() -> Vec<Vec<f64>>) -> f64 {
 }
 
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("jensenshannon") {
+        jensenshannon_bench();
+        return;
+    }
+
     let metric = DistanceMetric::Euclidean;
     for &(na, nb, dim) in &[
         (2000usize, 2000usize, 3usize),
@@ -134,6 +140,7 @@ fn maha_bench() {
         let ms = t0.elapsed().as_secs_f64() * 1e3 / reps as f64;
         println!("canberra n={n}: per_call={ms:>8.6}ms checksum={acc:.6e}");
     }
+    jensenshannon_bench();
 }
 
 fn time_it2(iters: usize, mut f: impl FnMut() -> Vec<f64>) -> f64 {
@@ -143,4 +150,23 @@ fn time_it2(iters: usize, mut f: impl FnMut() -> Vec<f64>) -> f64 {
         black_box(f());
     }
     start.elapsed().as_secs_f64() * 1e3 / iters as f64
+}
+
+fn jensenshannon_bench() {
+    for &n in &[256usize, 1024, 4096, 16384] {
+        let x: Vec<f64> = (0..n)
+            .map(|i| 0.1 + (i as f64 * 0.37).sin().abs())
+            .collect();
+        let y: Vec<f64> = (0..n)
+            .map(|i| 0.1 + (i as f64 * 0.41 + 1.0).cos().abs())
+            .collect();
+        let reps = (120_000_000 / (n + 1)).clamp(300, 120_000);
+        let t0 = Instant::now();
+        let mut acc = 0.0;
+        for _ in 0..reps {
+            acc += jensenshannon(black_box(&x), black_box(&y), None);
+        }
+        let ms = t0.elapsed().as_secs_f64() * 1e3 / reps as f64;
+        println!("jensenshannon n={n}: per_call={ms:>8.6}ms checksum={acc:.17e}");
+    }
 }

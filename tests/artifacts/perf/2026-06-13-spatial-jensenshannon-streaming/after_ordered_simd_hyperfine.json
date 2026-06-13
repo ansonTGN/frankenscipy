@@ -1,0 +1,24 @@
+{
+  "results": [
+    {
+      "command": "rch exec -- cargo run --profile release-perf -p fsci-spatial --bin perf_cdist --locked --quiet -- jensenshannon",
+      "mean": 125.51539951707998,
+      "stddev": 2.1512284444164234,
+      "median": 124.87167125308,
+      "user": 1.1688543066666666,
+      "system": 2.0044798533333332,
+      "min": 123.75952587408,
+      "max": 127.91500142408,
+      "times": [
+        124.87167125308,
+        123.75952587408,
+        127.91500142408
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

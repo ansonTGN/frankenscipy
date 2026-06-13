@@ -1,0 +1,38 @@
+Diff in /data/projects/frankenscipy/crates/fsci-spatial/src/lib.rs:413:
+         let right = Simd::<f64, L>::from_slice(&q[i..i + L]) / sq;
+         let mean = (left + right) / two;
+         let tl = left.simd_eq(zero).select(zero, left * (left / mean).ln());
+[31m-        let tr = right.simd_eq(zero).select(zero, right * (right / mean).ln());
+[m[32m+        let tr = right
+[m[32m+            .simd_eq(zero)
+[m[32m+            .select(zero, right * (right / mean).ln());
+[m         for term in (tl + tr).to_array() {
+             js += term;
+         }
+Diff in /data/projects/frankenscipy/crates/fsci-spatial/src/lib.rs:4590:
+         // false" — so NaN is the f64 "undefined" signal for both. Normal inputs are
+         // unchanged.
+         let af = [false, false, false, false];
+[31m-        assert!(dice(&af, &af).is_nan(), "dice(all-false) must be NaN like scipy");
+[m[32m+        assert!(
+[m[32m+            dice(&af, &af).is_nan(),
+[m[32m+            "dice(all-false) must be NaN like scipy"
+[m[32m+        );
+[m         assert!(
+             sokalsneath(&af, &af).is_nan(),
+             "sokalsneath(all-false) must be NaN (scipy raises)"
+Diff in /data/projects/frankenscipy/crates/fsci-spatial/src/bin/perf_cdist.rs:154:
+
+ fn jensenshannon_bench() {
+     for &n in &[256usize, 1024, 4096, 16384] {
+[31m-        let x: Vec<f64> = (0..n).map(|i| 0.1 + (i as f64 * 0.37).sin().abs()).collect();
+[m[31m-        let y: Vec<f64> = (0..n).map(|i| 0.1 + (i as f64 * 0.41 + 1.0).cos().abs()).collect();
+[m[32m+        let x: Vec<f64> = (0..n)
+[m[32m+            .map(|i| 0.1 + (i as f64 * 0.37).sin().abs())
+[m[32m+            .collect();
+[m[32m+        let y: Vec<f64> = (0..n)
+[m[32m+            .map(|i| 0.1 + (i as f64 * 0.41 + 1.0).cos().abs())
+[m[32m+            .collect();
+[m         let reps = (120_000_000 / (n + 1)).clamp(300, 120_000);
+         let t0 = Instant::now();
+         let mut acc = 0.0;
