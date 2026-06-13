@@ -452,12 +452,31 @@ pub fn log_ive_scalar(v: f64, x: f64) -> f64 {
 
     const Z_ASYMP: f64 = 100.0;
     if z < Z_ASYMP {
-        // iv does not overflow below ~709, so the scaled value is exact here.
+        // iv does not overflow below ~709, so the scaled value is exact here…
         let ive = ive_scalar(v, x);
-        if ive <= 0.0 || !ive.is_finite() {
-            return f64::NEG_INFINITY;
+        if ive > 0.0 && ive.is_finite() {
+            return ive.ln();
         }
-        return ive.ln();
+        // …but I_v(x) UNDERFLOWS to 0 for large order v at moderate x (e.g.
+        // I_267(12.6) ≈ 1e-320), making ive=0 and ive.ln()=-inf. Recover the
+        // finite value from the ascending series in log space:
+        //   ln I_v(x) = v·ln(x/2) − lnΓ(v+1) + ln Σ_m (x²/4)^m / (m!·(v+1)_m),
+        // then ln(ive) = ln I_v(x) − |x|. frankenscipy.
+        let half = z / 2.0;
+        let x2_4 = half * half;
+        let mut term = 1.0_f64;
+        let mut sum = 1.0_f64;
+        for m in 0..2000 {
+            let mf = f64::from(m);
+            term *= x2_4 / ((mf + 1.0) * (v + 1.0 + mf));
+            sum += term;
+            if term <= 1e-18 * sum {
+                break;
+            }
+        }
+        let ln_gamma_vp1 =
+            crate::gamma::gammaln_scalar(v + 1.0, RuntimeMode::Strict).unwrap_or(f64::NAN);
+        return v * half.ln() - ln_gamma_vp1 + sum.ln() - z;
     }
 
     // DLMF 10.40.1 asymptotic series for the scaled Bessel function.
@@ -4835,6 +4854,19 @@ mod tests {
         assert_eq!(log_ive_scalar(0.0, 0.0), 0.0);
         assert_eq!(log_ive_scalar(1.0, 0.0), f64::NEG_INFINITY);
         assert!(log_ive_scalar(f64::NAN, 1.0).is_nan());
+
+        // LARGE ORDER at moderate x: I_v(x) underflows to 0 (ive.ln() would be
+        // −inf), but the log-space series keeps it finite. Golden values from
+        // mpmath log(besseli(v,x))−x. frankenscipy regression.
+        for &(v, z, want) in &[
+            (267.0_f64, 12.649_f64, -748.544_985_f64),
+            (500.0, 20.0, -1479.838_351),
+            (100.0, 12.649, -191.550_010),
+        ] {
+            let li = log_ive_scalar(v, z);
+            assert!(li.is_finite(), "log_ive({v},{z}) not finite");
+            assert!((li - want).abs() < 1e-3, "log_ive({v},{z})={li} vs {want}");
+        }
     }
 
     #[test]
