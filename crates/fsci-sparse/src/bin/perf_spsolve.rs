@@ -51,6 +51,64 @@ fn opts_with(ordering: PermutationOrdering) -> SolveOptions {
     SolveOptions { ordering, ..SolveOptions::default() }
 }
 
+// 2D 5-point Laplacian on a k×k grid (n=k²): the canonical fill-reduction benchmark.
+// RCM keeps bandwidth ~k -> fill O(n·k)=O(n^1.5); minimum-degree/nested-dissection
+// achieve O(n log n) fill. Diagonally dominant (diag 4+eps, neighbors -1) -> stable.
+fn laplacian_2d(k: usize) -> CsrMatrix {
+    let n = k * k;
+    let mut rows = Vec::new();
+    let mut cols = Vec::new();
+    let mut data = Vec::new();
+    let idx = |r: usize, c: usize| r * k + c;
+    for r in 0..k {
+        for c in 0..k {
+            let i = idx(r, c);
+            rows.push(i);
+            cols.push(i);
+            data.push(4.001);
+            for (dr, dc) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
+                let (nr, nc) = (r as i64 + dr, c as i64 + dc);
+                if nr >= 0 && nr < k as i64 && nc >= 0 && nc < k as i64 {
+                    rows.push(i);
+                    cols.push(idx(nr as usize, nc as usize));
+                    data.push(-1.0);
+                }
+            }
+        }
+    }
+    CooMatrix::from_triplets(Shape2D::new(n, n), data, rows, cols, false)
+        .unwrap()
+        .to_csr()
+        .unwrap()
+}
+
+// Arrowhead: diagonal + a dense hub row/col through node 0. nnz ~= 3n. Eliminating the
+// hub early (natural/RCM, which can't isolate it) fills the whole trailing block O(n²);
+// minimum-degree eliminates the degree-1 spokes first (no fill) and the hub last (no
+// fill) -> O(n). The showcase where min-degree crushes bandwidth ordering.
+fn arrowhead(n: usize) -> CsrMatrix {
+    let mut rows = Vec::new();
+    let mut cols = Vec::new();
+    let mut data = Vec::new();
+    for i in 0..n {
+        rows.push(i);
+        cols.push(i);
+        data.push(n as f64 + 4.0); // strong diagonal -> diagonally dominant, stable
+        if i != 0 {
+            rows.push(0);
+            cols.push(i);
+            data.push(-1.0);
+            rows.push(i);
+            cols.push(0);
+            data.push(-1.0);
+        }
+    }
+    CooMatrix::from_triplets(Shape2D::new(n, n), data, rows, cols, false)
+        .unwrap()
+        .to_csr()
+        .unwrap()
+}
+
 // Diagonally-dominant pentadiagonal A (bandwidth 2): diag 6, off-diagonals -1 at
 // ±1, ±2. nnz/row ~= 5, so a.nnz() <= 16n -> routes to the native sparse LU.
 fn pentadiagonal(n: usize) -> CsrMatrix {
@@ -189,6 +247,86 @@ fn main() {
         println!(
             "ordering n={n:>5}: natural={t_nat:>10.4}ms  rcm={t_rcm:>9.5}ms  speedup={:>9.1}x  max|dx|={max_dx:.2e}",
             t_nat / t_rcm
+        );
+    }
+
+    // ── NEW LEVER: minimum-degree (MmdAtPlusA) vs RCM on a 2D Laplacian ──
+    println!("--- minimum-degree vs RCM (2D 5-point Laplacian) ---");
+    for &k in &[20usize, 32, 45, 64] {
+        let a = laplacian_2d(k);
+        let n = k * k;
+        let b: Vec<f64> = (0..n).map(|i| 1.0 + (i % 13) as f64 * 0.5).collect();
+        let x_rcm = spsolve(&a, &b, opts_with(PermutationOrdering::Colamd)).expect("rcm").solution;
+        let x_mmd = spsolve(&a, &b, opts_with(PermutationOrdering::MmdAtPlusA)).expect("mmd").solution;
+        let max_dx = x_rcm.iter().zip(&x_mmd).map(|(s, d)| (s - d).abs()).fold(0.0_f64, f64::max);
+        let reps = (8_000_000 / (n + 1)).clamp(3, 2000);
+        let t_rcm = time(reps, || {
+            black_box(spsolve(black_box(&a), black_box(&b), opts_with(PermutationOrdering::Colamd)).unwrap());
+        });
+        let t_mmd = time(reps, || {
+            black_box(spsolve(black_box(&a), black_box(&b), opts_with(PermutationOrdering::MmdAtPlusA)).unwrap());
+        });
+        println!(
+            "lap2d k={k:>3} n={n:>5}: rcm={t_rcm:>10.4}ms  mmd={t_mmd:>9.5}ms  speedup={:>7.2}x  max|dx|={max_dx:.2e}",
+            t_rcm / t_mmd
+        );
+    }
+
+    // ── factor-once-solve-many: min-degree's smaller factor pays off per-solve ──
+    println!("--- splu factor + 200 solves: RCM vs min-degree (2D Laplacian) ---");
+    for &k in &[32usize, 45, 64] {
+        let a = laplacian_2d(k);
+        let a_csc: CscMatrix = a.to_csc().unwrap();
+        let n = k * k;
+        let b: Vec<f64> = (0..n).map(|i| 1.0 + (i % 13) as f64 * 0.5).collect();
+        let m = 200usize;
+
+        let lu_rcm = splu(&a_csc, LuOptions { ordering: PermutationOrdering::Colamd, ..LuOptions::default() }).expect("rcm");
+        let lu_mmd = splu(&a_csc, LuOptions { ordering: PermutationOrdering::MmdAtPlusA, ..LuOptions::default() }).expect("mmd");
+        let xr = splu_solve(&lu_rcm, &b).unwrap();
+        let xm = splu_solve(&lu_mmd, &b).unwrap();
+        let max_dx = xr.iter().zip(&xm).map(|(s, d)| (s - d).abs()).fold(0.0_f64, f64::max);
+
+        let reps = 30;
+        let t_rcm = time(reps, || {
+            for _ in 0..m { black_box(splu_solve(black_box(&lu_rcm), black_box(&b)).unwrap()); }
+        });
+        let t_mmd = time(reps, || {
+            for _ in 0..m { black_box(splu_solve(black_box(&lu_mmd), black_box(&b)).unwrap()); }
+        });
+        println!(
+            "solve×{m} k={k:>3} n={n:>5}: rcm={t_rcm:>9.4}ms  mmd={t_mmd:>9.4}ms  per-solve speedup={:>6.2}x  max|dx|={max_dx:.2e}",
+            t_rcm / t_mmd
+        );
+    }
+
+    println!("--- minimum-degree ordering (arrowhead) ---");
+    for &n in &[300usize, 600, 1000] {
+        let a = arrowhead(n);
+        let b: Vec<f64> = (0..n).map(|i| 1.0 + (i % 13) as f64 * 0.5).collect();
+
+        let x_rcm = spsolve(&a, &b, opts_with(PermutationOrdering::Colamd))
+            .expect("spsolve rcm")
+            .solution;
+        let x_mmd = spsolve(&a, &b, opts_with(PermutationOrdering::MmdAtPlusA))
+            .expect("spsolve mmd")
+            .solution;
+        let max_dx = x_rcm
+            .iter()
+            .zip(x_mmd.iter())
+            .map(|(s, d)| (s - d).abs())
+            .fold(0.0_f64, f64::max);
+
+        let reps = (5_000_000 / (n + 1)).clamp(5, 2000);
+        let t_rcm = time(reps, || {
+            black_box(spsolve(black_box(&a), black_box(&b), opts_with(PermutationOrdering::Colamd)).unwrap());
+        });
+        let t_mmd = time(reps, || {
+            black_box(spsolve(black_box(&a), black_box(&b), opts_with(PermutationOrdering::MmdAtPlusA)).unwrap());
+        });
+        println!(
+            "arrowhd n={n:>5}: rcm={t_rcm:>10.4}ms  mmd={t_mmd:>9.5}ms  speedup={:>9.1}x  max|dx|={max_dx:.2e}",
+            t_rcm / t_mmd
         );
     }
 }

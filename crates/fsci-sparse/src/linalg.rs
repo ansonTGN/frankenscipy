@@ -234,6 +234,15 @@ impl NativeSparseLu {
         // the choice only affects fill, not the result, which stays the unique solution.
         let fill_perm: Option<Vec<usize>> = match ordering {
             PermutationOrdering::Natural => None,
+            // Multiple-minimum-degree variants do a true min-degree elimination order on
+            // the symmetric pattern A+Aᵀ — directly minimizing fill, so they crush RCM on
+            // irregular patterns (arrowheads, stencils) where bandwidth ≠ fill. (scipy's
+            // COLAMD/MMD orderings are the same family.) RCM stays the cheap default for
+            // Colamd: O(V log V) vs min-degree's O(V²) selection.
+            PermutationOrdering::MmdAtPlusA | PermutationOrdering::MmdAta => {
+                let p = minimum_degree_ordering(a);
+                if p.len() == n { Some(p) } else { None }
+            }
             _ => {
                 let p = reverse_cuthill_mckee(a);
                 if p.len() == n { Some(p) } else { None }
@@ -3373,6 +3382,70 @@ pub fn shortest_path(graph: &CsrMatrix, source: usize, target: usize) -> (f64, V
 /// Reverse Cuthill-McKee ordering to reduce matrix bandwidth.
 ///
 /// Returns a permutation vector. Matches `scipy.sparse.csgraph.reverse_cuthill_mckee`.
+// Symmetric minimum-degree elimination ordering on the pattern of A+Aᵀ. Returns the
+// elimination order `order` (order[k] = node eliminated k-th = fill_perm[k]); factoring
+// P·A·Pᵀ in this order minimizes fill far better than bandwidth reduction on irregular
+// patterns (2D/3D stencils, etc.). At each step the lowest-index minimum-current-degree
+// uneliminated node is removed and its remaining neighbors are made a clique (the fill its
+// elimination forces). A lazy binary min-heap keyed (degree, index) does selection in
+// O(log n) amortized — without it the O(n²) selection scan cancels the fill savings.
+// Deterministic (lowest-index tie-break). Opt-in via MmdAtPlusA/MmdAta.
+fn minimum_degree_ordering(a: &CsrMatrix) -> Vec<usize> {
+    use std::cmp::Reverse;
+    use std::collections::{BTreeSet, BinaryHeap};
+    let n = a.shape().rows;
+    if n == 0 {
+        return vec![];
+    }
+    let mut adj: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); n];
+    for i in 0..n {
+        for idx in a.indptr()[i]..a.indptr()[i + 1] {
+            let j = a.indices()[idx];
+            if j != i && a.data()[idx] != 0.0 {
+                adj[i].insert(j);
+                adj[j].insert(i);
+            }
+        }
+    }
+    let mut deg: Vec<usize> = adj.iter().map(BTreeSet::len).collect();
+    // Lazy heap: (degree, index); stale entries (degree != current deg[v], which can rise
+    // as cliques form) are discarded on pop. Tie-break on index → lowest-index min-degree,
+    // identical selection to an O(n²) scan.
+    let mut heap: BinaryHeap<Reverse<(usize, usize)>> =
+        (0..n).map(|v| Reverse((deg[v], v))).collect();
+    let mut eliminated = vec![false; n];
+    let mut order = Vec::with_capacity(n);
+    while order.len() < n {
+        let u = loop {
+            let Reverse((d, v)) = heap.pop().expect("heap nonempty while nodes remain");
+            if !eliminated[v] && d == deg[v] {
+                break v;
+            }
+        };
+        eliminated[u] = true;
+        order.push(u);
+        let nbrs: Vec<usize> = adj[u].iter().copied().filter(|&w| !eliminated[w]).collect();
+        for &w in &nbrs {
+            adj[w].remove(&u);
+        }
+        for ai in 0..nbrs.len() {
+            for bi in (ai + 1)..nbrs.len() {
+                let (x, y) = (nbrs[ai], nbrs[bi]);
+                adj[x].insert(y);
+                adj[y].insert(x);
+            }
+        }
+        for &w in &nbrs {
+            let nd = adj[w].len();
+            if nd != deg[w] {
+                deg[w] = nd;
+                heap.push(Reverse((nd, w)));
+            }
+        }
+    }
+    order
+}
+
 pub fn reverse_cuthill_mckee(graph: &CsrMatrix) -> Vec<usize> {
     let n = graph.shape().rows;
     if n == 0 {
@@ -5234,6 +5307,61 @@ mod tests {
         let b = vec![5.0, 5.0];
         let result = spsolve(&a, &b, SolveOptions::default()).expect("spsolve works");
         assert_close_slice(&result.solution, &[0.0, 2.5], 1e-12);
+    }
+
+    #[test]
+    fn min_degree_ordering_solves_correctly_on_arrowhead() {
+        // Arrowhead (dense hub through node 0) at n>=256 so the native sparse LU runs.
+        // Min-degree (MmdAtPlusA) reorders via b->Pb, x[P[i]]=z[i]; the result must
+        // equal the natural-order solve to rounding (the system has a unique solution).
+        let n = 300usize;
+        let mut rows = Vec::new();
+        let mut cols = Vec::new();
+        let mut data = Vec::new();
+        for i in 0..n {
+            rows.push(i);
+            cols.push(i);
+            data.push(n as f64 + 4.0);
+            if i != 0 {
+                rows.push(0);
+                cols.push(i);
+                data.push(-1.0);
+                rows.push(i);
+                cols.push(0);
+                data.push(-1.0);
+            }
+        }
+        let a = CooMatrix::from_triplets(Shape2D::new(n, n), data, rows, cols, false)
+            .expect("coo")
+            .to_csr()
+            .expect("csr");
+        let b: Vec<f64> = (0..n).map(|i| 1.0 + (i % 7) as f64).collect();
+
+        let x_nat = spsolve(
+            &a,
+            &b,
+            SolveOptions { ordering: PermutationOrdering::Natural, ..SolveOptions::default() },
+        )
+        .expect("natural")
+        .solution;
+        let x_mmd = spsolve(
+            &a,
+            &b,
+            SolveOptions { ordering: PermutationOrdering::MmdAtPlusA, ..SolveOptions::default() },
+        )
+        .expect("min-degree")
+        .solution;
+        assert_close_slice(&x_mmd, &x_nat, 1e-9);
+        // residual ‖A x - b‖∞ must be tiny
+        let mut max_res = 0.0_f64;
+        for i in 0..n {
+            let mut ax = 0.0;
+            for idx in a.indptr()[i]..a.indptr()[i + 1] {
+                ax += a.data()[idx] * x_mmd[a.indices()[idx]];
+            }
+            max_res = max_res.max((ax - b[i]).abs());
+        }
+        assert!(max_res < 1e-8, "residual too large: {max_res}");
     }
 
     #[test]
