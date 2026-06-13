@@ -7570,7 +7570,28 @@ impl DiscreteDistribution for BetaNegativeBinomial {
     }
 
     fn entropy(&self) -> f64 {
-        f64::NAN
+        // Support is infinite but the pmf tail decays polynomially, so
+        // h = −Σ pmf·ln pmf converges (scipy betanbinom sums it too). Sum until
+        // the mass is essentially exhausted and the pmf is negligible.
+        // frankenscipy.
+        let mut h = 0.0_f64;
+        let mut cum = 0.0_f64;
+        let mut k = 0u64;
+        loop {
+            let p = self.pmf(k);
+            if p > 0.0 {
+                h -= p * p.ln();
+                cum += p;
+            }
+            if cum > 1.0 - 1e-15 && p < 1e-16 {
+                break;
+            }
+            k += 1;
+            if k > 50_000_000 {
+                break;
+            }
+        }
+        h
     }
 }
 
