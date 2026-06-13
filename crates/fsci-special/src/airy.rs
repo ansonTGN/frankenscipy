@@ -52,7 +52,11 @@ pub struct AiryResult {
     pub bip: f64,
 }
 
-const AIRY_NEGATIVE_SERIES_LOWER_BOUND: f64 = -12.0;
+// Negative-axis series→asymptotic crossover. The Maclaurin series cancels for
+// large |x| (Ai(-12)≈5e-5, Bi'(-12)≈9.8e-5 vs mpmath), so switch to the
+// oscillatory asymptotic (now 6-term: ~6e-9 Ai/Bi, ~1e-6 derivatives) by x≈-9.
+// Raised from -12 to -9 to close that seam. frankenscipy.
+const AIRY_NEGATIVE_SERIES_LOWER_BOUND: f64 = -9.0;
 // Upper bound for the convergent Maclaurin series on the positive axis. The positive-x
 // asymptotic expansion's error on the recessive Ai/Ai' floors at the optimal-truncation
 // level ~e^{-2ζ} (ζ=(2/3)x^{3/2}): ~2.3e-5 at x=4, only reaching <1e-7 around x≈5.3. The
@@ -797,15 +801,22 @@ fn asymptotic_coefficients(zeta: f64) -> (f64, f64, f64, f64) {
 fn oscillatory_coefficients(zeta: f64) -> (f64, f64, f64, f64) {
     let iz = 1.0 / zeta;
     let iz2 = iz * iz;
+    let iz4 = iz2 * iz2;
+    let iz6 = iz4 * iz2;
 
-    // u_k for functions
+    // u_k for functions (recurrence uₖ = uₖ₋₁·(6k-5)(6k-3)(6k-1)/((2k-1)·216k)).
+    // Extended to k=6: the 4-term truncation floored at ~4e-6 near |x|≈8, leaving
+    // a series↔asymptotic seam (~1e-4 at x=-12) that moving the boundary alone
+    // couldn't close; 6 terms reach ~1e-9 down to |x|≈8. frankenscipy.
     let u1 = 5.0 / 72.0;
     let u2 = 385.0 / 10368.0;
     let u3 = 85085.0 / 2239488.0;
     let u4 = 37_182_145.0 / 644_972_544.0;
+    let u5 = 5_391_411_025.0 / 46_438_023_168.0;
+    let u6 = 5_849_680_962_125.0 / 20_061_226_008_576.0;
 
-    let l = 1.0 - u2 * iz2 + u4 * iz2 * iz2;
-    let m = u1 * iz - u3 * iz * iz2;
+    let l = 1.0 - u2 * iz2 + u4 * iz4 - u6 * iz6;
+    let m = u1 * iz - u3 * iz * iz2 + u5 * iz * iz4;
 
     // v_k for derivatives
     let v1 = 7.0 / 72.0;
@@ -820,7 +831,9 @@ fn oscillatory_coefficients(zeta: f64) -> (f64, f64, f64, f64) {
     // 1 − |v2|/ζ² left a +2|v2|/ζ² ≈ ζ⁻² residual in Ai'(−x)/Bi'(−x) (~6e-5 at
     // x=−15, ~7e-6 at x=−30) while Ai/Bi were ~1e-10. Fixing the sign drops the
     // derivative residual to <1e-7. frankenscipy-yz8s7.
-    let n = 1.0 + v2 * iz2 + v4 * iz2 * iz2;
+    // N/O (derivative series) keep the verified 4-term form (yz8s7); the residual
+    // there is ~ζ⁻⁴, not truncation, so extra terms don't help.
+    let n = 1.0 + v2 * iz2 + v4 * iz4;
     let o = v1 * iz - v3 * iz * iz2;
 
     (l, m, n, o)
@@ -1576,6 +1589,29 @@ mod tests {
         };
         assert_close(ai, 0.040_241_238_482_703_7, 1e-6, "Ai(-10)");
         assert_close(bi, -0.314_680_808_611_115, 1e-6, "Bi(-10)");
+    }
+
+    #[test]
+    fn airy_negative_seam_ai_bi_match_mpmath() {
+        // Seam x≈-9..-12 where the Maclaurin Ai/Bi cancelled (Ai(-12) was ~5e-5
+        // off); now routed through the 6-term oscillatory asymptotic. Golden Ai/Bi
+        // from mpmath. frankenscipy regression.
+        let g = |x: f64| {
+            let r = airy(&SpecialTensor::RealScalar(x), RuntimeMode::Strict).expect("airy");
+            let pick = |t: &SpecialTensor| match t {
+                SpecialTensor::RealScalar(v) => *v,
+                _ => panic!("scalar"),
+            };
+            (pick(&r[0]), pick(&r[2]))
+        };
+        for (x, ai_ref, bi_ref) in [
+            (-10.5_f64, -0.311_926_035_051_050_6_f64, -0.030_356_123_264_021_012_f64),
+            (-11.5, 0.305_422_970_043_592_65, -0.023_909_272_355_945_758),
+        ] {
+            let (ai, bi) = g(x);
+            assert!((ai - ai_ref).abs() < 1e-9, "Ai({x})={ai} vs {ai_ref}");
+            assert!((bi - bi_ref).abs() < 1e-9, "Bi({x})={bi} vs {bi_ref}");
+        }
     }
 
     #[test]
