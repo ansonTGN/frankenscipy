@@ -726,7 +726,7 @@ pub fn solve(a: &[Vec<f64>], b: &[f64], options: SolveOptions) -> Result<SolveRe
     // assumptions, transposition) keep their exact behavior; a singular pivot or any
     // unmet precondition falls through to the portfolio solver unchanged.
     let n = a.len();
-    if n >= BLOCKED_LU_MIN_DIM
+    if n >= FLAT_LU_SOLVE_MIN_DIM
         && options.mode == RuntimeMode::Strict
         && !options.transposed
         && matches!(options.assume_a, None | Some(MatrixAssumption::General))
@@ -756,7 +756,7 @@ pub fn solve(a: &[Vec<f64>], b: &[f64], options: SolveOptions) -> Result<SolveRe
     // Cholesky (parallel trailing update). A non-positive pivot (not actually PD)
     // returns None and falls through to the portfolio solver, which preserves the
     // exact `assume_a = pos` rejection behavior.
-    if n >= BLOCKED_LU_MIN_DIM
+    if n >= FLAT_LU_SOLVE_MIN_DIM
         && options.mode == RuntimeMode::Strict
         && !options.transposed
         && options.assume_a == Some(MatrixAssumption::PositiveDefinite)
@@ -929,7 +929,7 @@ pub fn inv(a: &[Vec<f64>], options: InvOptions) -> Result<InvResult, LinalgError
     // Restricted to the plain Strict / General case; a singular pivot or any unmet
     // precondition falls through to the portfolio inverse (diagnostics preserved).
     let n = a.len();
-    if n >= BLOCKED_LU_MIN_DIM
+    if n >= FLAT_LU_INV_MIN_DIM
         && options.mode == RuntimeMode::Strict
         && matches!(options.assume_a, None | Some(MatrixAssumption::General))
         && rows_are_rectangular(a, n)
@@ -975,6 +975,17 @@ pub fn det(a: &[Vec<f64>], mode: RuntimeMode, check_finite: bool) -> Result<f64,
 
     if rows == 0 {
         return Ok(1.0);
+    }
+    if let Some(result) = det_flat_lu_product(a) {
+        emit_trace(LinalgTrace {
+            operation: "det",
+            matrix_size: (rows, cols),
+            mode,
+            rcond: None,
+            warning: None,
+            error: None,
+        });
+        return Ok(result);
     }
     let matrix = dmatrix_from_rows(a)?;
     let result = matrix.lu().determinant();
@@ -9342,7 +9353,7 @@ fn pinv_full_rank_square_lu(
     }
 
     // pinv == inv for full-rank square: use the in-house LU inverse.
-    let inverse = if n >= BLOCKED_LU_MIN_DIM {
+    let inverse = if n >= FLAT_LU_INV_MIN_DIM {
         dmatrix_from_rows(&inv_blocked(a)?).ok()?
     } else {
         matrix.clone().lu().try_inverse()?
@@ -12500,124 +12511,154 @@ pub fn matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, LinalgErr
     Ok(c)
 }
 
-/// Minimum dimension at which `solve` uses the in-house blocked LU fast path. Below
-/// this the trailing-update GEMM is too small to parallelise, so the portfolio LU
-/// solver is used instead.
-const BLOCKED_LU_MIN_DIM: usize = 1024;
+/// Minimum dimensions for the in-house flat LU routes. `solve` benefits at the
+/// 1000x1000 profiled gate; inverse stays higher because the 256x256 gate regressed.
+const FLAT_LU_SOLVE_MIN_DIM: usize = 1000;
+const FLAT_LU_INV_MIN_DIM: usize = 1024;
+const FLAT_LU_DET_MIN_DIM: usize = 256;
 
-/// Right-looking **blocked LU factorisation with partial pivoting** — our own
-/// LAPACK-class kernel. Each panel (width NB) is factored unblocked, then the O(n³)
-/// trailing-submatrix update `A22 -= L21·U12` (the bulk of the flops) runs on all
-/// cores via the multithreaded flat-workspace GEMM. Returns the combined `L\U`
-/// factors and the row permutation (`perm[i]` = original row index now at position
-/// `i`), or `None` on a zero/non-finite pivot so callers can fall back to the
-/// portfolio solver. Partial pivoting reproduces the LAPACK/SciPy factorisation, so
-/// downstream solves match the reference to rounding.
-#[allow(clippy::needless_range_loop)] // explicit row/col indices drive pivoting + the panel/trailing kernels
-fn lu_factor_blocked(a_in: &[Vec<f64>]) -> Option<(Vec<Vec<f64>>, Vec<usize>)> {
+struct LuFactorsFlat {
+    n: usize,
+    data: Vec<f64>,
+    perm: Vec<usize>,
+}
+
+fn permutation_parity_is_odd(perm: &[usize]) -> Option<bool> {
+    let n = perm.len();
+    let mut values_seen = vec![false; n];
+    for &value in perm {
+        if value >= n || values_seen[value] {
+            return None;
+        }
+        values_seen[value] = true;
+    }
+
+    let mut index_seen = vec![false; n];
+    let mut cycles = 0usize;
+    for start in 0..n {
+        if index_seen[start] {
+            continue;
+        }
+        cycles += 1;
+        let mut current = start;
+        while !index_seen[current] {
+            index_seen[current] = true;
+            current = perm[current];
+        }
+    }
+    Some(((n - cycles) & 1) == 1)
+}
+
+/// Right-looking blocked LU factorization with partial pivoting in one contiguous
+/// row-major buffer. The panel width matches the profiled flat workspace tile so the
+/// update walks memory linearly instead of materializing L21/U12 as nested vectors.
+#[allow(clippy::needless_range_loop)]
+fn lu_factor_blocked(a_in: &[Vec<f64>]) -> Option<LuFactorsFlat> {
     let n = a_in.len();
-    if n == 0 || a_in[0].len() != n {
+    if n == 0 || !rows_are_rectangular(a_in, n) {
         return None;
     }
-    const NB: usize = 128;
-    let mut a: Vec<Vec<f64>> = a_in.to_vec(); // overwritten with the L\U factors
-    // perm[i] = original row index now sitting at position i (apply to a RHS as Pb[i]=b[perm[i]]).
+    const NB: usize = 64;
+    const COL_TILE: usize = 64;
+
+    let mut data = Vec::with_capacity(n.checked_mul(n)?);
+    for row in a_in {
+        data.extend_from_slice(row);
+    }
     let mut perm: Vec<usize> = (0..n).collect();
 
     let mut k = 0;
     while k < n {
         let kb = (k + NB).min(n);
-        // (1) Factor panel columns [k, kb) over rows [k, n) with partial pivoting.
         for j in k..kb {
             let mut p = j;
-            let mut mx = a[j][j].abs();
+            let mut mx = data[j * n + j].abs();
             for i in (j + 1)..n {
-                let v = a[i][j].abs();
+                let v = data[i * n + j].abs();
                 if v > mx {
                     mx = v;
                     p = i;
                 }
             }
-            if mx == 0.0 || mx.is_nan() {
-                return None; // singular within the panel -> fall back
+            if mx == 0.0 || !mx.is_finite() {
+                return None;
             }
             if p != j {
-                a.swap(p, j);
+                let p_base = p * n;
+                let j_base = j * n;
+                for col in 0..n {
+                    data.swap(p_base + col, j_base + col);
+                }
                 perm.swap(p, j);
             }
-            let pivot = a[j][j];
+            let pivot = data[j * n + j];
             for i in (j + 1)..n {
-                a[i][j] /= pivot;
+                data[i * n + j] /= pivot;
             }
-            // Rank-1 update of the remaining panel columns (j+1..kb).
+            let j_base = j * n;
             for i in (j + 1)..n {
-                let lij = a[i][j];
+                let i_base = i * n;
+                let lij = data[i_base + j];
                 if lij != 0.0 {
-                    let (head, tail) = a.split_at_mut(i);
-                    let row_i = &mut tail[0];
-                    let row_j = &head[j];
                     for jj in (j + 1)..kb {
-                        row_i[jj] -= lij * row_j[jj];
+                        data[i_base + jj] -= lij * data[j_base + jj];
                     }
                 }
             }
         }
-        // (2) Triangular solve U12 = L11^-1 · A12 for rows [k,kb), cols [kb,n).
+
         for i in k..kb {
+            let i_base = i * n;
             for jj in kb..n {
-                let mut s = a[i][jj];
-                for (p, row_p) in a.iter().enumerate().take(i).skip(k) {
-                    s -= a[i][p] * row_p[jj];
+                let mut s = data[i_base + jj];
+                for p in k..i {
+                    s -= data[i_base + p] * data[p * n + jj];
                 }
-                a[i][jj] = s;
+                data[i_base + jj] = s;
             }
         }
-        // (3) Trailing update A22 -= L21 · U12 via the parallel GEMM.
-        if kb < n {
-            let m2 = n - kb;
-            let nb = kb - k;
-            let n2 = n - kb;
-            let mut l21 = Vec::with_capacity(m2);
-            for row in a.iter().take(n).skip(kb) {
-                l21.push(row[k..kb].to_vec());
-            }
-            let mut u12 = Vec::with_capacity(nb);
-            for row in a.iter().take(kb).skip(k) {
-                u12.push(row[kb..n].to_vec());
-            }
-            let prod = matmul_flat_workspace(&l21, &u12, m2, nb, n2)?;
-            for (ii, i) in (kb..n).enumerate() {
-                let pr = &prod[ii];
-                let row = &mut a[i];
-                for (jj, j) in (kb..n).enumerate() {
-                    row[j] -= pr[jj];
+
+        for i in kb..n {
+            let i_base = i * n;
+            let mut j0 = kb;
+            while j0 < n {
+                let j1 = (j0 + COL_TILE).min(n);
+                for p in k..kb {
+                    let lip = data[i_base + p];
+                    if lip != 0.0 {
+                        let p_base = p * n;
+                        for j in j0..j1 {
+                            data[i_base + j] -= lip * data[p_base + j];
+                        }
+                    }
                 }
+                j0 = j1;
             }
         }
         k = kb;
     }
-    Some((a, perm))
+
+    Some(LuFactorsFlat { n, data, perm })
 }
 
-/// Forward/back substitution against precomputed `factors` (combined unit-lower L and
-/// upper U) given the row permutation `perm`, solving `A x = rhs`. `y` is the permuted
-/// RHS `Pb` on entry and is overwritten with the solution.
 #[allow(clippy::needless_range_loop)]
-fn lu_subst_factored(factors: &[Vec<f64>], mut y: Vec<f64>) -> Option<Vec<f64>> {
-    let n = factors.len();
+fn lu_subst_factored(factors: &LuFactorsFlat, mut y: Vec<f64>) -> Option<Vec<f64>> {
+    let n = factors.n;
     for i in 0..n {
         let mut s = y[i];
+        let i_base = i * n;
         for p in 0..i {
-            s -= factors[i][p] * y[p];
+            s -= factors.data[i_base + p] * y[p];
         }
-        y[i] = s; // L unit diagonal
+        y[i] = s;
     }
     for i in (0..n).rev() {
         let mut s = y[i];
+        let i_base = i * n;
         for p in (i + 1)..n {
-            s -= factors[i][p] * y[p];
+            s -= factors.data[i_base + p] * y[p];
         }
-        let d = factors[i][i];
+        let d = factors.data[i_base + i];
         if d == 0.0 {
             return None;
         }
@@ -12630,26 +12671,52 @@ fn lu_solve_blocked(a_in: &[Vec<f64>], b: &[f64]) -> Option<Vec<f64>> {
     if b.len() != a_in.len() {
         return None;
     }
-    let (factors, perm) = lu_factor_blocked(a_in)?;
-    let pb: Vec<f64> = perm.iter().map(|&orig| b[orig]).collect();
+    let factors = lu_factor_blocked(a_in)?;
+    let pb: Vec<f64> = factors.perm.iter().map(|&orig| b[orig]).collect();
     lu_subst_factored(&factors, pb)
 }
 
-/// Invert a general square `A` by factoring once with the parallel blocked LU and
-/// solving `A X = I` over the identity columns in parallel (each column an independent
-/// forward/back substitution). Returns `None` on singular/edge cases.
-fn inv_blocked(a_in: &[Vec<f64>]) -> Option<Vec<Vec<f64>>> {
-    let n = a_in.len();
-    if n == 0 || a_in[0].len() != n {
+fn det_flat_lu_product(a_in: &[Vec<f64>]) -> Option<f64> {
+    if a_in.len() < FLAT_LU_DET_MIN_DIM || a_in.iter().flatten().any(|value| !value.is_finite()) {
         return None;
     }
-    let (factors, perm) = lu_factor_blocked(a_in)?;
-    // For identity column j, the permuted RHS Pe_j has a single 1 at the position i
-    // where perm[i] == j. Solve A x = e_j -> column j of A^-1.
+    let max_abs = max_abs(a_in);
+    if max_abs > 1.0 && (a_in.len() as f64) * max_abs.ln() > f64::MAX.ln() - 4.0 {
+        return None;
+    }
+
+    let factors = lu_factor_blocked(a_in)?;
+    let mut determinant = if permutation_parity_is_odd(&factors.perm)? {
+        -1.0
+    } else {
+        1.0
+    };
+    for idx in 0..factors.n {
+        let diagonal = factors.data[idx * factors.n + idx];
+        if !diagonal.is_finite() {
+            return None;
+        }
+        determinant *= diagonal;
+        if !determinant.is_finite() {
+            return None;
+        }
+    }
+    Some(determinant)
+}
+
+/// Invert a general square `A` by factoring once with the flat LU and solving
+/// `A X = I` over identity columns in parallel. The public route stays gated at
+/// 1024 because the 256x256 dispatch was measured and rejected for this bead.
+fn inv_blocked(a_in: &[Vec<f64>]) -> Option<Vec<Vec<f64>>> {
+    let n = a_in.len();
+    if n == 0 || !rows_are_rectangular(a_in, n) {
+        return None;
+    }
+    let factors = lu_factor_blocked(a_in)?;
     let solve_col = |j: usize| -> Option<Vec<f64>> {
         let mut y = vec![0.0; n];
         for i in 0..n {
-            if perm[i] == j {
+            if factors.perm[i] == j {
                 y[i] = 1.0;
                 break;
             }
@@ -12663,7 +12730,6 @@ fn inv_blocked(a_in: &[Vec<f64>]) -> Option<Vec<Vec<f64>>> {
     } else {
         let chunk = n.div_ceil(nthreads);
         let factors_ref = &factors;
-        let perm_ref = &perm;
         let chunks: Vec<Option<Vec<Vec<f64>>>> = std::thread::scope(|scope| {
             let handles: Vec<_> = (0..nthreads)
                 .filter_map(|t| {
@@ -12677,7 +12743,7 @@ fn inv_blocked(a_in: &[Vec<f64>]) -> Option<Vec<Vec<f64>>> {
                             .map(|j| {
                                 let mut y = vec![0.0; n];
                                 for i in 0..n {
-                                    if perm_ref[i] == j {
+                                    if factors_ref.perm[i] == j {
                                         y[i] = 1.0;
                                         break;
                                     }
@@ -12697,7 +12763,6 @@ fn inv_blocked(a_in: &[Vec<f64>]) -> Option<Vec<Vec<f64>>> {
         cols
     };
 
-    // cols[j] is column j of the inverse; assemble row-major X[i][j].
     let mut x = vec![vec![0.0; n]; n];
     for j in 0..n {
         let col = &cols[j];
@@ -13199,12 +13264,16 @@ mod tests {
         for &(n, seed) in &[(16usize, 11u64), (130, 23), (270, 57)] {
             let a = make(n, seed);
             let got = inv_blocked(&a).expect("blocked inverse");
-            let reference = inv(&a, InvOptions::default()).expect("reference inverse");
+            let reference = dmatrix_from_rows(&a)
+                .expect("reference rows")
+                .lu()
+                .try_inverse()
+                .expect("reference inverse");
             // Match the reference inverse to tolerance.
             let mut max_diff = 0.0_f64;
             for i in 0..n {
                 for j in 0..n {
-                    max_diff = max_diff.max((got[i][j] - reference.inverse[i][j]).abs());
+                    max_diff = max_diff.max((got[i][j] - reference[(i, j)]).abs());
                 }
             }
             // A · A^-1 ≈ I residual.
@@ -13252,7 +13321,7 @@ mod tests {
                 .collect();
             (a, b)
         };
-        // n=130 and 270 straddle NB=128 (multi-panel); 270 also has a partial last panel.
+        // n=130 and 270 straddle NB=64 (multi-panel); 270 also has a partial last panel.
         for &(n, seed) in &[(16usize, 11u64), (130, 23), (200, 41), (270, 57)] {
             let (a, b) = make(n, seed);
             let x = lu_solve_blocked(&a, &b).expect("blocked LU solves nonsingular system");
@@ -13279,6 +13348,59 @@ mod tests {
                 "blocked LU residual too large at n={n}: {max_res:e}"
             );
         }
+    }
+
+    #[test]
+    fn flat_lu_permutation_parity_tracks_row_swaps() {
+        let identity = vec![0usize, 1, 2, 3];
+        assert_eq!(permutation_parity_is_odd(&identity), Some(false));
+        let one_swap = vec![1usize, 0, 2, 3];
+        assert_eq!(permutation_parity_is_odd(&one_swap), Some(true));
+        let two_swaps = vec![2usize, 0, 1, 3];
+        assert_eq!(permutation_parity_is_odd(&two_swaps), Some(false));
+        assert_eq!(permutation_parity_is_odd(&[0usize, 0]), None);
+        assert_eq!(permutation_parity_is_odd(&[0usize, 2]), None);
+    }
+
+    #[test]
+    #[ignore = "release-mode golden payload for frankenscipy-8l8r1.96"]
+    #[allow(clippy::needless_range_loop)]
+    fn flat_lu_golden_digest() {
+        let n = 128usize;
+        let a: Vec<Vec<f64>> = (0..n)
+            .map(|i| {
+                (0..n)
+                    .map(|j| {
+                        let r = ((i * 131 + j * 17 + (i ^ j) * 19) % 2003) as f64 / 997.0 - 1.0;
+                        if i == j { r + n as f64 * 0.25 } else { r }
+                    })
+                    .collect()
+            })
+            .collect();
+        let b: Vec<f64> = (0..n)
+            .map(|i| ((i * 29 + 7) % 503) as f64 / 251.0 - 1.0)
+            .collect();
+
+        let x = lu_solve_blocked(&a, &b).expect("flat LU solve");
+        let inverse = inv_blocked(&a).expect("flat LU inverse");
+        let determinant = det_flat_lu_product(&a).expect("flat LU determinant");
+
+        let mut digest: u64 = 0xcbf2_9ce4_8422_2325;
+        for value in x
+            .iter()
+            .chain(inverse.iter().flat_map(|row| row.iter()))
+            .chain(std::iter::once(&determinant))
+        {
+            for byte in value.to_bits().to_le_bytes() {
+                digest ^= byte as u64;
+                digest = digest.wrapping_mul(0x0000_0100_0000_01b3);
+            }
+        }
+        println!("flat_lu_golden_digest={digest:#018x}");
+        assert_eq!(
+            digest, 0x3476_4a79_88b2_f9f8,
+            "flat LU golden digest changed (got {digest:#018x})"
+        );
     }
 
     /// Byte-identity proof for the multithreaded flat-workspace GEMM: splitting the
