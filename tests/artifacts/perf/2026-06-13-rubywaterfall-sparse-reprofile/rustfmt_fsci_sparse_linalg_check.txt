@@ -1,0 +1,6 @@
+error: let chains are only allowed in Rust 2024 or later
+    --> /data/projects/frankenscipy/crates/fsci-sparse/src/linalg.rs:2964:8
+     |
+2964 |     if let Some(initial) = x0
+     |        ^^^^^^^^^^^^^^^^^^^^^^
+

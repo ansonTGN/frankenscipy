@@ -3421,6 +3421,75 @@ pub fn shortest_path(graph: &CsrMatrix, source: usize, target: usize) -> (f64, V
 // O(log n) amortized — without it the O(n²) selection scan cancels the fill savings.
 // Deterministic (lowest-index tie-break). Opt-in via MmdAtPlusA/MmdAta.
 fn minimum_degree_ordering(a: &CsrMatrix) -> Vec<usize> {
+    let rows = a.shape().rows;
+    if rows >= 1024 && a.nnz() <= rows.saturating_mul(8) && mmd_max_raw_row_width(a) <= 64 {
+        minimum_degree_ordering_btreeset(a)
+    } else {
+        minimum_degree_ordering_hashset(a)
+    }
+}
+
+fn mmd_max_raw_row_width(a: &CsrMatrix) -> usize {
+    (0..a.shape().rows)
+        .map(|row| a.indptr()[row + 1] - a.indptr()[row])
+        .max()
+        .unwrap_or(0)
+}
+
+fn minimum_degree_ordering_btreeset(a: &CsrMatrix) -> Vec<usize> {
+    use std::cmp::Reverse;
+    use std::collections::{BTreeSet, BinaryHeap};
+    let n = a.shape().rows;
+    if n == 0 {
+        return vec![];
+    }
+    let mut adj: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); n];
+    for i in 0..n {
+        for idx in a.indptr()[i]..a.indptr()[i + 1] {
+            let j = a.indices()[idx];
+            if j != i && a.data()[idx] != 0.0 {
+                adj[i].insert(j);
+                adj[j].insert(i);
+            }
+        }
+    }
+    let mut deg: Vec<usize> = adj.iter().map(BTreeSet::len).collect();
+    let mut heap: BinaryHeap<Reverse<(usize, usize)>> =
+        (0..n).map(|v| Reverse((deg[v], v))).collect();
+    let mut eliminated = vec![false; n];
+    let mut order = Vec::with_capacity(n);
+    while order.len() < n {
+        let u = loop {
+            let Reverse((d, v)) = heap.pop().expect("heap nonempty while nodes remain");
+            if !eliminated[v] && d == deg[v] {
+                break v;
+            }
+        };
+        eliminated[u] = true;
+        order.push(u);
+        let nbrs: Vec<usize> = adj[u].iter().copied().filter(|&w| !eliminated[w]).collect();
+        for &w in &nbrs {
+            adj[w].remove(&u);
+        }
+        for ai in 0..nbrs.len() {
+            for bi in (ai + 1)..nbrs.len() {
+                let (x, y) = (nbrs[ai], nbrs[bi]);
+                adj[x].insert(y);
+                adj[y].insert(x);
+            }
+        }
+        for &w in &nbrs {
+            let nd = adj[w].len();
+            if nd != deg[w] {
+                deg[w] = nd;
+                heap.push(Reverse((nd, w)));
+            }
+        }
+    }
+    order
+}
+
+fn minimum_degree_ordering_hashset(a: &CsrMatrix) -> Vec<usize> {
     use std::cmp::Reverse;
     use std::collections::{BinaryHeap, HashSet};
     let n = a.shape().rows;
@@ -5579,6 +5648,46 @@ mod tests {
             println!("x[{idx}]={:016x}", value.to_bits());
         }
         println!("MMD_LAPLACIAN_GOLDEN_END");
+    }
+
+    #[test]
+    #[ignore = "perf probe: run with rch and --release for focused MMD ordering timings"]
+    fn minimum_degree_ordering_perf_probe() {
+        fn digest_order(order: &[usize]) -> u64 {
+            let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+            for &value in order {
+                for byte in value.to_le_bytes() {
+                    hash ^= u64::from(byte);
+                    hash = hash.wrapping_mul(0x1000_0000_01b3);
+                }
+            }
+            hash
+        }
+
+        let cases = [
+            ("lap2d_k20", laplacian_2d_for_mmd(20), 6usize),
+            ("lap2d_k32", laplacian_2d_for_mmd(32), 3usize),
+            ("arrowhead_n1000", arrowhead_for_mmd(1000), 8usize),
+        ];
+        println!("MMD_ORDER_PERF_BEGIN");
+        for (name, a, reps) in cases {
+            let expected = minimum_degree_ordering_btree_reference(&a);
+            let mut last = Vec::new();
+            let start = std::time::Instant::now();
+            for _ in 0..reps {
+                last = super::minimum_degree_ordering(std::hint::black_box(&a));
+                std::hint::black_box(&last);
+            }
+            let ms = start.elapsed().as_secs_f64() * 1e3 / reps as f64;
+            assert_eq!(last, expected, "MMD order changed for {name}");
+            println!(
+                "case={name} n={} nnz={} reps={reps} ms={ms:.6} order_digest=0x{:016x}",
+                a.shape().rows,
+                a.nnz(),
+                digest_order(&last)
+            );
+        }
+        println!("MMD_ORDER_PERF_END");
     }
 
     #[test]
