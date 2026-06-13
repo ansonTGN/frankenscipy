@@ -15646,6 +15646,72 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "release-only public fast-path proof for the n=1000 blocked Cholesky route"]
+    fn solve_spd_fast_path_1000_known_solution_golden() {
+        let n = FLAT_LU_SOLVE_MIN_DIM;
+        let mut a = vec![vec![0.0; n]; n];
+        for i in 0..n {
+            for j in 0..=i {
+                let value = if i == j {
+                    n as f64 + 1.0
+                } else {
+                    (((i * 31 + j * 17 + 11) % 9) as f64 - 4.0) * 1.0e-4
+                };
+                a[i][j] = value;
+                a[j][i] = value;
+            }
+        }
+        let x_expected: Vec<f64> = (0..n).map(|i| ((i % 19) as f64 - 9.0) * 0.125).collect();
+        let b: Vec<f64> = a
+            .iter()
+            .map(|row| row.iter().zip(&x_expected).map(|(aij, xj)| aij * xj).sum())
+            .collect();
+        let result = solve(
+            &a,
+            &b,
+            SolveOptions {
+                assume_a: Some(MatrixAssumption::PositiveDefinite),
+                ..SolveOptions::default()
+            },
+        )
+        .expect("large SPD fast-path solve works");
+        let max_abs_err = result
+            .x
+            .iter()
+            .zip(&x_expected)
+            .map(|(actual, expected)| (actual - expected).abs())
+            .fold(0.0_f64, f64::max);
+        assert!(
+            max_abs_err < 1e-10,
+            "fast-path SPD solve drifted from known solution: {max_abs_err:e}"
+        );
+        let max_residual = a
+            .iter()
+            .zip(&b)
+            .map(|(row, rhs)| {
+                let dot: f64 = row.iter().zip(&result.x).map(|(aij, xj)| aij * xj).sum();
+                (dot - rhs).abs()
+            })
+            .fold(0.0_f64, f64::max);
+        assert!(
+            max_residual < 1e-9,
+            "fast-path SPD solve residual too large: {max_residual:e}"
+        );
+        let mut digest = 0xcbf2_9ce4_8422_2325_u64;
+        for value in &result.x {
+            for byte in value.to_bits().to_le_bytes() {
+                digest ^= byte as u64;
+                digest = digest.wrapping_mul(0x0000_0100_0000_01b3);
+            }
+        }
+        println!("solve_spd_fast_path_1000_golden_digest={digest:#018x}");
+        assert_eq!(
+            digest, 0x11a9_fcf1_4e2c_99f7,
+            "large SPD fast-path golden digest changed"
+        );
+    }
+
+    #[test]
     fn solve_banded_pentadiagonal() {
         // 5-diagonal system (l=2, u=2)
         let ab = vec![

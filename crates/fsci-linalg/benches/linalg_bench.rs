@@ -2,8 +2,9 @@ use std::time::Duration;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use fsci_linalg::{
-    DecompOptions, InvOptions, LstsqOptions, PinvOptions, SolveOptions, TriangularSolveOptions,
-    det, eigh, inv, lstsq, matmul, pinv, solve, solve_banded, solve_triangular,
+    DecompOptions, InvOptions, LstsqOptions, MatrixAssumption, PinvOptions, SolveOptions,
+    TriangularSolveOptions, det, eigh, inv, lstsq, matmul, pinv, solve, solve_banded,
+    solve_triangular,
 };
 use fsci_runtime::RuntimeMode;
 
@@ -263,6 +264,29 @@ fn bench_baseline_solve(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_baseline_solve_pos(c: &mut Criterion) {
+    let mut group = c.benchmark_group("baseline_solve_pos");
+    group.sample_size(100);
+    for &n in BASELINE_SIZES {
+        let a = make_symmetric_eigh_matrix(n);
+        let b = make_rhs(n);
+        group.bench_function(format!("{n}x{n}"), |bencher| {
+            bencher.iter(|| {
+                solve(
+                    std::hint::black_box(&a),
+                    std::hint::black_box(&b),
+                    SolveOptions {
+                        assume_a: Some(MatrixAssumption::PositiveDefinite),
+                        ..SolveOptions::default()
+                    },
+                )
+                .unwrap()
+            });
+        });
+    }
+    group.finish();
+}
+
 fn bench_baseline_inv(c: &mut Criterion) {
     let mut group = c.benchmark_group("baseline_inv");
     group.sample_size(100);
@@ -318,6 +342,7 @@ criterion_group!(
 criterion_group!(
     baseline_benches,
     bench_baseline_solve,
+    bench_baseline_solve_pos,
     bench_baseline_inv,
     bench_baseline_lstsq,
     bench_baseline_pinv
