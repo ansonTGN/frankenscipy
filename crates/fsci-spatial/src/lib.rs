@@ -492,23 +492,77 @@ pub fn pdist(x: &[Vec<f64>], metric: DistanceMetric) -> Result<Vec<f64>, Spatial
 
     let total = n * (n - 1) / 2;
     let nthreads = cdist_thread_count(n, n, dim);
+
+    // Cosine and Correlation recompute each vector's norm/mean+centered-norm — quantities
+    // that depend on ONE vector — inside the O(n²) pair loop. Precompute them ONCE (O(n·d))
+    // so each pair does only the cross term (a single reduction). Byte-identical: the
+    // precomputed per-vector quantities use the same arithmetic/summation order as the
+    // scalar `cosine`/`correlation` helpers, and the cross term is summed in the same order.
+    let result = match metric {
+        DistanceMetric::Cosine => {
+            let norms: Vec<f64> = x.iter().map(|v| simd_sqsum(v).sqrt()).collect();
+            pdist_fill(n, total, nthreads, |i, j| {
+                let denom = norms[i] * norms[j];
+                if denom == 0.0 {
+                    f64::NAN
+                } else {
+                    1.0 - simd_dot(&x[i], &x[j]) / denom
+                }
+            })
+        }
+        DistanceMetric::Correlation if dim >= 2 => {
+            let dn = dim as f64;
+            // Per vector: centered values c = x − mean, and ssa = Σ c². Same fused k-order
+            // as `correlation`, so the values are bit-identical.
+            let prep: Vec<(Vec<f64>, f64)> = x
+                .iter()
+                .map(|v| {
+                    let mean = v.iter().sum::<f64>() / dn;
+                    let c: Vec<f64> = v.iter().map(|&xi| xi - mean).collect();
+                    let ssa: f64 = c.iter().map(|&ci| ci * ci).sum();
+                    (c, ssa)
+                })
+                .collect();
+            pdist_fill(n, total, nthreads, |i, j| {
+                let (ci, ssa) = &prep[i];
+                let (cj, ssb) = &prep[j];
+                let ssab: f64 = ci.iter().zip(cj.iter()).map(|(&p, &q)| p * q).sum();
+                let denom = (ssa * ssb).sqrt();
+                if denom == 0.0 {
+                    f64::NAN
+                } else {
+                    1.0 - ssab / denom
+                }
+            })
+        }
+        _ => pdist_fill(n, total, nthreads, |i, j| {
+            metric_distance(&x[i], &x[j], metric)
+        }),
+    };
+    Ok(result)
+}
+
+/// Fill a condensed pairwise-distance vector by evaluating `pair(i, j)` for every i<j.
+/// Row i writes a contiguous run of (n−1−i) entries at offset i·(n−1) − i·(i−1)/2; rows are
+/// split across threads at pair-balanced boundaries and each fills its disjoint contiguous
+/// slice — bit-identical to the sequential i<j order regardless of which core owns a row.
+fn pdist_fill<F>(n: usize, total: usize, nthreads: usize, pair: F) -> Vec<f64>
+where
+    F: Fn(usize, usize) -> f64 + Sync,
+{
     if nthreads <= 1 {
         let mut result = Vec::with_capacity(total);
         for i in 0..n {
             for j in (i + 1)..n {
-                result.push(metric_distance(&x[i], &x[j], metric));
+                result.push(pair(i, j));
             }
         }
-        return Ok(result);
+        return result;
     }
-
-    // Condensed output: row i writes a contiguous run of (n-1-i) entries starting at
-    // offset(i) = i·(n-1) − i·(i−1)/2. Split the rows across threads at pair-balanced
-    // boundaries (early rows carry more pairs) and let each thread fill its disjoint
-    // contiguous slice — bit-identical to the sequential i<j push order.
     let mut result = vec![0.0_f64; total];
     let bounds = pdist_row_bounds(n, nthreads);
     let offset = |r: usize| -> usize { r * (n - 1) - r * (r.saturating_sub(1)) / 2 };
+    let pair = &pair;
     std::thread::scope(|scope| {
         let mut rest: &mut [f64] = &mut result;
         let mut prev = 0usize;
@@ -523,14 +577,14 @@ pub fn pdist(x: &[Vec<f64>], metric: DistanceMetric) -> Result<Vec<f64>, Spatial
                 let mut local = 0usize;
                 for i in r0..r1 {
                     for j in (i + 1)..n {
-                        seg[local] = metric_distance(&x[i], &x[j], metric);
+                        seg[local] = pair(i, j);
                         local += 1;
                     }
                 }
             });
         }
     });
-    Ok(result)
+    result
 }
 
 /// Pair-balanced row boundaries for a parallel `pdist`: returns up to `nthreads+1`
