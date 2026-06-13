@@ -12913,21 +12913,49 @@ fn lu_solve_mixed_precision(a_in: &[Vec<f64>], b: &[f64]) -> Option<Vec<f64>> {
     let mut x = lu_subst_factored_f32(&factors, &pb)?;
 
     let bnorm = b.iter().fold(0.0f64, |m, &v| m.max(v.abs()));
-    let anorm = a_in
-        .iter()
-        .fold(0.0f64, |m, row| m.max(row.iter().fold(0.0, |s, &v| s + v.abs())));
+    let anorm = a_in.iter().fold(0.0f64, |m, row| {
+        m.max(row.iter().fold(0.0, |s, &v| s + v.abs()))
+    });
 
     const MAX_REFINE: usize = 8;
     let mut prev_res = f64::INFINITY;
     for _ in 0..MAX_REFINE {
-        // Residual r = b − A·x and its ∞-norm, in full f64.
+        // Residual r = b − A·x and its ∞-norm, in full f64. The dot product is the
+        // refinement hot path (re-reads all of A each step), so it runs as a 4×8-wide
+        // SIMD reduction instead of a scalar accumulator chain.
+        const LANES: usize = 8;
         let mut r = vec![0.0f64; n];
         let mut res = 0.0f64;
+        let xs = x.as_slice();
         for i in 0..n {
-            let row = &a_in[i];
-            let mut s = 0.0f64;
-            for j in 0..n {
-                s += row[j] * x[j];
+            let row = a_in[i].as_slice();
+            let mut acc0 = Simd::<f64, LANES>::splat(0.0);
+            let mut acc1 = Simd::<f64, LANES>::splat(0.0);
+            let mut acc2 = Simd::<f64, LANES>::splat(0.0);
+            let mut acc3 = Simd::<f64, LANES>::splat(0.0);
+            let mut j = 0;
+            while j + 4 * LANES <= n {
+                acc0 += Simd::from_slice(&row[j..j + LANES]) * Simd::from_slice(&xs[j..j + LANES]);
+                acc1 += Simd::from_slice(&row[j + LANES..j + 2 * LANES])
+                    * Simd::from_slice(&xs[j + LANES..j + 2 * LANES]);
+                acc2 += Simd::from_slice(&row[j + 2 * LANES..j + 3 * LANES])
+                    * Simd::from_slice(&xs[j + 2 * LANES..j + 3 * LANES]);
+                acc3 += Simd::from_slice(&row[j + 3 * LANES..j + 4 * LANES])
+                    * Simd::from_slice(&xs[j + 3 * LANES..j + 4 * LANES]);
+                j += 4 * LANES;
+            }
+            let mut s: f64 = ((acc0 + acc1) + (acc2 + acc3)).to_array().iter().sum();
+            while j + LANES <= n {
+                s += (Simd::<f64, LANES>::from_slice(&row[j..j + LANES])
+                    * Simd::from_slice(&xs[j..j + LANES]))
+                .to_array()
+                .iter()
+                .sum::<f64>();
+                j += LANES;
+            }
+            while j < n {
+                s += row[j] * xs[j];
+                j += 1;
             }
             let ri = b[i] - s;
             r[i] = ri;
@@ -13695,7 +13723,10 @@ mod tests {
             for (&xi, &ri) in x.iter().zip(&reference.x) {
                 max_diff = max_diff.max((xi - ri).abs());
             }
-            assert!(max_diff < 1e-6, "mixed precision accepted a bad x: {max_diff:e}");
+            assert!(
+                max_diff < 1e-6,
+                "mixed precision accepted a bad x: {max_diff:e}"
+            );
         }
     }
 
