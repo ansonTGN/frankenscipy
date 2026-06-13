@@ -1460,10 +1460,16 @@ fn regularized_gamma_pair(a: f64, x: f64, mode: RuntimeMode) -> Result<(f64, f64
     let lg = gammaln_scalar(a, RuntimeMode::Strict)?;
     let prefactor = (-x + a * x.ln() - lg).exp();
     let (p, q) = if x < a + 1.0 {
+        // The lower series Σ xᵏ/(a)_{k+1} needs ~12√a terms to converge near
+        // x≈a (the term ratio x/(a+k) ≈ 1 there); the old fixed 200-term cap
+        // truncated it for large a — e.g. P(5000,5000) was 0.5% off (needs 558
+        // terms). Scale the cap with √a so it stays exact at large a while the
+        // ε-break keeps small/typical a cheap. frankenscipy.
+        let series_max = ((12.0 * a.sqrt()) as usize + 200).min(2_000_000);
         let mut ap = a;
         let mut term = 1.0 / a;
         let mut sum = term;
-        for _ in 0..MAX_ITERS {
+        for _ in 0..series_max {
             ap += 1.0;
             term *= x / ap;
             sum += term;
@@ -4354,6 +4360,20 @@ mod tests {
                     p + q
                 );
             }
+        }
+    }
+
+    #[test]
+    fn gammainc_large_a_near_transition_matches_scipy() {
+        // The lower series needs ~12√a terms near x≈a; the old 200-cap truncated
+        // it (P(5000,5000) was 0.5% off). Golden from scipy/mpmath. frankenscipy.
+        let cases = [
+            (2000.0_f64, 2000.0_f64, 0.502_973_548_444_202_5_f64),
+            (5000.0, 5000.0, 0.501_880_634_033_817_3),
+        ];
+        for &(a, x, want) in &cases {
+            let p = gammainc_scalar(a, x, RuntimeMode::Strict).unwrap();
+            assert!((p - want).abs() < 1e-10, "gammainc({a},{x}) = {p} vs {want}");
         }
     }
 
