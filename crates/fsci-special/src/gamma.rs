@@ -1270,7 +1270,6 @@ pub fn log_gammainc_scalar(a: f64, x: f64) -> f64 {
     }
 
     const EPS: f64 = 1.0e-14;
-    const MAX_ITERS: usize = 200;
     const FPMIN: f64 = 1.0e-300;
 
     let lg = match gammaln_scalar(a, RuntimeMode::Strict) {
@@ -1285,7 +1284,8 @@ pub fn log_gammainc_scalar(a: f64, x: f64) -> f64 {
         let mut ap = a;
         let mut term = 1.0 / a;
         let mut sum = term;
-        for _ in 0..MAX_ITERS {
+        let series_max = ((12.0 * a.sqrt()) as usize + 200).min(2_000_000);
+        for _ in 0..series_max {
             ap += 1.0;
             term *= x / ap;
             sum += term;
@@ -1301,7 +1301,12 @@ pub fn log_gammainc_scalar(a: f64, x: f64) -> f64 {
         let mut c = 1.0 / FPMIN;
         let mut d = 1.0 / b;
         let mut h = d;
-        for i in 1..=MAX_ITERS {
+        // The upper continued fraction needs ~√a steps near x≈a; the fixed
+        // 200-iter cap truncated it for very large a (Q(100000,100001) was ~1e-5
+        // off). Scale the cap with √a (the EPS-break keeps typical a cheap),
+        // mirroring the lower-series fix. frankenscipy.
+        let cf_max = ((12.0 * a.sqrt()) as usize + 200).min(2_000_000);
+        for i in 1..=cf_max {
             let i_f = i as f64;
             let an = -i_f * (i_f - a);
             b += 2.0;
@@ -1340,7 +1345,6 @@ pub fn log_gammaincc_scalar(a: f64, x: f64) -> f64 {
     }
 
     const EPS: f64 = 1.0e-14;
-    const MAX_ITERS: usize = 200;
     const FPMIN: f64 = 1.0e-300;
 
     let lg = match gammaln_scalar(a, RuntimeMode::Strict) {
@@ -1356,7 +1360,12 @@ pub fn log_gammaincc_scalar(a: f64, x: f64) -> f64 {
         let mut c = 1.0 / FPMIN;
         let mut d = 1.0 / b;
         let mut h = d;
-        for i in 1..=MAX_ITERS {
+        // The upper continued fraction needs ~√a steps near x≈a; the fixed
+        // 200-iter cap truncated it for very large a (Q(100000,100001) was ~1e-5
+        // off). Scale the cap with √a (the EPS-break keeps typical a cheap),
+        // mirroring the lower-series fix. frankenscipy.
+        let cf_max = ((12.0 * a.sqrt()) as usize + 200).min(2_000_000);
+        for i in 1..=cf_max {
             let i_f = i as f64;
             let an = -i_f * (i_f - a);
             b += 2.0;
@@ -1381,7 +1390,8 @@ pub fn log_gammaincc_scalar(a: f64, x: f64) -> f64 {
         let mut ap = a;
         let mut term = 1.0 / a;
         let mut sum = term;
-        for _ in 0..MAX_ITERS {
+        let series_max = ((12.0 * a.sqrt()) as usize + 200).min(2_000_000);
+        for _ in 0..series_max {
             ap += 1.0;
             term *= x / ap;
             sum += term;
@@ -1454,7 +1464,6 @@ fn regularized_gamma_pair(a: f64, x: f64, mode: RuntimeMode) -> Result<(f64, f64
     }
 
     const EPS: f64 = 1.0e-14;
-    const MAX_ITERS: usize = 200;
     const FPMIN: f64 = 1.0e-300;
 
     let lg = gammaln_scalar(a, RuntimeMode::Strict)?;
@@ -1486,7 +1495,12 @@ fn regularized_gamma_pair(a: f64, x: f64, mode: RuntimeMode) -> Result<(f64, f64
         let mut c = 1.0 / FPMIN;
         let mut d = 1.0 / b;
         let mut h = d;
-        for i in 1..=MAX_ITERS {
+        // The upper continued fraction needs ~√a steps near x≈a; the fixed
+        // 200-iter cap truncated it for very large a (Q(100000,100001) was ~1e-5
+        // off). Scale the cap with √a (the EPS-break keeps typical a cheap),
+        // mirroring the lower-series fix. frankenscipy.
+        let cf_max = ((12.0 * a.sqrt()) as usize + 200).min(2_000_000);
+        for i in 1..=cf_max {
             let i_f = i as f64;
             let an = -i_f * (i_f - a);
             b += 2.0;
