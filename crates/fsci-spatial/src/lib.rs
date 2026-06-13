@@ -3502,18 +3502,36 @@ pub fn seuclidean(x: &[f64], y: &[f64], v: &[f64]) -> f64 {
     if x.is_empty() || x.len() != y.len() || x.len() != v.len() {
         return f64::NAN;
     }
-    x.iter()
-        .zip(y.iter())
-        .zip(v.iter())
-        .map(|((&xi, &yi), &vi)| {
-            if vi <= 0.0 {
-                f64::NAN
-            } else {
-                (xi - yi).powi(2) / vi
-            }
-        })
-        .sum::<f64>()
-        .sqrt()
+    // Σ (x-y)²/v with v<=0 ⇒ NaN. Compute-heavy (sub, square, divide, compare, select per
+    // element), so 8-wide SIMD wins. `simd_le(0)` reproduces the `vi <= 0.0 ⇒ NaN` branch
+    // via a lane mask; NaN propagates through the sum exactly as the scalar fold.
+    // Σ (x-y)²/v with v<=0 ⇒ NaN. Compute-heavy (sub, square, divide, compare, select per
+    // element), so 8-wide SIMD wins ~2x. `simd_le(0)` reproduces the `vi <= 0.0 ⇒ NaN` branch
+    // via a lane mask; NaN propagates through the sum exactly as the scalar fold.
+    use std::simd::{Select, Simd, cmp::SimdPartialOrd, num::SimdFloat};
+    const L: usize = 8;
+    let n = x.len();
+    let nan_v = Simd::<f64, L>::splat(f64::NAN);
+    let zero = Simd::<f64, L>::splat(0.0);
+    let mut acc = Simd::<f64, L>::splat(0.0);
+    let mut i = 0;
+    while i + L <= n {
+        let d = Simd::<f64, L>::from_slice(&x[i..i + L]) - Simd::from_slice(&y[i..i + L]);
+        let vv = Simd::<f64, L>::from_slice(&v[i..i + L]);
+        acc += vv.simd_le(zero).select(nan_v, (d * d) / vv);
+        i += L;
+    }
+    let mut s = acc.reduce_sum();
+    while i < n {
+        let vi = v[i];
+        s += if vi <= 0.0 {
+            f64::NAN
+        } else {
+            (x[i] - y[i]).powi(2) / vi
+        };
+        i += 1;
+    }
+    s.sqrt()
 }
 
 /// Weighted Minkowski distance.

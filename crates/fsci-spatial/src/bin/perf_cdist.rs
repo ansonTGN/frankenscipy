@@ -4,7 +4,7 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use fsci_spatial::{DistanceMetric, cdist_metric, mahalanobis, metric_distance, pdist};
+use fsci_spatial::{DistanceMetric, cdist_metric, mahalanobis, metric_distance, pdist, seuclidean};
 
 fn grid(n: usize, dim: usize, seed: f64) -> Vec<Vec<f64>> {
     (0..n)
@@ -106,6 +106,19 @@ fn maha_bench() {
         }
         let ms = t0.elapsed().as_secs_f64() * 1e3 / reps as f64;
         println!("mahalanobis n={n}: per_call={ms:>8.5}ms checksum={acc:.6e}");
+    }
+    for &n in &[256usize, 1024, 4096] {
+        let x: Vec<f64> = (0..n).map(|i| (i as f64 * 0.37).sin()).collect();
+        let y: Vec<f64> = (0..n).map(|i| (i as f64 * 0.41 + 1.0).cos()).collect();
+        let v: Vec<f64> = (0..n).map(|i| 0.5 + (i % 7) as f64).collect();
+        let reps = (200_000_000 / (n + 1)).clamp(1000, 200_000);
+        let t0 = Instant::now();
+        let mut acc = 0.0;
+        for _ in 0..reps {
+            acc += seuclidean(black_box(&x), black_box(&y), black_box(&v));
+        }
+        let ms = t0.elapsed().as_secs_f64() * 1e3 / reps as f64;
+        println!("seuclidean n={n}: per_call={ms:>8.6}ms checksum={acc:.6e}");
     }
 }
 
