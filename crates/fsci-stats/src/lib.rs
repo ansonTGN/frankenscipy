@@ -20533,6 +20533,32 @@ impl ContinuousDistribution for CrystalBall {
         }
     }
 
+    fn logpdf(&self, x: f64) -> f64 {
+        // Closed form so the Gaussian right arm stays finite (default ln(pdf)
+        // underflows once exp(−x²/2) → 0, e.g. x≈38). frankenscipy.
+        let beta = self.beta_param;
+        let m = self.m;
+        let gauss_norm = (2.0 * PI).sqrt() * standard_normal_cdf(beta);
+        let a = (m / beta).powf(m) * (-0.5 * beta * beta).exp();
+        let tail_norm = if m > 1.0 {
+            a * (m / beta).powf(1.0 - m) / (m - 1.0)
+        } else {
+            100.0 * a
+        };
+        let total_norm = gauss_norm + tail_norm;
+        if !(total_norm > 0.0) {
+            return f64::NEG_INFINITY;
+        }
+        let ln_norm = total_norm.ln();
+        if x > -beta {
+            -0.5 * x * x - ln_norm
+        } else {
+            // ln a = m·ln(m/β) − β²/2;  power-law arm a·(b − x)^{−m}.
+            let b = m / beta - beta;
+            (m * (m / beta).ln() - 0.5 * beta * beta) - m * (b - x).ln() - ln_norm
+        }
+    }
+
     fn cdf(&self, x: f64) -> f64 {
         let beta = self.beta_param;
         let m = self.m;
