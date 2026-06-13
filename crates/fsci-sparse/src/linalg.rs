@@ -486,16 +486,30 @@ pub fn spsolve(a: &CsrMatrix, b: &[f64], options: SolveOptions) -> SparseResult<
     }
 
     let n = shape.rows;
-    if n > SPSOLVE_DENSE_MAX_N {
+    // Route genuinely-sparse systems to the native sparse LU instead of densifying A
+    // into an n×n dense matrix and running O(n³) dense LU. scipy.sparse.linalg.spsolve
+    // always factors sparsely (SuperLU); densifying a sparse A wastes O(n³) flops and
+    // O(n²) memory, while the native sparse LU costs ~O(n·fill) — orders of magnitude
+    // less for banded/stencil systems. The solution x is unique, so the result matches
+    // the dense path to rounding. Small or dense-pattern A keeps the cache-friendly
+    // dense LU, where the sparse factor's per-entry map overhead would lose.
+    let over_dense_guard = n > SPSOLVE_DENSE_MAX_N;
+    let genuinely_sparse = n >= 256 && a.nnz() <= n.saturating_mul(16);
+    if over_dense_guard || genuinely_sparse {
         let lu = NativeSparseLu::factorize_csr(a, 1.0)?;
         let solution = lu.solve(b)?;
+        let warnings = if over_dense_guard {
+            vec![format!(
+                "native sparse direct solve used for n={n}; dense fallback guard is {SPSOLVE_DENSE_MAX_N}"
+            )]
+        } else {
+            Vec::new()
+        };
         return Ok(SolveResult {
             solution,
             backend_used: SparseBackend::NativeSparseLu,
             ordering_used: options.ordering,
-            warnings: vec![format!(
-                "native sparse direct solve used for n={n}; dense fallback guard is {SPSOLVE_DENSE_MAX_N}"
-            )],
+            warnings,
         });
     }
 
