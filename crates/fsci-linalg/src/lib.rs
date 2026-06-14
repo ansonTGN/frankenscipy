@@ -3953,6 +3953,90 @@ pub fn srht_transform(
     Ok(out)
 }
 
+/// Result of [`pivoted_cholesky`]: a low-rank factor `L` (n×rank) with `A ≈ L·Lᵀ`.
+#[derive(Debug, Clone)]
+pub struct PivotedCholeskyResult {
+    /// The n×rank factor; `A ≈ factor · factorᵀ`.
+    pub factor: Vec<Vec<f64>>,
+    /// The `rank` pivot column indices, in selection order (largest residual first).
+    pub pivots: Vec<usize>,
+    /// Numerical rank reached (number of factor columns).
+    pub rank: usize,
+}
+
+/// Pivoted (partial / rank-revealing) Cholesky of a symmetric positive-semidefinite matrix
+/// `a` (n×n): a low-rank factor `L` (n×k) with `A ≈ L·Lᵀ`, exact (to rounding) when A has
+/// numerical rank ≤ k.
+///
+/// Greedily pivots on the largest diagonal residual (Harbrecht–Peters–Schneider), adding one
+/// factor column per step and stopping at `max_rank` or when the residual trace falls to
+/// `tol·trace(A)`. Cost O(n·k²) versus O(n³) for a full Cholesky — a large win when the
+/// numerical rank k ≪ n (kernel matrices, Gaussian-process covariances, Nyström), where a
+/// full Cholesky does the whole O(n³) and then most of the factor is discarded. Unlike a
+/// full Cholesky it needs no strict positive-definiteness (semidefinite suffices).
+pub fn pivoted_cholesky(
+    a: &[Vec<f64>],
+    max_rank: usize,
+    tol: f64,
+) -> Result<PivotedCholeskyResult, LinalgError> {
+    let (n, cols) = matrix_shape(a)?;
+    if n != cols {
+        return Err(LinalgError::ExpectedSquareMatrix);
+    }
+    let kmax = max_rank.min(n);
+    // Working diagonal residual d = diag(A − L Lᵀ), updated as columns are added.
+    let mut d: Vec<f64> = (0..n).map(|i| a[i][i]).collect();
+    let trace: f64 = d.iter().sum();
+    let stop = tol * trace.max(1.0);
+
+    let mut factor: Vec<Vec<f64>> = vec![vec![0.0; kmax]; n];
+    let mut pivots = Vec::with_capacity(kmax);
+    let mut rank = 0;
+    for j in 0..kmax {
+        // Pivot on the largest remaining diagonal residual.
+        let mut p = 0;
+        let mut best = f64::NEG_INFINITY;
+        for (i, &di) in d.iter().enumerate() {
+            if di > best {
+                best = di;
+                p = i;
+            }
+        }
+        if best <= stop || best <= 0.0 {
+            break;
+        }
+        let lpp = best.sqrt();
+        // L[:,j] = (A[:,p] − Σ_{t<j} L[:,t]·L[p,t]) / lpp
+        let lp: Vec<f64> = (0..j).map(|t| factor[p][t]).collect();
+        for i in 0..n {
+            let mut s = a[i][p];
+            let row = &factor[i];
+            for (t, &lpt) in lp.iter().enumerate() {
+                s -= row[t] * lpt;
+            }
+            factor[i][j] = s / lpp;
+        }
+        for (i, di) in d.iter_mut().enumerate() {
+            *di -= factor[i][j] * factor[i][j];
+        }
+        d[p] = 0.0; // the pivot's residual is now exactly zero
+        pivots.push(p);
+        rank += 1;
+    }
+
+    // Trim the factor to the rank actually reached.
+    if rank < kmax {
+        for row in &mut factor {
+            row.truncate(rank);
+        }
+    }
+    Ok(PivotedCholeskyResult {
+        factor,
+        pivots,
+        rank,
+    })
+}
+
 /// Cholesky decomposition for symmetric positive-definite matrices: A = LLᵀ.
 ///
 /// If `lower` is true (default), returns L such that A = LLᵀ.
@@ -17787,6 +17871,46 @@ mod tests {
 
         // Non-finite input is rejected.
         assert!(srht_transform(&[vec![f64::NAN, 1.0]], sk, 1).is_err());
+    }
+
+    #[test]
+    fn pivoted_cholesky_reconstructs_low_rank_psd() {
+        let mut s: u64 = 0x2718_2818_2845_9045;
+        let mut rng = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+        };
+        let (n, r) = (80usize, 9usize);
+        let b: Vec<Vec<f64>> = (0..n).map(|_| (0..r).map(|_| rng()).collect()).collect();
+        let mut a = vec![vec![0.0; n]; n];
+        for i in 0..n {
+            for j in 0..n {
+                a[i][j] = (0..r).map(|t| b[i][t] * b[j][t]).sum();
+            }
+        }
+
+        let pc = pivoted_cholesky(&a, n, 1e-12).expect("pivoted_cholesky");
+        assert!(pc.rank <= r + 1, "rank {} should be ≈ {r}", pc.rank);
+        assert_eq!(pc.factor.len(), n);
+        assert_eq!(pc.factor[0].len(), pc.rank);
+        assert_eq!(pc.pivots.len(), pc.rank);
+
+        // A ≈ L·Lᵀ to rounding (A is exactly rank r).
+        let mut maxerr = 0.0f64;
+        for i in 0..n {
+            for j in 0..n {
+                let approx: f64 = (0..pc.rank).map(|t| pc.factor[i][t] * pc.factor[j][t]).sum();
+                maxerr = maxerr.max((a[i][j] - approx).abs());
+            }
+        }
+        assert!(maxerr < 1e-8, "reconstruction maxerr {maxerr}");
+
+        // Capping max_rank below the true rank gives a truncated factor.
+        let pc2 = pivoted_cholesky(&a, 4, 1e-15).expect("pivoted_cholesky");
+        assert_eq!(pc2.rank, 4);
+        assert_eq!(pc2.factor[0].len(), 4);
+
+        assert!(pivoted_cholesky(&[vec![1.0, 2.0]], 2, 1e-10).is_err());
     }
 
     #[test]
