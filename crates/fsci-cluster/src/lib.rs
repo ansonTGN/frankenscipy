@@ -280,6 +280,92 @@ pub fn kernel_pca(
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// Classical Multidimensional Scaling (PCoA / Torgerson)
+// ══════════════════════════════════════════════════════════════════════
+
+/// Result of [`classical_mds`].
+#[derive(Debug, Clone)]
+pub struct MdsResult {
+    /// The `n×k` low-dimensional embedding (rows are points), columns ordered by descending
+    /// eigenvalue.
+    pub embedding: Vec<Vec<f64>>,
+    /// The leading eigenvalues of the double-centered matrix, descending (length k). Negative
+    /// values indicate the distances are not perfectly Euclidean in `k` dimensions.
+    pub eigenvalues: Vec<f64>,
+}
+
+/// Classical (metric) multidimensional scaling — Torgerson/Gower PCoA — from a precomputed
+/// `n×n` distance matrix.
+///
+/// Builds the double-centered Gram matrix `B = −½ J D² J` (where `Dᵢⱼ` is the distance and
+/// `J = I − 1ₙ/n`), then takes its top-`k` eigenpairs to place the points so their inner
+/// products best match `B`. The embedding is `eigenvectorsᵢ·√max(λᵢ,0)`, columns ordered by
+/// descending eigenvalue — the classical-MDS analogue of [`kernel_pca`] on `B`. The
+/// eigendecomposition dominates: O(n²·k) via [`fsci_linalg::randomized_eigh`] versus O(n³)
+/// for a full `eigh`, a large win when k ≪ n. `distances` must be square, symmetric and
+/// finite. Deterministic by `seed`.
+pub fn classical_mds(
+    distances: &[Vec<f64>],
+    n_components: usize,
+    seed: u64,
+) -> Result<MdsResult, ClusterError> {
+    if distances.is_empty() {
+        return Err(ClusterError::EmptyData);
+    }
+    let n = distances.len();
+    if distances.iter().any(|row| row.len() != n) {
+        return Err(ClusterError::InvalidArgument(
+            "distance matrix must be square".to_string(),
+        ));
+    }
+    if n_components == 0 || n_components > n {
+        return Err(ClusterError::InvalidArgument(format!(
+            "n_components={n_components} must be in [1, n={n}]"
+        )));
+    }
+    if distances.iter().flatten().any(|v| !v.is_finite()) {
+        return Err(ClusterError::InvalidArgument(
+            "distances must be finite".to_string(),
+        ));
+    }
+
+    // Squared distances, then double-center: B = −½ (D² − row_mean − col_mean + total_mean).
+    let d2: Vec<Vec<f64>> = distances
+        .iter()
+        .map(|row| row.iter().map(|&v| v * v).collect())
+        .collect();
+    let row_mean: Vec<f64> = d2.iter().map(|r| r.iter().sum::<f64>() / n as f64).collect();
+    let total_mean: f64 = row_mean.iter().sum::<f64>() / n as f64;
+    let b: Vec<Vec<f64>> = (0..n)
+        .map(|i| {
+            (0..n)
+                .map(|j| -0.5 * (d2[i][j] - row_mean[i] - row_mean[j] + total_mean))
+                .collect()
+        })
+        .collect();
+
+    let re = fsci_linalg::randomized_eigh(&b, n_components, 10, 4, seed)
+        .map_err(|e| ClusterError::InvalidArgument(format!("randomized_eigh: {e}")))?;
+    let kk = re.eigenvalues.len();
+
+    // randomized_eigh yields eigenvalues ascending; MDS wants largest first.
+    let eigenvalues: Vec<f64> = (0..kk).rev().map(|t| re.eigenvalues[t]).collect();
+    let embedding: Vec<Vec<f64>> = (0..n)
+        .map(|i| {
+            (0..kk)
+                .rev()
+                .map(|t| re.eigenvectors[i][t] * re.eigenvalues[t].max(0.0).sqrt())
+                .collect()
+        })
+        .collect();
+
+    Ok(MdsResult {
+        embedding,
+        eigenvalues,
+    })
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // Non-negative Matrix Factorization
 // ══════════════════════════════════════════════════════════════════════
 
@@ -3391,6 +3477,54 @@ mod tests {
 
         assert!(truncated_svd(&[], 2, 1).is_err());
         assert!(truncated_svd(&x, 0, 1).is_err());
+    }
+
+    #[test]
+    fn classical_mds_recovers_euclidean_distances() {
+        let mut s: u64 = 0x1357_9bdf_2468_ace0;
+        let mut rng = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+        };
+        let (n, r, k) = (80usize, 4usize, 4usize); // embed dim k == true dim r
+        // Points in R^r, then the exact Euclidean distance matrix.
+        let pts: Vec<Vec<f64>> = (0..n).map(|_| (0..r).map(|_| rng()).collect()).collect();
+        let dist: Vec<Vec<f64>> = (0..n)
+            .map(|i| {
+                (0..n)
+                    .map(|j| {
+                        (0..r)
+                            .map(|t| (pts[i][t] - pts[j][t]).powi(2))
+                            .sum::<f64>()
+                            .sqrt()
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let mds = classical_mds(&dist, k, 11).expect("classical_mds");
+        assert_eq!(mds.embedding.len(), n);
+        let kk = mds.eigenvalues.len();
+        assert_eq!(mds.embedding[0].len(), kk);
+        for w in mds.eigenvalues.windows(2) {
+            assert!(w[0] >= w[1] - 1e-9, "eigenvalues must be descending");
+        }
+        // MDS embedding is an isometry up to rotation: pairwise distances must match.
+        let mut maxerr = 0.0f64;
+        for i in 0..n {
+            for j in 0..n {
+                let de: f64 = (0..kk)
+                    .map(|t| (mds.embedding[i][t] - mds.embedding[j][t]).powi(2))
+                    .sum::<f64>()
+                    .sqrt();
+                maxerr = maxerr.max((de - dist[i][j]).abs());
+            }
+        }
+        assert!(maxerr < 1e-6, "distance reconstruction maxerr {maxerr}");
+
+        assert!(classical_mds(&[], 2, 1).is_err());
+        assert!(classical_mds(&dist, 0, 1).is_err());
+        assert!(classical_mds(&[vec![0.0, 1.0]], 1, 1).is_err()); // non-square
     }
 
     #[test]
