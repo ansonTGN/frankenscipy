@@ -9111,6 +9111,65 @@ fn symmetric_tridiagonal_qr_eigen(
     })
 }
 
+// Native safe-Rust symmetric eigensolver (the NO-GAPS replacement for nalgebra's scalar
+// symmetric_eigen, bead frankenscipy-psn7x): Householder tridiagonalization A = Q·T·Qᵀ (only the
+// active trailing submatrix is touched each step), the existing implicit-shift tridiagonal QR for
+// T's eigenpairs, then back-transform the eigenvectors by Q. Returns ascending eigenvalues and
+// the matching eigenvector columns, or None on a degenerate tridiagonal-QR non-convergence.
+//
+// VERIFIED correct against nalgebra (eigenvalues to 1e-8, residual <1e-9, orthonormal vectors) —
+// this is the staged foundation for psn7x. It is NOT yet wired into the public `eigh` because the
+// scalar version is ~0.34-0.64x nalgebra's speed (its two-sided Householder apply does ~2x the
+// flops of a rank-2 update, and the QL eigenvector accumulation is sequential). The perf win is
+// the follow-up: a rank-2-update tridiagonalization + thread::scope-parallel trailing update and
+// eigenvector back-transform.
+#[allow(dead_code)]
+fn symmetric_eigh_native(matrix: &DMatrix<f64>) -> Option<(Vec<f64>, DMatrix<f64>)> {
+    let n = matrix.nrows();
+    if n == 0 {
+        return Some((Vec::new(), DMatrix::<f64>::zeros(0, 0)));
+    }
+    if n == 1 {
+        return Some((vec![matrix[(0, 0)]], DMatrix::<f64>::identity(1, 1)));
+    }
+    let mut m = matrix.clone();
+    let mut reflectors: Vec<HouseholderReflector> = Vec::with_capacity(n.saturating_sub(2));
+    for k in 0..n - 2 {
+        let col: Vec<f64> = (k + 1..n).map(|i| m[(i, k)]).collect();
+        let refl = make_householder_reflector(k + 1, col);
+        if refl.tau != 0.0 {
+            // Similarity transform P·M·P, restricted to the active trailing block (columns/rows
+            // 0..k are already tridiagonal/zero below the sub-diagonal).
+            apply_householder_left(&mut m, &refl, k);
+            apply_householder_right(&mut m, &refl, k);
+        }
+        reflectors.push(refl);
+    }
+
+    let diag: Vec<f64> = (0..n).map(|i| m[(i, i)]).collect();
+    let offdiag: Vec<f64> = (0..n - 1).map(|i| m[(i + 1, i)]).collect();
+    let eig = symmetric_tridiagonal_qr_eigen(&diag, &offdiag)?;
+
+    // Back-transform: eigvecs(A) = Q·eigvecs(T), Q = P₀P₁…P_{n-3}; apply the reflectors to the
+    // eigenvector matrix from the left in reverse order.
+    let mut vecs = eig.eigenvectors;
+    for refl in reflectors.iter().rev() {
+        apply_householder_left(&mut vecs, refl, 0);
+    }
+
+    // Ascending eigenvalue order (matches the EighResult contract), reorder the columns to match.
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&i, &j| eig.eigenvalues[i].total_cmp(&eig.eigenvalues[j]));
+    let eigenvalues: Vec<f64> = order.iter().map(|&i| eig.eigenvalues[i]).collect();
+    let mut sorted = DMatrix::<f64>::zeros(n, n);
+    for (new_col, &old_col) in order.iter().enumerate() {
+        for r in 0..n {
+            sorted[(r, new_col)] = vecs[(r, old_col)];
+        }
+    }
+    Some((eigenvalues, sorted))
+}
+
 fn fill_deterministic_left_vector(u: &mut DMatrix<f64>, column: usize) -> Result<(), LinalgError> {
     let rows = u.nrows();
     for basis_idx in 0..rows {
@@ -20327,6 +20386,88 @@ mod tests {
     }
 
     // ── Eigenvalue decomposition tests ──────────────────────────────
+
+    #[test]
+    fn symmetric_eigh_native_matches_nalgebra_and_timing() {
+        let mut s: u64 = 0x1357_2468_9bdf_ace0;
+        let mut rng = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+        };
+        for &n in &[5usize, 40, 120] {
+            // Random symmetric matrix.
+            let mut a = DMatrix::<f64>::zeros(n, n);
+            for i in 0..n {
+                for j in i..n {
+                    let v = rng();
+                    a[(i, j)] = v;
+                    a[(j, i)] = v;
+                }
+            }
+            let (evals, evecs) = symmetric_eigh_native(&a).expect("native eigh");
+            assert_eq!(evals.len(), n);
+            for w in evals.windows(2) {
+                assert!(w[0] <= w[1] + 1e-9, "eigenvalues ascending");
+            }
+            // Residual ‖A·vᵢ − λᵢ·vᵢ‖ small, and eigenvectors orthonormal.
+            for c in 0..n {
+                let v = evecs.column(c);
+                let av = &a * v;
+                let mut resid = 0.0f64;
+                for r in 0..n {
+                    resid = resid.max((av[r] - evals[c] * evecs[(r, c)]).abs());
+                }
+                assert!(resid < 1e-9, "residual {resid} (n={n}, col={c})");
+            }
+            let gram = evecs.transpose() * &evecs;
+            for i in 0..n {
+                for j in 0..n {
+                    let expect = if i == j { 1.0 } else { 0.0 };
+                    assert!((gram[(i, j)] - expect).abs() < 1e-9, "eigenvectors not orthonormal");
+                }
+            }
+            // Eigenvalues agree with nalgebra's symmetric_eigen.
+            let mut na: Vec<f64> = a.clone().symmetric_eigenvalues().iter().copied().collect();
+            na.sort_by(|x, y| x.total_cmp(y));
+            for (x, y) in evals.iter().zip(&na) {
+                assert!((x - y).abs() < 1e-8, "eigenvalue mismatch {x} vs {y}");
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "perf probe; run with --release -- --ignored --nocapture"]
+    fn symmetric_eigh_native_vs_nalgebra_timing() {
+        let mut s: u64 = 0x2468_ace0_1357_9bdf;
+        let mut rng = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+        };
+        for &n in &[400usize, 800, 1200] {
+            let mut a = DMatrix::<f64>::zeros(n, n);
+            for i in 0..n {
+                for j in i..n {
+                    let v = rng();
+                    a[(i, j)] = v;
+                    a[(j, i)] = v;
+                }
+            }
+            let t = std::time::Instant::now();
+            let (ev, _) = symmetric_eigh_native(&a).unwrap();
+            let native_ms = t.elapsed().as_secs_f64() * 1e3;
+            std::hint::black_box(ev[0]);
+
+            let t = std::time::Instant::now();
+            let sym = a.clone().symmetric_eigen();
+            let na_ms = t.elapsed().as_secs_f64() * 1e3;
+            std::hint::black_box(sym.eigenvalues[0]);
+
+            println!(
+                "n={n}: native {native_ms:.1} ms | nalgebra {na_ms:.1} ms | ratio {:.2}x",
+                na_ms / native_ms
+            );
+        }
+    }
 
     #[test]
     fn eigh_symmetric_eigenvalues_ascending() {
