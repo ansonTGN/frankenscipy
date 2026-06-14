@@ -200,6 +200,102 @@ pub fn spectral_clustering(
     Ok(kmeans(&embedding, n_clusters, max_iter, seed)?.labels)
 }
 
+/// Result of [`spectral_coclustering`]: a simultaneous clustering of rows and columns.
+#[derive(Debug, Clone)]
+pub struct CoclusterResult {
+    /// Cluster label for each row (length m).
+    pub row_labels: Vec<usize>,
+    /// Cluster label for each column (length n).
+    pub col_labels: Vec<usize>,
+}
+
+/// Spectral co-clustering of a non-negative `m×n` data matrix into `n_clusters` biclusters
+/// (Dhillon 2001), matching `sklearn.cluster.SpectralCoclustering`.
+///
+/// Treats the matrix as the biadjacency of a bipartite row/column graph: forms the normalized
+/// matrix `Aₙ = D_r^{-1/2}·A·D_c^{-1/2}` (`D_r`, `D_c` the row/column sums), takes its leading
+/// `1+⌈log₂ k⌉` singular triplets via [`fsci_linalg::randomized_svd`] (O(m·n·k) versus O(m·n·min)
+/// for a full SVD), discards the trivial first one, stacks the `D_r^{-1/2}`-scaled left and
+/// `D_c^{-1/2}`-scaled right singular vectors into one `(m+n)×ℓ` embedding, and [`kmeans`]-clusters
+/// it — rows and columns that load on the same singular structure land in the same bicluster.
+/// `data` must be non-negative with positive row and column sums; `n_clusters ≥ 2`. Deterministic
+/// by `seed`.
+pub fn spectral_coclustering(
+    data: &[Vec<f64>],
+    n_clusters: usize,
+    max_iter: usize,
+    seed: u64,
+) -> Result<CoclusterResult, ClusterError> {
+    if data.is_empty() || data[0].is_empty() {
+        return Err(ClusterError::EmptyData);
+    }
+    let m = data.len();
+    let n = data[0].len();
+    if data.iter().any(|row| row.len() != n) {
+        return Err(ClusterError::InvalidArgument(
+            "all rows must have the same length".to_string(),
+        ));
+    }
+    if n_clusters < 2 || n_clusters > m.min(n) {
+        return Err(ClusterError::InvalidArgument(format!(
+            "n_clusters={n_clusters} must be in [2, min(m,n)={}]",
+            m.min(n)
+        )));
+    }
+    if data.iter().flatten().any(|v| !(v.is_finite() && *v >= 0.0)) {
+        return Err(ClusterError::InvalidArgument(
+            "data must be finite and non-negative".to_string(),
+        ));
+    }
+
+    let row_sum: Vec<f64> = data.iter().map(|r| r.iter().sum()).collect();
+    let col_sum: Vec<f64> = (0..n).map(|j| data.iter().map(|r| r[j]).sum()).collect();
+    if row_sum.iter().any(|&s| s <= 0.0) || col_sum.iter().any(|&s| s <= 0.0) {
+        return Err(ClusterError::InvalidArgument(
+            "every row and column must have a positive sum".to_string(),
+        ));
+    }
+    let inv_sqrt_r: Vec<f64> = row_sum.iter().map(|&s| 1.0 / s.sqrt()).collect();
+    let inv_sqrt_c: Vec<f64> = col_sum.iter().map(|&s| 1.0 / s.sqrt()).collect();
+
+    // Normalized bipartite matrix Aₙ = D_r^{-1/2} A D_c^{-1/2}.
+    let an: Vec<Vec<f64>> = (0..m)
+        .map(|i| {
+            (0..n)
+                .map(|j| data[i][j] * inv_sqrt_r[i] * inv_sqrt_c[j])
+                .collect()
+        })
+        .collect();
+
+    // n_sv = 1 + ⌈log₂ k⌉; the embedding uses the singular vectors after the trivial first.
+    let n_sv = (1 + (n_clusters as f64).log2().ceil() as usize).min(m.min(n));
+    let svd = fsci_linalg::randomized_svd(&an, n_sv, 10, 4, seed)
+        .map_err(|e| ClusterError::InvalidArgument(format!("randomized_svd: {e}")))?;
+    let kk = svd.s.len();
+    if kk < 2 {
+        return Err(ClusterError::ConvergenceFailed(
+            "co-clustering needs at least 2 singular vectors".to_string(),
+        ));
+    }
+    let edim = kk - 1; // drop the leading (trivial) singular vector
+
+    // Stack the row and column embeddings: Z = [D_r^{-1/2}·U[:,1:]; D_c^{-1/2}·Vᵀ[1:,:]ᵀ].
+    let mut z = Vec::with_capacity(m + n);
+    for (urow, &isr) in svd.u.iter().zip(&inv_sqrt_r) {
+        z.push((1..kk).map(|t| urow[t] * isr).collect::<Vec<f64>>());
+    }
+    for (j, &isc) in inv_sqrt_c.iter().enumerate() {
+        z.push((1..kk).map(|t| svd.vt[t][j] * isc).collect::<Vec<f64>>());
+    }
+    debug_assert_eq!(z[0].len(), edim);
+
+    let labels = kmeans(&z, n_clusters, max_iter, seed)?.labels;
+    Ok(CoclusterResult {
+        row_labels: labels[..m].to_vec(),
+        col_labels: labels[m..].to_vec(),
+    })
+}
+
 /// Result of [`spectral_embedding`].
 #[derive(Debug, Clone)]
 pub struct SpectralEmbeddingResult {
@@ -4990,6 +5086,66 @@ mod tests {
 
         assert!(pca(&[], k, 1).is_err());
         assert!(pca(&x, 0, 1).is_err());
+    }
+
+    #[test]
+    fn spectral_coclustering_recovers_block_structure() {
+        let mut s: u64 = 0x243f_6a88_85a3_08d3;
+        let mut rng = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((s >> 11) as f64) / (1u64 << 53) as f64
+        };
+        // Block-diagonal biclustering structure: 3 row-blocks × 3 col-blocks, large values on
+        // the matching diagonal blocks and small noise elsewhere.
+        let kk = 3usize;
+        let rm = 12usize; // rows per block
+        let cm = 9usize; // cols per block
+        let m = kk * rm;
+        let n = kk * cm;
+        let mut data = vec![vec![0.0; n]; m];
+        let mut row_truth = vec![0usize; m];
+        let mut col_truth = vec![0usize; n];
+        for i in 0..m {
+            row_truth[i] = i / rm;
+        }
+        for j in 0..n {
+            col_truth[j] = j / cm;
+        }
+        for i in 0..m {
+            for j in 0..n {
+                data[i][j] = if row_truth[i] == col_truth[j] {
+                    10.0 + rng()
+                } else {
+                    0.01 + 0.01 * rng()
+                };
+            }
+        }
+
+        let cc = spectral_coclustering(&data, kk, 100, 7).expect("coclustering");
+        assert_eq!(cc.row_labels.len(), m);
+        assert_eq!(cc.col_labels.len(), n);
+
+        // Purity of row and column labelings against the true blocks.
+        let purity = |labels: &[usize], truth: &[usize]| -> usize {
+            let mut correct = 0usize;
+            for pred in 0..kk {
+                let mut counts = vec![0usize; kk];
+                for (i, &l) in labels.iter().enumerate() {
+                    if l == pred {
+                        counts[truth[i]] += 1;
+                    }
+                }
+                correct += counts.iter().copied().max().unwrap_or(0);
+            }
+            correct
+        };
+        assert_eq!(purity(&cc.row_labels, &row_truth), m, "rows should match blocks");
+        assert_eq!(purity(&cc.col_labels, &col_truth), n, "cols should match blocks");
+
+        assert!(spectral_coclustering(&[], 2, 10, 1).is_err());
+        assert!(spectral_coclustering(&data, 1, 10, 1).is_err()); // k < 2
+        assert!(spectral_coclustering(&data, m + 1, 10, 1).is_err());
+        assert!(spectral_coclustering(&[vec![-1.0, 1.0], vec![1.0, 1.0]], 2, 10, 1).is_err()); // negative
     }
 
     #[test]
