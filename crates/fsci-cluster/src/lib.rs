@@ -201,6 +201,85 @@ pub fn spectral_clustering(
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// Kernel PCA (randomized)
+// ══════════════════════════════════════════════════════════════════════
+
+/// Result of [`kernel_pca`], mirroring `sklearn.decomposition.KernelPCA`.
+#[derive(Debug, Clone)]
+pub struct KernelPcaResult {
+    /// The leading kernel eigenvalues (length k).
+    pub eigenvalues: Vec<f64>,
+    /// The corresponding unit eigenvectors of the centered kernel (n×k).
+    pub eigenvectors: Vec<Vec<f64>>,
+    /// The data projected into the kernel feature space, `eigenvectors·diag(√λ)` (n×k).
+    pub transformed: Vec<Vec<f64>>,
+}
+
+/// Kernel Principal Component Analysis from a precomputed `n×n` kernel (Gram) matrix.
+///
+/// Matches `sklearn.decomposition.KernelPCA(kernel="precomputed", n_components=k)`:
+/// double-centers the kernel (`K − 1ₙK − K1ₙ + 1ₙK1ₙ`), takes its top-`k` eigenpairs via
+/// [`fsci_linalg::randomized_eigh`], and returns the projections `αᵢ·√λᵢ` — the nonlinear
+/// analogue of [`pca`]. The eigendecomposition dominates: O(n²·k) randomized versus O(n³)
+/// for a full `eigh` — a large win when k ≪ n. `kernel` should be symmetric PSD; eigenvalues
+/// that come out ≤ 0 (from the centering) contribute a zero projection. Deterministic by
+/// `seed`.
+pub fn kernel_pca(
+    kernel: &[Vec<f64>],
+    n_components: usize,
+    seed: u64,
+) -> Result<KernelPcaResult, ClusterError> {
+    if kernel.is_empty() {
+        return Err(ClusterError::EmptyData);
+    }
+    let n = kernel.len();
+    if kernel.iter().any(|row| row.len() != n) {
+        return Err(ClusterError::InvalidArgument(
+            "kernel matrix must be square".to_string(),
+        ));
+    }
+    if n_components == 0 || n_components > n {
+        return Err(ClusterError::InvalidArgument(format!(
+            "n_components={n_components} must be in [1, n={n}]"
+        )));
+    }
+    if kernel.iter().flatten().any(|v| !v.is_finite()) {
+        return Err(ClusterError::InvalidArgument(
+            "kernel must be finite".to_string(),
+        ));
+    }
+
+    // Double-center the (symmetric) kernel: row_mean serves as col_mean.
+    let row_mean: Vec<f64> = kernel.iter().map(|r| r.iter().sum::<f64>() / n as f64).collect();
+    let total_mean: f64 = row_mean.iter().sum::<f64>() / n as f64;
+    let kc: Vec<Vec<f64>> = (0..n)
+        .map(|i| {
+            (0..n)
+                .map(|j| kernel[i][j] - row_mean[i] - row_mean[j] + total_mean)
+                .collect()
+        })
+        .collect();
+
+    let re = fsci_linalg::randomized_eigh(&kc, n_components, 10, 4, seed)
+        .map_err(|e| ClusterError::InvalidArgument(format!("randomized_eigh: {e}")))?;
+    let kk = re.eigenvalues.len();
+
+    let transformed: Vec<Vec<f64>> = (0..n)
+        .map(|i| {
+            (0..kk)
+                .map(|t| re.eigenvectors[i][t] * re.eigenvalues[t].max(0.0).sqrt())
+                .collect()
+        })
+        .collect();
+
+    Ok(KernelPcaResult {
+        eigenvalues: re.eigenvalues,
+        eigenvectors: re.eigenvectors,
+        transformed,
+    })
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // K-Means Clustering
 // ══════════════════════════════════════════════════════════════════════
 
@@ -2890,6 +2969,45 @@ mod tests {
 
         assert!(spectral_clustering(&[], 2, 10, 1).is_err());
         assert!(spectral_clustering(&aff, 0, 10, 1).is_err());
+    }
+
+    #[test]
+    fn kernel_pca_reconstructs_centered_kernel() {
+        let mut s: u64 = 0x9182_7364_5546_3728;
+        let mut rng = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+        };
+        let (n, r, k) = (90usize, 7usize, 12usize); // k > r → exact rank-k reconstruction
+        let b: Vec<Vec<f64>> = (0..n).map(|_| (0..r).map(|_| rng()).collect()).collect();
+        let kernel: Vec<Vec<f64>> = (0..n)
+            .map(|i| (0..n).map(|j| (0..r).map(|t| b[i][t] * b[j][t]).sum()).collect())
+            .collect();
+        // Reference centered kernel.
+        let rm: Vec<f64> = kernel.iter().map(|r| r.iter().sum::<f64>() / n as f64).collect();
+        let tm: f64 = rm.iter().sum::<f64>() / n as f64;
+        let kc: Vec<Vec<f64>> = (0..n)
+            .map(|i| (0..n).map(|j| kernel[i][j] - rm[i] - rm[j] + tm).collect())
+            .collect();
+
+        let kp = kernel_pca(&kernel, k, 3).expect("kernel_pca");
+        let kk = kp.transformed[0].len();
+        assert_eq!(kp.eigenvalues.len(), kk);
+        assert_eq!(kp.eigenvectors.len(), n);
+        assert_eq!(kp.transformed.len(), n);
+
+        // transformed·transformedᵀ ≈ centered kernel (rank k > r ⇒ exact to rounding).
+        let mut maxerr = 0.0f64;
+        for i in 0..n {
+            for j in 0..n {
+                let approx: f64 = (0..kk).map(|t| kp.transformed[i][t] * kp.transformed[j][t]).sum();
+                maxerr = maxerr.max((kc[i][j] - approx).abs());
+            }
+        }
+        assert!(maxerr < 1e-8, "reconstruction maxerr {maxerr}");
+
+        assert!(kernel_pca(&[], 2, 1).is_err());
+        assert!(kernel_pca(&kernel, 0, 1).is_err());
     }
 
     #[test]
