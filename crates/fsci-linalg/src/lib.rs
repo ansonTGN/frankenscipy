@@ -3860,6 +3860,99 @@ pub fn randomized_pinv(
     })
 }
 
+/// Subsampled Randomized Hadamard Transform (SRHT) sketch: `S·A` (sketch_size × n), the
+/// rows of `a` (m×n) mixed by a fast Walsh–Hadamard transform, randomly sign-flipped, and
+/// subsampled.
+///
+/// `S = √(m'/s)·P·H·D`, with `D` a random ±1 diagonal, `H` the m'×m' Hadamard transform
+/// (m' = next power of two ≥ m, applied via [`fsci_fft::fwht`]), and `P` a uniform sample of
+/// `s` rows. The structured transform costs O(n·m'·log m') versus O(s·m·n) for the
+/// equivalent dense Gaussian sketch (`Ω·A`, `Ω` an s×m Gaussian) — the SRHT was designed to
+/// match Gaussian subspace-embedding quality (s ≈ O(n·log n) suffices) at a fraction of the
+/// cost. A fast Johnson–Lindenstrauss embedding for randomized linear algebra (companion to
+/// [`clarkson_woodruff_transform`]). The columns sketch independently and run across
+/// threads; deterministic given `seed`.
+pub fn srht_transform(
+    a: &[Vec<f64>],
+    sketch_size: usize,
+    seed: u64,
+) -> Result<Vec<Vec<f64>>, LinalgError> {
+    let (m, n) = matrix_shape(a)?;
+    if n == 0 {
+        return Ok(vec![Vec::new(); sketch_size.max(1)]);
+    }
+    if a.iter().flatten().any(|v| !v.is_finite()) {
+        return Err(LinalgError::NonFiniteInput);
+    }
+    let mp = m.next_power_of_two();
+    let s = sketch_size.max(1).min(mp);
+    let mut state = seed ^ 0x9e37_79b9_7f4a_7c15;
+    let mut next = || {
+        state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    };
+    let signs: Vec<f64> = (0..mp).map(|_| if next() & 1 == 0 { 1.0 } else { -1.0 }).collect();
+    let mut perm: Vec<usize> = (0..mp).collect();
+    for i in 0..s {
+        let j = i + (next() as usize) % (mp - i);
+        perm.swap(i, j);
+    }
+    let rows = &perm[..s];
+    // `fwht` is the UNNORMALIZED Hadamard (‖H·v‖² = m'·‖v‖²), so the usual √(m'/s) scale —
+    // which assumes a unit-norm Hadamard — would over-scale by m'. The norm-preserving SRHT
+    // scale for the unnormalized transform is 1/√s: ‖S·a‖² = (1/s)·(s/m')·m'·‖a‖² = ‖a‖².
+    let scale = 1.0 / (s as f64).sqrt();
+    let opts = fsci_fft::FftOptions::default();
+
+    let nthreads = std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(1)
+        .min(n)
+        .max(1);
+    let chunk = n.div_ceil(nthreads);
+    let signs_r = &signs;
+    let opts_r = &opts;
+    let cols: Vec<Vec<f64>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..nthreads)
+            .filter_map(|tn| {
+                let j0 = tn * chunk;
+                if j0 >= n {
+                    return None;
+                }
+                let j1 = (j0 + chunk).min(n);
+                Some(scope.spawn(move || {
+                    let mut v = vec![0.0; mp];
+                    let mut local = Vec::with_capacity(j1 - j0);
+                    for j in j0..j1 {
+                        for (i, slot) in v.iter_mut().enumerate() {
+                            *slot = if i < m { a[i][j] * signs_r[i] } else { 0.0 };
+                        }
+                        let hv = fsci_fft::fwht(&v, opts_r)
+                            .expect("fwht on power-of-two finite input");
+                        local.push(rows.iter().map(|&r| scale * hv[r]).collect::<Vec<f64>>());
+                    }
+                    local
+                }))
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|h| h.join().expect("srht worker panicked"))
+            .collect()
+    });
+
+    let mut out = vec![vec![0.0; n]; s];
+    for (j, col) in cols.iter().enumerate() {
+        for (t, &val) in col.iter().enumerate() {
+            out[t][j] = val;
+        }
+    }
+    Ok(out)
+}
+
 /// Cholesky decomposition for symmetric positive-definite matrices: A = LLᵀ.
 ///
 /// If `lower` is true (default), returns L such that A = LLᵀ.
@@ -17650,6 +17743,50 @@ mod tests {
             "rel pinv err {} too large",
             (num / den).sqrt()
         );
+    }
+
+    #[test]
+    fn srht_transform_is_a_norm_preserving_embedding() {
+        let mut sr: u64 = 0x1357_9bdf_2468_ace0;
+        let mut rng = || {
+            sr = sr.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((sr >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+        };
+        let (m, n, sk) = (300usize, 12usize, 96usize);
+        let a: Vec<Vec<f64>> = (0..m).map(|_| (0..n).map(|_| rng()).collect()).collect();
+
+        let sa = srht_transform(&a, sk, 11).expect("srht");
+        assert_eq!(sa.len(), sk);
+        assert_eq!(sa[0].len(), n);
+
+        // Same seed → bit-identical (reproducible).
+        let sa2 = srht_transform(&a, sk, 11).expect("srht");
+        for (r1, r2) in sa.iter().zip(&sa2) {
+            for (&x, &y) in r1.iter().zip(r2) {
+                assert_eq!(x.to_bits(), y.to_bits());
+            }
+        }
+        // Different seed → different sketch.
+        let sa3 = srht_transform(&a, sk, 12).expect("srht");
+        assert!(sa.iter().flatten().zip(sa3.iter().flatten()).any(|(&x, &y)| x != y));
+
+        // Norm-preserving subspace embedding: mean ‖S·A·x‖² / ‖A·x‖² ≈ 1.
+        let trials = 50;
+        let mut ratio = 0.0;
+        for _ in 0..trials {
+            let x: Vec<f64> = (0..n).map(|_| rng()).collect();
+            let dot = |row: &[f64]| row.iter().zip(&x).map(|(&p, &q)| p * q).sum::<f64>();
+            let nax: f64 = a.iter().map(|r| dot(r).powi(2)).sum();
+            let nsax: f64 = sa.iter().map(|r| dot(r).powi(2)).sum();
+            if nax > 1e-12 {
+                ratio += nsax / nax;
+            }
+        }
+        let mean = ratio / trials as f64;
+        assert!((0.5..1.7).contains(&mean), "embedding mean {mean} not ≈ 1");
+
+        // Non-finite input is rejected.
+        assert!(srht_transform(&[vec![f64::NAN, 1.0]], sk, 1).is_err());
     }
 
     #[test]
