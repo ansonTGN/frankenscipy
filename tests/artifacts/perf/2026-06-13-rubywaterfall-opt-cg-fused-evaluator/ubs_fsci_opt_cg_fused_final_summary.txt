@@ -1,0 +1,20 @@
+UBS final summary for frankenscipy-8l8r1.105
+
+Command surface:
+- Scanned files: 3
+- Full raw output retained locally at `ubs_fsci_opt_cg_fused_final.txt` but not committed because the UBS banner includes trailing whitespace.
+
+Internal cargo checks reported by UBS:
+- Formatting: OK, clean
+- Clippy: OK, no warnings/errors
+- Cargo check: OK, clean
+
+Remaining UBS finding counts:
+- Critical issues: 5
+- Warning issues: 651
+- Info items: 119
+
+Interpretation:
+- The final accepted-gradient clone warning from the earlier scan is gone.
+- The remaining counts are broad pre-existing/test/probe findings outside this one-lever performance change.
+- Follow-up bead filed: `frankenscipy-rrh1w` (`[quality][opt] clean fsci-opt probe-bin clippy and UBS debt`).

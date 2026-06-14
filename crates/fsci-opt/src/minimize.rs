@@ -3,7 +3,7 @@
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::linesearch::{WolfeParams, line_search_wolfe2};
+use crate::linesearch::{WolfeParams, line_search_wolfe2, line_search_wolfe2_with_gradient_probe};
 use crate::types::{
     Bound, ConvergenceStatus, MinimizeOptions, OptError, OptimizeMethod, OptimizeResult,
     OptimizeTraceEntry,
@@ -454,26 +454,27 @@ where
                 counter.set(counter.get() + 1);
                 (fun)(xv)
             };
-            let g_closure = |xv: &[f64]| {
-                let mut g = vec![0.0; xv.len()];
-                let mut xp = xv.to_vec();
+            let mut g_closure = |xv: &mut [f64], gradient: &mut Vec<f64>| {
+                if gradient.len() != xv.len() {
+                    gradient.resize(xv.len(), 0.0);
+                }
                 for i in 0..xv.len() {
                     let step = eps * (1.0 + xv[i].abs());
-                    let orig = xp[i];
-                    xp[i] = orig + step;
+                    let orig = xv[i];
+                    xv[i] = orig + step;
                     counter.set(counter.get() + 1);
-                    let fp = (fun)(&xp);
-                    xp[i] = orig - step;
+                    let fp = (fun)(xv);
+                    xv[i] = orig - step;
                     counter.set(counter.get() + 1);
-                    let fm = (fun)(&xp);
-                    xp[i] = orig;
-                    g[i] = (fp - fm) / (2.0 * step);
+                    let fm = (fun)(xv);
+                    xv[i] = orig;
+                    gradient[i] = (fp - fm) / (2.0 * step);
                 }
-                g
+                dot(gradient, &direction)
             };
-            let res = line_search_wolfe2(
+            let res = line_search_wolfe2_with_gradient_probe(
                 &f_closure,
-                &g_closure,
+                &mut g_closure,
                 &x,
                 &direction,
                 f,
@@ -483,9 +484,10 @@ where
             if let Ok(ls) = res {
                 objective.nfev += counter.get();
                 Some(LineSearchStep {
-                    x: add_scaled(&x, &direction, ls.alpha),
-                    f: ls.f_at_alpha,
-                    alpha: ls.alpha,
+                    x: add_scaled(&x, &direction, ls.result.alpha),
+                    f: ls.result.f_at_alpha,
+                    alpha: ls.result.alpha,
+                    accepted_gradient: ls.accepted_gradient,
                 })
             } else {
                 None
@@ -522,13 +524,23 @@ where
             },
         };
 
-        let next_grad = match finite_diff_gradient(&mut objective, &search.x, options.gradient_eps)
-        {
-            Ok(value) => {
+        let next_grad = match search.accepted_gradient {
+            Some(accepted_gradient) => {
+                if let Err(err) = objective.reserve_evaluations(n * 2) {
+                    return Ok(result_from_error(&search.x, nit, objective.nfev, njev, err));
+                }
                 njev += 1;
-                value
+                accepted_gradient
             }
-            Err(err) => return Ok(result_from_error(&search.x, nit, objective.nfev, njev, err)),
+            None => match finite_diff_gradient(&mut objective, &search.x, options.gradient_eps) {
+                Ok(value) => {
+                    njev += 1;
+                    value
+                }
+                Err(err) => {
+                    return Ok(result_from_error(&search.x, nit, objective.nfev, njev, err));
+                }
+            },
         };
 
         let denom = dot(&grad, &grad).max(1.0e-18);
@@ -1795,7 +1807,11 @@ where
             };
             // BFGS curvature update from the step actually taken (s) and the resulting
             // gradient change (y) — both already in hand, so no extra evaluations.
-            let y: Vec<f64> = grad.iter().zip(grad_old.iter()).map(|(gn, go)| gn - go).collect();
+            let y: Vec<f64> = grad
+                .iter()
+                .zip(grad_old.iter())
+                .map(|(gn, go)| gn - go)
+                .collect();
             trust_bfgs_hessian_update(&mut hessian, &step, &y);
             nhev += 1;
             nit = iteration + 1;
@@ -2144,6 +2160,7 @@ struct LineSearchStep {
     alpha: f64,
     x: Vec<f64>,
     f: f64,
+    accepted_gradient: Option<Vec<f64>>,
 }
 
 struct Objective<'a, F>
@@ -2188,6 +2205,18 @@ where
             };
         }
         Ok(value)
+    }
+
+    fn reserve_evaluations(&mut self, count: usize) -> Result<(), OptError> {
+        let remaining = self.maxfev.saturating_sub(self.nfev);
+        if remaining < count {
+            self.nfev = self.maxfev;
+            return Err(OptError::EvaluationBudgetExceeded {
+                detail: format!("max function evaluations exceeded ({})", self.maxfev),
+            });
+        }
+        self.nfev += count;
+        Ok(())
     }
 }
 
@@ -2242,6 +2271,7 @@ where
                 alpha,
                 x: candidate_x,
                 f: candidate_f,
+                accepted_gradient: None,
             }));
         }
         alpha *= 0.5;
@@ -2297,6 +2327,7 @@ where
                         alpha: b,
                         x: candidate_x,
                         f: fb,
+                        accepted_gradient: None,
                     });
                 }
             }
@@ -2321,6 +2352,7 @@ where
                     alpha: b,
                     x: candidate_x,
                     f: fb,
+                    accepted_gradient: None,
                 });
             }
         }
@@ -2364,6 +2396,7 @@ where
             alpha,
             x: candidate_x,
             f: candidate_f,
+            accepted_gradient: None,
         });
     }
 
@@ -2371,6 +2404,7 @@ where
         alpha: 0.0,
         x: x.to_vec(),
         f: fx,
+        accepted_gradient: None,
     })
 }
 
@@ -5361,7 +5395,9 @@ mod tests {
             maxfev: Some(200_000),
             ..MinimizeOptions::default()
         };
-        let x0: Vec<f64> = (0..10).map(|i| if i % 2 == 0 { -1.5 } else { 1.7 }).collect();
+        let x0: Vec<f64> = (0..10)
+            .map(|i| if i % 2 == 0 { -1.5 } else { 1.7 })
+            .collect();
         let result = minimize(rosenbrock_nd, &x0, options).expect("minimize");
         assert!(result.success, "should converge: {}", result.message);
         assert!(
