@@ -4037,6 +4037,120 @@ pub fn pivoted_cholesky(
     })
 }
 
+/// Greedily select up to `k` columns of `y` (l×n) by column-pivoted modified Gram–Schmidt,
+/// returning the chosen column indices in selection order (largest residual norm first).
+fn pivoted_columns(y: &[Vec<f64>], k: usize) -> Vec<usize> {
+    let l = y.len();
+    let n = if l > 0 { y[0].len() } else { 0 };
+    let cols: Vec<Vec<f64>> = (0..n).map(|j| (0..l).map(|i| y[i][j]).collect()).collect();
+    let mut norms: Vec<f64> = cols.iter().map(|c| c.iter().map(|&x| x * x).sum()).collect();
+    let mut basis: Vec<Vec<f64>> = Vec::new();
+    let mut pivots = Vec::with_capacity(k);
+    let kk = k.min(n).min(l);
+    for _ in 0..kk {
+        let mut p = usize::MAX;
+        let mut best = f64::NEG_INFINITY;
+        for (j, &nj) in norms.iter().enumerate() {
+            if nj > best {
+                best = nj;
+                p = j;
+            }
+        }
+        if p == usize::MAX || best <= 0.0 {
+            break;
+        }
+        // Orthogonalise column p against the current basis.
+        let mut v = cols[p].clone();
+        for q in &basis {
+            let d: f64 = q.iter().zip(&v).map(|(&a, &b)| a * b).sum();
+            for (vi, &qi) in v.iter_mut().zip(q) {
+                *vi -= d * qi;
+            }
+        }
+        let nv = v.iter().map(|&x| x * x).sum::<f64>().sqrt();
+        if nv <= 1e-12 {
+            norms[p] = f64::NEG_INFINITY;
+            continue;
+        }
+        for vi in v.iter_mut() {
+            *vi /= nv;
+        }
+        // Deflate the remaining column norms by the projection onto the new direction.
+        for (j, nj) in norms.iter_mut().enumerate() {
+            if *nj == f64::NEG_INFINITY {
+                continue;
+            }
+            let d: f64 = v.iter().zip(&cols[j]).map(|(&a, &b)| a * b).sum();
+            *nj = (*nj - d * d).max(0.0);
+        }
+        basis.push(v);
+        pivots.push(p);
+        norms[p] = f64::NEG_INFINITY;
+    }
+    pivots
+}
+
+/// Result of [`interp_decomp`]: `A ≈ A[:, skeleton] · proj`.
+#[derive(Debug, Clone)]
+pub struct InterpDecompResult {
+    /// Indices of the `rank` selected (skeleton) columns of A.
+    pub skeleton: Vec<usize>,
+    /// The rank×n interpolation matrix; `A ≈ A[:, skeleton] · proj`.
+    pub proj: Vec<Vec<f64>>,
+    /// Number of skeleton columns.
+    pub rank: usize,
+}
+
+/// Interpolative decomposition (ID) of `a` (m×n): a subset of `k` columns (the skeleton) and
+/// an interpolation matrix `proj` (k×n) with `A ≈ A[:, skeleton] · proj`.
+///
+/// Matches `scipy.linalg.interpolative.interp_decomp`. Randomized: an SRHT sketch
+/// ([`srht_transform`]) reduces A to `l = k + n_oversamples` rows, column-pivoted Gram–
+/// Schmidt on that small sketch picks the skeleton columns, and `proj = A[:, skeleton]⁺ · A`
+/// (the least-squares interpolation). Cost O(m·n·k) versus O(m·n·min(m,n)) for a
+/// deterministic full column-pivoted QR — a large win when the numerical rank k ≪ min(m,n).
+/// Exact (to rounding) when A has numerical rank ≤ k and the skeleton spans its range.
+/// Unlike orthogonal-factor decompositions, ID keeps ACTUAL columns of A (interpretable;
+/// the basis of CUR / feature selection / model reduction).
+pub fn interp_decomp(
+    a: &[Vec<f64>],
+    k: usize,
+    n_oversamples: usize,
+    seed: u64,
+) -> Result<InterpDecompResult, LinalgError> {
+    let (m, n) = matrix_shape(a)?;
+    if n == 0 || k == 0 {
+        return Ok(InterpDecompResult {
+            skeleton: Vec::new(),
+            proj: Vec::new(),
+            rank: 0,
+        });
+    }
+    let l = (k + n_oversamples).min(m).min(n).max(1);
+    let y = srht_transform(a, l, seed)?; // l×n
+    let skeleton = pivoted_columns(&y, k.min(n));
+    let kk = skeleton.len();
+    if kk == 0 {
+        return Ok(InterpDecompResult {
+            skeleton,
+            proj: Vec::new(),
+            rank: 0,
+        });
+    }
+    // A[:, skeleton] (m×kk), then proj = A[:, skeleton]⁺ · A (kk×n).
+    let aj: Vec<Vec<f64>> = a
+        .iter()
+        .map(|row| skeleton.iter().map(|&j| row[j]).collect())
+        .collect();
+    let pinv_aj = pinv(&aj, PinvOptions::default())?.pseudo_inverse; // kk×m
+    let proj = matmul(&pinv_aj, a)?; // kk×n
+    Ok(InterpDecompResult {
+        skeleton,
+        proj,
+        rank: kk,
+    })
+}
+
 /// Cholesky decomposition for symmetric positive-definite matrices: A = LLᵀ.
 ///
 /// If `lower` is true (default), returns L such that A = LLᵀ.
@@ -17871,6 +17985,40 @@ mod tests {
 
         // Non-finite input is rejected.
         assert!(srht_transform(&[vec![f64::NAN, 1.0]], sk, 1).is_err());
+    }
+
+    #[test]
+    fn interp_decomp_reconstructs_low_rank() {
+        let mut s: u64 = 0x5151_2626_3737_4848;
+        let mut rng = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+        };
+        let (m, n, r, k) = (140usize, 60usize, 8usize, 14usize);
+        let b: Vec<Vec<f64>> = (0..m).map(|_| (0..r).map(|_| rng()).collect()).collect();
+        let c: Vec<Vec<f64>> = (0..r).map(|_| (0..n).map(|_| rng()).collect()).collect();
+        let a: Vec<Vec<f64>> = b
+            .iter()
+            .map(|bi| (0..n).map(|j| (0..r).map(|t| bi[t] * c[t][j]).sum()).collect())
+            .collect();
+
+        let id = interp_decomp(&a, k, 8, 5).expect("interp_decomp");
+        assert!(id.rank <= k && id.rank >= r.min(k));
+        assert_eq!(id.skeleton.len(), id.rank);
+        assert_eq!(id.proj.len(), id.rank);
+        assert_eq!(id.proj[0].len(), n);
+        for &j in &id.skeleton {
+            assert!(j < n, "skeleton index {j} out of range");
+        }
+        // A ≈ A[:, skeleton] · proj to rounding (A is exactly rank r ≤ k).
+        let mut maxerr = 0.0f64;
+        for i in 0..m {
+            for j in 0..n {
+                let approx: f64 = (0..id.rank).map(|t| a[i][id.skeleton[t]] * id.proj[t][j]).sum();
+                maxerr = maxerr.max((a[i][j] - approx).abs());
+            }
+        }
+        assert!(maxerr < 1e-7, "reconstruction maxerr {maxerr}");
     }
 
     #[test]
