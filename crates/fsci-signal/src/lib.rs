@@ -5317,6 +5317,89 @@ pub fn iirpeak(w0: f64, q: f64) -> Result<BaCoeffs, SignalError> {
     })
 }
 
+/// Comb filter type for [`iircomb`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CombType {
+    /// Regularly-spaced band-stop notches.
+    Notch,
+    /// Regularly-spaced band-pass peaks.
+    Peak,
+}
+
+/// Design an IIR notching or peaking digital comb filter.
+///
+/// Matches `scipy.signal.iircomb(w0, Q, ftype, fs, pass_zero)`. `w0` is the
+/// fundamental frequency (same units as `fs`, must satisfy `0 < w0 < fs/2` and
+/// evenly divide `fs`); `q` is the quality factor. `fs` defaults to 2.0. The
+/// `pass_zero` flag selects whether the zero-frequency bin is passed. Returns the
+/// `(b, a)` transfer-function coefficients of the order-`N = round(fs/w0)` comb.
+///
+/// Implements Orfanidis "Introduction to Signal Processing" §11.5 with the −3 dB
+/// reference gain, for which the band-edge term simplifies to 1.
+pub fn iircomb(
+    w0: f64,
+    q: f64,
+    ftype: CombType,
+    fs: Option<f64>,
+    pass_zero: bool,
+) -> Result<BaCoeffs, SignalError> {
+    let fs = fs.unwrap_or(2.0);
+    if !(fs.is_finite() && fs > 0.0) {
+        return Err(SignalError::InvalidParameter {
+            detail: "fs must be finite and positive".to_string(),
+        });
+    }
+    if !(w0.is_finite() && w0 > 0.0 && w0 < fs / 2.0) {
+        return Err(SignalError::FrequencyOutOfBand {
+            detail: format!("w0 must be in (0, {}) (Nyquist)", fs / 2.0),
+        });
+    }
+    if !(q.is_finite() && q > 0.0) {
+        return Err(SignalError::InvalidParameter {
+            detail: "Q must be positive".to_string(),
+        });
+    }
+    // Filter order; fs must be (near-)divisible by w0.
+    let nn = (fs / w0).round();
+    if !(nn >= 1.0 && nn.is_finite()) {
+        return Err(SignalError::InvalidParameter {
+            detail: "fs/w0 must round to a positive integer".to_string(),
+        });
+    }
+    if (w0 - fs / nn).abs() / fs > 1e-14 {
+        return Err(SignalError::InvalidParameter {
+            detail: "fs must be divisible by w0".to_string(),
+        });
+    }
+    let n = nn as usize;
+
+    // Radian fundamental and bandwidth (Eq. 11.3.1).
+    let w0r = 2.0 * std::f64::consts::PI * w0 / fs;
+    let w_delta = w0r / q;
+    // notch: (G0,G)=(1,0); peak: (0,1).
+    let (g0, g) = match ftype {
+        CombType::Notch => (1.0, 0.0),
+        CombType::Peak => (0.0, 1.0),
+    };
+    let beta = (nn * w_delta / 4.0).tan();
+    let ax = (1.0 - beta) / (1.0 + beta);
+    let bx = (g0 + g * beta) / (1.0 + beta);
+    let cx = (g0 - g * beta) / (1.0 + beta);
+    let negative = matches!(
+        (ftype, pass_zero),
+        (CombType::Peak, true) | (CombType::Notch, false)
+    );
+    let sgn = if negative { -1.0 } else { 1.0 };
+
+    let mut b = vec![0.0; n + 1];
+    b[0] = bx;
+    b[n] = sgn * cx;
+    let mut a = vec![0.0; n + 1];
+    a[0] = 1.0;
+    a[n] = sgn * ax;
+    Ok(BaCoeffs { b, a })
+}
+
 /// General IIR filter design dispatcher.
 pub fn iirfilter(
     order: usize,
@@ -13765,6 +13848,32 @@ mod tests {
                 "iir a {g} vs {w}"
             );
         }
+    }
+
+    #[test]
+    fn iircomb_matches_scipy() {
+        // notch, 20Hz @ 200Hz, Q=30, pass_zero=False → N=10
+        let c = iircomb(20.0, 30.0, CombType::Notch, Some(200.0), false).unwrap();
+        assert_eq!(c.b.len(), 11);
+        assert!((c.b[0] - 9.50202022148920e-01).abs() <= 1e-13);
+        assert!((c.b[10] - (-9.50202022148920e-01)).abs() <= 1e-13);
+        assert!(c.b[1..10].iter().all(|&x| x == 0.0));
+        assert_eq!(c.a[0], 1.0);
+        assert!((c.a[10] - (-9.00404044297840e-01)).abs() <= 1e-13);
+        assert!(c.a[1..10].iter().all(|&x| x == 0.0));
+        // peak, 250Hz @ 1000Hz, Q=30, pass_zero=True → N=4
+        let p = iircomb(250.0, 30.0, CombType::Peak, Some(1000.0), true).unwrap();
+        assert_eq!(p.b.len(), 5);
+        assert!((p.b[0] - 4.97979778510800e-02).abs() <= 1e-13);
+        assert!((p.b[4] - 4.97979778510800e-02).abs() <= 1e-13);
+        assert!((p.a[4] - (-9.00404044297840e-01)).abs() <= 1e-13);
+        // normalized w0=0.25 @ fs=2 (default), notch → N=8
+        let d = iircomb(0.25, 25.0, CombType::Notch, None, false).unwrap();
+        assert_eq!(d.b.len(), 9);
+        assert!((d.b[0] - 9.40809296181594e-01).abs() <= 1e-13);
+        assert!((d.a[8] - (-8.81618592363189e-01)).abs() <= 1e-13);
+        // not divisible → error
+        assert!(iircomb(0.3, 25.0, CombType::Notch, Some(2.0), false).is_err());
     }
 
     #[test]
