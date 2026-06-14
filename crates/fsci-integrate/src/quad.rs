@@ -2147,6 +2147,164 @@ where
     }
 }
 
+/// Evaluate a convergent integral over a finite interval using tanh-sinh
+/// (double-exponential) quadrature.
+///
+/// Matches the finite-limit core of `scipy.integrate.tanhsinh(f, a, b)`. The
+/// substitution `x = c + d·tanh((π/2)·sinh(t))` (with `c=(a+b)/2`, `d=(b-a)/2`)
+/// maps `(a, b)` to the whole real line and packs the abscissae so densely near
+/// the endpoints that integrable endpoint singularities (e.g. `1/√x`, `ln x`)
+/// converge quadratically — the number of correct digits roughly doubles per
+/// level. Nodes are reused across levels: halving the step only adds the new
+/// odd-index abscissae.
+///
+/// `atol`/`rtol` are the absolute/relative tolerances (non-positive values fall
+/// back to `0.0` and `1e-12`); `max_level` caps the refinement levels (`0` →
+/// 16). Returns the estimate, the last level-to-level change as the error
+/// estimate, the function-evaluation count, and whether the tolerance was met.
+/// Infinite limits are out of scope (returns a non-converged `NaN`).
+pub fn tanhsinh<F>(f: F, a: f64, b: f64, atol: f64, rtol: f64, max_level: usize) -> QuadResult
+where
+    F: Fn(f64) -> f64,
+{
+    if !a.is_finite() || !b.is_finite() {
+        return QuadResult {
+            integral: f64::NAN,
+            error: f64::INFINITY,
+            neval: 0,
+            converged: false,
+        };
+    }
+    if a == b {
+        return QuadResult {
+            integral: 0.0,
+            error: 0.0,
+            neval: 0,
+            converged: true,
+        };
+    }
+    // Integrate left→right, restore the sign for b < a.
+    let (lo, hi, sign) = if a < b { (a, b, 1.0) } else { (b, a, -1.0) };
+    let atol = if atol > 0.0 { atol } else { 0.0 };
+    let rtol = if rtol > 0.0 { rtol } else { 1e-12 };
+    let max_level = if max_level == 0 {
+        16
+    } else {
+        max_level.min(20)
+    };
+
+    let c = 0.5 * (lo + hi);
+    let d = 0.5 * (hi - lo);
+    let half_pi = std::f64::consts::FRAC_PI_2;
+    // Beyond t_max the tanh-sinh weight (π/2)·cosh(t)/cosh²((π/2)sinh t) has
+    // underflowed to zero, so summation can stop.
+    let t_max = 6.8;
+    let mut neval = 0usize;
+
+    // Accumulate (and mirror) the contribution of abscissa index j at step h
+    // into `sum`. j == 0 is the (single) centre node; j > 0 contributes the
+    // symmetric pair straddling the midpoint. Abscissae are computed as a
+    // distance `d·r` from the *nearest* endpoint with `r = 1 − tanh(u)` formed
+    // cancellation-free, so integrable endpoint singularities keep full
+    // relative precision (the classic tanh-sinh accuracy fix).
+    let accumulate = |j: i64, h: f64, sum: &mut f64, neval: &mut usize| {
+        let t = j as f64 * h;
+        let sh = t.sinh();
+        let u = half_pi * sh; // (π/2)·sinh(t)
+        let cu = u.cosh();
+        let w = half_pi * t.cosh() / (cu * cu);
+        if !w.is_finite() || w == 0.0 {
+            return;
+        }
+        if j == 0 {
+            let fx = f(c);
+            *neval += 1;
+            if fx.is_finite() {
+                *sum += w * fx;
+            }
+            return;
+        }
+        // r = 1 − tanh(u) for u > 0, without the 1 − (≈1) cancellation.
+        let e2 = (-2.0 * u).exp();
+        let r = 2.0 * e2 / (1.0 + e2);
+        let delta = d * r; // distance from the near endpoint
+        if delta <= 0.0 {
+            return; // node has collapsed onto an endpoint
+        }
+        // Lower node sits at lo + delta, upper at hi − delta; both carry the
+        // same (even) weight.
+        let x_lo = lo + delta;
+        if x_lo > lo && x_lo < hi {
+            let fx = f(x_lo);
+            *neval += 1;
+            if fx.is_finite() {
+                *sum += w * fx;
+            }
+        }
+        let x_hi = hi - delta;
+        if x_hi > lo && x_hi < hi {
+            let fx = f(x_hi);
+            *neval += 1;
+            if fx.is_finite() {
+                *sum += w * fx;
+            }
+        }
+    };
+
+    // Level 0: every integer index at the coarse step h0 = 1.
+    let mut h = 1.0_f64;
+    let mut bare = 0.0_f64;
+    accumulate(0, h, &mut bare, &mut neval);
+    let mut j = 1;
+    while (j as f64) * h <= t_max {
+        accumulate(j, h, &mut bare, &mut neval);
+        j += 1;
+    }
+    let mut prev = h * d * bare;
+    let mut prev_delta = f64::INFINITY; // |I_{k-1} − I_{k-2}|
+    let mut last_err = f64::INFINITY;
+
+    for level in 1..=max_level {
+        h *= 0.5;
+        // Halving the step keeps the old nodes (even indices) and only adds the
+        // new odd-index abscissae.
+        let mut j = 1;
+        while (j as f64) * h <= t_max {
+            accumulate(j, h, &mut bare, &mut neval);
+            j += 2;
+        }
+        let cur = h * d * bare;
+        let delta = (cur - prev).abs();
+        // Tanh-sinh converges quadratically (the digit count roughly doubles per
+        // level), so when the last step `d1` is much smaller than the previous
+        // `d2` the remaining error is well modelled by d1²/d2. This stops a
+        // level or two after the estimate plateaus instead of grinding the
+        // raw step difference down to tolerance.
+        last_err = if prev_delta > 0.0 && prev_delta.is_finite() {
+            (delta * delta / prev_delta).min(delta)
+        } else {
+            delta
+        };
+        if level >= 2 && last_err <= atol + rtol * cur.abs() {
+            return QuadResult {
+                integral: sign * cur,
+                error: last_err,
+                neval,
+                converged: true,
+            };
+        }
+        prev_delta = delta;
+        prev = cur;
+    }
+
+    QuadResult {
+        integral: sign * prev,
+        error: last_err,
+        neval,
+        converged: false,
+    }
+}
+
 /// Integrate sampled data using the trapezoidal rule (irregular spacing).
 ///
 /// Matches `scipy.integrate.trapezoid(y, x)` with explicit x values.
@@ -4300,6 +4458,45 @@ mod tests {
             result.integral,
             exact
         );
+    }
+
+    #[test]
+    fn tanhsinh_smooth_and_singular_match_scipy() {
+        // Smooth integrands → machine precision.
+        let smooth: &[(fn(f64) -> f64, f64, f64, f64)] = &[
+            (|x| x.exp(), 0.0, 1.0, std::f64::consts::E - 1.0),
+            (|x| x.cos(), 0.0, std::f64::consts::FRAC_PI_2, 1.0),
+            (|x| x * x, -1.0, 2.0, 3.0),
+        ];
+        for &(f, a, b, exact) in smooth {
+            let r = tanhsinh(f, a, b, 0.0, 1e-12, 16);
+            assert!(r.converged, "tanhsinh did not converge");
+            assert!(
+                (r.integral - exact).abs() <= 1e-11,
+                "tanhsinh {} vs {}",
+                r.integral,
+                exact
+            );
+        }
+        // Endpoint singularities: the cancellation-free abscissae keep full
+        // precision where a naive c+d·tanh(u) would not.
+        let r = tanhsinh(|x| 1.0 / x.sqrt(), 0.0, 1.0, 0.0, 1e-12, 16);
+        assert!(
+            (r.integral - 2.0).abs() <= 1e-12,
+            "1/sqrt(x): {}",
+            r.integral
+        );
+        let r = tanhsinh(|x| x.ln(), 0.0, 1.0, 0.0, 1e-12, 16);
+        assert!((r.integral + 1.0).abs() <= 1e-11, "ln(x): {}", r.integral);
+        let r = tanhsinh(|x| -(x.ln().powi(3)), 0.0, 1.0, 0.0, 1e-12, 16);
+        assert!((r.integral - 6.0).abs() <= 1e-10, "-ln^3: {}", r.integral);
+        // Reversed limits negate; degenerate interval is zero.
+        let fwd = tanhsinh(|x| x * x, 0.0, 1.0, 0.0, 1e-12, 16).integral;
+        let rev = tanhsinh(|x| x * x, 1.0, 0.0, 0.0, 1e-12, 16).integral;
+        assert!((fwd + rev).abs() <= 1e-14);
+        assert_eq!(tanhsinh(|x| x, 2.0, 2.0, 0.0, 1e-12, 16).integral, 0.0);
+        // Infinite limits are out of scope.
+        assert!(!tanhsinh(|x| (-x).exp(), 0.0, f64::INFINITY, 0.0, 1e-12, 16).converged);
     }
 
     #[test]
