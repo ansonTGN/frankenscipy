@@ -457,6 +457,114 @@ pub fn classical_mds(
     })
 }
 
+/// Landmark MDS (de Silva–Tenenbaum) — scalable classical MDS that eigendecomposes only an
+/// `m×m` landmark block, then triangulates every point from its distances to the landmarks.
+///
+/// Runs [`classical_mds`]'s double-centering + eigendecomposition on the `n_landmarks×n_landmarks`
+/// landmark submatrix (`m ≪ n`), giving the landmark embedding `L` and the inverse-scaled
+/// eigenvectors `L# = V·diag(λ^{-1/2})`. Each of the `n` points is then placed by
+/// `x_p = −½·L#·(δ_p − μ)`, where `δ_p` are its squared distances to the landmarks and `μ`
+/// the mean landmark squared-distance — exact for landmarks, the least-squares triangulation
+/// otherwise. Cost O(m³ + n·m·k) versus O(n²·k) for [`classical_mds`] over the full matrix — a
+/// large win when m ≪ n. `distances` must be square, symmetric and finite; deterministic by
+/// `seed`.
+pub fn landmark_mds(
+    distances: &[Vec<f64>],
+    n_components: usize,
+    n_landmarks: usize,
+    seed: u64,
+) -> Result<MdsResult, ClusterError> {
+    if distances.is_empty() {
+        return Err(ClusterError::EmptyData);
+    }
+    let n = distances.len();
+    if distances.iter().any(|row| row.len() != n) {
+        return Err(ClusterError::InvalidArgument(
+            "distance matrix must be square".to_string(),
+        ));
+    }
+    if n_components == 0 || n_landmarks > n || n_components > n_landmarks {
+        return Err(ClusterError::InvalidArgument(format!(
+            "need 1 ≤ n_components={n_components} ≤ n_landmarks={n_landmarks} ≤ n={n}"
+        )));
+    }
+    if distances.iter().flatten().any(|v| !v.is_finite()) {
+        return Err(ClusterError::InvalidArgument(
+            "distances must be finite".to_string(),
+        ));
+    }
+
+    // Deterministic landmark sample (Fisher–Yates partial shuffle, then sort).
+    let mut perm: Vec<usize> = (0..n).collect();
+    let mut state = seed ^ 0x9e37_79b9_7f4a_7c15;
+    let mut nxt = || {
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        state >> 11
+    };
+    for i in 0..n_landmarks {
+        let j = i + (nxt() as usize) % (n - i);
+        perm.swap(i, j);
+    }
+    let mut landmarks: Vec<usize> = perm[..n_landmarks].to_vec();
+    landmarks.sort_unstable();
+    let m = landmarks.len();
+
+    // Double-center the landmark squared-distance block: B_L = −½ J Δ J.
+    let delta: Vec<Vec<f64>> = landmarks
+        .iter()
+        .map(|&a| landmarks.iter().map(|&b| distances[a][b].powi(2)).collect())
+        .collect();
+    let mu: Vec<f64> = delta.iter().map(|r| r.iter().sum::<f64>() / m as f64).collect();
+    let total: f64 = mu.iter().sum::<f64>() / m as f64;
+    let bl: Vec<Vec<f64>> = (0..m)
+        .map(|a| {
+            (0..m)
+                .map(|b| -0.5 * (delta[a][b] - mu[a] - mu[b] + total))
+                .collect()
+        })
+        .collect();
+
+    let e = fsci_linalg::eigh(&bl, fsci_linalg::DecompOptions::default())
+        .map_err(|err| ClusterError::InvalidArgument(format!("eigh: {err}")))?;
+    // eigh ascending; take the top-k (largest) eigenpairs, descending.
+    let order: Vec<usize> = (0..m).rev().take(n_components).collect();
+    let lmax = e.eigenvalues.iter().cloned().fold(0.0f64, f64::max);
+    let tol = (m as f64) * f64::EPSILON * lmax.max(1.0);
+
+    // L# rows (k×m): row t = v_t / √λ_t (only for λ_t > tol).
+    let eigenvalues: Vec<f64> = order.iter().map(|&t| e.eigenvalues[t]).collect();
+    let lpinv: Vec<Vec<f64>> = order
+        .iter()
+        .map(|&t| {
+            let lam = e.eigenvalues[t];
+            let s = if lam > tol { 1.0 / lam.sqrt() } else { 0.0 };
+            (0..m).map(|a| s * e.eigenvectors[a][t]).collect()
+        })
+        .collect();
+
+    // Triangulate every point: x_p[t] = −½ Σ_b L#[t][b] (δ_p[b] − μ_b).
+    let k = order.len();
+    let embedding: Vec<Vec<f64>> = (0..n)
+        .map(|p| {
+            let dshift: Vec<f64> = landmarks
+                .iter()
+                .enumerate()
+                .map(|(b, &lb)| distances[p][lb].powi(2) - mu[b])
+                .collect();
+            (0..k)
+                .map(|t| -0.5 * lpinv[t].iter().zip(&dshift).map(|(&l, &ds)| l * ds).sum::<f64>())
+                .collect()
+        })
+        .collect();
+
+    Ok(MdsResult {
+        embedding,
+        eigenvalues,
+    })
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Non-negative Matrix Factorization
 // ══════════════════════════════════════════════════════════════════════
@@ -4061,6 +4169,50 @@ mod tests {
         assert!(classical_mds(&[], 2, 1).is_err());
         assert!(classical_mds(&dist, 0, 1).is_err());
         assert!(classical_mds(&[vec![0.0, 1.0]], 1, 1).is_err()); // non-square
+    }
+
+    #[test]
+    fn landmark_mds_recovers_euclidean_distances() {
+        let mut st: u64 = 0xa5a5_3c3c_7e7e_1212;
+        let mut rng = || {
+            st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+        };
+        let (n, r, k, m) = (120usize, 4usize, 4usize, 12usize); // m > r, k == r
+        let pts: Vec<Vec<f64>> = (0..n).map(|_| (0..r).map(|_| rng()).collect()).collect();
+        let dist: Vec<Vec<f64>> = (0..n)
+            .map(|i| {
+                (0..n)
+                    .map(|j| {
+                        (0..r).map(|t| (pts[i][t] - pts[j][t]).powi(2)).sum::<f64>().sqrt()
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let mds = landmark_mds(&dist, k, m, 9).expect("landmark_mds");
+        assert_eq!(mds.embedding.len(), n);
+        let kk = mds.embedding[0].len();
+        for w in mds.eigenvalues.windows(2) {
+            assert!(w[0] >= w[1] - 1e-9, "eigenvalues descending");
+        }
+        // Pairwise distances of the embedding match the originals (isometry up to rotation).
+        let mut maxerr = 0.0f64;
+        for i in 0..n {
+            for j in 0..n {
+                let de: f64 = (0..kk)
+                    .map(|t| (mds.embedding[i][t] - mds.embedding[j][t]).powi(2))
+                    .sum::<f64>()
+                    .sqrt();
+                maxerr = maxerr.max((de - dist[i][j]).abs());
+            }
+        }
+        assert!(maxerr < 1e-6, "landmark MDS distance maxerr {maxerr}");
+
+        assert!(landmark_mds(&[], 2, 2, 1).is_err());
+        assert!(landmark_mds(&dist, 0, 5, 1).is_err());
+        assert!(landmark_mds(&dist, 5, 3, 1).is_err()); // k > landmarks
+        assert!(landmark_mds(&dist, 2, n + 1, 1).is_err()); // landmarks > n
     }
 
     #[test]
