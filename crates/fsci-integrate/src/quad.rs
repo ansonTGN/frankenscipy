@@ -2362,6 +2362,135 @@ where
     result
 }
 
+/// Result of a series summation by [`nsum`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct NsumResult {
+    /// Estimated value of the series.
+    pub sum: f64,
+    /// Estimated absolute error.
+    pub error: f64,
+    /// Number of function evaluations.
+    pub nfev: usize,
+    /// Whether the requested accuracy was achieved.
+    pub converged: bool,
+}
+
+/// Evaluate a convergent series `Σ f(n)` for `n = a, a+step, …, b` numerically.
+///
+/// Matches `scipy.integrate.nsum(f, a, b, step)` for a scalar term function. A
+/// finite range is summed directly. An infinite upper limit is handled by the
+/// Euler–Maclaurin formula: the first terms are summed directly and the tail is
+/// replaced by `∫ f dx` (via [`tanhsinh`]) plus the half-term and Bernoulli
+/// derivative corrections. The size of the direct window is grown until the
+/// estimate stops changing, which drives the (finite-difference) correction
+/// terms toward zero and makes convergence robust regardless of derivative
+/// noise.
+///
+/// `step` must be positive. `atol`/`rtol` default to `0.0`/`1e-11` when
+/// non-positive. Returns the sum, an error estimate, the evaluation count, and
+/// whether the tolerance was met.
+pub fn nsum<F>(f: F, a: f64, b: f64, step: f64, atol: f64, rtol: f64) -> NsumResult
+where
+    F: Fn(f64) -> f64,
+{
+    let nan = NsumResult {
+        sum: f64::NAN,
+        error: f64::INFINITY,
+        nfev: 0,
+        converged: false,
+    };
+    if a.is_nan() || !step.is_finite() || step <= 0.0 || !a.is_finite() {
+        return nan;
+    }
+    let atol = if atol > 0.0 { atol } else { 0.0 };
+    let rtol = if rtol > 0.0 { rtol } else { 1e-11 };
+
+    // Finite range: direct summation over n = a, a+step, …, ≤ b.
+    if b.is_finite() {
+        if b < a {
+            return NsumResult {
+                sum: 0.0,
+                error: 0.0,
+                nfev: 0,
+                converged: true,
+            };
+        }
+        let count = ((b - a) / step).floor() as i64 + 1;
+        let mut sum = 0.0;
+        let mut nfev = 0usize;
+        for k in 0..count {
+            sum += f(a + k as f64 * step);
+            nfev += 1;
+        }
+        return NsumResult {
+            sum,
+            error: 0.0,
+            nfev,
+            converged: true,
+        };
+    }
+    if b != f64::INFINITY {
+        return nan; // b is −∞ with a finite ⇒ empty/invalid ordering
+    }
+
+    // Infinite tail via Euler–Maclaurin with a growing direct window.
+    // Σ_{k≥m} f(a+ks) ≈ (1/s)∫_{n_m}^∞ f dx + f(n_m)/2
+    //                   − (s/12) f'(n_m) + (s³/720) f'''(n_m)
+    let s = step;
+    let mut direct = 0.0;
+    let mut nfev = 0usize;
+    let mut filled = 0i64; // number of leading terms already in `direct`
+    let mut prev_est = f64::INFINITY;
+    let mut last_err = f64::INFINITY;
+    let mut m = 8i64;
+
+    for _iter in 0..24 {
+        // Extend the direct partial sum to the first `m` terms.
+        while filled < m {
+            direct += f(a + filled as f64 * s);
+            nfev += 1;
+            filled += 1;
+        }
+        let n_m = a + m as f64 * s;
+        let f_nm = f(n_m);
+        nfev += 1;
+        // Central finite-difference derivatives at n_m.
+        let delta = (1e-3 * n_m.abs()).max(1e-4);
+        let fp = f(n_m + delta);
+        let fm = f(n_m - delta);
+        let fp2 = f(n_m + 2.0 * delta);
+        let fm2 = f(n_m - 2.0 * delta);
+        nfev += 4;
+        let d1 = (fp - fm) / (2.0 * delta); // f'(n_m)
+        let d3 = (fp2 - 2.0 * fp + 2.0 * fm - fm2) / (2.0 * delta.powi(3)); // f'''(n_m)
+
+        let integ = tanhsinh(&f, n_m, f64::INFINITY, atol, rtol, 16);
+        nfev += integ.neval;
+
+        let tail = integ.integral / s + 0.5 * f_nm - (s / 12.0) * d1 + (s.powi(3) / 720.0) * d3;
+        let est = direct + tail;
+
+        last_err = (est - prev_est).abs();
+        if last_err <= atol + rtol * est.abs() {
+            return NsumResult {
+                sum: est,
+                error: last_err,
+                nfev,
+                converged: true,
+            };
+        }
+        prev_est = est;
+        m *= 2;
+    }
+
+    NsumResult {
+        sum: prev_est,
+        error: last_err,
+        nfev,
+        converged: false,
+    }
+}
+
 /// Integrate sampled data using the trapezoidal rule (irregular spacing).
 ///
 /// Matches `scipy.integrate.trapezoid(y, x)` with explicit x values.
@@ -4515,6 +4644,48 @@ mod tests {
             result.integral,
             exact
         );
+    }
+
+    #[test]
+    fn nsum_series_match_scipy() {
+        let inf = f64::INFINITY;
+        let pi = std::f64::consts::PI;
+        // Σ 1/n² = π²/6
+        let r = nsum(|n| 1.0 / (n * n), 1.0, inf, 1.0, 0.0, 1e-11);
+        assert!(
+            r.converged && (r.sum - pi * pi / 6.0).abs() <= 1e-9,
+            "1/n^2: {}",
+            r.sum
+        );
+        // Σ 1/n⁴ = π⁴/90
+        let r = nsum(|n| 1.0 / n.powi(4), 1.0, inf, 1.0, 0.0, 1e-11);
+        assert!(
+            (r.sum - pi.powi(4) / 90.0).abs() <= 1e-9,
+            "1/n^4: {}",
+            r.sum
+        );
+        // Σ 2^-n = 1 (geometric)
+        let r = nsum(|n| 2.0_f64.powf(-n), 1.0, inf, 1.0, 0.0, 1e-11);
+        assert!((r.sum - 1.0).abs() <= 1e-9, "2^-n: {}", r.sum);
+        // odd-only Σ 1/n² (step 2) = π²/8
+        let r = nsum(|n| 1.0 / (n * n), 1.0, inf, 2.0, 0.0, 1e-11);
+        assert!(
+            (r.sum - pi * pi / 8.0).abs() <= 1e-9,
+            "1/n^2 step2: {}",
+            r.sum
+        );
+        // Finite range is summed directly and exactly.
+        let r = nsum(|n| n, 1.0, 10.0, 1.0, 0.0, 1e-11);
+        assert_eq!(r.sum, 55.0);
+        // Σ_{n=0}^∞ e^{-n} = 1/(1 − 1/e)
+        let r = nsum(|n| (-n).exp(), 0.0, inf, 1.0, 0.0, 1e-11);
+        assert!(
+            (r.sum - 1.0 / (1.0 - (-1.0_f64).exp())).abs() <= 1e-10,
+            "exp(-n): {}",
+            r.sum
+        );
+        // Invalid step.
+        assert!(!nsum(|n| n, 1.0, inf, 0.0, 0.0, 1e-11).converged);
     }
 
     #[test]
