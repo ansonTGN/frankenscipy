@@ -7963,6 +7963,68 @@ fn apply_householder_left(
 }
 
 #[allow(dead_code)]
+fn apply_symmetric_householder_trailing_rank2(
+    matrix: &mut DMatrix<f64>,
+    reflector: &HouseholderReflector,
+    p: &mut [f64],
+    w: &mut [f64],
+) {
+    if reflector.tau == 0.0 || reflector.values.is_empty() {
+        return;
+    }
+
+    debug_assert_eq!(matrix.nrows(), matrix.ncols());
+    let n = matrix.nrows();
+    let start = reflector.start;
+    let active = reflector.values.len();
+    debug_assert!(start + active <= n);
+    debug_assert!(p.len() >= active);
+    debug_assert!(w.len() >= active);
+
+    p[..active].fill(0.0);
+    let data = matrix.as_slice();
+    for (col_offset, &v_col) in reflector.values.iter().enumerate() {
+        if v_col == 0.0 {
+            continue;
+        }
+        let col = start + col_offset;
+        let col_base = col * n;
+        for row_offset in 0..active {
+            p[row_offset] += data[col_base + start + row_offset] * v_col;
+        }
+    }
+    for value in &mut p[..active] {
+        *value *= reflector.tau;
+    }
+
+    let v_dot_p = reflector
+        .values
+        .iter()
+        .zip(&p[..active])
+        .map(|(v, p_value)| v * p_value)
+        .sum::<f64>();
+    let correction = 0.5 * reflector.tau * v_dot_p;
+    for row_offset in 0..active {
+        w[row_offset] = p[row_offset] - correction * reflector.values[row_offset];
+    }
+
+    let data = matrix.as_mut_slice();
+    for row_offset in 0..active {
+        let row = start + row_offset;
+        let v_row = reflector.values[row_offset];
+        let w_row = w[row_offset];
+        for (col_offset, &w_col) in w.iter().enumerate().take(row_offset + 1) {
+            let col = start + col_offset;
+            let v_col = reflector.values[col_offset];
+            let update = v_row * w_col + w_row * v_col;
+            let value = data[col * n + row] - update;
+            data[col * n + row] = value;
+            data[row * n + col] = value;
+        }
+    }
+}
+
+#[allow(dead_code)]
 fn apply_left_reflectors_column_chunks(
     matrix: &mut DMatrix<f64>,
     reflectors: &[HouseholderReflector],
@@ -9134,14 +9196,23 @@ fn symmetric_eigh_native(matrix: &DMatrix<f64>) -> Option<(Vec<f64>, DMatrix<f64
     }
     let mut m = matrix.clone();
     let mut reflectors: Vec<HouseholderReflector> = Vec::with_capacity(n.saturating_sub(2));
+    let mut rank2_p = vec![0.0_f64; n];
+    let mut rank2_w = vec![0.0_f64; n];
     for k in 0..n - 2 {
+        let first = m[(k + 1, k)];
         let col: Vec<f64> = (k + 1..n).map(|i| m[(i, k)]).collect();
         let refl = make_householder_reflector(k + 1, col);
+        let beta = first - refl.values[0];
         if refl.tau != 0.0 {
-            // Similarity transform P·M·P, restricted to the active trailing block (columns/rows
-            // 0..k are already tridiagonal/zero below the sub-diagonal).
-            apply_householder_left(&mut m, &refl, k);
-            apply_householder_right(&mut m, &refl, k);
+            // Similarity transform P*M*P on the active symmetric suffix, using
+            // A - v*w^T - w*v^T instead of two full Householder passes.
+            apply_symmetric_householder_trailing_rank2(&mut m, &refl, &mut rank2_p, &mut rank2_w);
+        }
+        m[(k + 1, k)] = beta;
+        m[(k, k + 1)] = beta;
+        for i in k + 2..n {
+            m[(i, k)] = 0.0;
+            m[(k, i)] = 0.0;
         }
         reflectors.push(refl);
     }
@@ -20391,7 +20462,9 @@ mod tests {
     fn symmetric_eigh_native_matches_nalgebra_and_timing() {
         let mut s: u64 = 0x1357_2468_9bdf_ace0;
         let mut rng = || {
-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            s = s
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
         };
         for &n in &[5usize, 40, 120] {
@@ -20423,7 +20496,10 @@ mod tests {
             for i in 0..n {
                 for j in 0..n {
                     let expect = if i == j { 1.0 } else { 0.0 };
-                    assert!((gram[(i, j)] - expect).abs() < 1e-9, "eigenvectors not orthonormal");
+                    assert!(
+                        (gram[(i, j)] - expect).abs() < 1e-9,
+                        "eigenvectors not orthonormal"
+                    );
                 }
             }
             // Eigenvalues agree with nalgebra's symmetric_eigen.
@@ -20440,7 +20516,9 @@ mod tests {
     fn symmetric_eigh_native_vs_nalgebra_timing() {
         let mut s: u64 = 0x2468_ace0_1357_9bdf;
         let mut rng = || {
-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            s = s
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
         };
         for &n in &[400usize, 800, 1200] {
