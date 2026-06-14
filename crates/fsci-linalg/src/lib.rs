@@ -13099,12 +13099,12 @@ fn lu_factor_blocked(a_in: &[Vec<f64>]) -> Option<LuFactorsFlat> {
         // alias, so the single flat buffer is updated in place.
         const MR: usize = 4;
         const NR: usize = 8;
-        let mut i0 = kb;
-        while i0 < n {
-            let mr = (n - i0).min(MR);
-            let mut j0 = kb;
-            while j0 < n {
-                let nr = (n - j0).min(NR);
+        let mut j0 = kb;
+        while j0 < n {
+            let nr = (n - j0).min(NR);
+            let mut i0 = kb;
+            while i0 < n {
+                let mr = (n - i0).min(MR);
                 if mr == MR && nr == NR {
                     let r0 = i0 * n;
                     let r1 = (i0 + 1) * n;
@@ -13147,9 +13147,9 @@ fn lu_factor_blocked(a_in: &[Vec<f64>]) -> Option<LuFactorsFlat> {
                         }
                     }
                 }
-                j0 += nr;
+                i0 += mr;
             }
-            i0 += mr;
+            j0 += nr;
         }
         k = kb;
     }
@@ -13286,12 +13286,12 @@ fn lu_factor_blocked_f32(a_in: &[Vec<f64>]) -> Option<LuFactorsFlatF32> {
         // f64 kernel; reduction is monotonic-p sum-then-subtract over the panel).
         const MR: usize = 4;
         const NR: usize = 16;
-        let mut i0 = kb;
-        while i0 < n {
-            let mr = (n - i0).min(MR);
-            let mut j0 = kb;
-            while j0 < n {
-                let nr = (n - j0).min(NR);
+        let mut j0 = kb;
+        while j0 < n {
+            let nr = (n - j0).min(NR);
+            let mut i0 = kb;
+            while i0 < n {
+                let mr = (n - i0).min(MR);
                 if mr == MR && nr == NR {
                     let r0 = i0 * n;
                     let r1 = (i0 + 1) * n;
@@ -13334,9 +13334,9 @@ fn lu_factor_blocked_f32(a_in: &[Vec<f64>]) -> Option<LuFactorsFlatF32> {
                         }
                     }
                 }
-                j0 += nr;
+                i0 += mr;
             }
-            i0 += mr;
+            j0 += nr;
         }
         k = kb;
     }

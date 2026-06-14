@@ -1,0 +1,985 @@
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_decomp2.rs:1:
+ //! Differential probe: pinv/lstsq/svdvals/null_space/orth/subspace_angles vs scipy.linalg
+ use fsci_linalg as la;
+-fn m(name:&str, mat:&[Vec<f64>]){
+-    let r=mat.len(); let c=if r>0 {mat[0].len()} else {0};
+-    let mut s=Vec::new(); for row in mat { for &v in row { s.push(format!("{v:.17e}")); } }
++fn m(name: &str, mat: &[Vec<f64>]) {
++    let r = mat.len();
++    let c = if r > 0 { mat[0].len() } else { 0 };
++    let mut s = Vec::new();
++    for row in mat {
++        for &v in row {
++            s.push(format!("{v:.17e}"));
++        }
++    }
+     println!("{name}|{r}|{c}|{}", s.join(";"));
+ }
+-fn v(name:&str, vec:&[f64]){
+-    let s:Vec<String>=vec.iter().map(|x| format!("{x:.17e}")).collect();
++fn v(name: &str, vec: &[f64]) {
++    let s: Vec<String> = vec.iter().map(|x| format!("{x:.17e}")).collect();
+     println!("{name}|1|{}|{}", vec.len(), s.join(";"));
+ }
+-fn main(){
++fn main() {
+     // matrices: square full, tall, wide, rank-deficient square, near-singular
+-    let sq: Vec<Vec<f64>> = vec![vec![2.0,1.0,0.0],vec![1.0,3.0,1.0],vec![0.0,1.0,2.0]];
+-    let tall: Vec<Vec<f64>> = vec![vec![1.0,2.0],vec![3.0,4.0],vec![5.0,6.0],vec![7.0,9.0]];
+-    let wide: Vec<Vec<f64>> = vec![vec![1.0,2.0,3.0,4.0],vec![2.0,3.0,5.0,1.0]];
+-    let rankdef: Vec<Vec<f64>> = vec![vec![1.0,2.0,3.0],vec![2.0,4.0,6.0],vec![1.0,1.0,1.0]];
+-    let do_dec = |name:&str, a:&Vec<Vec<f64>>|{
+-        if let Ok(p)=la::pinv(a, la::PinvOptions::default()){ m(&format!("pinv_{name}"), &p.pseudo_inverse); }
+-        if let Ok(s)=la::svdvals(a, la::DecompOptions::default()){ v(&format!("svdvals_{name}"), &s); }
+-        if let Ok(ns)=la::null_space(a, None, la::DecompOptions::default()){
+-            let r=ns.len(); let c=if r>0 {ns[0].len()} else {0};
++    let sq: Vec<Vec<f64>> = vec![
++        vec![2.0, 1.0, 0.0],
++        vec![1.0, 3.0, 1.0],
++        vec![0.0, 1.0, 2.0],
++    ];
++    let tall: Vec<Vec<f64>> = vec![
++        vec![1.0, 2.0],
++        vec![3.0, 4.0],
++        vec![5.0, 6.0],
++        vec![7.0, 9.0],
++    ];
++    let wide: Vec<Vec<f64>> = vec![vec![1.0, 2.0, 3.0, 4.0], vec![2.0, 3.0, 5.0, 1.0]];
++    let rankdef: Vec<Vec<f64>> = vec![
++        vec![1.0, 2.0, 3.0],
++        vec![2.0, 4.0, 6.0],
++        vec![1.0, 1.0, 1.0],
++    ];
++    let do_dec = |name: &str, a: &Vec<Vec<f64>>| {
++        if let Ok(p) = la::pinv(a, la::PinvOptions::default()) {
++            m(&format!("pinv_{name}"), &p.pseudo_inverse);
++        }
++        if let Ok(s) = la::svdvals(a, la::DecompOptions::default()) {
++            v(&format!("svdvals_{name}"), &s);
++        }
++        if let Ok(ns) = la::null_space(a, None, la::DecompOptions::default()) {
++            let r = ns.len();
++            let c = if r > 0 { ns[0].len() } else { 0 };
+             println!("nulldim_{name}|1|1|{}", c as f64);
+         }
+-        if let Ok(o)=la::orth(a, None, la::DecompOptions::default()){
+-            let r=o.len(); let c=if r>0 {o[0].len()} else {0};
++        if let Ok(o) = la::orth(a, None, la::DecompOptions::default()) {
++            let r = o.len();
++            let c = if r > 0 { o[0].len() } else { 0 };
+             println!("orthdim_{name}|1|1|{}", c as f64);
+         }
+     };
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_decomp2.rs:30:
+-    do_dec("sq",&sq); do_dec("tall",&tall); do_dec("wide",&wide); do_dec("rankdef",&rankdef);
++    do_dec("sq", &sq);
++    do_dec("tall", &tall);
++    do_dec("wide", &wide);
++    do_dec("rankdef", &rankdef);
+     // lstsq: solve A x = b
+-    let b_sq=vec![1.0,2.0,3.0];
+-    if let Ok(r)=la::lstsq(&sq,&b_sq, la::LstsqOptions::default()){ v("lstsq_sq_x",&r.x); println!("lstsq_sq_rank|1|1|{}", r.rank as f64); }
+-    let b_tall=vec![1.0,2.0,2.0,3.0];
+-    if let Ok(r)=la::lstsq(&tall,&b_tall, la::LstsqOptions::default()){ v("lstsq_tall_x",&r.x); v("lstsq_tall_res",&r.residuals); println!("lstsq_tall_rank|1|1|{}", r.rank as f64); }
+-    let b_rd=vec![1.0,2.0,1.0];
+-    if let Ok(r)=la::lstsq(&rankdef,&b_rd, la::LstsqOptions::default()){ v("lstsq_rd_x",&r.x); println!("lstsq_rd_rank|1|1|{}", r.rank as f64); }
++    let b_sq = vec![1.0, 2.0, 3.0];
++    if let Ok(r) = la::lstsq(&sq, &b_sq, la::LstsqOptions::default()) {
++        v("lstsq_sq_x", &r.x);
++        println!("lstsq_sq_rank|1|1|{}", r.rank as f64);
++    }
++    let b_tall = vec![1.0, 2.0, 2.0, 3.0];
++    if let Ok(r) = la::lstsq(&tall, &b_tall, la::LstsqOptions::default()) {
++        v("lstsq_tall_x", &r.x);
++        v("lstsq_tall_res", &r.residuals);
++        println!("lstsq_tall_rank|1|1|{}", r.rank as f64);
++    }
++    let b_rd = vec![1.0, 2.0, 1.0];
++    if let Ok(r) = la::lstsq(&rankdef, &b_rd, la::LstsqOptions::default()) {
++        v("lstsq_rd_x", &r.x);
++        println!("lstsq_rd_rank|1|1|{}", r.rank as f64);
++    }
+     // subspace_angles
+-    let p=vec![vec![1.0,0.0],vec![0.0,1.0],vec![0.0,0.0]];
+-    let q=vec![vec![1.0,0.0],vec![0.0,1.0],vec![1.0,1.0]];
+-    if let Ok(ang)=la::subspace_angles(&p,&q, la::DecompOptions::default()){ v("subspace_angles",&ang); }
++    let p = vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![0.0, 0.0]];
++    let q = vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![1.0, 1.0]];
++    if let Ok(ang) = la::subspace_angles(&p, &q, la::DecompOptions::default()) {
++        v("subspace_angles", &ang);
++    }
+ }
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_eig.rs:1:
+ //! Differential oracle probe: general eig eigenvalues vs scipy.linalg.eig (gitignored).
+ //! Lines: `name,ev,k,re,im` (sorted eigenvalues) and `name,resid,k,value` (real-ev residual).
+-use fsci_linalg::{eig, DecompOptions};
++use fsci_linalg::{DecompOptions, eig};
+ 
+ fn main() {
+     let o = || DecompOptions::default();
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_eig.rs:7:
+     let mats: Vec<(&str, Vec<Vec<f64>>)> = vec![
+-        ("sym", vec![vec![2.0, 1.0, 0.0], vec![1.0, 3.0, 1.0], vec![0.0, 1.0, 2.0]]),
+-        ("real_nonsym", vec![vec![3.0, 0.4, 0.1], vec![0.0, 2.0, 0.3], vec![0.0, 0.0, 1.5]]),
++        (
++            "sym",
++            vec![
++                vec![2.0, 1.0, 0.0],
++                vec![1.0, 3.0, 1.0],
++                vec![0.0, 1.0, 2.0],
++            ],
++        ),
++        (
++            "real_nonsym",
++            vec![
++                vec![3.0, 0.4, 0.1],
++                vec![0.0, 2.0, 0.3],
++                vec![0.0, 0.0, 1.5],
++            ],
++        ),
+         ("rot", vec![vec![0.0, -1.0], vec![1.0, 0.0]]),
+-        ("complex3", vec![vec![0.5, -1.2, 0.3], vec![1.1, 0.4, -0.2], vec![0.0, 0.6, 0.9]]),
+-        ("scalerot", vec![vec![1.0, -2.0, 0.0], vec![2.0, 1.0, 0.0], vec![0.0, 0.0, 4.0]]),
++        (
++            "complex3",
++            vec![
++                vec![0.5, -1.2, 0.3],
++                vec![1.1, 0.4, -0.2],
++                vec![0.0, 0.6, 0.9],
++            ],
++        ),
++        (
++            "scalerot",
++            vec![
++                vec![1.0, -2.0, 0.0],
++                vec![2.0, 1.0, 0.0],
++                vec![0.0, 0.0, 4.0],
++            ],
++        ),
+     ];
+     for (name, a) in &mats {
+         let n = a.len();
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_eigvec_cplx.rs:1:
+-use fsci_linalg::{eig, DecompOptions};
+-fn main(){
+-  // rot: eigenvalues ±i. dgeev packs complex eigvec as vr (col j) + i vi (col j+1).
+-  let mats: Vec<(&str,Vec<Vec<f64>>)> = vec![
+-    ("rot", vec![vec![0.0,-1.0],vec![1.0,0.0]]),
+-    ("complex3", vec![vec![0.5,-1.2,0.3],vec![1.1,0.4,-0.2],vec![0.0,0.6,0.9]]),
+-  ];
+-  for (name,a) in &mats {
+-    let n=a.len();
+-    let r=eig(a,DecompOptions::default()).unwrap();
+-    for j in 0..n {
+-      println!("{name},lam,{j},{:.17e},{:.17e}",r.eigenvalues_re[j],r.eigenvalues_im[j]);
+-      for i in 0..n { println!("{name},vec,{j}_{i},{:.17e}",r.eigenvectors[i][j]); }
+-    }
+-    // try to interpret as dgeev packing: for a conj pair (j, j+1), v = col_j + i col_{j+1}
+-    // check residual ||A v - lam v|| for the first of each pair
+-    let mut j=0;
+-    while j<n {
+-      if r.eigenvalues_im[j].abs()>1e-9 && j+1<n {
+-        let lam=(r.eigenvalues_re[j], r.eigenvalues_im[j]);
+-        let vr:Vec<f64>=(0..n).map(|i| r.eigenvectors[i][j]).collect();
+-        let vi:Vec<f64>=(0..n).map(|i| r.eigenvectors[i][j+1]).collect();
+-        // (A (vr+i vi) - (lr+i li)(vr+i vi))
+-        let mut maxres=0.0f64;
+-        for i in 0..n {
+-          let avr:f64=(0..n).map(|k|a[i][k]*vr[k]).sum();
+-          let avi:f64=(0..n).map(|k|a[i][k]*vi[k]).sum();
+-          let re=avr-(lam.0*vr[i]-lam.1*vi[i]);
+-          let im=avi-(lam.0*vi[i]+lam.1*vr[i]);
+-          maxres=maxres.max((re*re+im*im).sqrt());
++use fsci_linalg::{DecompOptions, eig};
++fn main() {
++    // rot: eigenvalues ±i. dgeev packs complex eigvec as vr (col j) + i vi (col j+1).
++    let mats: Vec<(&str, Vec<Vec<f64>>)> = vec![
++        ("rot", vec![vec![0.0, -1.0], vec![1.0, 0.0]]),
++        (
++            "complex3",
++            vec![
++                vec![0.5, -1.2, 0.3],
++                vec![1.1, 0.4, -0.2],
++                vec![0.0, 0.6, 0.9],
++            ],
++        ),
++    ];
++    for (name, a) in &mats {
++        let n = a.len();
++        let r = eig(a, DecompOptions::default()).unwrap();
++        for j in 0..n {
++            println!(
++                "{name},lam,{j},{:.17e},{:.17e}",
++                r.eigenvalues_re[j], r.eigenvalues_im[j]
++            );
++            for i in 0..n {
++                println!("{name},vec,{j}_{i},{:.17e}", r.eigenvectors[i][j]);
++            }
+         }
+-        println!("{name},packresid,{j},{maxres:.6e}");
+-        j+=2;
+-      } else { j+=1; }
++        // try to interpret as dgeev packing: for a conj pair (j, j+1), v = col_j + i col_{j+1}
++        // check residual ||A v - lam v|| for the first of each pair
++        let mut j = 0;
++        while j < n {
++            if r.eigenvalues_im[j].abs() > 1e-9 && j + 1 < n {
++                let lam = (r.eigenvalues_re[j], r.eigenvalues_im[j]);
++                let vr: Vec<f64> = (0..n).map(|i| r.eigenvectors[i][j]).collect();
++                let vi: Vec<f64> = (0..n).map(|i| r.eigenvectors[i][j + 1]).collect();
++                // (A (vr+i vi) - (lr+i li)(vr+i vi))
++                let mut maxres = 0.0f64;
++                for i in 0..n {
++                    let avr: f64 = (0..n).map(|k| a[i][k] * vr[k]).sum();
++                    let avi: f64 = (0..n).map(|k| a[i][k] * vi[k]).sum();
++                    let re = avr - (lam.0 * vr[i] - lam.1 * vi[i]);
++                    let im = avi - (lam.0 * vi[i] + lam.1 * vr[i]);
++                    maxres = maxres.max((re * re + im * im).sqrt());
++                }
++                println!("{name},packresid,{j},{maxres:.6e}");
++                j += 2;
++            } else {
++                j += 1;
++            }
++        }
+     }
+-  }
+ }
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_lyap_complex.rs:1:
+ //! Probe: Lyapunov/Sylvester/ARE with COMPLEX-eigenvalue A vs scipy.linalg (gitignored).
+ use fsci_linalg::{
+-    solve_continuous_are, solve_continuous_lyapunov, solve_discrete_are, solve_discrete_lyapunov,
+-    solve_sylvester, DecompOptions,
++    DecompOptions, solve_continuous_are, solve_continuous_lyapunov, solve_discrete_are,
++    solve_discrete_lyapunov, solve_sylvester,
+ };
+ 
+ fn dump(name: &str, m: &[Vec<f64>]) {
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_lyap_complex.rs:40:
+     let bare = vec![vec![0.0], vec![1.0]];
+     let qare = vec![vec![1.0, 0.0], vec![0.0, 1.0]];
+     let rare = vec![vec![1.0]];
+-    run("care_cplx", solve_continuous_are(&aare, &bare, &qare, &rare, o()));
++    run(
++        "care_cplx",
++        solve_continuous_are(&aare, &bare, &qare, &rare, o()),
++    );
+ 
+     // Discrete ARE with complex-eigenvalue A
+     let adare = vec![vec![0.3, -0.5], vec![0.5, 0.3]];
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_lyap_complex.rs:47:
+-    run("dare_cplx", solve_discrete_are(&adare, &bare, &qare, &rare, o()));
++    run(
++        "dare_cplx",
++        solve_discrete_are(&adare, &bare, &qare, &rare, o()),
++    );
+ }
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_matfunc2.rs:1:
+ //! Probe: logm/fracpow/signm on a complex-eigenvalue matrix vs scipy (gitignored).
+-use fsci_linalg::{fractional_matrix_power, logm, signm, expm, DecompOptions};
++use fsci_linalg::{DecompOptions, expm, fractional_matrix_power, logm, signm};
+ 
+ fn dump(func: &str, m: &[Vec<f64>]) {
+     for (r, row) in m.iter().enumerate() {
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_matfunc2.rs:30:
+     ];
+     for (lbl, a) in [("m2", &m2), ("m4", &m4)] {
+         run(&format!("logm_{lbl}"), logm(a, o()));
+-        run(&format!("fracpow0.5_{lbl}"), fractional_matrix_power(a, 0.5, o()));
++        run(
++            &format!("fracpow0.5_{lbl}"),
++            fractional_matrix_power(a, 0.5, o()),
++        );
+         run(&format!("signm_{lbl}"), signm(a, o()));
+         run(&format!("expm_{lbl}"), expm(a, o()));
+     }
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_matfuncs.rs:1:
+ //! Differential oracle probe: matrix functions vs scipy.linalg (gitignored).
+ //! Lines: `func,mat,r,c,value` or `func,mat,ERR`. Matrices defined identically in python cmp.
+-use fsci_linalg::{coshm, cosm, expm, fractional_matrix_power, logm, signm, sinhm, sinm, sqrtm, DecompOptions};
++use fsci_linalg::{
++    DecompOptions, coshm, cosm, expm, fractional_matrix_power, logm, signm, sinhm, sinm, sqrtm,
++};
+ 
+ fn dump(func: &str, mat: &str, m: &[Vec<f64>]) {
+     for (r, row) in m.iter().enumerate() {
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_matsolvers.rs:1:
+ //! Differential oracle probe: matrix-equation solvers + polar vs scipy.linalg (gitignored).
+ //! Lines: `name,r,c,value`. Inputs match the python comparator.
+ use fsci_linalg::{
+-    polar, solve_continuous_are, solve_continuous_lyapunov, solve_discrete_are,
+-    solve_discrete_lyapunov, solve_sylvester, DecompOptions,
++    DecompOptions, polar, solve_continuous_are, solve_continuous_lyapunov, solve_discrete_are,
++    solve_discrete_lyapunov, solve_sylvester,
+ };
+ 
+ fn dump(name: &str, m: &[Vec<f64>]) {
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_matsolvers.rs:42:
+     let bare = vec![vec![0.0], vec![1.0]];
+     let qare = vec![vec![1.0, 0.0], vec![0.0, 1.0]];
+     let rare = vec![vec![1.0]];
+-    run("care", solve_continuous_are(&aare, &bare, &qare, &rare, o()));
++    run(
++        "care",
++        solve_continuous_are(&aare, &bare, &qare, &rare, o()),
++    );
+ 
+     // Discrete ARE
+     let adare = vec![vec![0.9, 0.1], vec![0.0, 0.8]];
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_signm.rs:1:
+-use fsci_linalg::{signm, DecompOptions};
+-fn run(l:&str,r:Result<Vec<Vec<f64>>,fsci_linalg::LinalgError>){match r{Ok(m)=>{for(i,row)in m.iter().enumerate(){for(j,&v)in row.iter().enumerate(){println!("{l},{i},{j},{v:.17e}");}}}Err(e)=>println!("{l},ERR,{e:?}")}}
+-fn main(){
+-  let o=||DecompOptions::default();
+-  // s1: eigenvalues 1±3i (right half-plane) -> signm should be I
+-  let s1=vec![vec![3.0,-5.0],vec![2.0,-1.0]];
+-  // s2: eigenvalues -1±2i (left half-plane) -> signm should be -I
+-  let s2=vec![vec![-1.0,-2.0],vec![2.0,-1.0]];
+-  // s3: 3x3 mixed: block with Re>0 + real negative eigenvalue
+-  let s3=vec![vec![0.5,-1.2,0.3],vec![1.1,0.4,-0.2],vec![0.0,0.0,-2.0]];
+-  run("signm_s1",signm(&s1,o()));
+-  run("signm_s2",signm(&s2,o()));
+-  run("signm_s3",signm(&s3,o()));
++use fsci_linalg::{DecompOptions, signm};
++fn run(l: &str, r: Result<Vec<Vec<f64>>, fsci_linalg::LinalgError>) {
++    match r {
++        Ok(m) => {
++            for (i, row) in m.iter().enumerate() {
++                for (j, &v) in row.iter().enumerate() {
++                    println!("{l},{i},{j},{v:.17e}");
++                }
++            }
++        }
++        Err(e) => println!("{l},ERR,{e:?}"),
++    }
++}
++fn main() {
++    let o = || DecompOptions::default();
++    // s1: eigenvalues 1±3i (right half-plane) -> signm should be I
++    let s1 = vec![vec![3.0, -5.0], vec![2.0, -1.0]];
++    // s2: eigenvalues -1±2i (left half-plane) -> signm should be -I
++    let s2 = vec![vec![-1.0, -2.0], vec![2.0, -1.0]];
++    // s3: 3x3 mixed: block with Re>0 + real negative eigenvalue
++    let s3 = vec![
++        vec![0.5, -1.2, 0.3],
++        vec![1.1, 0.4, -0.2],
++        vec![0.0, 0.0, -2.0],
++    ];
++    run("signm_s1", signm(&s1, o()));
++    run("signm_s2", signm(&s2, o()));
++    run("signm_s3", signm(&s3, o()));
+ }
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_specmat.rs:19:
+     dump("invhilbert5", &invhilbert(5));
+     dump("pascal_sym4", &pascal(4, true));
+     dump("pascal_low4", &pascal(4, false));
+-    dump("toeplitz", &toeplitz(&[1.0, 2.0, 3.0, 4.0], Some(&[1.0, 5.0, 6.0])));
++    dump(
++        "toeplitz",
++        &toeplitz(&[1.0, 2.0, 3.0, 4.0], Some(&[1.0, 5.0, 6.0])),
++    );
+     dump("circulant", &circulant(&[1.0, 2.0, 3.0, 4.0]));
+-    dump("hankel", &hankel(&[1.0, 2.0, 3.0, 4.0], Some(&[4.0, 7.0, 8.0, 9.0])));
++    dump(
++        "hankel",
++        &hankel(&[1.0, 2.0, 3.0, 4.0], Some(&[4.0, 7.0, 8.0, 9.0])),
++    );
+     dump("tri_5_4_1", &tri(5, 4, 1));
+     dump("tri_4_4_-1", &tri(4, 4, -1));
+     dump("vander_inc", &vander(&[1.0, 2.0, 3.0, 5.0], Some(4), true));
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_specmat.rs:29:
+     dump("helmert5", &helmert(5));
+     dump("helmert_full5", &helmert_full(5));
+     dump("fiedler", &fiedler(&[1.0, 4.0, 12.0, 45.0]));
+-    dump("fiedler_companion", &fiedler_companion(&[1.0, -3.0, 2.0, -5.0, 7.0]));
++    dump(
++        "fiedler_companion",
++        &fiedler_companion(&[1.0, -3.0, 2.0, -5.0, 7.0]),
++    );
+     if let Ok(m) = hadamard(8) {
+         dump("hadamard8", &m);
+     }
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_specmat2.rs:1:
+ //! Differential probe: special-matrix constructors vs scipy.linalg (gitignored).
+ //! Lines: `name|rows|cols|v00;v01;...` row-major.
+ use fsci_linalg as la;
+-fn dump(name:&str, m:&[Vec<f64>]){
+-    let r=m.len(); let c=if r>0 {m[0].len()} else {0};
+-    let mut s=Vec::new();
+-    for row in m { for &v in row { s.push(format!("{v:.17e}")); } }
++fn dump(name: &str, m: &[Vec<f64>]) {
++    let r = m.len();
++    let c = if r > 0 { m[0].len() } else { 0 };
++    let mut s = Vec::new();
++    for row in m {
++        for &v in row {
++            s.push(format!("{v:.17e}"));
++        }
++    }
+     println!("{name}|{r}|{c}|{}", s.join(";"));
+ }
+-fn main(){
+-    for n in [2usize,3,4,5,6,7] {
++fn main() {
++    for n in [2usize, 3, 4, 5, 6, 7] {
+         dump(&format!("hilbert_{n}"), &la::hilbert(n));
+         dump(&format!("invhilbert_{n}"), &la::invhilbert(n));
+-        dump(&format!("pascal_sym_{n}"), &la::pascal(n,true));
+-        dump(&format!("pascal_low_{n}"), &la::pascal(n,false));
++        dump(&format!("pascal_sym_{n}"), &la::pascal(n, true));
++        dump(&format!("pascal_low_{n}"), &la::pascal(n, false));
+         dump(&format!("helmert_{n}"), &la::helmert(n));
+         dump(&format!("helmertfull_{n}"), &la::helmert_full(n));
+     }
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_specmat2.rs:19:
+     // toeplitz / circulant / hankel
+-    dump("toeplitz", &la::toeplitz(&[1.0,2.0,3.0,4.0], Some(&[1.0,5.0,6.0])));
+-    dump("circulant", &la::circulant(&[1.0,2.0,3.0,4.0]));
+-    dump("hankel", &la::hankel(&[1.0,2.0,3.0,4.0], Some(&[4.0,7.0,8.0,9.0])));
++    dump(
++        "toeplitz",
++        &la::toeplitz(&[1.0, 2.0, 3.0, 4.0], Some(&[1.0, 5.0, 6.0])),
++    );
++    dump("circulant", &la::circulant(&[1.0, 2.0, 3.0, 4.0]));
++    dump(
++        "hankel",
++        &la::hankel(&[1.0, 2.0, 3.0, 4.0], Some(&[4.0, 7.0, 8.0, 9.0])),
++    );
+     // fiedler / fiedler_companion / companion / leslie
+-    dump("fiedler", &la::fiedler(&[1.0,2.0,3.0,4.0]));
+-    dump("fiedler_companion", &la::fiedler_companion(&[1.0,-3.0,2.0,5.0,1.0]));
+-    dump("companion", &la::companion(&[1.0,-6.0,11.0,-6.0]).unwrap());
+-    dump("leslie", &la::leslie(&[0.1,2.0,1.0,0.1], &[0.2,0.8,0.7]).unwrap());
++    dump("fiedler", &la::fiedler(&[1.0, 2.0, 3.0, 4.0]));
++    dump(
++        "fiedler_companion",
++        &la::fiedler_companion(&[1.0, -3.0, 2.0, 5.0, 1.0]),
++    );
++    dump(
++        "companion",
++        &la::companion(&[1.0, -6.0, 11.0, -6.0]).unwrap(),
++    );
++    dump(
++        "leslie",
++        &la::leslie(&[0.1, 2.0, 1.0, 0.1], &[0.2, 0.8, 0.7]).unwrap(),
++    );
+     // tri / convolution_matrix
+-    dump("tri", &la::tri(4,5,1));
+-    dump("convmat_full", &la::convolution_matrix(&[1.0,2.0,3.0], 4, "full"));
+-    dump("convmat_same", &la::convolution_matrix(&[1.0,2.0,3.0], 4, "same"));
+-    dump("convmat_valid", &la::convolution_matrix(&[1.0,2.0,3.0], 4, "valid"));
++    dump("tri", &la::tri(4, 5, 1));
++    dump(
++        "convmat_full",
++        &la::convolution_matrix(&[1.0, 2.0, 3.0], 4, "full"),
++    );
++    dump(
++        "convmat_same",
++        &la::convolution_matrix(&[1.0, 2.0, 3.0], 4, "same"),
++    );
++    dump(
++        "convmat_valid",
++        &la::convolution_matrix(&[1.0, 2.0, 3.0], 4, "valid"),
++    );
+ }
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/diff_sqrtm.rs:1:
+ //! Probe: sqrtm on complex-eigenvalue matrices vs scipy.linalg.sqrtm (gitignored).
+-use fsci_linalg::{sqrtm, DecompOptions};
++use fsci_linalg::{DecompOptions, sqrtm};
+ 
+ fn dump(func: &str, m: &[Vec<f64>]) {
+     for (r, row) in m.iter().enumerate() {
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_cwt.rs:32:
+     let seed = 7u64;
+     let mut st: u64 = 0x243f_6a88_85a3_08d3;
+     let mut rng = || {
+-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
++        st = st
++            .wrapping_mul(6364136223846793005)
++            .wrapping_add(1442695040888963407);
+         ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+     };
+     let a: Vec<Vec<f64>> = (0..m).map(|_| (0..n).map(|_| rng()).collect()).collect();
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_cwt.rs:64:
+     te.sort_by(|a, b| a.partial_cmp(b).unwrap());
+     let imp = ti[trials / 2] * 1e3;
+     let exp = te[trials / 2] * 1e3;
+-    println!("explicit(form S + matmul) {exp:.2} ms | implicit CountSketch {imp:.2} ms | speedup {:.1}x  (m={m} n={n} sketch={sketch})", exp / imp);
++    println!(
++        "explicit(form S + matmul) {exp:.2} ms | implicit CountSketch {imp:.2} ms | speedup {:.1}x  (m={m} n={n} sketch={sketch})",
++        exp / imp
++    );
+ }
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_id.rs:1:
+ // Correctness + A/B for interp_decomp (randomized, SRHT-sketched column pivoting) vs a
+ // deterministic full-matrix column-pivoted ID. Both reconstruct a low-rank A as
+ // A[:,skeleton]·proj; the randomized version pivots a tiny sketch instead of all m rows.
+-use fsci_linalg::{interp_decomp, matmul, pinv, PinvOptions};
++use fsci_linalg::{PinvOptions, interp_decomp, matmul, pinv};
+ use std::hint::black_box;
+ use std::time::Instant;
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_id.rs:10:
+     let m = a.len();
+     let n = a[0].len();
+     let cols: Vec<Vec<f64>> = (0..n).map(|j| (0..m).map(|i| a[i][j]).collect()).collect();
+-    let mut norms: Vec<f64> = cols.iter().map(|c| c.iter().map(|&x| x * x).sum()).collect();
++    let mut norms: Vec<f64> = cols
++        .iter()
++        .map(|c| c.iter().map(|&x| x * x).sum())
++        .collect();
+     let mut basis: Vec<Vec<f64>> = Vec::new();
+     let mut skel = Vec::new();
+     for _ in 0..k {
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_id.rs:17:
+-        let p = (0..n).max_by(|&a, &b| norms[a].total_cmp(&norms[b])).unwrap();
++        let p = (0..n)
++            .max_by(|&a, &b| norms[a].total_cmp(&norms[b]))
++            .unwrap();
+         if norms[p] <= 0.0 {
+             break;
+         }
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_id.rs:44:
+         skel.push(p);
+         norms[p] = f64::NEG_INFINITY;
+     }
+-    let aj: Vec<Vec<f64>> = a.iter().map(|r| skel.iter().map(|&j| r[j]).collect()).collect();
++    let aj: Vec<Vec<f64>> = a
++        .iter()
++        .map(|r| skel.iter().map(|&j| r[j]).collect())
++        .collect();
+     let pinv_aj = pinv(&aj, PinvOptions::default()).unwrap().pseudo_inverse;
+     let proj = matmul(&pinv_aj, a).unwrap();
+     (skel, proj)
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_id.rs:57:
+     let k = 40usize;
+     let mut st: u64 = 0x243f_6a88_85a3_08d3;
+     let mut rng = || {
+-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
++        st = st
++            .wrapping_mul(6364136223846793005)
++            .wrapping_add(1442695040888963407);
+         ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+     };
+     let b: Vec<Vec<f64>> = (0..m).map(|_| (0..r).map(|_| rng()).collect()).collect();
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_id.rs:64:
+     let c: Vec<Vec<f64>> = (0..r).map(|_| (0..n).map(|_| rng()).collect()).collect();
+     let a: Vec<Vec<f64>> = b
+         .iter()
+-        .map(|bi| (0..n).map(|j| (0..r).map(|t| bi[t] * c[t][j]).sum::<f64>() + 1e-7 * rng()).collect())
++        .map(|bi| {
++            (0..n)
++                .map(|j| (0..r).map(|t| bi[t] * c[t][j]).sum::<f64>() + 1e-7 * rng())
++                .collect()
++        })
+         .collect();
+ 
+     let id = interp_decomp(&a, k, 10, 7).expect("interp_decomp");
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_id.rs:72:
+     let mut den = 0.0f64;
+     for i in 0..m {
+         for j in 0..n {
+-            let approx: f64 = (0..id.rank).map(|t| a[i][id.skeleton[t]] * id.proj[t][j]).sum();
++            let approx: f64 = (0..id.rank)
++                .map(|t| a[i][id.skeleton[t]] * id.proj[t][j])
++                .sum();
+             num += (a[i][j] - approx).powi(2);
+             den += a[i][j] * a[i][j];
+         }
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_id.rs:79:
+     }
+-    println!("interp_decomp rank={} rel_reconstruction_err={:.3e}", id.rank, (num / den).sqrt());
++    println!(
++        "interp_decomp rank={} rel_reconstruction_err={:.3e}",
++        id.rank,
++        (num / den).sqrt()
++    );
+ 
+     let trials = 3;
+     let mut tr = Vec::new();
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_id.rs:94:
+     td.sort_by(|a, b| a.partial_cmp(b).unwrap());
+     let r_ms = tr[trials / 2] * 1e3;
+     let d_ms = td[trials / 2] * 1e3;
+-    println!("deterministic full-pivot ID {d_ms:.2} ms | randomized interp_decomp {r_ms:.2} ms | speedup {:.2}x  (m={m} n={n} k={k})", d_ms / r_ms);
++    println!(
++        "deterministic full-pivot ID {d_ms:.2} ms | randomized interp_decomp {r_ms:.2} ms | speedup {:.2}x  (m={m} n={n} k={k})",
++        d_ms / r_ms
++    );
+ }
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_pivchol.rs:1:
+ // Correctness + A/B for pivoted_cholesky (low-rank, O(n·k²)) vs full cholesky (O(n³)) on a
+ // numerically rank-r PSD matrix. The pivoted factor must reconstruct A to the noise floor;
+ // the speedup is the wall-clock ratio.
+-use fsci_linalg::{cholesky, pivoted_cholesky, DecompOptions};
++use fsci_linalg::{DecompOptions, cholesky, pivoted_cholesky};
+ use std::hint::black_box;
+ use std::time::Instant;
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_pivchol.rs:11:
+     let k = 40usize;
+     let mut st: u64 = 0x243f_6a88_85a3_08d3;
+     let mut rng = || {
+-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
++        st = st
++            .wrapping_mul(6364136223846793005)
++            .wrapping_add(1442695040888963407);
+         ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+     };
+     // PSD A = B·Bᵀ (rank r) + 1e-8·I (strictly PD so the full Cholesky is well-behaved).
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_pivchol.rs:33:
+     let mut den = 0.0f64;
+     for i in 0..n {
+         for j in 0..n {
+-            let approx: f64 = (0..pc.rank).map(|t| pc.factor[i][t] * pc.factor[j][t]).sum();
++            let approx: f64 = (0..pc.rank)
++                .map(|t| pc.factor[i][t] * pc.factor[j][t])
++                .sum();
+             num += (a[i][j] - approx).powi(2);
+             den += a[i][j] * a[i][j];
+         }
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_pivchol.rs:59:
+     tp.sort_by(|a, b| a.partial_cmp(b).unwrap());
+     let f = tf[trials / 2] * 1e3;
+     let p = tp[trials / 2] * 1e3;
+-    println!("full cholesky {f:.2} ms | pivoted_cholesky {p:.2} ms | speedup {:.1}x  (n={n} rank≈{r} k={k})", f / p);
++    println!(
++        "full cholesky {f:.2} ms | pivoted_cholesky {p:.2} ms | speedup {:.1}x  (n={n} rank≈{r} k={k})",
++        f / p
++    );
+ }
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_reigh.rs:2:
+ // On a rank-r symmetric matrix with the sketch dimension > r, the dominant subspace is
+ // captured exactly, so the k largest-magnitude eigenvalues match the full eigh's; the
+ // speedup is the wall-clock ratio (full eigh O(n³) vs randomized O(n²k)).
+-use fsci_linalg::{eigh, randomized_eigh, DecompOptions};
++use fsci_linalg::{DecompOptions, eigh, randomized_eigh};
+ use std::hint::black_box;
+ use std::time::Instant;
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_reigh.rs:12:
+     let k = 10usize;
+     let mut st: u64 = 0x243f_6a88_85a3_08d3;
+     let mut rng = || {
+-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
++        st = st
++            .wrapping_mul(6364136223846793005)
++            .wrapping_add(1442695040888963407);
+         ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+     };
+     // Symmetric A = Σ_t d_t w_t w_tᵀ, mixed-sign decaying d_t → rank-r symmetric.
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_reigh.rs:66:
+     tr.sort_by(|a, b| a.partial_cmp(b).unwrap());
+     let f = tf[trials / 2] * 1e3;
+     let rr = tr[trials / 2] * 1e3;
+-    println!("full eigh {f:.2} ms | randomized_eigh {rr:.2} ms | speedup {:.2}x  (n={n} k={k})", f / rr);
++    println!(
++        "full eigh {f:.2} ms | randomized_eigh {rr:.2} ms | speedup {:.2}x  (n={n} k={k})",
++        f / rr
++    );
+ }
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_rpinv.rs:1:
+ // Correctness + A/B for randomized_pinv vs the full-SVD pinv, on a numerically rank-r
+ // matrix. With both truncating at the same relative tolerance (above the noise floor,
+ // below the signal), the two pseudoinverses agree; the speedup is the wall-clock ratio.
+-use fsci_linalg::{pinv, randomized_pinv, PinvOptions};
++use fsci_linalg::{PinvOptions, pinv, randomized_pinv};
+ use std::hint::black_box;
+ use std::time::Instant;
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_rpinv.rs:13:
+     let rtol = 1e-3;
+     let mut st: u64 = 0x243f_6a88_85a3_08d3;
+     let mut rng = || {
+-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
++        st = st
++            .wrapping_mul(6364136223846793005)
++            .wrapping_add(1442695040888963407);
+         ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+     };
+     // A = B(m×r)·C(r×n) (signal) + tiny noise → numerically rank-r, but full-rank so the
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_rpinv.rs:66:
+     tr.sort_by(|a, b| a.partial_cmp(b).unwrap());
+     let f = tf[trials / 2] * 1e3;
+     let rr = tr[trials / 2] * 1e3;
+-    println!("full pinv {f:.2} ms | randomized_pinv {rr:.2} ms | speedup {:.2}x  (m={m} n={n} k={k})", f / rr);
++    println!(
++        "full pinv {f:.2} ms | randomized_pinv {rr:.2} ms | speedup {:.2}x  (m={m} n={n} k={k})",
++        f / rr
++    );
+ }
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_rsvd.rs:2:
+ // On a rank-r matrix with l = k + oversamples > r, the random sketch captures the entire
+ // range, so the leading-k singular values match the full SVD to ~machine precision; the
+ // speedup is the wall-clock ratio (full SVD does O(m·n·min) work, randomized O(m·n·l)).
+-use fsci_linalg::{randomized_svd, svd, DecompOptions};
++use fsci_linalg::{DecompOptions, randomized_svd, svd};
+ use std::hint::black_box;
+ use std::time::Instant;
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_rsvd.rs:13:
+     let k = 10usize;
+     let mut s: u64 = 0x243f_6a88_85a3_08d3;
+     let mut rng = || {
+-        s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
++        s = s
++            .wrapping_mul(6364136223846793005)
++            .wrapping_add(1442695040888963407);
+         ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+     };
+     // A = B (m×r) · C (r×n)  → exactly rank r.
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_rsvd.rs:61:
+     tr.sort_by(|a, b| a.partial_cmp(b).unwrap());
+     let f = tf[trials / 2] * 1e3;
+     let rr = tr[trials / 2] * 1e3;
+-    println!("full svd {f:.2} ms | randomized_svd {rr:.2} ms | speedup {:.2}x  (m={m} n={n} k={k})", f / rr);
++    println!(
++        "full svd {f:.2} ms | randomized_svd {rr:.2} ms | speedup {:.2}x  (m={m} n={n} k={k})",
++        f / rr
++    );
+ }
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_srht.rs:12:
+     let s = 600usize;
+     let mut st: u64 = 0x243f_6a88_85a3_08d3;
+     let mut u01 = || {
+-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
++        st = st
++            .wrapping_mul(6364136223846793005)
++            .wrapping_add(1442695040888963407);
+         (st >> 11) as f64 / (1u64 << 53) as f64
+     };
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_srht.rs:51:
+             ratio += nsax / nax;
+         }
+     }
+-    println!("srht embedding mean ‖SAx‖²/‖Ax‖² = {:.4} (≈1 expected)", ratio / trials_emb as f64);
++    println!(
++        "srht embedding mean ‖SAx‖²/‖Ax‖² = {:.4} (≈1 expected)",
++        ratio / trials_emb as f64
++    );
+ 
+     let trials = 5;
+     let mut tsr = Vec::new();
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/bin/perf_srht.rs:69:
+     tg.sort_by(|a, b| a.partial_cmp(b).unwrap());
+     let sr = tsr[trials / 2] * 1e3;
+     let g = tg[trials / 2] * 1e3;
+-    println!("dense Gaussian sketch {g:.2} ms | srht_transform {sr:.2} ms | speedup {:.1}x  (m={m} n={n} s={s})", g / sr);
++    println!(
++        "dense Gaussian sketch {g:.2} ms | srht_transform {sr:.2} ms | speedup {:.1}x  (m={m} n={n} s={s})",
++        g / sr
++    );
+ }
+ 
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/lib.rs:3621:
+ /// Transpose a row-major matrix.
+ fn transpose_rows(a: &[Vec<f64>]) -> Vec<Vec<f64>> {
+     let cols = a.first().map_or(0, Vec::len);
+-    (0..cols).map(|j| a.iter().map(|row| row[j]).collect()).collect()
++    (0..cols)
++        .map(|j| a.iter().map(|row| row[j]).collect())
++        .collect()
+ }
+ 
+ /// Truncated SVD of `a` (m×n) via randomized range finding (Halko–Martinsson–Tropp).
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/lib.rs:3894:
+         z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+         z ^ (z >> 31)
+     };
+-    let signs: Vec<f64> = (0..mp).map(|_| if next() & 1 == 0 { 1.0 } else { -1.0 }).collect();
++    let signs: Vec<f64> = (0..mp)
++        .map(|_| if next() & 1 == 0 { 1.0 } else { -1.0 })
++        .collect();
+     let mut perm: Vec<usize> = (0..mp).collect();
+     for i in 0..s {
+         let j = i + (next() as usize) % (mp - i);
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/lib.rs:3930:
+                         for (i, slot) in v.iter_mut().enumerate() {
+                             *slot = if i < m { a[i][j] * signs_r[i] } else { 0.0 };
+                         }
+-                        let hv = fsci_fft::fwht(&v, opts_r)
+-                            .expect("fwht on power-of-two finite input");
++                        let hv =
++                            fsci_fft::fwht(&v, opts_r).expect("fwht on power-of-two finite input");
+                         local.push(rows.iter().map(|&r| scale * hv[r]).collect::<Vec<f64>>());
+                     }
+                     local
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/lib.rs:4043:
+     let l = y.len();
+     let n = if l > 0 { y[0].len() } else { 0 };
+     let cols: Vec<Vec<f64>> = (0..n).map(|j| (0..l).map(|i| y[i][j]).collect()).collect();
+-    let mut norms: Vec<f64> = cols.iter().map(|c| c.iter().map(|&x| x * x).sum()).collect();
++    let mut norms: Vec<f64> = cols
++        .iter()
++        .map(|c| c.iter().map(|&x| x * x).sum())
++        .collect();
+     let mut basis: Vec<Vec<f64>> = Vec::new();
+     let mut pivots = Vec::with_capacity(k);
+     let kk = k.min(n).min(l);
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/lib.rs:17752:
+         // matches the full SVD to rounding. Also checks the rank-k reconstruction error.
+         let mut s: u64 = 0x0123_4567_89ab_cdef;
+         let mut rng = || {
+-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
++            s = s
++                .wrapping_mul(6364136223846793005)
++                .wrapping_add(1442695040888963407);
+             ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+         };
+         let (m, n, r, k) = (80usize, 60usize, 12usize, 6usize);
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/lib.rs:17786:
+         // truncation built from the full SVD.
+         for row in 0..m {
+             for col in 0..n {
+-                let approx: f64 = (0..k).map(|t| rsvd.u[row][t] * rsvd.s[t] * rsvd.vt[t][col]).sum();
+-                let exact: f64 = (0..k).map(|t| full.u[row][t] * full.s[t] * full.vt[t][col]).sum();
++                let approx: f64 = (0..k)
++                    .map(|t| rsvd.u[row][t] * rsvd.s[t] * rsvd.vt[t][col])
++                    .sum();
++                let exact: f64 = (0..k)
++                    .map(|t| full.u[row][t] * full.s[t] * full.vt[t][col])
++                    .sum();
+                 assert!(
+                     (approx - exact).abs() < 1e-7 * (1.0 + exact.abs()),
+                     "reconstruction[{row}][{col}]: {approx} vs {exact}"
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/lib.rs:17800:
+     fn clarkson_woodruff_shape_determinism_and_embedding() {
+         let mut s: u64 = 0xa5a5_5a5a_1234_5678;
+         let mut rng = || {
+-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
++            s = s
++                .wrapping_mul(6364136223846793005)
++                .wrapping_add(1442695040888963407);
+             ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+         };
+         let (m, n, sketch) = (300usize, 8usize, 120usize);
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/lib.rs:17819:
+         }
+         // Different seed → different sketch (almost surely).
+         let sa3 = clarkson_woodruff_transform(&a, sketch, 100).expect("cwt");
+-        assert!(sa.iter().flatten().zip(sa3.iter().flatten()).any(|(&x, &y)| x != y));
++        assert!(
++            sa.iter()
++                .flatten()
++                .zip(sa3.iter().flatten())
++                .any(|(&x, &y)| x != y)
++        );
+ 
+         // Unbiased squared-norm embedding: E[‖S·A·x‖²] = ‖A·x‖²; average over many x → ≈ 1.
+         let trials = 60;
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/lib.rs:17846:
+     fn randomized_eigh_matches_full_eigh_on_low_rank() {
+         let mut s: u64 = 0x0f1e_2d3c_4b5a_6978;
+         let mut rng = || {
+-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
++            s = s
++                .wrapping_mul(6364136223846793005)
++                .wrapping_add(1442695040888963407);
+             ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+         };
+         let (n, r, k) = (90usize, 14usize, 6usize);
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/lib.rs:17902:
+     fn randomized_pinv_matches_full_pinv_on_low_rank() {
+         let mut s: u64 = 0x7766_5544_3322_1100;
+         let mut rng = || {
+-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
++            s = s
++                .wrapping_mul(6364136223846793005)
++                .wrapping_add(1442695040888963407);
+             ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+         };
+         let (m, n, r, k) = (120usize, 50usize, 8usize, 12usize);
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/lib.rs:17947:
+     fn srht_transform_is_a_norm_preserving_embedding() {
+         let mut sr: u64 = 0x1357_9bdf_2468_ace0;
+         let mut rng = || {
+-            sr = sr.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
++            sr = sr
++                .wrapping_mul(6364136223846793005)
++                .wrapping_add(1442695040888963407);
+             ((sr >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+         };
+         let (m, n, sk) = (300usize, 12usize, 96usize);
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/lib.rs:17966:
+         }
+         // Different seed → different sketch.
+         let sa3 = srht_transform(&a, sk, 12).expect("srht");
+-        assert!(sa.iter().flatten().zip(sa3.iter().flatten()).any(|(&x, &y)| x != y));
++        assert!(
++            sa.iter()
++                .flatten()
++                .zip(sa3.iter().flatten())
++                .any(|(&x, &y)| x != y)
++        );
+ 
+         // Norm-preserving subspace embedding: mean ‖S·A·x‖² / ‖A·x‖² ≈ 1.
+         let trials = 50;
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/lib.rs:17991:
+     fn interp_decomp_reconstructs_low_rank() {
+         let mut s: u64 = 0x5151_2626_3737_4848;
+         let mut rng = || {
+-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
++            s = s
++                .wrapping_mul(6364136223846793005)
++                .wrapping_add(1442695040888963407);
+             ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+         };
+         let (m, n, r, k) = (140usize, 60usize, 8usize, 14usize);
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/lib.rs:17999:
+         let c: Vec<Vec<f64>> = (0..r).map(|_| (0..n).map(|_| rng()).collect()).collect();
+         let a: Vec<Vec<f64>> = b
+             .iter()
+-            .map(|bi| (0..n).map(|j| (0..r).map(|t| bi[t] * c[t][j]).sum()).collect())
++            .map(|bi| {
++                (0..n)
++                    .map(|j| (0..r).map(|t| bi[t] * c[t][j]).sum())
++                    .collect()
++            })
+             .collect();
+ 
+         let id = interp_decomp(&a, k, 8, 5).expect("interp_decomp");
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/lib.rs:18014:
+         let mut maxerr = 0.0f64;
+         for i in 0..m {
+             for j in 0..n {
+-                let approx: f64 = (0..id.rank).map(|t| a[i][id.skeleton[t]] * id.proj[t][j]).sum();
++                let approx: f64 = (0..id.rank)
++                    .map(|t| a[i][id.skeleton[t]] * id.proj[t][j])
++                    .sum();
+                 maxerr = maxerr.max((a[i][j] - approx).abs());
+             }
+         }
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/lib.rs:18025:
+     fn pivoted_cholesky_reconstructs_low_rank_psd() {
+         let mut s: u64 = 0x2718_2818_2845_9045;
+         let mut rng = || {
+-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
++            s = s
++                .wrapping_mul(6364136223846793005)
++                .wrapping_add(1442695040888963407);
+             ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+         };
+         let (n, r) = (80usize, 9usize);
+Diff in /data/projects/.scratch/frankenscipy-rubywaterfall-lu-recursive/crates/fsci-linalg/src/lib.rs:18047:
+         let mut maxerr = 0.0f64;
+         for i in 0..n {
+             for j in 0..n {
+-                let approx: f64 = (0..pc.rank).map(|t| pc.factor[i][t] * pc.factor[j][t]).sum();
++                let approx: f64 = (0..pc.rank)
++                    .map(|t| pc.factor[i][t] * pc.factor[j][t])
++                    .sum();
+                 maxerr = maxerr.max((a[i][j] - approx).abs());
+             }
+         }
