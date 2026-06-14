@@ -565,6 +565,198 @@ pub fn landmark_mds(
     })
 }
 
+// Min-heap node for Dijkstra (ordered by ascending tentative distance).
+#[derive(Clone, Copy)]
+struct DijkstraNode {
+    dist: f64,
+    node: usize,
+}
+impl PartialEq for DijkstraNode {
+    fn eq(&self, other: &Self) -> bool {
+        self.dist == other.dist && self.node == other.node
+    }
+}
+impl Eq for DijkstraNode {}
+impl Ord for DijkstraNode {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // Reversed so BinaryHeap (a max-heap) pops the SMALLEST distance first.
+        other
+            .dist
+            .total_cmp(&self.dist)
+            .then(other.node.cmp(&self.node))
+    }
+}
+impl PartialOrd for DijkstraNode {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+// Single-source Dijkstra over a weighted adjacency list; returns geodesic distances (∞ for
+// unreachable nodes).
+fn dijkstra(adj: &[Vec<(usize, f64)>], source: usize) -> Vec<f64> {
+    let n = adj.len();
+    let mut dist = vec![f64::INFINITY; n];
+    dist[source] = 0.0;
+    let mut heap = std::collections::BinaryHeap::new();
+    heap.push(DijkstraNode { dist: 0.0, node: source });
+    while let Some(DijkstraNode { dist: d, node }) = heap.pop() {
+        if d > dist[node] {
+            continue;
+        }
+        for &(nbr, w) in &adj[node] {
+            let nd = d + w;
+            if nd < dist[nbr] {
+                dist[nbr] = nd;
+                heap.push(DijkstraNode { dist: nd, node: nbr });
+            }
+        }
+    }
+    dist
+}
+
+/// Landmark Isomap (de Silva–Tenenbaum) — scalable nonlinear manifold embedding.
+///
+/// Matches `sklearn.manifold.Isomap`'s geometry but with the landmark approximation: builds a
+/// symmetric `k`-nearest-neighbour graph (Euclidean edge weights), runs Dijkstra from each of
+/// `m` landmarks to get the `m×n` geodesic distances, and applies landmark classical MDS
+/// (double-centre the `m×m` landmark-geodesic block, take its top-`k` eigenpairs, triangulate
+/// all `n` points). The geodesic distances capture the manifold's intrinsic geometry, so the
+/// embedding "unrolls" curved manifolds a linear method (PCA/MDS) cannot. Cost
+/// O(n²·d + m·(E + n log n) + n·m·k) — the `m` Dijkstra runs replace the O(n·(E+n log n))
+/// all-source shortest paths of full Isomap, an asymptotic O(n)→O(m) drop in the geodesic
+/// stage. Requires a connected neighbour graph (errors otherwise). `n_neighbors` is the graph
+/// degree; deterministic by `seed`.
+pub fn landmark_isomap(
+    data: &[Vec<f64>],
+    n_components: usize,
+    n_neighbors: usize,
+    n_landmarks: usize,
+    seed: u64,
+) -> Result<MdsResult, ClusterError> {
+    if data.is_empty() || data[0].is_empty() {
+        return Err(ClusterError::EmptyData);
+    }
+    let n = data.len();
+    let dim = data[0].len();
+    if data.iter().any(|row| row.len() != dim) {
+        return Err(ClusterError::InvalidArgument(
+            "all rows must have the same length".to_string(),
+        ));
+    }
+    if n_neighbors == 0 || n_neighbors >= n {
+        return Err(ClusterError::InvalidArgument(format!(
+            "n_neighbors={n_neighbors} must be in [1, n-1={}]",
+            n - 1
+        )));
+    }
+    if n_components == 0 || n_components > n_landmarks || n_landmarks > n {
+        return Err(ClusterError::InvalidArgument(format!(
+            "need 1 ≤ n_components={n_components} ≤ n_landmarks={n_landmarks} ≤ n={n}"
+        )));
+    }
+    if data.iter().flatten().any(|v| !v.is_finite()) {
+        return Err(ClusterError::InvalidArgument(
+            "data must be finite".to_string(),
+        ));
+    }
+
+    let edist = |a: &[f64], b: &[f64]| -> f64 {
+        a.iter().zip(b).map(|(&x, &y)| (x - y) * (x - y)).sum::<f64>().sqrt()
+    };
+
+    // Symmetric k-NN graph (edge weight = Euclidean distance). Undirected: an edge is kept if
+    // either endpoint lists the other among its k nearest.
+    let mut adj: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
+    let mut seen: Vec<std::collections::HashSet<usize>> = vec![std::collections::HashSet::new(); n];
+    for i in 0..n {
+        let mut d: Vec<(f64, usize)> = (0..n)
+            .filter(|&j| j != i)
+            .map(|j| (edist(&data[i], &data[j]), j))
+            .collect();
+        // Partial selection of the k smallest, then exact order among them.
+        d.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        for &(w, j) in d.iter().take(n_neighbors) {
+            if seen[i].insert(j) {
+                adj[i].push((j, w));
+            }
+            if seen[j].insert(i) {
+                adj[j].push((i, w));
+            }
+        }
+    }
+
+    // Landmarks.
+    let mut perm: Vec<usize> = (0..n).collect();
+    let mut state = seed ^ 0x9e37_79b9_7f4a_7c15;
+    let mut nxt = || {
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        state >> 11
+    };
+    for i in 0..n_landmarks {
+        let j = i + (nxt() as usize) % (n - i);
+        perm.swap(i, j);
+    }
+    let mut landmarks: Vec<usize> = perm[..n_landmarks].to_vec();
+    landmarks.sort_unstable();
+    let m = landmarks.len();
+
+    // Geodesics from each landmark to all points (m×n).
+    let geo: Vec<Vec<f64>> = landmarks.iter().map(|&l| dijkstra(&adj, l)).collect();
+    if geo.iter().flatten().any(|d| !d.is_finite()) {
+        return Err(ClusterError::ConvergenceFailed(
+            "neighbour graph is disconnected; increase n_neighbors".to_string(),
+        ));
+    }
+
+    // Landmark classical MDS on the geodesic distances.
+    // Δ[a][b] = geodesic(landmark_a, landmark_b)²  (m×m, symmetric).
+    let delta: Vec<Vec<f64>> = (0..m)
+        .map(|a| (0..m).map(|b| geo[a][landmarks[b]].powi(2)).collect())
+        .collect();
+    let mu: Vec<f64> = delta.iter().map(|r| r.iter().sum::<f64>() / m as f64).collect();
+    let total: f64 = mu.iter().sum::<f64>() / m as f64;
+    let bl: Vec<Vec<f64>> = (0..m)
+        .map(|a| (0..m).map(|b| -0.5 * (delta[a][b] - mu[a] - mu[b] + total)).collect())
+        .collect();
+
+    let e = fsci_linalg::eigh(&bl, fsci_linalg::DecompOptions::default())
+        .map_err(|err| ClusterError::InvalidArgument(format!("eigh: {err}")))?;
+    let order: Vec<usize> = (0..m).rev().take(n_components).collect();
+    let lmax = e.eigenvalues.iter().cloned().fold(0.0f64, f64::max);
+    let tol = (m as f64) * f64::EPSILON * lmax.max(1.0);
+
+    let eigenvalues: Vec<f64> = order.iter().map(|&t| e.eigenvalues[t]).collect();
+    // L# rows (k×m): v_t / √λ_t.
+    let lpinv: Vec<Vec<f64>> = order
+        .iter()
+        .map(|&t| {
+            let lam = e.eigenvalues[t];
+            let s = if lam > tol { 1.0 / lam.sqrt() } else { 0.0 };
+            (0..m).map(|a| s * e.eigenvectors[a][t]).collect()
+        })
+        .collect();
+
+    // Triangulate every point from its landmark geodesics: x_p[t] = −½ Σ_b L#[t][b](δ_p[b]−μ_b),
+    // where δ_p[b] = geodesic(landmark_b, p)².
+    let k = order.len();
+    let embedding: Vec<Vec<f64>> = (0..n)
+        .map(|p| {
+            let dshift: Vec<f64> = (0..m).map(|b| geo[b][p].powi(2) - mu[b]).collect();
+            (0..k)
+                .map(|t| -0.5 * lpinv[t].iter().zip(&dshift).map(|(&l, &ds)| l * ds).sum::<f64>())
+                .collect()
+        })
+        .collect();
+
+    Ok(MdsResult {
+        embedding,
+        eigenvalues,
+    })
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Non-negative Matrix Factorization
 // ══════════════════════════════════════════════════════════════════════
@@ -4632,6 +4824,75 @@ mod tests {
         assert!(landmark_mds(&dist, 0, 5, 1).is_err());
         assert!(landmark_mds(&dist, 5, 3, 1).is_err()); // k > landmarks
         assert!(landmark_mds(&dist, 2, n + 1, 1).is_err()); // landmarks > n
+    }
+
+    #[test]
+    fn landmark_isomap_recovers_intrinsic_coordinates() {
+        // A flat 2-D sheet (grid in (u,v)) isometrically embedded in 3-D via two orthonormal
+        // axes. Geodesics equal intrinsic Euclidean distances, so Isomap must recover (u,v)
+        // up to a rigid transform — verified by distance-matrix correlation.
+        let gu = 16usize;
+        let gv = 16usize;
+        let n = gu * gv;
+        // Orthonormal 3-D axes e1 ⟂ e2.
+        let e1 = [0.6, 0.8, 0.0];
+        let e2 = [0.0, 0.0, 1.0];
+        let mut data = Vec::with_capacity(n);
+        let mut intrinsic = Vec::with_capacity(n);
+        for iu in 0..gu {
+            for iv in 0..gv {
+                let u = iu as f64;
+                let v = iv as f64;
+                data.push(vec![
+                    u * e1[0] + v * e2[0],
+                    u * e1[1] + v * e2[1],
+                    u * e1[2] + v * e2[2],
+                ]);
+                intrinsic.push([u, v]);
+            }
+        }
+
+        let iso = landmark_isomap(&data, 2, 8, 40, 7).expect("isomap");
+        assert_eq!(iso.embedding.len(), n);
+        assert_eq!(iso.embedding[0].len(), 2);
+        for w in iso.eigenvalues.windows(2) {
+            assert!(w[0] >= w[1] - 1e-9, "eigenvalues descending");
+        }
+
+        // Pearson correlation between embedding pairwise distances and true intrinsic distances.
+        let mut emb_d = Vec::new();
+        let mut tru_d = Vec::new();
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let ed: f64 = (0..2)
+                    .map(|t| (iso.embedding[i][t] - iso.embedding[j][t]).powi(2))
+                    .sum::<f64>()
+                    .sqrt();
+                let td: f64 = (0..2)
+                    .map(|t| (intrinsic[i][t] - intrinsic[j][t]).powi(2))
+                    .sum::<f64>()
+                    .sqrt();
+                emb_d.push(ed);
+                tru_d.push(td);
+            }
+        }
+        let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
+        let (me, mt) = (mean(&emb_d), mean(&tru_d));
+        let mut cov = 0.0;
+        let mut ve = 0.0;
+        let mut vt = 0.0;
+        for (&a, &b) in emb_d.iter().zip(&tru_d) {
+            cov += (a - me) * (b - mt);
+            ve += (a - me).powi(2);
+            vt += (b - mt).powi(2);
+        }
+        let corr = cov / (ve.sqrt() * vt.sqrt());
+        assert!(corr > 0.97, "isomap distance correlation {corr}");
+
+        assert!(landmark_isomap(&[], 2, 3, 3, 1).is_err());
+        assert!(landmark_isomap(&data, 2, 0, 3, 1).is_err()); // n_neighbors 0
+        assert!(landmark_isomap(&data, 5, 8, 3, 1).is_err()); // k > landmarks
+        assert!(landmark_isomap(&data, 2, n, 5, 1).is_err()); // n_neighbors >= n
     }
 
     #[test]
