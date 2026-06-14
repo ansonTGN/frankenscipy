@@ -200,6 +200,158 @@ pub fn spectral_clustering(
     Ok(kmeans(&embedding, n_clusters, max_iter, seed)?.labels)
 }
 
+/// Result of [`affinity_propagation`].
+#[derive(Debug, Clone)]
+pub struct AffinityPropagationResult {
+    /// Cluster label for each point (length n); labels index into `exemplars`.
+    pub labels: Vec<usize>,
+    /// Indices of the exemplar (representative) points, one per cluster.
+    pub exemplars: Vec<usize>,
+    /// Iterations performed.
+    pub n_iter: usize,
+}
+
+/// Affinity propagation clustering from a precomputed `n×n` similarity matrix (Frey–Dueck
+/// 2007), matching `sklearn.cluster.AffinityPropagation(affinity="precomputed")`.
+///
+/// Exchanges "responsibility" and "availability" messages between every pair of points until a
+/// stable set of exemplars emerges, then assigns each point to its best exemplar. The number of
+/// clusters is *not* specified up front — it is governed by `preference` (the self-similarity
+/// `s(k,k)`; larger ⇒ more clusters; a common choice is the median off-diagonal similarity).
+/// Updates are damped by `damping ∈ [0.5, 1)`. Iterates up to `max_iter`, stopping early once the
+/// exemplar set is unchanged for `convergence_iter` consecutive iterations. `similarity` should be
+/// symmetric (e.g. negative squared distances); its diagonal is overwritten with `preference`.
+/// Deterministic.
+pub fn affinity_propagation(
+    similarity: &[Vec<f64>],
+    preference: f64,
+    damping: f64,
+    max_iter: usize,
+    convergence_iter: usize,
+) -> Result<AffinityPropagationResult, ClusterError> {
+    if similarity.is_empty() {
+        return Err(ClusterError::EmptyData);
+    }
+    let n = similarity.len();
+    if similarity.iter().any(|row| row.len() != n) {
+        return Err(ClusterError::InvalidArgument(
+            "similarity matrix must be square".to_string(),
+        ));
+    }
+    if !(damping.is_finite() && (0.5..1.0).contains(&damping)) {
+        return Err(ClusterError::InvalidArgument(
+            "damping must be in [0.5, 1.0)".to_string(),
+        ));
+    }
+    if !preference.is_finite() || similarity.iter().flatten().any(|v| !v.is_finite()) {
+        return Err(ClusterError::InvalidArgument(
+            "similarity and preference must be finite".to_string(),
+        ));
+    }
+
+    // S with the diagonal set to `preference`.
+    let mut s: Vec<Vec<f64>> = (0..n)
+        .map(|i| {
+            (0..n)
+                .map(|k| if i == k { preference } else { similarity[i][k] })
+                .collect()
+        })
+        .collect();
+    // Break exact ties/symmetry with tiny deterministic noise (degenerate inputs — e.g. several
+    // identical clusters — otherwise oscillate and never settle on exemplars; sklearn does the
+    // same with random_state). The perturbation is ~1e-10·‖S‖∞, far below any real structure.
+    let smax = s.iter().flatten().map(|v| v.abs()).fold(0.0f64, f64::max).max(1.0);
+    let mut st: u64 = 0x9e37_79b9_7f4a_7c15;
+    for row in s.iter_mut() {
+        for v in row.iter_mut() {
+            st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let u = ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5;
+            *v += 1e-10 * smax * u;
+        }
+    }
+
+    let mut r = vec![vec![0.0f64; n]; n]; // responsibilities
+    let mut a = vec![vec![0.0f64; n]; n]; // availabilities
+    let mut last_exemplars: Vec<usize> = Vec::new();
+    let mut stable = 0usize;
+    let mut iters = 0;
+
+    for it in 0..max_iter.max(1) {
+        iters = it + 1;
+        // Responsibilities: r(i,k) = s(i,k) − max_{k'≠k}(a(i,k')+s(i,k')).
+        for i in 0..n {
+            // Largest and second-largest of (a+s) across k', with argmax.
+            let (mut max1, mut max1_idx, mut max2) = (f64::NEG_INFINITY, 0usize, f64::NEG_INFINITY);
+            for k in 0..n {
+                let v = a[i][k] + s[i][k];
+                if v > max1 {
+                    max2 = max1;
+                    max1 = v;
+                    max1_idx = k;
+                } else if v > max2 {
+                    max2 = v;
+                }
+            }
+            for k in 0..n {
+                let competitor = if k == max1_idx { max2 } else { max1 };
+                let upd = s[i][k] - competitor;
+                r[i][k] = damping * r[i][k] + (1.0 - damping) * upd;
+            }
+        }
+        // Availabilities: a(i,k)=min(0, r(k,k)+Σ_{i'∉{i,k}}max(0,r(i',k))); a(k,k)=Σ_{i'≠k}max(0,·).
+        for k in 0..n {
+            let col_pos: f64 = (0..n).map(|i| r[i][k].max(0.0)).sum();
+            let rkk = r[k][k];
+            let pos_kk = rkk.max(0.0);
+            for i in 0..n {
+                let upd = if i == k {
+                    col_pos - pos_kk
+                } else {
+                    (rkk + col_pos - r[i][k].max(0.0) - pos_kk).min(0.0)
+                };
+                a[i][k] = damping * a[i][k] + (1.0 - damping) * upd;
+            }
+        }
+        // Exemplars: points with r(k,k)+a(k,k) > 0.
+        let exemplars: Vec<usize> = (0..n).filter(|&k| r[k][k] + a[k][k] > 0.0).collect();
+        if !exemplars.is_empty() && exemplars == last_exemplars {
+            stable += 1;
+            if stable >= convergence_iter {
+                break;
+            }
+        } else {
+            stable = 0;
+            last_exemplars = exemplars;
+        }
+    }
+
+    // Final exemplars; fall back to the highest-criterion point if none emerged.
+    let mut exemplars: Vec<usize> = (0..n).filter(|&k| r[k][k] + a[k][k] > 0.0).collect();
+    if exemplars.is_empty() {
+        let best = (0..n)
+            .max_by(|&p, &q| (r[p][p] + a[p][p]).total_cmp(&(r[q][q] + a[q][q])))
+            .unwrap_or(0);
+        exemplars.push(best);
+    }
+    // Assign each point to the exemplar with the highest similarity (its own preference if it is
+    // itself an exemplar).
+    let labels: Vec<usize> = (0..n)
+        .map(|i| {
+            exemplars
+                .iter()
+                .enumerate()
+                .max_by(|&(_, &p), &(_, &q)| s[i][p].total_cmp(&s[i][q]))
+                .map_or(0, |(c, _)| c)
+        })
+        .collect();
+
+    Ok(AffinityPropagationResult {
+        labels,
+        exemplars,
+        n_iter: iters,
+    })
+}
+
 /// Result of [`spectral_coclustering`]: a simultaneous clustering of rows and columns.
 #[derive(Debug, Clone)]
 pub struct CoclusterResult {
@@ -5086,6 +5238,63 @@ mod tests {
 
         assert!(pca(&[], k, 1).is_err());
         assert!(pca(&x, 0, 1).is_err());
+    }
+
+    #[test]
+    fn affinity_propagation_recovers_clusters() {
+        let mut s: u64 = 0x51a4_b3c2_d1e0_f9a8;
+        let mut rng = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+        };
+        // Three well-separated 2-D blobs.
+        let (k, per) = (3usize, 15usize);
+        let n = k * per;
+        let mut pts = Vec::new();
+        let mut truth = Vec::new();
+        for c in 0..k {
+            for _ in 0..per {
+                pts.push([20.0 * c as f64 + rng(), rng()]);
+                truth.push(c);
+            }
+        }
+        // Similarity = negative squared Euclidean distance.
+        let mut sim = vec![vec![0.0; n]; n];
+        let mut offdiag = Vec::new();
+        for i in 0..n {
+            for j in 0..n {
+                if i != j {
+                    let d2 = (pts[i][0] - pts[j][0]).powi(2) + (pts[i][1] - pts[j][1]).powi(2);
+                    sim[i][j] = -d2;
+                    offdiag.push(-d2);
+                }
+            }
+        }
+        offdiag.sort_by(|a, b| a.total_cmp(b));
+        let preference = offdiag[offdiag.len() / 2]; // median similarity
+
+        let ap = affinity_propagation(&sim, preference, 0.9, 500, 15).expect("ap");
+        assert_eq!(ap.labels.len(), n);
+        assert!(!ap.exemplars.is_empty());
+        // Recovered exactly 3 exemplars/clusters and perfect purity.
+        let n_clusters = ap.exemplars.len();
+        assert_eq!(n_clusters, k, "should find 3 exemplars, got {n_clusters}");
+        let mut correct = 0usize;
+        for pred in 0..n_clusters {
+            let mut counts = vec![0usize; k];
+            for (i, &l) in ap.labels.iter().enumerate() {
+                if l == pred {
+                    counts[truth[i]] += 1;
+                }
+            }
+            correct += counts.iter().copied().max().unwrap_or(0);
+        }
+        assert_eq!(correct, n, "affinity propagation should perfectly separate the blobs");
+
+        assert!(affinity_propagation(&[], -1.0, 0.5, 10, 5).is_err());
+        assert!(affinity_propagation(&sim, preference, 0.4, 10, 5).is_err()); // damping < 0.5
+        assert!(affinity_propagation(&sim, preference, 1.0, 10, 5).is_err()); // damping >= 1.0
+        assert!(affinity_propagation(&[vec![0.0, 1.0]], -1.0, 0.5, 10, 5).is_err()); // non-square
     }
 
     #[test]
