@@ -3189,6 +3189,90 @@ pub fn cheb1ap(
     Ok((Vec::new(), poles, k))
 }
 
+/// Analog Chebyshev type II (inverse Chebyshev) lowpass prototype.
+///
+/// Matches `scipy.signal.cheb2ap(N, rs)`. Returns `(zeros, poles, gain)` for the
+/// normalized analog Chebyshev-II lowpass with `N` poles and at least `rs` dB of
+/// stopband attenuation. Zeros lie on the imaginary axis; poles follow a
+/// Butterworth-like circle deformed by the ripple factor. The `m`/`m1` index
+/// ordering reproduces scipy's pole/zero output order exactly.
+pub fn cheb2ap(
+    n: u32,
+    rs: f64,
+) -> Result<(Vec<fsci_fft::Complex64>, Vec<fsci_fft::Complex64>, f64), SignalError> {
+    if n == 0 {
+        return Ok((Vec::new(), Vec::new(), 1.0));
+    }
+    if !rs.is_finite() || rs <= 0.0 {
+        return Err(SignalError::InvalidArgument(
+            "cheb2ap: rs must be positive finite".to_string(),
+        ));
+    }
+    let nf = n as f64;
+    let de = 1.0 / (10.0_f64.powf(0.1 * rs) - 1.0).sqrt();
+    let mu = (1.0 / de).asinh() / nf;
+    let pi = std::f64::consts::PI;
+
+    // Zero index set m (scipy order). Odd N: arange(-N+1,0,2) ++ arange(2,N,2).
+    // Even N: arange(-N+1,N,2).
+    let ni = n as i64;
+    let mut m: Vec<f64> = Vec::new();
+    if n % 2 == 1 {
+        let mut k = -ni + 1;
+        while k < 0 {
+            m.push(k as f64);
+            k += 2;
+        }
+        let mut k = 2i64;
+        while k < ni {
+            m.push(k as f64);
+            k += 2;
+        }
+    } else {
+        let mut k = -ni + 1;
+        while k < ni {
+            m.push(k as f64);
+            k += 2;
+        }
+    }
+    // z = 1j / sin(m·π/(2N)) → purely imaginary (0, 1/sin).
+    let zeros: Vec<fsci_fft::Complex64> = m
+        .iter()
+        .map(|&mv| (0.0, 1.0 / (mv * pi / (2.0 * nf)).sin()))
+        .collect();
+
+    // Poles: m1 = arange(-N+1, N, 2); p = -1 / sinh(mu + i·θ).
+    let sinh_mu = mu.sinh();
+    let cosh_mu = mu.cosh();
+    let mut poles: Vec<fsci_fft::Complex64> = Vec::with_capacity(n as usize);
+    let mut k = -ni + 1;
+    while k < ni {
+        let theta = pi * k as f64 / (2.0 * nf);
+        // sinh(mu + iθ) = sinh(mu)cos θ + i cosh(mu) sin θ
+        let sr = sinh_mu * theta.cos();
+        let si = cosh_mu * theta.sin();
+        // p = -1 / (sr + i·si) = (-sr + i·si) / (sr² + si²)
+        let den = sr * sr + si * si;
+        poles.push((-sr / den, si / den));
+        k += 2;
+    }
+
+    // k = Re( Π(-p) / Π(-z) ).
+    let cmul = |a: fsci_fft::Complex64, b: fsci_fft::Complex64| {
+        (a.0 * b.0 - a.1 * b.1, a.0 * b.1 + a.1 * b.0)
+    };
+    let prod_neg = |v: &[fsci_fft::Complex64]| {
+        v.iter()
+            .fold((1.0_f64, 0.0_f64), |acc, &c| cmul(acc, (-c.0, -c.1)))
+    };
+    let num = prod_neg(&poles);
+    let den = prod_neg(&zeros);
+    let dnorm = den.0 * den.0 + den.1 * den.1;
+    // (num / den).re
+    let gain = (num.0 * den.0 + num.1 * den.1) / dnorm;
+    Ok((zeros, poles, gain))
+}
+
 /// Analog Butterworth lowpass prototype.
 ///
 /// Matches `scipy.signal.buttap(N)`. Returns `(zeros, poles, gain)` for
@@ -13681,6 +13765,29 @@ mod tests {
                 "iir a {g} vs {w}"
             );
         }
+    }
+
+    #[test]
+    fn cheb2ap_matches_scipy() {
+        let close =
+            |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() <= 1e-11 && (a.1 - b.1).abs() <= 1e-11;
+        // N=2, rs=40
+        let (z, p, k) = cheb2ap(2, 40.0).unwrap();
+        assert!((k - 9.99999999999999e-03).abs() <= 1e-14);
+        assert!(close(z[0], (0.0, -1.414213562373)) && close(z[1], (0.0, 1.414213562373)));
+        assert!(close(p[0], (-0.09949874371066, -0.1004987562112)));
+        assert!(close(p[1], (-0.09949874371066, 0.1004987562112)));
+        // N=3, rs=30 (odd: 2 zeros, real middle pole)
+        let (z3, p3, k3) = cheb2ap(3, 30.0).unwrap();
+        assert_eq!(z3.len(), 2);
+        assert_eq!(p3.len(), 3);
+        assert!((k3 - 9.49157995752498e-02).abs() <= 1e-13);
+        assert!(close(p3[0], (-0.2204319884135, -0.4331463279449)));
+        assert!(close(p3[1], (-0.5357797764022, 0.0)));
+        assert!(close(p3[2], (-0.2204319884135, 0.4331463279449)));
+        // N=0 → empty, gain 1
+        let (z0, p0, k0) = cheb2ap(0, 40.0).unwrap();
+        assert!(z0.is_empty() && p0.is_empty() && k0 == 1.0);
     }
 
     #[test]
