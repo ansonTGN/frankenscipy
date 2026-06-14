@@ -112,6 +112,95 @@ pub fn pca(x: &[Vec<f64>], n_components: usize, seed: u64) -> Result<PcaResult, 
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// Spectral Clustering (randomized)
+// ══════════════════════════════════════════════════════════════════════
+
+/// Spectral clustering of a precomputed `n×n` affinity (similarity) matrix into
+/// `n_clusters` groups, via randomized eigendecomposition (Ng–Jordan–Weiss).
+///
+/// Matches `sklearn.cluster.SpectralClustering(affinity="precomputed")`: forms the
+/// symmetric normalized affinity `D^{-1/2}·A·D^{-1/2}` (D the degree diagonal), takes its
+/// top-`n_clusters` eigenvectors via [`fsci_linalg::randomized_eigh`] (the eigenvectors of
+/// the smallest eigenvalues of the normalized Laplacian = the spectral embedding),
+/// row-normalises the embedding, and runs [`kmeans`] on it. The eigendecomposition is the
+/// dominant cost: O(n²·k) randomized versus O(n³) for a full `eigh` — a large win when
+/// `n_clusters ≪ n`. `affinity` should be symmetric with non-negative entries; deterministic
+/// given `seed`.
+pub fn spectral_clustering(
+    affinity: &[Vec<f64>],
+    n_clusters: usize,
+    max_iter: usize,
+    seed: u64,
+) -> Result<Vec<usize>, ClusterError> {
+    if affinity.is_empty() {
+        return Err(ClusterError::EmptyData);
+    }
+    let n = affinity.len();
+    if affinity.iter().any(|row| row.len() != n) {
+        return Err(ClusterError::InvalidArgument(
+            "affinity matrix must be square".to_string(),
+        ));
+    }
+    if n_clusters == 0 || n_clusters > n {
+        return Err(ClusterError::InvalidArgument(format!(
+            "n_clusters={n_clusters} must be in [1, n={n}]"
+        )));
+    }
+    if affinity.iter().flatten().any(|v| !v.is_finite()) {
+        return Err(ClusterError::InvalidArgument(
+            "affinity must be finite".to_string(),
+        ));
+    }
+
+    // Symmetric normalized affinity D^{-1/2} A D^{-1/2}.
+    let inv_sqrt: Vec<f64> = affinity
+        .iter()
+        .map(|row| {
+            let deg: f64 = row.iter().sum();
+            if deg > 0.0 {
+                1.0 / deg.sqrt()
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let normalized: Vec<Vec<f64>> = (0..n)
+        .map(|i| {
+            (0..n)
+                .map(|j| affinity[i][j] * inv_sqrt[i] * inv_sqrt[j])
+                .collect()
+        })
+        .collect();
+
+    let re = fsci_linalg::randomized_eigh(&normalized, n_clusters, 10, 4, seed)
+        .map_err(|e| ClusterError::InvalidArgument(format!("randomized_eigh: {e}")))?;
+    let k = re.eigenvalues.len();
+    if k == 0 {
+        return Err(ClusterError::ConvergenceFailed(
+            "spectral embedding is empty".to_string(),
+        ));
+    }
+
+    // Spectral embedding (n×k), row-normalised to unit length (Ng–Jordan–Weiss).
+    let mut embedding = vec![vec![0.0; k]; n];
+    for (i, row) in embedding.iter_mut().enumerate() {
+        let mut nrm = 0.0;
+        for (t, slot) in row.iter_mut().enumerate() {
+            *slot = re.eigenvectors[i][t];
+            nrm += *slot * *slot;
+        }
+        let nrm = nrm.sqrt();
+        if nrm > 1e-12 {
+            for slot in row.iter_mut() {
+                *slot /= nrm;
+            }
+        }
+    }
+
+    Ok(kmeans(&embedding, n_clusters, max_iter, seed)?.labels)
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // K-Means Clustering
 // ══════════════════════════════════════════════════════════════════════
 
@@ -2753,6 +2842,54 @@ mod tests {
 
         assert!(pca(&[], k, 1).is_err());
         assert!(pca(&x, 0, 1).is_err());
+    }
+
+    #[test]
+    fn spectral_clustering_recovers_separated_blobs() {
+        let mut s: u64 = 0x1a2b_3c4d_5e6f_7081;
+        let mut rng = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+        };
+        let (k, per) = (3usize, 20usize);
+        let n = k * per;
+        let mut pts = Vec::new();
+        let mut truth = Vec::new();
+        for c in 0..k {
+            for _ in 0..per {
+                pts.push(vec![15.0 * c as f64 + rng(), rng()]);
+                truth.push(c);
+            }
+        }
+        let aff: Vec<Vec<f64>> = (0..n)
+            .map(|i| {
+                (0..n)
+                    .map(|j| {
+                        let d2: f64 =
+                            pts[i].iter().zip(&pts[j]).map(|(&a, &b)| (a - b) * (a - b)).sum();
+                        (-0.5 * d2).exp()
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let labels = spectral_clustering(&aff, k, 100, 7).expect("spectral");
+        assert_eq!(labels.len(), n);
+        // Perfectly separated blobs → purity 1.0 (each predicted cluster is one true blob).
+        let mut correct = 0usize;
+        for pred in 0..k {
+            let mut counts = vec![0usize; k];
+            for i in 0..n {
+                if labels[i] == pred {
+                    counts[truth[i]] += 1;
+                }
+            }
+            correct += counts.iter().copied().max().unwrap_or(0);
+        }
+        assert_eq!(correct, n, "should perfectly separate the blobs");
+
+        assert!(spectral_clustering(&[], 2, 10, 1).is_err());
+        assert!(spectral_clustering(&aff, 0, 10, 1).is_err());
     }
 
     #[test]
