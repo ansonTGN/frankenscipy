@@ -1013,6 +1013,117 @@ pub fn nystroem(
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// CUR decomposition (leverage-score row/column sampling)
+// ══════════════════════════════════════════════════════════════════════
+
+/// Result of [`cur_decomposition`]: `A ≈ C·U·R` with `C`/`R` actual columns/rows of `A`.
+#[derive(Debug, Clone)]
+pub struct CurResult {
+    /// Sampled column indices (sorted, length k).
+    pub column_indices: Vec<usize>,
+    /// Sampled row indices (sorted, length k).
+    pub row_indices: Vec<usize>,
+    /// `C` = the selected columns of `A` (m×k).
+    pub c: Vec<Vec<f64>>,
+    /// Linking matrix `U` = `C⁺·A·R⁺` (k×k).
+    pub u: Vec<Vec<f64>>,
+    /// `R` = the selected rows of `A` (k×n).
+    pub r: Vec<Vec<f64>>,
+}
+
+// Indices of the `k` largest values (ties broken by smaller index), then sorted ascending.
+fn top_k_by_score(score: &[f64], k: usize) -> Vec<usize> {
+    let mut idx: Vec<usize> = (0..score.len()).collect();
+    idx.sort_by(|&a, &b| {
+        score[b]
+            .partial_cmp(&score[a])
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.cmp(&b))
+    });
+    idx.truncate(k);
+    idx.sort_unstable();
+    idx
+}
+
+/// CUR decomposition (Mahoney–Drineas) of an `m×n` matrix via randomized leverage scores.
+///
+/// Selects `k` actual columns `C` and rows `R` of `A` by their statistical leverage —
+/// `ℓ_j = Σ_{t<k} V_{tj}²` (columns) and `ℓ_i = Σ_{t<k} U_{it}²` (rows), from the rank-`k`
+/// SVD computed with [`fsci_linalg::randomized_svd`] — then forms the linking matrix
+/// `U = C⁺·A·R⁺` so that `A ≈ C·U·R`. Unlike an SVD this basis is *interpretable* (real
+/// columns/rows), the row/column analogue of [`fsci_linalg::interp_decomp`]. Cost is dominated
+/// by the O(m·n·k) randomized SVD versus O(m·n·min(m,n)) for a full-SVD leverage computation.
+/// Exact to rounding when the numerical rank of `A` is ≤ k. `a` must be rectangular and finite;
+/// deterministic by `seed`.
+pub fn cur_decomposition(
+    a: &[Vec<f64>],
+    n_components: usize,
+    n_oversamples: usize,
+    seed: u64,
+) -> Result<CurResult, ClusterError> {
+    if a.is_empty() || a[0].is_empty() {
+        return Err(ClusterError::EmptyData);
+    }
+    let m = a.len();
+    let n = a[0].len();
+    if a.iter().any(|row| row.len() != n) {
+        return Err(ClusterError::InvalidArgument(
+            "all rows must have the same length".to_string(),
+        ));
+    }
+    if n_components == 0 || n_components > m.min(n) {
+        return Err(ClusterError::InvalidArgument(format!(
+            "n_components={n_components} must be in [1, min(m,n)={}]",
+            m.min(n)
+        )));
+    }
+    if a.iter().flatten().any(|v| !v.is_finite()) {
+        return Err(ClusterError::InvalidArgument("a must be finite".to_string()));
+    }
+
+    let svd = fsci_linalg::randomized_svd(a, n_components, n_oversamples, 4, seed)
+        .map_err(|e| ClusterError::InvalidArgument(format!("randomized_svd: {e}")))?;
+    let kk = svd.s.len();
+
+    // Leverage scores from the top-kk singular vectors.
+    let col_lev: Vec<f64> = (0..n)
+        .map(|j| (0..kk).map(|t| svd.vt[t][j].powi(2)).sum())
+        .collect();
+    let row_lev: Vec<f64> = (0..m)
+        .map(|i| (0..kk).map(|t| svd.u[i][t].powi(2)).sum())
+        .collect();
+    let column_indices = top_k_by_score(&col_lev, n_components);
+    let row_indices = top_k_by_score(&row_lev, n_components);
+
+    // C = A[:, cols] (m×kc); R = A[rows, :] (kr×n).
+    let c: Vec<Vec<f64>> = a
+        .iter()
+        .map(|row| column_indices.iter().map(|&j| row[j]).collect())
+        .collect();
+    let r: Vec<Vec<f64>> = row_indices.iter().map(|&i| a[i].clone()).collect();
+
+    // U = C⁺ · A · R⁺.
+    let pc = fsci_linalg::pinv(&c, fsci_linalg::PinvOptions::default())
+        .map_err(|e| ClusterError::InvalidArgument(format!("pinv(C): {e}")))?
+        .pseudo_inverse; // (kc×m)
+    let pr = fsci_linalg::pinv(&r, fsci_linalg::PinvOptions::default())
+        .map_err(|e| ClusterError::InvalidArgument(format!("pinv(R): {e}")))?
+        .pseudo_inverse; // (n×kr)
+    let pca = fsci_linalg::matmul(&pc, a)
+        .map_err(|e| ClusterError::InvalidArgument(format!("matmul: {e}")))?; // (kc×n)
+    let u = fsci_linalg::matmul(&pca, &pr)
+        .map_err(|e| ClusterError::InvalidArgument(format!("matmul: {e}")))?; // (kc×kr)
+
+    Ok(CurResult {
+        column_indices,
+        row_indices,
+        c,
+        u,
+        r,
+    })
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // K-Means Clustering
 // ══════════════════════════════════════════════════════════════════════
 
@@ -4007,6 +4118,50 @@ mod tests {
         assert!(nystroem(&kernel, 0, 1).is_err());
         assert!(nystroem(&kernel, n + 1, 1).is_err());
         assert!(nystroem(&[vec![1.0, 0.0]], 1, 1).is_err()); // non-square
+    }
+
+    #[test]
+    fn cur_decomposition_reconstructs_lowrank() {
+        let mut s: u64 = 0xc0ff_ee00_1234_5678;
+        let mut rng = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+        };
+        // Rank-r matrix A = B·G (m×r · r×n); k ≥ r ⇒ CUR is exact to rounding.
+        let (m, n, r, k) = (100usize, 60usize, 6usize, 10usize);
+        let bb: Vec<Vec<f64>> = (0..m).map(|_| (0..r).map(|_| rng()).collect()).collect();
+        let gg: Vec<Vec<f64>> = (0..r).map(|_| (0..n).map(|_| rng()).collect()).collect();
+        let a: Vec<Vec<f64>> = bb
+            .iter()
+            .map(|bi| (0..n).map(|j| (0..r).map(|t| bi[t] * gg[t][j]).sum()).collect())
+            .collect();
+
+        let cur = cur_decomposition(&a, k, 10, 7).expect("cur");
+        assert_eq!(cur.column_indices.len(), k);
+        assert_eq!(cur.row_indices.len(), k);
+        assert!(cur.column_indices.windows(2).all(|w| w[0] < w[1]));
+        assert!(cur.row_indices.windows(2).all(|w| w[0] < w[1]));
+        // C/R must be genuine columns/rows of A.
+        for (cc, &jcol) in cur.column_indices.iter().enumerate() {
+            for i in 0..m {
+                assert_eq!(cur.c[i][cc], a[i][jcol]);
+            }
+        }
+
+        // A ≈ C·U·R.
+        let cu = fsci_linalg::matmul(&cur.c, &cur.u).expect("CU");
+        let cur_recon = fsci_linalg::matmul(&cu, &cur.r).expect("CUR");
+        let mut maxerr = 0.0f64;
+        for i in 0..m {
+            for j in 0..n {
+                maxerr = maxerr.max((cur_recon[i][j] - a[i][j]).abs());
+            }
+        }
+        assert!(maxerr < 1e-6, "CUR reconstruction maxerr {maxerr}");
+
+        assert!(cur_decomposition(&[], 2, 5, 1).is_err());
+        assert!(cur_decomposition(&a, 0, 5, 1).is_err());
+        assert!(cur_decomposition(&a, m + 1, 5, 1).is_err());
     }
 
     #[test]
