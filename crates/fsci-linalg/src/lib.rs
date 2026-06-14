@@ -3480,6 +3480,24 @@ pub fn qr_update(
 ///
 /// Returns left singular vectors U, singular values σ, and right singular vectors Vᵀ.
 /// Matches `scipy.linalg.svd(a)`.
+// True when the bidiagonal factor is (numerically) rank-deficient — i.e. some diagonal entry has
+// collapsed to ~0 relative to the largest entry. An upper bidiagonal with all-nonzero diagonal is
+// invertible, so this exactly characterizes singularity. Rank-deficient inputs stall the
+// implicit-shift bidiagonal QR (frankenscipy-9xrce); the caller reroutes them to jacobi_svd.
+fn bidiagonal_is_rank_deficient(reduction: &BidiagonalReduction) -> bool {
+    let scale = reduction
+        .diagonal
+        .iter()
+        .chain(reduction.superdiagonal.iter())
+        .map(|v| v.abs())
+        .fold(0.0_f64, f64::max);
+    if scale == 0.0 {
+        return true; // all-zero matrix
+    }
+    let threshold = scale * BIDIAG_RANK_DEFICIENT_REL_TOL;
+    reduction.diagonal.iter().any(|&d| d.abs() <= threshold)
+}
+
 pub fn svd(a: &[Vec<f64>], options: DecompOptions) -> Result<SvdResult, LinalgError> {
     let (rows, cols) = matrix_shape(a)?;
     hardened_dimension_check(options.mode, rows, cols)?;
@@ -3494,11 +3512,15 @@ pub fn svd(a: &[Vec<f64>], options: DecompOptions) -> Result<SvdResult, LinalgEr
     }
 
     let matrix = dmatrix_from_rows(a)?;
-    if let Some(thin_svd) = public_square_or_tall_thin_svd_candidate(&matrix)
-        && let Some((max_s, _)) = public_bidiag_svd_stats(&thin_svd.singular_values)
+    // Tall/square fast path: do the bidiagonal reduction once, then either reroute a
+    // rank-deficient matrix to the robust Jacobi SVD (avoids the implicit-shift QR stall,
+    // frankenscipy-9xrce) or feed the SAME reduction to the existing deterministic path —
+    // byte-for-byte unchanged for full-rank inputs.
+    if rows >= cols
+        && cols >= PUBLIC_BIDIAG_SVD_MIN_COLS
+        && let Ok(reduction) = golub_kahan_bidiagonal_reduction(&matrix)
     {
-        let threshold = public_bidiag_default_threshold(rows, cols, max_s);
-        if public_bidiag_svd_accepts(&matrix, &thin_svd, threshold) {
+        if bidiagonal_is_rank_deficient(&reduction) {
             emit_trace(LinalgTrace {
                 operation: "svd",
                 matrix_size: (rows, cols),
@@ -3507,12 +3529,28 @@ pub fn svd(a: &[Vec<f64>], options: DecompOptions) -> Result<SvdResult, LinalgEr
                 warning: None,
                 error: None,
             });
+            return jacobi_svd(a, options);
+        }
+        if let Ok(thin_svd) = deterministic_thin_svd_from_reduction(&reduction)
+            && let Some((max_s, _)) = public_bidiag_svd_stats(&thin_svd.singular_values)
+        {
+            let threshold = public_bidiag_default_threshold(rows, cols, max_s);
+            if public_bidiag_svd_accepts(&matrix, &thin_svd, threshold) {
+                emit_trace(LinalgTrace {
+                    operation: "svd",
+                    matrix_size: (rows, cols),
+                    mode: options.mode,
+                    rcond: None,
+                    warning: None,
+                    error: None,
+                });
 
-            return Ok(SvdResult {
-                u: rows_from_dmatrix(&thin_svd.u),
-                s: thin_svd.singular_values,
-                vt: rows_from_dmatrix(&thin_svd.v_t),
-            });
+                return Ok(SvdResult {
+                    u: rows_from_dmatrix(&thin_svd.u),
+                    s: thin_svd.singular_values,
+                    vt: rows_from_dmatrix(&thin_svd.v_t),
+                });
+            }
         }
     }
 
@@ -7700,6 +7738,12 @@ const BIDIAG_TRIDIAGONAL_QR_MAX_ITERS_PER_DIM: usize = 64;
 const PUBLIC_BIDIAG_SVD_MIN_COLS: usize = 64;
 const PUBLIC_BIDIAG_RANK_GAP_REL_TOL: f64 = 64.0 * f64::EPSILON;
 const PUBLIC_BIDIAG_RECON_REL_TOL: f64 = 1e-8;
+// A bidiagonal diagonal entry this small (relative to the largest bidiagonal entry) marks an
+// exactly-rank-deficient matrix: Golub–Kahan reduction of a rank-r matrix collapses the trailing
+// diagonal entries d[r..] to rounding level (~ε·‖A‖). The threshold sits ~5 orders above ε, so it
+// catches exact zeros while sparing genuinely-small-but-nonzero singular values (condition up to
+// ~1e11) — those keep the existing implicit-shift path byte-for-byte. See frankenscipy-9xrce.
+const BIDIAG_RANK_DEFICIENT_REL_TOL: f64 = 1e-11;
 const THIN_BIDIAG_LEFT_REPLAY_MIN_PAR_COLS: usize = 128;
 const THIN_BIDIAG_LEFT_REPLAY_MIN_COLS_PER_WORKER: usize = 32;
 const THIN_BIDIAG_LEFT_REPLAY_MAX_WORKERS: usize = 8;
@@ -17889,6 +17933,42 @@ mod tests {
         );
         println!("speedup={:.6}", rowwise_ms / workspace_ms);
         println!("BIDIAG_RIGHT_WORKSPACE_PERF_END");
+    }
+
+    #[test]
+    fn svd_reroutes_rank_deficient_to_jacobi_and_reconstructs() {
+        // A tall (cols ≥ PUBLIC_BIDIAG_SVD_MIN_COLS) EXACTLY rank-deficient matrix used to stall
+        // the implicit-shift bidiagonal QR for tens of seconds (frankenscipy-9xrce). svd() must
+        // now detect the rank deficiency from the bidiagonal and return the correct SVD quickly.
+        let mut s: u64 = 0x9e37_79b9_1234_abcd;
+        let mut rng = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+        };
+        let (m, n, r) = (150usize, 96usize, 20usize);
+        let b: Vec<Vec<f64>> = (0..m).map(|_| (0..r).map(|_| rng()).collect()).collect();
+        let c: Vec<Vec<f64>> = (0..r).map(|_| (0..n).map(|_| rng()).collect()).collect();
+        let a: Vec<Vec<f64>> = (0..m)
+            .map(|i| (0..n).map(|j| (0..r).map(|t| b[i][t] * c[t][j]).sum()).collect())
+            .collect();
+
+        let res = svd(&a, DecompOptions::default()).expect("svd");
+        assert_eq!(res.s.len(), n);
+        // Exactly r nonzero singular values.
+        let nz = res.s.iter().filter(|&&x| x > 1e-9).count();
+        assert_eq!(nz, r, "expected rank {r}, got {nz} nonzero singular values");
+        // Reconstruction A ≈ U·Σ·Vᵀ.
+        let mut maxerr = 0.0f64;
+        for i in 0..m {
+            for j in 0..n {
+                let v: f64 = (0..n).map(|t| res.u[i][t] * res.s[t] * res.vt[t][j]).sum();
+                maxerr = maxerr.max((v - a[i][j]).abs());
+            }
+        }
+        assert!(maxerr < 1e-10, "rank-deficient svd reconstruction maxerr {maxerr}");
+        for w in res.s.windows(2) {
+            assert!(w[0] >= w[1] - 1e-12, "singular values descending");
+        }
     }
 
     #[test]
