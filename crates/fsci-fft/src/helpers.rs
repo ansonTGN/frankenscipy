@@ -41,6 +41,101 @@ pub fn ifftshift_1d<T: Clone>(input: &[T]) -> Vec<T> {
     rotate_left_owned(input, input.len() / 2)
 }
 
+/// Roll a flat row-major N-D array right by `k_right` along `axis`.
+///
+/// `out[..., i, ...] = input[..., (i - k_right) mod n, ...]`, the building
+/// block for the N-D (i)fftshift. Returns a clone unchanged when the axis is
+/// empty or the (reduced) shift is zero.
+fn roll_axis<T: Clone>(input: &[T], shape: &[usize], axis: usize, k_right: usize) -> Vec<T> {
+    let n = shape[axis];
+    if n == 0 {
+        return input.to_vec();
+    }
+    let k = k_right % n;
+    if k == 0 {
+        return input.to_vec();
+    }
+    let total: usize = input.len();
+    // Stride of `axis` in the row-major layout (product of trailing dims).
+    let stride: usize = shape[axis + 1..].iter().product();
+    let mut out = input.to_vec();
+    for (flat, slot) in out.iter_mut().enumerate() {
+        let coord = (flat / stride) % n;
+        // roll-right source coordinate: (coord - k) mod n
+        let src_coord = (coord + n - k) % n;
+        let src = flat - coord * stride + src_coord * stride;
+        *slot = input[src].clone();
+    }
+    out
+}
+
+fn validate_nd_shape(len: usize, shape: &[usize]) -> Result<(), FftError> {
+    if shape.is_empty() {
+        return Err(FftError::InvalidShape {
+            detail: "shape must have at least one dimension",
+        });
+    }
+    let expected: usize = shape.iter().product();
+    if expected != len {
+        return Err(FftError::InvalidShape {
+            detail: "shape product does not match input length",
+        });
+    }
+    Ok(())
+}
+
+/// Shift the zero-frequency component to the center of the spectrum for an
+/// N-dimensional, row-major array.
+///
+/// Matches `scipy.fft.fftshift(x, axes)`. `shape` gives the array dimensions
+/// (its product must equal `input.len()`); `axes` selects which axes to shift
+/// (all axes when `None`). Each selected axis is rolled right by `n/2`.
+pub fn fftshift<T: Clone>(
+    input: &[T],
+    shape: &[usize],
+    axes: Option<&[usize]>,
+) -> Result<Vec<T>, FftError> {
+    validate_nd_shape(input.len(), shape)?;
+    let mut data = input.to_vec();
+    let all: Vec<usize> = (0..shape.len()).collect();
+    let axes = axes.unwrap_or(&all);
+    for &ax in axes {
+        if ax >= shape.len() {
+            return Err(FftError::InvalidShape {
+                detail: "axis out of bounds",
+            });
+        }
+        data = roll_axis(&data, shape, ax, shape[ax] / 2);
+    }
+    Ok(data)
+}
+
+/// Inverse of [`fftshift`] for an N-dimensional, row-major array.
+///
+/// Matches `scipy.fft.ifftshift(x, axes)`. Each selected axis is rolled right
+/// by `n - n/2` (equivalently, left by `n/2`), undoing [`fftshift`] exactly for
+/// both even and odd lengths.
+pub fn ifftshift<T: Clone>(
+    input: &[T],
+    shape: &[usize],
+    axes: Option<&[usize]>,
+) -> Result<Vec<T>, FftError> {
+    validate_nd_shape(input.len(), shape)?;
+    let mut data = input.to_vec();
+    let all: Vec<usize> = (0..shape.len()).collect();
+    let axes = axes.unwrap_or(&all);
+    for &ax in axes {
+        if ax >= shape.len() {
+            return Err(FftError::InvalidShape {
+                detail: "axis out of bounds",
+            });
+        }
+        let n = shape[ax];
+        data = roll_axis(&data, shape, ax, n - n / 2);
+    }
+    Ok(data)
+}
+
 fn validate_frequency_args(n: usize, sample_spacing: f64) -> Result<(), FftError> {
     if n == 0 {
         return Err(FftError::InvalidShape {
@@ -419,9 +514,49 @@ mod tests {
     use fsci_runtime::RuntimeMode;
 
     use super::{
-        fftconvolve, fftfreq, fftshift_1d, ifftshift_1d, polynomial_multiply_fft, rfftfreq,
+        fftconvolve, fftfreq, fftshift, fftshift_1d, ifftshift, ifftshift_1d,
+        polynomial_multiply_fft, rfftfreq,
     };
     use crate::FftOptions;
+
+    #[test]
+    fn fftshift_nd_matches_numpy() {
+        // 2x3, all axes
+        let a: Vec<i32> = (0..6).collect();
+        assert_eq!(fftshift(&a, &[2, 3], None).unwrap(), vec![5, 3, 4, 2, 0, 1]);
+        assert_eq!(
+            ifftshift(&a, &[2, 3], None).unwrap(),
+            vec![4, 5, 3, 1, 2, 0]
+        );
+        // 2x3, axis 1 only
+        assert_eq!(
+            fftshift(&a, &[2, 3], Some(&[1])).unwrap(),
+            vec![2, 0, 1, 5, 3, 4]
+        );
+        // 3x3 (odd) round-trip + golden
+        let b: Vec<i32> = (0..9).collect();
+        assert_eq!(
+            fftshift(&b, &[3, 3], None).unwrap(),
+            vec![8, 6, 7, 2, 0, 1, 5, 3, 4]
+        );
+        assert_eq!(
+            ifftshift(&fftshift(&b, &[3, 3], None).unwrap(), &[3, 3], None).unwrap(),
+            b
+        );
+        // 2x2x2, axes (0,2)
+        let c: Vec<i32> = (0..8).collect();
+        assert_eq!(
+            fftshift(&c, &[2, 2, 2], Some(&[0, 2])).unwrap(),
+            vec![5, 4, 7, 6, 1, 0, 3, 2]
+        );
+        // N-D with shape [n] reduces to the 1D version
+        let d: Vec<i32> = vec![0, 1, 2, 3, 4];
+        assert_eq!(fftshift(&d, &[5], None).unwrap(), fftshift_1d(&d));
+        assert_eq!(ifftshift(&d, &[5], None).unwrap(), ifftshift_1d(&d));
+        // shape mismatch errors
+        assert!(fftshift(&d, &[2, 3], None).is_err());
+        assert!(fftshift(&d, &[5], Some(&[1])).is_err());
+    }
 
     #[test]
     fn fftfreq_even_length_matches_expected_ordering() {
