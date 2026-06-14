@@ -280,6 +280,233 @@ pub fn kernel_pca(
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// Non-negative Matrix Factorization
+// ══════════════════════════════════════════════════════════════════════
+
+/// Initialization strategy for [`nmf`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NmfInit {
+    /// Non-negative Double SVD (Boutsidis–Gallopoulos), seeded by a randomized SVD — a high
+    /// quality start that converges in far fewer iterations than random.
+    Nndsvd,
+    /// Small random non-negative entries (the classic baseline; many more iterations).
+    Random,
+}
+
+/// Result of [`nmf`]: `X ≈ W·H` with `W, H ≥ 0`.
+#[derive(Debug, Clone)]
+pub struct NmfResult {
+    /// Basis / coefficient matrix `W` (n×k), non-negative.
+    pub w: Vec<Vec<f64>>,
+    /// Components matrix `H` (k×d), non-negative.
+    pub h: Vec<Vec<f64>>,
+    /// Multiplicative-update iterations performed.
+    pub n_iter: usize,
+    /// Final relative reconstruction error `‖X − W·H‖_F / ‖X‖_F`.
+    pub reconstruction_err: f64,
+}
+
+fn transpose_rows(a: &[Vec<f64>]) -> Vec<Vec<f64>> {
+    let cols = a.first().map_or(0, Vec::len);
+    (0..cols).map(|j| a.iter().map(|row| row[j]).collect()).collect()
+}
+
+fn nndsvd_init(
+    x: &[Vec<f64>],
+    k: usize,
+    seed: u64,
+) -> Result<(Vec<Vec<f64>>, Vec<Vec<f64>>), ClusterError> {
+    let n = x.len();
+    let d = x[0].len();
+    let svd = fsci_linalg::randomized_svd(x, k, 10, 5, seed)
+        .map_err(|e| ClusterError::InvalidArgument(format!("randomized_svd: {e}")))?;
+    let kk = svd.s.len();
+    let mut w = vec![vec![0.0; k]; n];
+    let mut h = vec![vec![0.0; d]; k];
+    let norm = |v: &[f64]| -> f64 { v.iter().map(|&x| x * x).sum::<f64>().sqrt() };
+
+    for j in 0..kk {
+        let u_j: Vec<f64> = svd.u.iter().map(|row| row[j]).collect();
+        let v_j: &Vec<f64> = &svd.vt[j];
+        let s_j = svd.s[j].max(0.0);
+        if j == 0 {
+            // Leading singular vectors of a non-negative matrix are non-negative
+            // (Perron–Frobenius); take their magnitudes.
+            let sc = s_j.sqrt();
+            for (i, wr) in w.iter_mut().enumerate() {
+                wr[0] = sc * u_j[i].abs();
+            }
+            for (jj, &v) in v_j.iter().enumerate() {
+                h[0][jj] = sc * v.abs();
+            }
+            continue;
+        }
+        let up: Vec<f64> = u_j.iter().map(|&x| x.max(0.0)).collect();
+        let un: Vec<f64> = u_j.iter().map(|&x| (-x).max(0.0)).collect();
+        let vp: Vec<f64> = v_j.iter().map(|&x| x.max(0.0)).collect();
+        let vn: Vec<f64> = v_j.iter().map(|&x| (-x).max(0.0)).collect();
+        let (nup, nun, nvp, nvn) = (norm(&up), norm(&un), norm(&vp), norm(&vn));
+        let (uu, vv, nu, nv, m) = if nup * nvp >= nun * nvn {
+            (up, vp, nup, nvp, nup * nvp)
+        } else {
+            (un, vn, nun, nvn, nun * nvn)
+        };
+        let sc = (s_j * m).sqrt();
+        if nu > 1e-12 {
+            for (i, wr) in w.iter_mut().enumerate() {
+                wr[j] = sc * uu[i] / nu;
+            }
+        }
+        if nv > 1e-12 {
+            for (jj, &v) in vv.iter().enumerate() {
+                h[j][jj] = sc * v / nv;
+            }
+        }
+    }
+
+    // NNDSVDa: replace exact zeros with a small constant so multiplicative updates can move
+    // them off zero.
+    let avg = x.iter().flatten().sum::<f64>() / (n * d) as f64;
+    let fill = (avg * 0.01).max(1e-9);
+    for row in w.iter_mut() {
+        for v in row.iter_mut() {
+            if *v < 1e-12 {
+                *v = fill;
+            }
+        }
+    }
+    for row in h.iter_mut() {
+        for v in row.iter_mut() {
+            if *v < 1e-12 {
+                *v = fill;
+            }
+        }
+    }
+    Ok((w, h))
+}
+
+/// Non-negative Matrix Factorization `X ≈ W·H` (W, H ≥ 0) by multiplicative updates
+/// (Lee–Seung, Frobenius objective).
+///
+/// Matches `sklearn.decomposition.NMF(n_components=k, solver="mu")`. The key lever is the
+/// initialization: [`NmfInit::Nndsvd`] seeds W, H from a randomized SVD of X
+/// ([`fsci_linalg::randomized_svd`]), a far better starting point than random — it reaches a
+/// given reconstruction error in dramatically fewer iterations. `x` must be non-negative.
+/// Deterministic given `seed`.
+pub fn nmf(
+    x: &[Vec<f64>],
+    n_components: usize,
+    max_iter: usize,
+    tol: f64,
+    init: NmfInit,
+    seed: u64,
+) -> Result<NmfResult, ClusterError> {
+    if x.is_empty() {
+        return Err(ClusterError::EmptyData);
+    }
+    let n = x.len();
+    let d = x[0].len();
+    if d == 0 {
+        return Err(ClusterError::EmptyData);
+    }
+    if x.iter().any(|row| row.len() != d) {
+        return Err(ClusterError::InvalidArgument(
+            "all rows must have the same length".to_string(),
+        ));
+    }
+    if x.iter().flatten().any(|&v| !v.is_finite() || v < 0.0) {
+        return Err(ClusterError::InvalidArgument(
+            "nmf input must be finite and non-negative".to_string(),
+        ));
+    }
+    let k = n_components.min(n).min(d);
+    if k == 0 {
+        return Err(ClusterError::InvalidArgument(
+            "n_components must be at least 1".to_string(),
+        ));
+    }
+
+    let (mut w, mut h) = match init {
+        NmfInit::Nndsvd => nndsvd_init(x, k, seed)?,
+        NmfInit::Random => {
+            let mut state = seed ^ 0x9e37_79b9_7f4a_7c15;
+            let mut next = || {
+                state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+                let mut z = state;
+                z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+                z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+                ((z ^ (z >> 31)) >> 11) as f64 / (1u64 << 53) as f64 + 1e-4
+            };
+            let w = (0..n).map(|_| (0..k).map(|_| next()).collect()).collect();
+            let h = (0..k).map(|_| (0..d).map(|_| next()).collect()).collect();
+            (w, h)
+        }
+    };
+
+    let eps = 1e-10;
+    let mm = |a: &[Vec<f64>], b: &[Vec<f64>]| -> Result<Vec<Vec<f64>>, ClusterError> {
+        fsci_linalg::matmul(a, b).map_err(|e| ClusterError::InvalidArgument(format!("matmul: {e}")))
+    };
+    let x_norm: f64 = x.iter().flatten().map(|&v| v * v).sum::<f64>().sqrt().max(1e-30);
+    let rel_err = |w: &[Vec<f64>], h: &[Vec<f64>]| -> Result<f64, ClusterError> {
+        let wh = mm(w, h)?;
+        let mut s = 0.0;
+        for (xr, wr) in x.iter().zip(&wh) {
+            for (&xv, &wv) in xr.iter().zip(wr) {
+                s += (xv - wv) * (xv - wv);
+            }
+        }
+        Ok(s.sqrt() / x_norm)
+    };
+
+    let mut prev = f64::INFINITY;
+    let mut n_iter = 0;
+    for it in 0..max_iter {
+        n_iter = it + 1;
+        // H ← H ⊙ (Wᵀ X) ⊘ (Wᵀ W H)
+        let wt = transpose_rows(&w);
+        let wtx = mm(&wt, x)?;
+        let wtw = mm(&wt, &w)?;
+        let wtwh = mm(&wtw, &h)?;
+        for (i, hr) in h.iter_mut().enumerate() {
+            for (j, hv) in hr.iter_mut().enumerate() {
+                *hv *= wtx[i][j] / (wtwh[i][j] + eps);
+            }
+        }
+        // W ← W ⊙ (X Hᵀ) ⊘ (W H Hᵀ)
+        let ht = transpose_rows(&h);
+        let xht = mm(x, &ht)?;
+        let hht = mm(&h, &ht)?;
+        let whht = mm(&w, &hht)?;
+        for (i, wr) in w.iter_mut().enumerate() {
+            for (j, wv) in wr.iter_mut().enumerate() {
+                *wv *= xht[i][j] / (whht[i][j] + eps);
+            }
+        }
+        if it % 10 == 9 || it == max_iter - 1 {
+            let err = rel_err(&w, &h)?;
+            if (prev - err).abs() < tol {
+                let reconstruction_err = err;
+                return Ok(NmfResult {
+                    w,
+                    h,
+                    n_iter,
+                    reconstruction_err,
+                });
+            }
+            prev = err;
+        }
+    }
+    let reconstruction_err = rel_err(&w, &h)?;
+    Ok(NmfResult {
+        w,
+        h,
+        n_iter,
+        reconstruction_err,
+    })
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // K-Means Clustering
 // ══════════════════════════════════════════════════════════════════════
 
@@ -3008,6 +3235,39 @@ mod tests {
 
         assert!(kernel_pca(&[], 2, 1).is_err());
         assert!(kernel_pca(&kernel, 0, 1).is_err());
+    }
+
+    #[test]
+    fn nmf_factorizes_nonnegative_low_rank() {
+        let mut s: u64 = 0x6f2c_1a8b_4d3e_5790;
+        let mut rng = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (s >> 11) as f64 / (1u64 << 53) as f64 + 0.1
+        };
+        let (n, d, r, k) = (60usize, 25usize, 5usize, 6usize); // k ≥ r
+        let wt: Vec<Vec<f64>> = (0..n).map(|_| (0..r).map(|_| rng()).collect()).collect();
+        let ht: Vec<Vec<f64>> = (0..r).map(|_| (0..d).map(|_| rng()).collect()).collect();
+        let x: Vec<Vec<f64>> = wt
+            .iter()
+            .map(|wr| (0..d).map(|j| (0..r).map(|t| wr[t] * ht[t][j]).sum()).collect())
+            .collect();
+
+        let res = nmf(&x, k, 400, 1e-7, NmfInit::Nndsvd, 3).expect("nmf");
+        assert_eq!(res.w.len(), n);
+        assert_eq!(res.w[0].len(), k);
+        assert_eq!(res.h.len(), k);
+        assert_eq!(res.h[0].len(), d);
+        // W, H are non-negative.
+        assert!(res.w.iter().chain(&res.h).flatten().all(|&v| v >= 0.0));
+        // X ≈ W·H to a small relative error (non-negative, k ≥ rank).
+        assert!(
+            res.reconstruction_err < 0.1,
+            "reconstruction_err {} too high",
+            res.reconstruction_err
+        );
+
+        assert!(nmf(&[], k, 10, 1e-6, NmfInit::Random, 1).is_err());
+        assert!(nmf(&[vec![-1.0, 1.0]], 1, 10, 1e-6, NmfInit::Random, 1).is_err());
     }
 
     #[test]
