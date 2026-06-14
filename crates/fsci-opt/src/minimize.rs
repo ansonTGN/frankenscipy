@@ -5,8 +5,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::linesearch::{WolfeParams, line_search_wolfe2, line_search_wolfe2_with_gradient_probe};
 use crate::types::{
-    Bound, ConvergenceStatus, MinimizeOptions, OptError, OptimizeMethod, OptimizeResult,
-    OptimizeTraceEntry,
+    Bound, ConvergenceStatus, GradientFunc, MinimizeOptions, OptError, OptimizeMethod,
+    OptimizeResult, OptimizeTraceEntry,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -379,7 +379,13 @@ where
         Err(err) => return Ok(result_from_error(x0, 0, 0, 0, err)),
     };
     let mut njev = 0usize;
-    let mut grad = match finite_diff_gradient(&mut objective, &x, options.gradient_eps) {
+    let exact_gradient = options.gradient;
+    let mut grad = match evaluate_minimize_gradient(
+        &mut objective,
+        exact_gradient,
+        &x,
+        options.gradient_eps,
+    ) {
         Ok(value) => {
             njev += 1;
             value
@@ -450,25 +456,42 @@ where
         let wolfe_search = {
             let eps = options.gradient_eps;
             let counter = std::cell::Cell::new(0usize);
+            let mut wolfe_gradient_evals = 0usize;
+            let mut gradient_error: Option<OptError> = None;
             let f_closure = |xv: &[f64]| {
                 counter.set(counter.get() + 1);
                 (fun)(xv)
             };
             let mut g_closure = |xv: &mut [f64], gradient: &mut Vec<f64>| {
-                if gradient.len() != xv.len() {
-                    gradient.resize(xv.len(), 0.0);
-                }
-                for i in 0..xv.len() {
-                    let step = eps * (1.0 + xv[i].abs());
-                    let orig = xv[i];
-                    xv[i] = orig + step;
-                    counter.set(counter.get() + 1);
-                    let fp = (fun)(xv);
-                    xv[i] = orig - step;
-                    counter.set(counter.get() + 1);
-                    let fm = (fun)(xv);
-                    xv[i] = orig;
-                    gradient[i] = (fp - fm) / (2.0 * step);
+                if let Some(gradient_fn) = exact_gradient {
+                    match validate_gradient_output(gradient_fn(xv), xv.len()) {
+                        Ok(value) => {
+                            *gradient = value;
+                            wolfe_gradient_evals += 1;
+                        }
+                        Err(err) => {
+                            gradient_error = Some(err);
+                            gradient.clear();
+                            gradient.resize(xv.len(), f64::NAN);
+                            return f64::NAN;
+                        }
+                    }
+                } else {
+                    if gradient.len() != xv.len() {
+                        gradient.resize(xv.len(), 0.0);
+                    }
+                    for i in 0..xv.len() {
+                        let step = eps * (1.0 + xv[i].abs());
+                        let orig = xv[i];
+                        xv[i] = orig + step;
+                        counter.set(counter.get() + 1);
+                        let fp = (fun)(xv);
+                        xv[i] = orig - step;
+                        counter.set(counter.get() + 1);
+                        let fm = (fun)(xv);
+                        xv[i] = orig;
+                        gradient[i] = (fp - fm) / (2.0 * step);
+                    }
                 }
                 dot(gradient, &direction)
             };
@@ -481,8 +504,12 @@ where
                 &grad,
                 WolfeParams::default(),
             );
+            if let Some(err) = gradient_error {
+                return Ok(result_from_error(&x, nit, objective.nfev, njev, err));
+            }
             if let Ok(ls) = res {
                 objective.nfev += counter.get();
+                njev += wolfe_gradient_evals;
                 Some(LineSearchStep {
                     x: add_scaled(&x, &direction, ls.result.alpha),
                     f: ls.result.f_at_alpha,
@@ -526,13 +553,20 @@ where
 
         let next_grad = match search.accepted_gradient {
             Some(accepted_gradient) => {
-                if let Err(err) = objective.reserve_evaluations(n * 2) {
-                    return Ok(result_from_error(&search.x, nit, objective.nfev, njev, err));
+                if exact_gradient.is_none() {
+                    if let Err(err) = objective.reserve_evaluations(n * 2) {
+                        return Ok(result_from_error(&search.x, nit, objective.nfev, njev, err));
+                    }
+                    njev += 1;
                 }
-                njev += 1;
                 accepted_gradient
             }
-            None => match finite_diff_gradient(&mut objective, &search.x, options.gradient_eps) {
+            None => match evaluate_minimize_gradient(
+                &mut objective,
+                exact_gradient,
+                &search.x,
+                options.gradient_eps,
+            ) {
                 Ok(value) => {
                     njev += 1;
                     value
@@ -2246,6 +2280,39 @@ where
     Ok(gradient)
 }
 
+fn evaluate_minimize_gradient<F>(
+    objective: &mut Objective<'_, F>,
+    gradient: Option<GradientFunc>,
+    x: &[f64],
+    gradient_eps: f64,
+) -> Result<Vec<f64>, OptError>
+where
+    F: Fn(&[f64]) -> f64,
+{
+    if let Some(gradient_fn) = gradient {
+        validate_gradient_output(gradient_fn(x), x.len())
+    } else {
+        finite_diff_gradient(objective, x, gradient_eps)
+    }
+}
+
+fn validate_gradient_output(gradient: Vec<f64>, expected_len: usize) -> Result<Vec<f64>, OptError> {
+    if gradient.len() != expected_len {
+        return Err(OptError::InvalidArgument {
+            detail: format!(
+                "gradient callback returned length {}, expected {expected_len}",
+                gradient.len()
+            ),
+        });
+    }
+    if gradient.iter().any(|value| !value.is_finite()) {
+        return Err(OptError::NonFiniteInput {
+            detail: String::from("gradient callback returned NaN or Inf"),
+        });
+    }
+    Ok(gradient)
+}
+
 fn armijo_backtracking<F>(
     objective: &mut Objective<'_, F>,
     x: &[f64],
@@ -3737,6 +3804,15 @@ mod tests {
         (1.0 - x0).powi(2) + 100.0 * (x1 - x0 * x0).powi(2)
     }
 
+    fn rosenbrock_gradient(x: &[f64]) -> Vec<f64> {
+        let x0 = x[0];
+        let x1 = x[1];
+        vec![
+            -2.0 * (1.0 - x0) - 400.0 * x0 * (x1 - x0 * x0),
+            200.0 * (x1 - x0 * x0),
+        ]
+    }
+
     fn himmelblau(x: &[f64]) -> f64 {
         let x0 = x[0];
         let x1 = x[1];
@@ -4380,6 +4456,59 @@ mod tests {
             &result,
             114,
         );
+    }
+
+    #[test]
+    fn cg_rosenbrock_exact_gradient_uses_callback_jacobian() {
+        let mut options = MinimizeOptions {
+            method: Some(OptimizeMethod::ConjugateGradient),
+            tol: Some(1.0e-7),
+            maxiter: Some(600),
+            maxfev: Some(80_000),
+            mode: RuntimeMode::Strict,
+            ..MinimizeOptions::default()
+        };
+        options.gradient = Some(rosenbrock_gradient);
+
+        let initial = rosenbrock(&[-1.2, 1.0]);
+        let exact = cg_pr_plus(&rosenbrock, &[-1.2, 1.0], options).expect("cg exact");
+        let expected_jac = rosenbrock_gradient(&exact.x);
+
+        assert!(exact.fun.expect("objective") < initial);
+        assert_eq!(exact.jac.as_ref().expect("jac"), &expected_jac);
+        assert!(exact.njev > 0);
+        push_test_log(
+            "cg-rosenbrock-exact-gradient",
+            "cg_pr_plus",
+            "rosenbrock",
+            2,
+            RuntimeMode::Strict,
+            &exact,
+            118,
+        );
+    }
+
+    #[test]
+    fn cg_exact_gradient_rejects_bad_callback_shape() {
+        fn bad_gradient(_: &[f64]) -> Vec<f64> {
+            vec![0.0]
+        }
+
+        let result = cg_pr_plus(
+            &sphere,
+            &[4.0, -1.5],
+            MinimizeOptions {
+                method: Some(OptimizeMethod::ConjugateGradient),
+                gradient: Some(bad_gradient),
+                mode: RuntimeMode::Strict,
+                ..MinimizeOptions::default()
+            },
+        )
+        .expect("cg returns invalid-input result");
+
+        assert!(!result.success);
+        assert_eq!(result.status, ConvergenceStatus::InvalidInput);
+        assert!(result.message.contains("gradient callback returned length"));
     }
 
     #[test]

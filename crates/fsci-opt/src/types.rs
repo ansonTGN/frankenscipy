@@ -4,6 +4,7 @@ use fsci_runtime::RuntimeMode;
 use serde::{Deserialize, Serialize};
 
 pub type MinimizeCallback = fn(&[f64]) -> bool;
+pub type GradientFunc = fn(&[f64]) -> Vec<f64>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OptimizeMethod {
@@ -113,6 +114,7 @@ pub struct MinimizeOptions {
     pub maxfev: Option<usize>,
     pub gradient_eps: f64,
     pub callback: Option<MinimizeCallback>,
+    pub gradient: Option<GradientFunc>,
     pub hessp: Option<HesspFunc>,
     pub bounds: Option<&'static [Bound]>,
     pub has_general_constraints: bool,
@@ -131,6 +133,7 @@ impl Default for MinimizeOptions {
             maxfev: None,
             gradient_eps: 1.0e-8,
             callback: None,
+            gradient: None,
             hessp: None,
             bounds: None,
             has_general_constraints: false,

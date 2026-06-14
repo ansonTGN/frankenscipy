@@ -20,6 +20,16 @@ fn rosenbrock(x: &[f64]) -> f64 {
     s
 }
 
+fn rosenbrock_gradient(x: &[f64]) -> Vec<f64> {
+    let mut grad = vec![0.0; x.len()];
+    for i in 0..x.len() - 1 {
+        let residual = x[i + 1] - x[i] * x[i];
+        grad[i] += -400.0 * x[i] * residual - 2.0 * (1.0 - x[i]);
+        grad[i + 1] += 200.0 * residual;
+    }
+    grad
+}
+
 fn quadratic(x: &[f64]) -> f64 {
     x.iter().map(|xi| xi * xi).sum()
 }
@@ -86,6 +96,17 @@ fn bench_cg(c: &mut Criterion) {
             |b, x0| {
                 b.iter(|| {
                     let _ = cg_pr_plus(&rosenbrock, x0, opts(OptimizeMethod::ConjugateGradient));
+                });
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("rosenbrock_exact_gradient", dim),
+            &(x0.clone()),
+            |b, x0| {
+                b.iter(|| {
+                    let mut options = opts(OptimizeMethod::ConjugateGradient);
+                    options.gradient = Some(rosenbrock_gradient);
+                    let _ = cg_pr_plus(&rosenbrock, x0, options);
                 });
             },
         );

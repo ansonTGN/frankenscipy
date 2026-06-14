@@ -24,8 +24,8 @@ pub use root::{
     root, root_scalar, secant, toms748,
 };
 pub use types::{
-    Bound, Bounds, ConvergenceStatus, LinearConstraint, MinimizeOptions, NonlinearConstraint,
-    OptError, OptimizeMethod, OptimizeResult, RootMethod, RootOptions,
+    Bound, Bounds, ConvergenceStatus, GradientFunc, LinearConstraint, MinimizeOptions,
+    NonlinearConstraint, OptError, OptimizeMethod, OptimizeResult, RootMethod, RootOptions,
 };
 
 /// Exit status for adaptive numerical differentiation.
