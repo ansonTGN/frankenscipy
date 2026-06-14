@@ -1787,6 +1787,82 @@ pub fn nystroem_spectral_embedding(
     })
 }
 
+/// Diffusion-map embedding (Coifman–Lafon) directly from `n×d` data, Nyström-accelerated.
+///
+/// Like [`nystroem_spectral_embedding`] it takes the leading eigenpairs `(μ_j, ψ_j)` of the
+/// normalized affinity, but it drops the trivial stationary eigenvector and scales each
+/// remaining coordinate by `μ_j^t` (`t = time_steps`): `Ψ_t(x_i) = (μ_1^t ψ_1[i], …, μ_k^t
+/// ψ_k[i])`. The Euclidean distance in this embedding approximates the *diffusion distance* at
+/// time `t` — a multi-scale, noise-robust manifold geometry distinct from the raw spectral
+/// embedding. Larger `t` emphasises coarse structure (slow-decaying modes). Cost is the same
+/// O(n·m² + m³ + n·m·k) as the Nyström spectral routines; the `n×n` affinity is never formed.
+/// `gamma` is the RBF width, `time_steps ≥ 0` the diffusion time; deterministic by `seed`.
+pub fn diffusion_map(
+    data: &[Vec<f64>],
+    n_components: usize,
+    n_landmarks: usize,
+    gamma: f64,
+    time_steps: f64,
+    seed: u64,
+) -> Result<SpectralEmbeddingResult, ClusterError> {
+    if data.is_empty() || data[0].is_empty() {
+        return Err(ClusterError::EmptyData);
+    }
+    let n = data.len();
+    let dim = data[0].len();
+    if data.iter().any(|row| row.len() != dim) {
+        return Err(ClusterError::InvalidArgument(
+            "all rows must have the same length".to_string(),
+        ));
+    }
+    // One extra component is computed and discarded (the trivial stationary eigenvector).
+    let want = n_components + 1;
+    if n_components == 0 || want > n_landmarks || n_landmarks > n {
+        return Err(ClusterError::InvalidArgument(format!(
+            "need 1 ≤ n_components+1={want} ≤ n_landmarks={n_landmarks} ≤ n={n}"
+        )));
+    }
+    if !(gamma.is_finite() && gamma > 0.0) {
+        return Err(ClusterError::InvalidArgument(
+            "gamma must be finite and positive".to_string(),
+        ));
+    }
+    if !(time_steps.is_finite() && time_steps >= 0.0) {
+        return Err(ClusterError::InvalidArgument(
+            "time_steps must be finite and non-negative".to_string(),
+        ));
+    }
+    if data.iter().flatten().any(|v| !v.is_finite()) {
+        return Err(ClusterError::InvalidArgument(
+            "data must be finite".to_string(),
+        ));
+    }
+
+    let (v, eigenvalues) = nystroem_spectral_embed(data, want, n_landmarks, gamma, seed)?;
+    let kk = eigenvalues.len();
+    if kk < 2 {
+        return Err(ClusterError::ConvergenceFailed(
+            "diffusion map needs at least 2 captured eigenpairs".to_string(),
+        ));
+    }
+    // Drop the leading (trivial) eigenvector; scale coordinate j by μ_j^t.
+    let kept = kk - 1;
+    let scaled_eigenvalues: Vec<f64> = (1..kk).map(|j| eigenvalues[j]).collect();
+    let scales: Vec<f64> = scaled_eigenvalues
+        .iter()
+        .map(|&mu| mu.max(0.0).powf(time_steps))
+        .collect();
+    let embedding: Vec<Vec<f64>> = v
+        .iter()
+        .map(|row| (0..kept).map(|j| row[j + 1] * scales[j]).collect())
+        .collect();
+
+    Ok(SpectralEmbeddingResult {
+        embedding,
+        eigenvalues: scaled_eigenvalues,
+    })
+}
+
 /// Nyström-accelerated normalized spectral clustering directly from `n×d` data — without ever
 /// materializing the `n×n` affinity.
 ///
@@ -4622,6 +4698,58 @@ mod tests {
         assert!(nystroem_spectral_embedding(&[], 2, 2, 0.5, 1).is_err());
         assert!(nystroem_spectral_embedding(&pts, 5, 3, 0.5, 1).is_err()); // k > landmarks
         assert!(nystroem_spectral_embedding(&pts, 2, 5, 0.0, 1).is_err()); // gamma <= 0
+    }
+
+    #[test]
+    fn diffusion_map_separates_blobs_and_scales_with_time() {
+        let mut s: u64 = 0xd1ff_5107_b10b_2024;
+        let mut rng = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+        };
+        let (k, per) = (3usize, 50usize);
+        let n = k * per;
+        let mut pts = Vec::new();
+        let mut truth = Vec::new();
+        for c in 0..k {
+            for _ in 0..per {
+                pts.push(vec![15.0 * c as f64 + rng(), rng()]);
+                truth.push(c);
+            }
+        }
+
+        let dm = diffusion_map(&pts, k, 24, 0.5, 1.0, 7).expect("diffusion_map");
+        assert_eq!(dm.embedding.len(), n);
+        assert_eq!(dm.embedding[0].len(), k);
+        assert_eq!(dm.eigenvalues.len(), k);
+        for w in dm.eigenvalues.windows(2) {
+            assert!(w[0] >= w[1] - 1e-9, "eigenvalues descending");
+        }
+        // The diffusion coordinates separate the blobs (k-means → purity 1.0).
+        let labels = kmeans(&dm.embedding, k, 100, 7).expect("kmeans").labels;
+        let mut correct = 0usize;
+        for pred in 0..k {
+            let mut counts = vec![0usize; k];
+            for i in 0..n {
+                if labels[i] == pred {
+                    counts[truth[i]] += 1;
+                }
+            }
+            correct += counts.iter().copied().max().unwrap_or(0);
+        }
+        assert_eq!(correct, n, "diffusion map should separate the blobs");
+
+        // Larger diffusion time shrinks coordinates by μ^t (μ ≤ 1) — column 0's scale ratio is μ_1.
+        let dm2 = diffusion_map(&pts, k, 24, 0.5, 2.0, 7).expect("diffusion_map t=2");
+        let norm1: f64 = dm.embedding.iter().map(|r| r[0] * r[0]).sum::<f64>().sqrt();
+        let norm2: f64 = dm2.embedding.iter().map(|r| r[0] * r[0]).sum::<f64>().sqrt();
+        assert!(norm2 <= norm1 + 1e-9, "t=2 coords must not exceed t=1 (μ ≤ 1)");
+
+        assert!(diffusion_map(&[], 2, 3, 0.5, 1.0, 1).is_err());
+        assert!(diffusion_map(&pts, 0, 3, 0.5, 1.0, 1).is_err());
+        assert!(diffusion_map(&pts, 3, 3, 0.5, 1.0, 1).is_err()); // k+1 > landmarks
+        assert!(diffusion_map(&pts, 2, 5, 0.0, 1.0, 1).is_err()); // gamma <= 0
+        assert!(diffusion_map(&pts, 2, 5, 0.5, -1.0, 1).is_err()); // negative time
     }
 
     #[test]
