@@ -489,11 +489,10 @@ fn transpose_rows(a: &[Vec<f64>]) -> Vec<Vec<f64>> {
     (0..cols).map(|j| a.iter().map(|row| row[j]).collect()).collect()
 }
 
-fn nndsvd_init(
-    x: &[Vec<f64>],
-    k: usize,
-    seed: u64,
-) -> Result<(Vec<Vec<f64>>, Vec<Vec<f64>>), ClusterError> {
+/// A pair of dense matrices `(W, H)` returned by an NMF initializer.
+type WhPair = (Vec<Vec<f64>>, Vec<Vec<f64>>);
+
+fn nndsvd_init(x: &[Vec<f64>], k: usize, seed: u64) -> Result<WhPair, ClusterError> {
     let n = x.len();
     let d = x[0].len();
     let svd = fsci_linalg::randomized_svd(x, k, 10, 5, seed)
@@ -901,6 +900,115 @@ pub fn factor_analysis(
         mean,
         loglike,
         n_iter: iters,
+    })
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Nyström kernel approximation (column sampling)
+// ══════════════════════════════════════════════════════════════════════
+
+/// Result of [`nystroem`].
+#[derive(Debug, Clone)]
+pub struct NystroemResult {
+    /// Explicit feature map `Z` (n×m'), with `Z·Zᵀ ≈ K`. `m'` is the effective rank kept
+    /// (≤ n_components, smaller if the landmark block is rank-deficient).
+    pub feature_map: Vec<Vec<f64>>,
+    /// The sampled landmark row/column indices (sorted, length n_components).
+    pub landmark_indices: Vec<usize>,
+}
+
+/// Nyström low-rank approximation of a precomputed `n×n` symmetric PSD kernel.
+///
+/// Matches the idea of `sklearn.kernel_approximation.Nystroem(kernel="precomputed")`: samples
+/// `n_components` landmark columns, forms `C = K[:, landmarks]` (n×m) and `W = K[landmarks,
+/// landmarks]` (m×m), and returns the explicit feature map `Z = C·W^{-1/2}` so that `Z·Zᵀ =
+/// C·W⁻¹·Cᵀ ≈ K` — exact when the numerical rank of `K` is ≤ m and the landmarks span its
+/// range. Only the small `m×m` block is eigendecomposed ([`fsci_linalg::eigh`]); cost
+/// O(n·m² + m³) versus O(n³) for a full eigendecomposition of `K`, a large win when m ≪ n.
+/// Landmarks are chosen by a deterministic `seed`-seeded permutation. `kernel` must be square
+/// and finite.
+pub fn nystroem(
+    kernel: &[Vec<f64>],
+    n_components: usize,
+    seed: u64,
+) -> Result<NystroemResult, ClusterError> {
+    if kernel.is_empty() {
+        return Err(ClusterError::EmptyData);
+    }
+    let n = kernel.len();
+    if kernel.iter().any(|row| row.len() != n) {
+        return Err(ClusterError::InvalidArgument(
+            "kernel matrix must be square".to_string(),
+        ));
+    }
+    if n_components == 0 || n_components > n {
+        return Err(ClusterError::InvalidArgument(format!(
+            "n_components={n_components} must be in [1, n={n}]"
+        )));
+    }
+    if kernel.iter().flatten().any(|v| !v.is_finite()) {
+        return Err(ClusterError::InvalidArgument(
+            "kernel must be finite".to_string(),
+        ));
+    }
+
+    // Deterministic landmark sample: Fisher–Yates partial shuffle, then sort for stability.
+    let mut perm: Vec<usize> = (0..n).collect();
+    let mut state = seed ^ 0x9e37_79b9_7f4a_7c15;
+    let mut next = || {
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        state >> 11
+    };
+    for i in 0..n_components {
+        let j = i + (next() as usize) % (n - i);
+        perm.swap(i, j);
+    }
+    let mut landmarks: Vec<usize> = perm[..n_components].to_vec();
+    landmarks.sort_unstable();
+    let m = landmarks.len();
+
+    // C = K[:, landmarks] (n×m); W = K[landmarks, landmarks] (m×m).
+    let c: Vec<Vec<f64>> = kernel
+        .iter()
+        .map(|row| landmarks.iter().map(|&l| row[l]).collect())
+        .collect();
+    let w: Vec<Vec<f64>> = landmarks
+        .iter()
+        .map(|&li| landmarks.iter().map(|&lj| kernel[li][lj]).collect())
+        .collect();
+
+    // W^{-1/2} = V·diag(λ^{-1/2})·Vᵀ over eigenpairs with λ > tol (PSD block).
+    let e = fsci_linalg::eigh(&w, fsci_linalg::DecompOptions::default())
+        .map_err(|err| ClusterError::InvalidArgument(format!("eigh: {err}")))?;
+    let lmax = e.eigenvalues.iter().cloned().fold(0.0f64, f64::max);
+    let tol = (m as f64) * f64::EPSILON * lmax.max(1.0);
+    // inv_sqrt_w (m×m): Σ_t λ_t^{-1/2} v_t v_tᵀ for λ_t > tol.
+    let mut inv_sqrt_w = vec![vec![0.0f64; m]; m];
+    for (t, &lam) in e.eigenvalues.iter().enumerate() {
+        if lam <= tol {
+            continue;
+        }
+        let s = 1.0 / lam.sqrt();
+        for (a, row) in inv_sqrt_w.iter_mut().enumerate() {
+            let va = e.eigenvectors[a][t];
+            if va == 0.0 {
+                continue;
+            }
+            for (b, slot) in row.iter_mut().enumerate() {
+                *slot += s * va * e.eigenvectors[b][t];
+            }
+        }
+    }
+
+    // Z = C · W^{-1/2} (n×m).
+    let feature_map = fsci_linalg::matmul(&c, &inv_sqrt_w)
+        .map_err(|err| ClusterError::InvalidArgument(format!("matmul: {err}")))?;
+
+    Ok(NystroemResult {
+        feature_map,
+        landmark_indices: landmarks,
     })
 }
 
@@ -3859,6 +3967,46 @@ mod tests {
         assert!(factor_analysis(&[], 2, 10, 1e-3, 1).is_err());
         assert!(factor_analysis(&x, 0, 10, 1e-3, 1).is_err());
         assert!(factor_analysis(&x, d + 1, 10, 1e-3, 1).is_err());
+    }
+
+    #[test]
+    fn nystroem_reconstructs_lowrank_kernel() {
+        let mut s: u64 = 0xfeed_face_dead_beef;
+        let mut rng = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
+        };
+        // PSD kernel K = B Bᵀ of rank r; sample m > r landmarks ⇒ exact Nyström reconstruction.
+        let (n, r, m) = (90usize, 5usize, 14usize);
+        let b: Vec<Vec<f64>> = (0..n).map(|_| (0..r).map(|_| rng()).collect()).collect();
+        let kernel: Vec<Vec<f64>> = (0..n)
+            .map(|i| {
+                (0..n)
+                    .map(|j| (0..r).map(|t| b[i][t] * b[j][t]).sum())
+                    .collect()
+            })
+            .collect();
+
+        let ny = nystroem(&kernel, m, 7).expect("nystroem");
+        assert_eq!(ny.landmark_indices.len(), m);
+        assert!(ny.landmark_indices.windows(2).all(|w| w[0] < w[1])); // sorted, distinct
+        assert_eq!(ny.feature_map.len(), n);
+        let mp = ny.feature_map[0].len();
+
+        // K ≈ Z·Zᵀ.
+        let mut maxerr = 0.0f64;
+        for i in 0..n {
+            for j in 0..n {
+                let zz: f64 = (0..mp).map(|t| ny.feature_map[i][t] * ny.feature_map[j][t]).sum();
+                maxerr = maxerr.max((zz - kernel[i][j]).abs());
+            }
+        }
+        assert!(maxerr < 1e-8, "Nyström reconstruction maxerr {maxerr}");
+
+        assert!(nystroem(&[], 2, 1).is_err());
+        assert!(nystroem(&kernel, 0, 1).is_err());
+        assert!(nystroem(&kernel, n + 1, 1).is_err());
+        assert!(nystroem(&[vec![1.0, 0.0]], 1, 1).is_err()); // non-square
     }
 
     #[test]
