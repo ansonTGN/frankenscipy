@@ -10285,6 +10285,114 @@ pub fn qspline1d(signal: &[f64], lamb: f64) -> Result<Vec<f64>, SignalError> {
     Ok(spline1d_coeff(signal, -3.0 + 2.0 * 2.0_f64.sqrt(), 8.0))
 }
 
+/// Centered cardinal cubic B-spline kernel `B3(x)` (support `|x| < 2`).
+fn cubic_bspline_kernel(x: f64) -> f64 {
+    let a = x.abs();
+    if a < 1.0 {
+        2.0 / 3.0 - a * a + a * a * a / 2.0
+    } else if a < 2.0 {
+        let t = 2.0 - a;
+        t * t * t / 6.0
+    } else {
+        0.0
+    }
+}
+
+/// Centered cardinal quadratic B-spline kernel `B2(x)` (support `|x| < 1.5`).
+fn quadratic_bspline_kernel(x: f64) -> f64 {
+    let a = x.abs();
+    if a < 0.5 {
+        0.75 - a * a
+    } else if a < 1.5 {
+        let t = 1.5 - a;
+        t * t / 2.0
+    } else {
+        0.0
+    }
+}
+
+/// Fold a (sample-spaced) coordinate into `[0, n-1]` with mirror-symmetric
+/// boundary handling (reflection about 0 and about `n-1`, period `2(n-1)`),
+/// matching the recursion in scipy's `*spline1d_eval`.
+fn mirror_fold(x: f64, n: usize) -> f64 {
+    if n <= 1 {
+        return 0.0;
+    }
+    let edge = n as f64 - 1.0;
+    let period = 2.0 * edge;
+    let t = x.rem_euclid(period);
+    if t > edge { period - t } else { t }
+}
+
+/// Evaluate a cubic spline (given its coefficients `cj`) at new points,
+/// matching `scipy.signal.cspline1d_eval(cj, newx, dx, x0)`.
+///
+/// The old knot points were `x0 + j·dx` for `j = 0..len(cj)-1`; edges use
+/// mirror-symmetric boundary conditions. Each output is the sum of the four
+/// neighbouring coefficients weighted by the centered cubic B-spline kernel.
+pub fn cspline1d_eval(
+    cj: &[f64],
+    newx: &[f64],
+    dx: f64,
+    x0: f64,
+) -> Result<Vec<f64>, SignalError> {
+    if cj.is_empty() {
+        return Err(SignalError::InvalidArgument(
+            "spline coefficients must not be empty".to_string(),
+        ));
+    }
+    let n = cj.len();
+    let out = newx
+        .iter()
+        .map(|&xv| {
+            let x = mirror_fold((xv - x0) / dx, n);
+            let jlower = (x - 2.0).floor() as i64 + 1;
+            let mut r = 0.0;
+            for i in 0..4 {
+                let thisj = jlower + i;
+                let idx = thisj.clamp(0, n as i64 - 1) as usize;
+                r += cj[idx] * cubic_bspline_kernel(x - thisj as f64);
+            }
+            r
+        })
+        .collect();
+    Ok(out)
+}
+
+/// Evaluate a quadratic spline (given its coefficients `cj`) at new points,
+/// matching `scipy.signal.qspline1d_eval(cj, newx, dx, x0)`.
+///
+/// As [`cspline1d_eval`] but with the three neighbouring coefficients weighted
+/// by the centered quadratic B-spline kernel.
+pub fn qspline1d_eval(
+    cj: &[f64],
+    newx: &[f64],
+    dx: f64,
+    x0: f64,
+) -> Result<Vec<f64>, SignalError> {
+    if cj.is_empty() {
+        return Err(SignalError::InvalidArgument(
+            "spline coefficients must not be empty".to_string(),
+        ));
+    }
+    let n = cj.len();
+    let out = newx
+        .iter()
+        .map(|&xv| {
+            let x = mirror_fold((xv - x0) / dx, n);
+            let jlower = (x - 1.5).floor() as i64 + 1;
+            let mut r = 0.0;
+            for i in 0..3 {
+                let thisj = jlower + i;
+                let idx = thisj.clamp(0, n as i64 - 1) as usize;
+                r += cj[idx] * quadratic_bspline_kernel(x - thisj as f64);
+            }
+            r
+        })
+        .collect();
+    Ok(out)
+}
+
 /// Apply a median filter to a 1-D signal.
 ///
 /// Matches `scipy.signal.medfilt(volume, kernel_size)`.
@@ -22442,6 +22550,26 @@ mod tests {
         }
         assert_eq!(left_bases, expected_left, "left_bases mismatch");
         assert_eq!(right_bases, expected_right, "right_bases mismatch");
+    }
+
+    #[test]
+    fn cspline1d_qspline1d_eval_match_scipy() {
+        let s = [1.0, 2.0, 5.0, 3.0, 8.0, 4.0, 2.0, 6.0, 1.0, 7.0];
+        let cj = cspline1d(&s, 0.0).unwrap();
+        let qj = qspline1d(&s, 0.0).unwrap();
+        // includes out-of-range points (mirror reflection) and an exact knot.
+        let nx = [-1.3, 0.0, 2.7, 4.5, 9.0, 10.5];
+        let ce = cspline1d_eval(&cj, &nx, 1.0, 0.0).unwrap();
+        let cexp = [3.143115502, 1.000004982, 3.111312777, 6.9312201046, 7.0, 3.3680427052];
+        for (g, e) in ce.iter().zip(&cexp) {
+            assert!((g - e).abs() < 1e-7, "cubic eval {g} vs {e}");
+        }
+        let qe = qspline1d_eval(&qj, &nx, 1.0, 0.0).unwrap();
+        let qexp = [2.9780378835, 1.000000032, 3.0553399474, 6.7111017662, 7.0, 3.3630423045];
+        for (g, e) in qe.iter().zip(&qexp) {
+            assert!((g - e).abs() < 1e-7, "quad eval {g} vs {e}");
+        }
+        assert!(cspline1d_eval(&[], &nx, 1.0, 0.0).is_err());
     }
 
     #[test]
