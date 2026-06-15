@@ -2630,6 +2630,66 @@ where
     minimize_scalar_bounded(func, (x1, x2), 1e-5, 500).0
 }
 
+/// Run [`minimize`] with a fixed method and return the minimiser `xopt`, the
+/// first output of the legacy `scipy.optimize.fmin_*` family.
+fn fmin_with_method<F>(fun: F, x0: &[f64], method: OptimizeMethod) -> Result<Vec<f64>, OptError>
+where
+    F: Fn(&[f64]) -> f64,
+{
+    let options = MinimizeOptions {
+        method: Some(method),
+        ..MinimizeOptions::default()
+    };
+    minimize(fun, x0, options).map(|result| result.x)
+}
+
+/// Minimize a function using the downhill simplex (Nelder–Mead) algorithm.
+///
+/// Matches `scipy.optimize.fmin(func, x0)`: a legacy wrapper that runs
+/// Nelder–Mead and returns the minimiser `xopt` (scipy's first output). Use
+/// [`minimize`] with [`OptimizeMethod::NelderMead`] for the full result.
+pub fn fmin<F>(func: F, x0: &[f64]) -> Result<Vec<f64>, OptError>
+where
+    F: Fn(&[f64]) -> f64,
+{
+    fmin_with_method(func, x0, OptimizeMethod::NelderMead)
+}
+
+/// Minimize a function using the modified Powell direction-set method.
+///
+/// Matches `scipy.optimize.fmin_powell(func, x0)`: returns the minimiser
+/// `xopt`. Use [`minimize`] with [`OptimizeMethod::Powell`] for the full result.
+pub fn fmin_powell<F>(func: F, x0: &[f64]) -> Result<Vec<f64>, OptError>
+where
+    F: Fn(&[f64]) -> f64,
+{
+    fmin_with_method(func, x0, OptimizeMethod::Powell)
+}
+
+/// Minimize a function using the nonlinear conjugate-gradient (Polak–Ribière)
+/// method with a finite-difference gradient.
+///
+/// Matches `scipy.optimize.fmin_cg(f, x0)`: returns the minimiser `xopt`. Use
+/// [`minimize`] with [`OptimizeMethod::ConjugateGradient`] for the full result.
+pub fn fmin_cg<F>(func: F, x0: &[f64]) -> Result<Vec<f64>, OptError>
+where
+    F: Fn(&[f64]) -> f64,
+{
+    fmin_with_method(func, x0, OptimizeMethod::ConjugateGradient)
+}
+
+/// Minimize a function using the BFGS quasi-Newton method with a
+/// finite-difference gradient.
+///
+/// Matches `scipy.optimize.fmin_bfgs(f, x0)`: returns the minimiser `xopt`. Use
+/// [`minimize`] with [`OptimizeMethod::Bfgs`] for the full result.
+pub fn fmin_bfgs<F>(func: F, x0: &[f64]) -> Result<Vec<f64>, OptError>
+where
+    F: Fn(&[f64]) -> f64,
+{
+    fmin_with_method(func, x0, OptimizeMethod::Bfgs)
+}
+
 /// Fixed-point iteration: find x such that f(x) = x.
 ///
 /// Matches `scipy.optimize.fixed_point`.
@@ -4176,6 +4236,24 @@ mod tests {
         linprog, milp, minimize_scalar_bounded, nnls, projected_gradient_descent, pso, rosen,
         rosen_der, rosen_hess, rosen_hess_prod, shgo,
     };
+
+    #[test]
+    fn fmin_legacy_wrappers_reach_quadratic_minimum() {
+        use crate::{fmin, fmin_bfgs, fmin_cg, fmin_powell};
+        // Quadratic bowl with minimiser at (1, -2); scipy's fmin/fmin_powell/
+        // fmin_cg/fmin_bfgs all return this point from x0 = (0, 0).
+        let f = |x: &[f64]| (x[0] - 1.0).powi(2) + (x[1] + 2.0).powi(2);
+        let x0 = [0.0, 0.0];
+        for xopt in [
+            fmin(f, &x0).expect("fmin"),
+            fmin_powell(f, &x0).expect("fmin_powell"),
+            fmin_cg(f, &x0).expect("fmin_cg"),
+            fmin_bfgs(f, &x0).expect("fmin_bfgs"),
+        ] {
+            assert!((xopt[0] - 1.0).abs() < 1e-3, "x0 = {}", xopt[0]);
+            assert!((xopt[1] + 2.0).abs() < 1e-3, "x1 = {}", xopt[1]);
+        }
+    }
 
     #[test]
     fn defaults_match_packet_contract_intent() {
