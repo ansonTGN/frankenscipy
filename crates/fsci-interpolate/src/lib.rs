@@ -3985,6 +3985,22 @@ pub fn splrep(
     ))
 }
 
+/// Fit a B-spline to 1-D data, matching `scipy.interpolate.make_splrep(x, y, k=k, s=0)`
+/// (the interpolation case), returning a [`BSpline`].
+///
+/// For `s = 0` this is exactly the interpolating spline ([`make_interp_spline`]);
+/// scipy's `make_splrep(s=0)` produces identical knots and coefficients. A
+/// positive `s` (FITPACK smoothing with adaptive knot insertion) returns an
+/// error.
+pub fn make_splrep(x: &[f64], y: &[f64], k: usize, s: f64) -> Result<BSpline, InterpError> {
+    if s != 0.0 {
+        return Err(InterpError::InvalidArgument {
+            detail: "make_splrep currently supports only s = 0 (interpolation)".to_string(),
+        });
+    }
+    make_interp_spline(x, y, k)
+}
+
 /// Fit a parametric interpolating B-spline through N-D points, matching
 /// `scipy.interpolate.splprep(points, k=k, s=0)` (the interpolation case).
 ///
@@ -6083,6 +6099,23 @@ fn smooth_bivariate_solve_coefficients(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn make_splrep_interpolation_matches_scipy() {
+        // make_splrep(x,y,s=0) == make_interp_spline; scipy gives these coeffs.
+        let x = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
+        let y = [0.0, 1.0, 0.5, 2.0, 1.5, 3.0];
+        let b = make_splrep(&x, &y, 3, 0.0).unwrap();
+        let t_exp = [0.0, 0.0, 0.0, 0.0, 2.0, 3.0, 5.0, 5.0, 5.0, 5.0];
+        for (g, e) in b.knots().iter().zip(&t_exp) {
+            assert!((g - e).abs() < 1e-12, "t {g} vs {e}");
+        }
+        let c_exp = [0.0, 2.507407, -1.264815, 3.781481, -0.140741, 3.0];
+        for (g, e) in b.coeffs().iter().zip(&c_exp) {
+            assert!((g - e).abs() < 1e-5, "c {g} vs {e}");
+        }
+        assert!(make_splrep(&x, &y, 3, 1.0).is_err());
+    }
 
     #[test]
     fn splprep_interpolation_matches_scipy() {
