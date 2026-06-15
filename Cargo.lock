@@ -850,6 +850,7 @@ dependencies = [
 name = "fsci-cluster"
 version = "0.1.0"
 dependencies = [
+ "fsci-linalg",
  "fsci-runtime",
  "proptest",
 ]

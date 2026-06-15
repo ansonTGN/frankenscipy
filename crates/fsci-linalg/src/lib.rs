@@ -7809,6 +7809,9 @@ const BIDIAG_JACOBI_MAX_SWEEPS: usize = 128;
 const BIDIAG_SYMMETRIC_EIGEN_MIN_DIM: usize = 32;
 const BIDIAG_TRIDIAGONAL_QR_MIN_DIM: usize = 128;
 const BIDIAG_TRIDIAGONAL_QR_MAX_ITERS_PER_DIM: usize = 64;
+const TRIDIAGONAL_INVERSE_ITERATIONS: usize = 4;
+const TRIDIAGONAL_INVERSE_MIN_PIVOT: f64 = 64.0 * f64::EPSILON;
+const TRIDIAGONAL_INVERSE_RESIDUAL_TOL: f64 = 1e-7;
 const PUBLIC_BIDIAG_SVD_MIN_COLS: usize = 64;
 const PUBLIC_BIDIAG_RANK_GAP_REL_TOL: f64 = 64.0 * f64::EPSILON;
 const PUBLIC_BIDIAG_RECON_REL_TOL: f64 = 1e-8;
@@ -9187,6 +9190,200 @@ fn symmetric_tridiagonal_qr_eigen(
     })
 }
 
+fn normalize_tridiagonal_inverse_vector(values: &mut [f64]) -> bool {
+    let norm_sq = values.iter().map(|value| value * value).sum::<f64>();
+    if !norm_sq.is_finite() || norm_sq <= 0.0 {
+        return false;
+    }
+    let inv_norm = norm_sq.sqrt().recip();
+    for value in values.iter_mut() {
+        *value *= inv_norm;
+    }
+    canonicalize_slice_sign(values);
+    true
+}
+
+struct ShiftedTridiagonalWorkspace<'a> {
+    solution: &'a mut [f64],
+    upper_factors: &'a mut [f64],
+    reduced_rhs: &'a mut [f64],
+}
+
+fn solve_shifted_tridiagonal_system(
+    diagonal: &[f64],
+    offdiagonal: &[f64],
+    shifted_lambda: f64,
+    min_pivot: f64,
+    rhs: &[f64],
+    work: ShiftedTridiagonalWorkspace<'_>,
+) -> bool {
+    let n = diagonal.len();
+    if n == 0 {
+        return true;
+    }
+
+    let stabilize_pivot = |pivot: f64| {
+        if pivot.abs() >= min_pivot {
+            pivot
+        } else if pivot.is_sign_negative() {
+            -min_pivot
+        } else {
+            min_pivot
+        }
+    };
+
+    let mut pivot = stabilize_pivot(diagonal[0] - shifted_lambda);
+    if !pivot.is_finite() {
+        return false;
+    }
+    work.upper_factors[0] = if n > 1 { offdiagonal[0] / pivot } else { 0.0 };
+    work.reduced_rhs[0] = rhs[0] / pivot;
+
+    for row in 1..n {
+        pivot = stabilize_pivot(
+            diagonal[row] - shifted_lambda - offdiagonal[row - 1] * work.upper_factors[row - 1],
+        );
+        if !pivot.is_finite() {
+            return false;
+        }
+        work.upper_factors[row] = if row + 1 < n {
+            offdiagonal[row] / pivot
+        } else {
+            0.0
+        };
+        work.reduced_rhs[row] =
+            (rhs[row] - offdiagonal[row - 1] * work.reduced_rhs[row - 1]) / pivot;
+    }
+
+    work.solution[n - 1] = work.reduced_rhs[n - 1];
+    for row in (0..n - 1).rev() {
+        work.solution[row] =
+            work.reduced_rhs[row] - work.upper_factors[row] * work.solution[row + 1];
+    }
+
+    work.solution.iter().all(|value| value.is_finite())
+}
+
+fn tridiagonal_eigenvector_residual_max(
+    diagonal: &[f64],
+    offdiagonal: &[f64],
+    eigenvalues: &[f64],
+    eigenvectors: &DMatrix<f64>,
+) -> f64 {
+    let n = diagonal.len();
+    let mut max_residual = 0.0_f64;
+    for col in 0..n {
+        let lambda = eigenvalues[col];
+        for row in 0..n {
+            let mut residual = (diagonal[row] - lambda) * eigenvectors[(row, col)];
+            if row > 0 {
+                residual += offdiagonal[row - 1] * eigenvectors[(row - 1, col)];
+            }
+            if row + 1 < n {
+                residual += offdiagonal[row] * eigenvectors[(row + 1, col)];
+            }
+            max_residual = max_residual.max(residual.abs());
+        }
+    }
+    max_residual
+}
+
+fn tridiagonal_inverse_iteration_eigenvectors(
+    diagonal: &[f64],
+    offdiagonal: &[f64],
+    eigenvalues: &[f64],
+) -> Option<DMatrix<f64>> {
+    let n = diagonal.len();
+    if eigenvalues.len() != n || offdiagonal.len() != n.saturating_sub(1) {
+        return None;
+    }
+    if n == 0 {
+        return Some(DMatrix::<f64>::zeros(0, 0));
+    }
+    if n == 1 {
+        return Some(DMatrix::<f64>::identity(1, 1));
+    }
+
+    let scale = diagonal
+        .iter()
+        .chain(offdiagonal.iter())
+        .copied()
+        .map(f64::abs)
+        .fold(0.0_f64, f64::max)
+        .max(1.0);
+    let min_pivot = TRIDIAGONAL_INVERSE_MIN_PIVOT * scale;
+    let shift_unit = 32.0 * f64::EPSILON * scale;
+    let mut eigenvectors = DMatrix::<f64>::zeros(n, n);
+    let mut rhs = vec![0.0_f64; n];
+    let mut solution = vec![0.0_f64; n];
+    let mut upper_factors = vec![0.0_f64; n];
+    let mut reduced_rhs = vec![0.0_f64; n];
+
+    for (col, &lambda) in eigenvalues.iter().enumerate() {
+        for (row, value) in rhs.iter_mut().enumerate() {
+            let pattern = ((row + 1) * (col + 3) + 5) % 17;
+            *value = 0.5 + pattern as f64 / 19.0;
+        }
+        if !normalize_tridiagonal_inverse_vector(&mut rhs) {
+            return None;
+        }
+
+        let signed_shift = if col % 2 == 0 {
+            shift_unit
+        } else {
+            -shift_unit
+        };
+        let shifted_lambda = lambda + signed_shift * (1 + col % 13) as f64;
+        for _ in 0..TRIDIAGONAL_INVERSE_ITERATIONS {
+            if !solve_shifted_tridiagonal_system(
+                diagonal,
+                offdiagonal,
+                shifted_lambda,
+                min_pivot,
+                &rhs,
+                ShiftedTridiagonalWorkspace {
+                    solution: &mut solution,
+                    upper_factors: &mut upper_factors,
+                    reduced_rhs: &mut reduced_rhs,
+                },
+            ) {
+                return None;
+            }
+            std::mem::swap(&mut rhs, &mut solution);
+            if !normalize_tridiagonal_inverse_vector(&mut rhs) {
+                return None;
+            }
+        }
+
+        for row in 0..n {
+            eigenvectors[(row, col)] = rhs[row];
+        }
+    }
+
+    let residual =
+        tridiagonal_eigenvector_residual_max(diagonal, offdiagonal, eigenvalues, &eigenvectors);
+    if residual <= TRIDIAGONAL_INVERSE_RESIDUAL_TOL * scale {
+        Some(eigenvectors)
+    } else {
+        None
+    }
+}
+
+fn symmetric_tridiagonal_inverse_iteration_eigen(
+    diagonal: &[f64],
+    offdiagonal: &[f64],
+) -> Option<SymmetricJacobiEigen> {
+    let (eigenvalues, _) =
+        eigh_tridiagonal(diagonal, offdiagonal, true, DecompOptions::default()).ok()?;
+    let eigenvectors =
+        tridiagonal_inverse_iteration_eigenvectors(diagonal, offdiagonal, &eigenvalues)?;
+    Some(SymmetricJacobiEigen {
+        eigenvalues,
+        eigenvectors,
+        sweeps: TRIDIAGONAL_INVERSE_ITERATIONS,
+    })
+}
+
 // Native safe-Rust symmetric eigensolver (the NO-GAPS replacement for nalgebra's scalar
 // symmetric_eigen, bead frankenscipy-psn7x): Householder tridiagonalization A = Q·T·Qᵀ (only the
 // active trailing submatrix is touched each step), the existing implicit-shift tridiagonal QR for
@@ -9233,7 +9430,8 @@ fn symmetric_eigh_native(matrix: &DMatrix<f64>) -> Option<(Vec<f64>, DMatrix<f64
 
     let diag: Vec<f64> = (0..n).map(|i| m[(i, i)]).collect();
     let offdiag: Vec<f64> = (0..n - 1).map(|i| m[(i + 1, i)]).collect();
-    let eig = symmetric_tridiagonal_qr_eigen(&diag, &offdiag)?;
+    let eig = symmetric_tridiagonal_inverse_iteration_eigen(&diag, &offdiag)
+        .or_else(|| symmetric_tridiagonal_qr_eigen(&diag, &offdiag))?;
 
     // Back-transform: eigvecs(A) = Q·eigvecs(T), Q = P₀P₁…P_{n-3}; apply the reflectors to the
     // eigenvector matrix from the left in reverse order.
@@ -20645,6 +20843,43 @@ mod tests {
     }
 
     // ── Eigenvalue decomposition tests ──────────────────────────────
+
+    #[test]
+    fn tridiagonal_inverse_iteration_eigenvectors_are_residual_clean() {
+        let n = 48usize;
+        let diagonal: Vec<f64> = (0..n)
+            .map(|idx| 1.0 + idx as f64 / n as f64 + ((idx * 7 + 3) % 11) as f64 * 0.01)
+            .collect();
+        let offdiagonal: Vec<f64> = (0..n - 1)
+            .map(|idx| 0.05 + ((idx * 5 + 1) % 13) as f64 * 0.003)
+            .collect();
+        let eigen = symmetric_tridiagonal_inverse_iteration_eigen(&diagonal, &offdiagonal)
+            .expect("inverse-iteration tridiagonal eigenvectors");
+
+        for pair in eigen.eigenvalues.windows(2) {
+            assert!(pair[0] <= pair[1], "eigenvalues must be ascending");
+        }
+
+        let residual = tridiagonal_eigenvector_residual_max(
+            &diagonal,
+            &offdiagonal,
+            &eigen.eigenvalues,
+            &eigen.eigenvectors,
+        );
+        assert!(residual < 1e-7, "tridiagonal residual {residual:.17e}");
+
+        let gram = eigen.eigenvectors.transpose() * &eigen.eigenvectors;
+        for row in 0..n {
+            for col in 0..n {
+                let expected = if row == col { 1.0 } else { 0.0 };
+                assert!(
+                    (gram[(row, col)] - expected).abs() < 1e-6,
+                    "orthogonality error at ({row}, {col}) = {:.17e}",
+                    gram[(row, col)] - expected
+                );
+            }
+        }
+    }
 
     #[test]
     fn symmetric_eigh_native_matches_nalgebra_and_timing() {

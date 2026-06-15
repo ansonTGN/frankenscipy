@@ -1,0 +1,256 @@
+  [2m2026-06-15T05:07:53.384151Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSelected worker: ovh-a at ubuntu@51.222.245.56 (0 slots remaining after reservation, speed 50.0)[0m
+    [2;3mat[0m rch/src/hook.rs:514 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:53.660077Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mStarting remote compilation pipeline for frankenscipy-psn7x-rubywaterfall-push-20260615-0450 (hash: 552aa09b6205348a)[0m
+    [2;3mat[0m rch/src/hook.rs:5994 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:53.660134Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mPrepared dependency sync manifest for 20 roots[0m
+    [2;3mat[0m rch/src/hook.rs:6016 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:54.711536Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSyncing project to worker ovh-a...[0m
+    [2;3mat[0m rch/src/hook.rs:6046 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:54.711619Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450 -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450 on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:55.420399Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 708ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:55.420516Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-arrayapi -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-arrayapi on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:55.942451Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 521ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:55.942556Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-cluster -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-cluster on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:56.469816Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 527ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:56.469974Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-conformance -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-conformance on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:57.035347Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 565ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:57.035449Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-constants -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-constants on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:57.631469Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 596ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:57.631580Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-datasets -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-datasets on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:58.113868Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 482ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:58.114000Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-fft -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-fft on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:58.604288Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 490ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:58.604383Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-integrate -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-integrate on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:59.071176Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 466ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:59.071279Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-interpolate -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-interpolate on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:59.550699Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 479ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:07:59.550818Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-io -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-io on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:00.152330Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 601ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:00.152413Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-linalg -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-linalg on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:00.623276Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 470ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:00.623390Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-ndimage -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-ndimage on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:01.090977Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 467ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:01.091091Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-odr -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-odr on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:01.547755Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 456ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:01.547867Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-opt -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-opt on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:02.004790Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 456ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:02.004908Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-runtime -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-runtime on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:02.462890Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 457ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:02.462997Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-signal -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-signal on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:02.934342Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 471ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:02.934441Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-sparse -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-sparse on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:03.411461Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 477ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:03.411578Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-spatial -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-spatial on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:03.928318Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 516ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:03.928429Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-special -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-special on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:04.390085Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 461ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:04.390184Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-stats -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-stats on ovh-a[0m
+    [2;3mat[0m rch/src/transfer.rs:1434 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:04.889175Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 498ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1503 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:04.889211Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSync complete: 4162 files, 142094 bytes in 10164ms[0m
+    [2;3mat[0m rch/src/hook.rs:6209 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:15.857226Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mExecuting command remotely: cargo clippy -j 1 -p fsci-linalg --lib --locked -- -D warnings[0m
+    [2;3mat[0m rch/src/hook.rs:6252 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-15T05:08:15.857278Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mRewriting CARGO_TARGET_DIR for remote execution (worker-scoped path): /data/tmp/cargo-target -> /data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/.rch-target-ovh-a-job-29884606035532509-1781500074711528823-0[0m
+    [2;3mat[0m rch/src/transfer.rs:712 [2;3mon[0m ThreadId(1)
+
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded approx v0.5.1
+  Downloaded arrayref v0.3.9
+  Downloaded autocfg v1.5.0
+  Downloaded arrayvec v0.7.6
+  Downloaded cc v1.2.60
+  Downloaded bytemuck v1.25.0
+  Downloaded equivalent v1.0.2
+  Downloaded cfg-if v1.0.4
+  Downloaded cpufeatures v0.3.0
+  Downloaded constant_time_eq v0.4.2
+  Downloaded find-msvc-tools v0.1.9
+  Downloaded blake3 v1.8.4
+  Downloaded num-integer v0.1.46
+  Downloaded serde_core v1.0.228
+  Downloaded num-rational v0.4.2
+  Downloaded simba v0.9.1
+  Downloaded serde v1.0.228
+  Downloaded glam v0.16.0
+  Downloaded itoa v1.0.18
+  Downloaded wide v0.7.33
+  Downloaded typenum v1.20.0
+  Downloaded glam v0.17.3
+  Downloaded glam v0.14.0
+  Downloaded num-complex v0.4.6
+  Downloaded rawpointer v0.2.1
+  Downloaded glam v0.15.2
+  Downloaded glam v0.19.0
+  Downloaded paste v1.0.15
+  Downloaded glam v0.18.0
+  Downloaded quote v1.0.45
+  Downloaded nalgebra-macros v0.3.0
+  Downloaded serde_derive v1.0.228
+  Downloaded hashbrown v0.17.0
+  Downloaded glam v0.20.5
+  Downloaded shlex v1.3.0
+  Downloaded matrixmultiply v0.3.10
+  Downloaded num-traits v0.2.19
+  Downloaded unicode-ident v1.0.24
+  Downloaded zmij v1.0.21
+  Downloaded memchr v2.8.0
+  Downloaded proc-macro2 v1.0.106
+  Downloaded indexmap v2.14.0
+  Downloaded safe_arch v0.7.4
+  Downloaded num-bigint v0.4.6
+  Downloaded glam v0.22.0
+  Downloaded glam v0.21.3
+  Downloaded serde_json v1.0.149
+  Downloaded glam v0.23.0
+  Downloaded glam v0.24.2
+  Downloaded syn v2.0.117
+  Downloaded glam v0.25.0
+  Downloaded glam v0.28.0
+  Downloaded glam v0.27.0
+  Downloaded nalgebra v0.34.2
+  Downloaded glam v0.29.3
+  Downloaded glam v0.30.10
+  Downloaded glam v0.32.1
+  Downloaded glam v0.31.1
+   Compiling autocfg v1.5.0
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.45
+   Compiling unicode-ident v1.0.24
+   Compiling num-traits v0.2.19
+   Compiling syn v2.0.117
+   Compiling shlex v1.3.0
+   Compiling find-msvc-tools v0.1.9
+   Compiling serde_core v1.0.228
+   Compiling cc v1.2.60
+   Compiling zmij v1.0.21
+   Compiling blake3 v1.8.4
+   Compiling serde_json v1.0.149
+    Checking equivalent v1.0.2
+   Compiling serde v1.0.228
+   Compiling paste v1.0.15
+    Checking hashbrown v0.17.0
+    Checking bytemuck v1.25.0
+    Checking safe_arch v0.7.4
+    Checking indexmap v2.14.0
+   Compiling serde_derive v1.0.228
+   Compiling matrixmultiply v0.3.10
+    Checking cpufeatures v0.3.0
+    Checking cfg-if v1.0.4
+    Checking arrayref v0.3.9
+    Checking itoa v1.0.18
+    Checking constant_time_eq v0.4.2
+    Checking memchr v2.8.0
+    Checking arrayvec v0.7.6
+    Checking wide v0.7.33
+    Checking num-complex v0.4.6
+    Checking num-integer v0.1.46
+    Checking approx v0.5.1
+    Checking rawpointer v0.2.1
+    Checking simba v0.9.1
+    Checking num-rational v0.4.2
+    Checking fsci-runtime v0.1.0 (/data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-runtime)
+   Compiling nalgebra-macros v0.3.0
+    Checking typenum v1.20.0
+    Checking nalgebra v0.34.2
+    Checking fsci-fft v0.1.0 (/data/projects/.scratch/frankenscipy-psn7x-rubywaterfall-push-20260615-0450/crates/fsci-fft)
+error: unused variable: `total`
+  --> crates/fsci-fft/src/helpers.rs:58:9
+   |
+58 |     let total: usize = input.len();
+   |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_total`
+   |
+   = note: `-D unused-variables` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(unused_variables)]`
+
+error: could not compile `fsci-fft` (lib) due to 1 previous error
+  [2m2026-06-15T05:08:37.043870Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mRemote command finished: exit=101 in 21186ms[0m
+    [2;3mat[0m rch/src/hook.rs:6376 [2;3mon[0m ThreadId(1)
+
+[RCH] remote ovh-a failed (exit 101)
