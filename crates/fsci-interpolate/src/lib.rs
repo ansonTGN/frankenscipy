@@ -4163,6 +4163,43 @@ pub fn splder(
     Ok((new_t, new_c, k - 1))
 }
 
+/// Evaluate a B-spline and all its derivatives, up to order `k` (the spline
+/// degree), at each point in `x_eval`.
+///
+/// Returns one row per evaluation point; `result[i]` is
+/// `[B(x_i), B'(x_i), …, B^(k)(x_i)]` (length `k + 1`, order 0 being the spline
+/// value itself). Matches `scipy.interpolate.spalde(x, tck)`.
+///
+/// The derivatives are obtained by repeatedly differentiating the spline with
+/// [`splder`] and evaluating each successive derivative with [`splev`], which
+/// reproduces FITPACK's result at non-knot points.
+pub fn spalde(
+    x_eval: &[f64],
+    tck: &(Vec<f64>, Vec<f64>, usize),
+) -> Result<Vec<Vec<f64>>, InterpError> {
+    let k = tck.2;
+
+    // Evaluate each derivative order over all points: per_order[j][i] is the
+    // j-th derivative at x_eval[i].
+    let mut per_order: Vec<Vec<f64>> = Vec::with_capacity(k + 1);
+    let mut current = tck.clone();
+    for j in 0..=k {
+        per_order.push(splev(x_eval, &current)?);
+        if j < k {
+            current = splder(&current)?;
+        }
+    }
+
+    // Transpose into one row of length k+1 per evaluation point.
+    let mut out: Vec<Vec<f64>> = vec![Vec::with_capacity(k + 1); x_eval.len()];
+    for order_vals in &per_order {
+        for (i, &v) in order_vals.iter().enumerate() {
+            out[i].push(v);
+        }
+    }
+    Ok(out)
+}
+
 /// Compute the antiderivative (integral) of a B-spline.
 ///
 /// Accepts both the FrankenSciPy "tight" tck convention
@@ -7860,6 +7897,45 @@ mod tests {
             assert_eq!(dc.len(), dt.len() - dk - 1);
             assert_eq!(dc, expected_c);
         }
+    }
+
+    #[test]
+    fn spalde_matches_scipy_cubic_sine_tck() {
+        // Same cubic tck (scipy.splrep of sin on [0, 2π]) fed to both libraries;
+        // golden rows from scipy.interpolate.spalde at x = 1.0 and x = 2.5.
+        let t = vec![
+            0.0, 0.0, 0.0, 0.0, 1.1423973285781066, 1.7135959928671598, 2.284794657156213,
+            2.8559933214452666, 3.4271919857343196, 3.998390650023373, 4.569589314312426,
+            5.140787978601479, 6.283185307179586, 6.283185307179586, 6.283185307179586,
+            6.283185307179586,
+        ];
+        let c = vec![
+            6.8853109097104774e-18, 0.3874530925947836, 0.9328410869555639, 1.045009810272688,
+            0.7980061424100005, 0.2974630662128592, -0.2974630662128589, -0.7980061424100005,
+            -1.0450098102726877, -0.9328410869555637, -0.38745309259478417,
+            -2.4492935982947064e-16, 0.0, 0.0, 0.0, 0.0,
+        ];
+        let tck = (t, c, 3usize);
+
+        let res = spalde(&[1.0, 2.5], &tck).unwrap();
+        assert_eq!(res.len(), 2);
+        assert_eq!(res[0].len(), 4); // [value, 1st, 2nd, 3rd derivative]
+
+        // scipy.interpolate.spalde([1.0, 2.5], tck)
+        let expected = [
+            [0.841_124_74, 0.543_276_82, -0.838_693_66, -0.728_993_49],
+            [0.598_350_2, -0.801_824_51, -0.593_302_33, 0.854_008_96],
+        ];
+        for (row, exp) in res.iter().zip(expected.iter()) {
+            for (got, e) in row.iter().zip(exp.iter()) {
+                assert!((got - e).abs() < 1e-7, "got {got}, expected {e}");
+            }
+        }
+
+        // Order-0 derivative equals splev (the spline value itself).
+        let vals = splev(&[1.0, 2.5], &tck).unwrap();
+        assert!((res[0][0] - vals[0]).abs() < 1e-15);
+        assert!((res[1][0] - vals[1]).abs() < 1e-15);
     }
 
     #[test]
