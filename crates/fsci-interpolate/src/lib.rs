@@ -4018,15 +4018,166 @@ fn coeff_of_divided_diff(xs: &[f64]) -> Vec<f64> {
         .collect()
 }
 
-/// Create a cubic smoothing B-spline for an explicit regularization parameter
-/// `lam`, matching `scipy.interpolate.make_smoothing_spline(x, y, w, lam=lam)`.
+/// Minimize a scalar function on `[a, b]` with Brent's bounded method, matching
+/// `scipy.optimize.minimize_scalar(method='Bounded')` (xatol = 1e-5).
+fn bounded_minimize(f: &dyn Fn(f64) -> f64, a: f64, b: f64, xatol: f64, maxfun: usize) -> f64 {
+    let sqrt_eps = 2.2e-16_f64.sqrt();
+    let golden_mean = 0.5 * (3.0 - 5.0_f64.sqrt());
+    let (mut a, mut b) = (a, b);
+    let mut fulc = a + golden_mean * (b - a);
+    let (mut nfc, mut xf) = (fulc, fulc);
+    let mut rat = 0.0_f64;
+    let mut e = 0.0_f64;
+    let mut fx = f(xf);
+    let mut num = 1;
+    let (mut ffulc, mut fnfc) = (fx, fx);
+    let mut xm = 0.5 * (a + b);
+    let mut tol1 = sqrt_eps * xf.abs() + xatol / 3.0;
+    let mut tol2 = 2.0 * tol1;
+    while (xf - xm).abs() > (tol2 - 0.5 * (b - a)) {
+        let mut golden = true;
+        if e.abs() > tol1 {
+            golden = false;
+            let r0 = (xf - nfc) * (fx - ffulc);
+            let mut q = (xf - fulc) * (fx - fnfc);
+            let mut p = (xf - fulc) * q - (xf - nfc) * r0;
+            q = 2.0 * (q - r0);
+            if q > 0.0 {
+                p = -p;
+            }
+            q = q.abs();
+            let r = e;
+            e = rat;
+            if p.abs() < (0.5 * q * r).abs() && p > q * (a - xf) && p < q * (b - xf) {
+                rat = p / q;
+                let x = xf + rat;
+                if (x - a) < tol2 || (b - x) < tol2 {
+                    let si = if xm - xf >= 0.0 { 1.0 } else { -1.0 };
+                    rat = tol1 * si;
+                }
+            } else {
+                golden = true;
+            }
+        }
+        if golden {
+            e = if xf >= xm { a - xf } else { b - xf };
+            rat = golden_mean * e;
+        }
+        let si = if rat >= 0.0 { 1.0 } else { -1.0 };
+        let x = xf + si * rat.abs().max(tol1);
+        let fu = f(x);
+        num += 1;
+        if fu <= fx {
+            if x >= xf {
+                a = xf;
+            } else {
+                b = xf;
+            }
+            fulc = nfc;
+            ffulc = fnfc;
+            nfc = xf;
+            fnfc = fx;
+            xf = x;
+            fx = fu;
+        } else {
+            if x < xf {
+                a = x;
+            } else {
+                b = x;
+            }
+            if fu <= fnfc || nfc == xf {
+                fulc = nfc;
+                ffulc = fnfc;
+                nfc = x;
+                fnfc = fu;
+            } else if fu <= ffulc || fulc == xf || fulc == nfc {
+                fulc = x;
+                ffulc = fu;
+            }
+        }
+        xm = 0.5 * (a + b);
+        tol1 = sqrt_eps * xf.abs() + xatol / 3.0;
+        tol2 = 2.0 * tol1;
+        if num >= maxfun {
+            break;
+        }
+    }
+    xf
+}
+
+/// Find the GCV-optimal regularization parameter for [`make_smoothing_spline`],
+/// matching scipy's `_compute_optimal_gcv_parameter`: minimize over `[0, n]`
+/// `GCV(λ) = (‖λ·E·c_λ‖²/n) / (1 − tr(A_λ)/n)²`, where `c_λ` solves
+/// `(X + λE)c = y` and `tr(A_λ) = tr((XᵀWX + λXᵀE)⁻¹ XᵀWX)`.
+fn gcv_optimal_lambda(x_full: &[Vec<f64>], e_full: &[Vec<f64>], y: &[f64], w: &[f64]) -> f64 {
+    let n = x_full.len();
+    let nf = n as f64;
+    // XtWX = Xᵀ W X, XtE = Xᵀ W E.
+    let mut xtwx = vec![vec![0.0_f64; n]; n];
+    let mut xte = vec![vec![0.0_f64; n]; n];
+    for i in 0..n {
+        for j in 0..n {
+            let (mut sx, mut se) = (0.0_f64, 0.0_f64);
+            for k in 0..n {
+                let xwk = x_full[k][i] * w[k];
+                sx += xwk * x_full[k][j];
+                se += xwk * e_full[k][j];
+            }
+            xtwx[i][j] = sx;
+            xte[i][j] = se;
+        }
+    }
+    let gcv = |lam: f64| -> f64 {
+        // c solves (X + λE) c = y.
+        let mut m = vec![vec![0.0_f64; n]; n];
+        for i in 0..n {
+            for j in 0..n {
+                m[i][j] = x_full[i][j] + lam * e_full[i][j];
+            }
+        }
+        let mut rhs = y.to_vec();
+        let c = match solve_dense_system(&mut m, &mut rhs) {
+            Ok(c) => c,
+            Err(_) => return f64::INFINITY,
+        };
+        // numer = ‖λ·E·c‖² / n.
+        let mut numer = 0.0_f64;
+        for row in e_full {
+            let mut r = 0.0_f64;
+            for (j, &v) in row.iter().enumerate() {
+                r += v * c[j];
+            }
+            numer += (lam * r) * (lam * r);
+        }
+        numer /= nf;
+        // tr(A) = tr(lhs⁻¹ XtWX), lhs = XtWX + λ XtE; solve lhs Z = XtWX col-by-col.
+        let mut tr = 0.0_f64;
+        for col in 0..n {
+            let mut lhs = vec![vec![0.0_f64; n]; n];
+            for i in 0..n {
+                for j in 0..n {
+                    lhs[i][j] = xtwx[i][j] + lam * xte[i][j];
+                }
+            }
+            let mut b: Vec<f64> = (0..n).map(|i| xtwx[i][col]).collect();
+            match solve_dense_system(&mut lhs, &mut b) {
+                Ok(z) => tr += z[col],
+                Err(_) => return f64::INFINITY,
+            }
+        }
+        let denom = (1.0 - tr / nf).powi(2);
+        numer / denom
+    };
+    bounded_minimize(&gcv, 0.0, nf, 1e-5, 500)
+}
+
+/// Create a cubic smoothing B-spline matching `scipy.interpolate.make_smoothing_spline`.
 ///
 /// Solves the penalized weighted least-squares problem
 /// `Σ w_i (y_i − f(x_i))² + lam·∫ f''²` in the natural-cubic-spline basis (knots
 /// at the data points), via the banded design matrix `X` and penalty `E` exactly
-/// as scipy does, then maps back to B-spline coefficients. Returns the
-/// [`BSpline`]. The automatic GCV selection (`lam = None`) is not yet
-/// implemented — pass an explicit non-negative `lam`.
+/// as scipy does, then maps back to B-spline coefficients. When `lam` is `None`
+/// the parameter is chosen by generalized cross-validation (GCV) over `[0, n]`.
 pub fn make_smoothing_spline(
     x: &[f64],
     y: &[f64],
@@ -4047,21 +4198,11 @@ pub fn make_smoothing_spline(
             detail: "x should be an ascending array".to_string(),
         });
     }
-    let lam = match lam {
-        Some(l) if l >= 0.0 => l,
-        Some(_) => {
-            return Err(InterpError::InvalidArgument {
-                detail: "regularization parameter should be non-negative".to_string(),
-            });
-        }
-        None => {
-            return Err(InterpError::InvalidArgument {
-                detail: "make_smoothing_spline GCV (lam=None) is not yet implemented; \
-                         pass an explicit lam"
-                    .to_string(),
-            });
-        }
-    };
+    if matches!(lam, Some(l) if l < 0.0) {
+        return Err(InterpError::InvalidArgument {
+            detail: "regularization parameter should be non-negative".to_string(),
+        });
+    }
     let w: Vec<f64> = match w {
         Some(s) if s.len() == n => s.to_vec(),
         Some(_) => {
@@ -4129,18 +4270,35 @@ pub fn make_smoothing_spline(
         }
     }
 
-    // Assemble (X + lam·E) from its 5 bands (LAPACK (2,2) storage: entry
-    // A[i][j] = ab[2+i-j][j] for |i-j| ≤ 2) into a full matrix, then dense-solve.
-    let ab: Vec<Vec<f64>> = (0..5)
-        .map(|r| (0..n).map(|c| xm[r][c] + lam * we[r][c]).collect())
-        .collect();
+    // Expand the banded design X and penalty E (LAPACK (2,2): A[i][j] =
+    // band[2+i-j][j] for |i-j| ≤ 2) into full n×n matrices.
+    let band_to_full = |band: &[Vec<f64>]| -> Vec<Vec<f64>> {
+        let mut m = vec![vec![0.0_f64; n]; n];
+        for i in 0..n {
+            for j in 0..n {
+                let d = 2 + i as isize - j as isize;
+                if (0..5).contains(&d) {
+                    m[i][j] = band[d as usize][j];
+                }
+            }
+        }
+        m
+    };
+    let x_full = band_to_full(&xm);
+    let e_full = band_to_full(&we);
+
+    // Resolve the regularization parameter: explicit, or by generalized
+    // cross-validation (GCV) minimized over [0, n] when lam is None.
+    let lam = match lam {
+        Some(l) => l,
+        None => gcv_optimal_lambda(&x_full, &e_full, y, &w),
+    };
+
+    // Solve (X + lam·E) c = y.
     let mut full = vec![vec![0.0_f64; n]; n];
     for i in 0..n {
         for j in 0..n {
-            let d = 2 + i as isize - j as isize;
-            if (0..5).contains(&d) {
-                full[i][j] = ab[d as usize][j];
-            }
+            full[i][j] = x_full[i][j] + lam * e_full[i][j];
         }
     }
     let mut rhs = y.to_vec();
@@ -6277,8 +6435,16 @@ mod tests {
         for (g, e) in b.coeffs().iter().zip(&c_exp) {
             assert!((g - e).abs() < 1e-6, "c {g} vs {e}");
         }
-        // GCV (lam=None) and negative lam are rejected.
-        assert!(make_smoothing_spline(&x, &y, None, None).is_err());
+        // GCV (lam=None): scipy picks lam≈6.9999939 and these coefficients.
+        let bg = make_smoothing_spline(&x, &y, None, None).unwrap();
+        let cg_exp = [
+            0.03603182, 0.35933446, 1.00593975, 1.984986, 2.96695705, 3.96200032,
+            4.97038668, 5.63607983, 5.96892641,
+        ];
+        for (g, e) in bg.coeffs().iter().zip(&cg_exp) {
+            assert!((g - e).abs() < 1e-4, "gcv c {g} vs {e}");
+        }
+        // Negative lam is rejected.
         assert!(make_smoothing_spline(&x, &y, None, Some(-1.0)).is_err());
     }
 
