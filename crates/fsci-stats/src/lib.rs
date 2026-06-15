@@ -25470,6 +25470,15 @@ pub fn pearsonr_alternative(x: &[f64], y: &[f64], alternative: &str) -> Correlat
     }
 }
 
+/// Calculate a Spearman rho rank-order correlation coefficient and p-value.
+///
+/// Matches `scipy.stats.spearmanrho(x, y, alternative=...)` — the renamed,
+/// keyword-only form of `spearmanr`. Identical statistic and p-value to
+/// [`spearmanr_alternative`]; provided under scipy's current public name.
+pub fn spearmanrho(x: &[f64], y: &[f64], alternative: &str) -> CorrelationResult {
+    spearmanr_alternative(x, y, alternative)
+}
+
 /// Calculate the Spearman rank-order correlation coefficient and p-value.
 ///
 /// Matches `scipy.stats.spearmanr(a, b)`.
@@ -50300,6 +50309,25 @@ mod tests {
         let default = spearmanr(&x, &y);
         let two_sided = spearmanr_alternative(&x, &y, "two-sided");
         assert!((default.pvalue - two_sided.pvalue).abs() < 1e-10);
+    }
+
+    #[test]
+    fn spearmanrho_matches_scipy_reference_values() {
+        // scipy.stats.spearmanrho([1..7], [2,1,4,3,6,5,8])
+        let x = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+        let y = vec![2.0, 1.0, 4.0, 3.0, 6.0, 5.0, 8.0];
+
+        let r = spearmanrho(&x, &y, "two-sided");
+        assert!((r.statistic - 0.892_857_142_857_142_8).abs() < 1e-12);
+        assert!((r.pvalue - 0.006_807_187_408_935_413).abs() < 1e-10);
+
+        let g = spearmanrho(&x, &y, "greater");
+        assert!((g.pvalue - 0.003_403_593_704_467_706_3).abs() < 1e-10);
+
+        // Equivalent to spearmanr_alternative under the same hypothesis.
+        let alt = spearmanr_alternative(&x, &y, "two-sided");
+        assert_eq!(r.statistic, alt.statistic);
+        assert_eq!(r.pvalue, alt.pvalue);
     }
 
     // ── Yule Q/Y tests ─────────────────────────────────────────────
