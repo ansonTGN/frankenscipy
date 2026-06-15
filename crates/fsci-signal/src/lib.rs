@@ -3412,6 +3412,51 @@ fn bessel_mag_norm_factor(poles_re: &[f64], poles_im: &[f64], k: f64) -> f64 {
     p1
 }
 
+/// Analog elliptic (Cauer) lowpass prototype.
+///
+/// Matches `scipy.signal.ellipap(N, rp, rs)`. Returns `(zeros, poles, gain)` for
+/// the normalized analog elliptic lowpass of order `N` with `rp` dB of passband
+/// ripple and `rs` dB of stopband attenuation. This is the prototype that the
+/// digital [`ellip`] design builds on internally; here it is exposed directly,
+/// matching scipy's public function.
+///
+/// For `N == 0` scipy returns empty zero/pole arrays with the even-order DC gain
+/// `10^(−rp/20)`; that convention is reproduced here.
+pub fn ellipap(
+    n: u32,
+    rp: f64,
+    rs: f64,
+) -> Result<(Vec<fsci_fft::Complex64>, Vec<fsci_fft::Complex64>, f64), SignalError> {
+    if !rp.is_finite() || rp <= 0.0 {
+        return Err(SignalError::InvalidArgument(
+            "ellipap: rp must be positive finite".to_string(),
+        ));
+    }
+    if !rs.is_finite() || rs <= 0.0 {
+        return Err(SignalError::InvalidArgument(
+            "ellipap: rs must be positive finite".to_string(),
+        ));
+    }
+    if n == 0 {
+        // Even-order filters have a DC gain of −rp dB (scipy convention).
+        return Ok((Vec::new(), Vec::new(), 10.0_f64.powf(-rp / 20.0)));
+    }
+    let zpk = elliptic_analog_zpk(n as usize, rp, rs)?;
+    let zeros: Vec<fsci_fft::Complex64> = zpk
+        .zeros_re
+        .iter()
+        .zip(zpk.zeros_im.iter())
+        .map(|(&re, &im)| (re, im))
+        .collect();
+    let poles: Vec<fsci_fft::Complex64> = zpk
+        .poles_re
+        .iter()
+        .zip(zpk.poles_im.iter())
+        .map(|(&re, &im)| (re, im))
+        .collect();
+    Ok((zeros, poles, zpk.gain))
+}
+
 /// Elliptic (Cauer) filter order and natural frequency for analog
 /// lowpass design.
 ///
@@ -14096,6 +14141,85 @@ mod tests {
         // Metamorphic: all poles strictly in the left half-plane (stable).
         for n in 1..=8u32 {
             let (_, p, _) = besselap(n, BesselNorm::Phase).unwrap();
+            assert_eq!(p.len(), n as usize);
+            assert!(p.iter().all(|c| c.0 < 0.0), "N={n} pole not in LHP");
+        }
+    }
+
+    #[test]
+    fn ellipap_matches_scipy() {
+        fn sorted(mut p: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
+            p.sort_by(|a, b| {
+                a.0.partial_cmp(&b.0)
+                    .unwrap()
+                    .then(a.1.partial_cmp(&b.1).unwrap())
+            });
+            p
+        }
+        let cmp = |got: Vec<(f64, f64)>, want: &[(f64, f64)]| {
+            let g = sorted(got);
+            assert_eq!(g.len(), want.len());
+            for (a, b) in g.iter().zip(want.iter()) {
+                assert!(
+                    (a.0 - b.0).abs() <= 1e-9 && (a.1 - b.1).abs() <= 1e-9,
+                    "{a:?} vs {b:?}"
+                );
+            }
+        };
+
+        // N=0 → empty, gain = 10^(-rp/20).
+        let (z, p, k) = ellipap(0, 1.0, 40.0).unwrap();
+        assert!(z.is_empty() && p.is_empty());
+        assert!((k - 0.8912509381337456).abs() <= 1e-12);
+
+        // N=1, rp=1, rs=40.
+        let (z, p, k) = ellipap(1, 1.0, 40.0).unwrap();
+        assert!(z.is_empty());
+        cmp(p, &[(-1.96522672836, 0.0)]);
+        assert!((k - 1.9652267283602716).abs() <= 1e-9);
+
+        // N=3, rp=1, rs=40 (odd: real middle pole, 2 imaginary zeros).
+        let (z, p, k) = ellipap(3, 1.0, 40.0).unwrap();
+        cmp(z, &[(0.0, -2.75834334368), (0.0, 2.75834334368)]);
+        cmp(
+            p,
+            &[
+                (-0.52372103072, 0.0),
+                (-0.227259770751, -0.976571011653),
+                (-0.227259770751, 0.976571011653),
+            ],
+        );
+        assert!((k - 0.0692014892175001).abs() <= 1e-9);
+
+        // N=4, rp=0.5, rs=60 (even).
+        let (z, p, k) = ellipap(4, 0.5, 60.0).unwrap();
+        cmp(
+            z,
+            &[
+                (0.0, -6.79406905199),
+                (0.0, -2.88886139586),
+                (0.0, 2.88886139586),
+                (0.0, 6.79406905199),
+            ],
+        );
+        cmp(
+            p,
+            &[
+                (-0.43338938557, -0.44269041905),
+                (-0.43338938557, 0.44269041905),
+                (-0.162150636672, -1.01827685161),
+                (-0.162150636672, 1.01827685161),
+            ],
+        );
+        assert!((k - 0.0009999999999999979).abs() <= 1e-12);
+
+        // Invalid specs rejected.
+        assert!(ellipap(3, -1.0, 40.0).is_err());
+        assert!(ellipap(3, 1.0, 0.0).is_err());
+
+        // Metamorphic: stable poles (LHP) for a range of even/odd orders.
+        for n in 1..=6u32 {
+            let (_, p, _) = ellipap(n, 1.0, 50.0).unwrap();
             assert_eq!(p.len(), n as usize);
             assert!(p.iter().all(|c| c.0 < 0.0), "N={n} pole not in LHP");
         }
