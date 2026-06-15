@@ -6731,6 +6731,97 @@ impl Dirichlet {
     }
 }
 
+/// The multinomial distribution, matching `scipy.stats.multinomial(n, p)`.
+pub struct Multinomial {
+    pub n: usize,
+    pub p: Vec<f64>,
+}
+
+impl Multinomial {
+    /// Create a multinomial distribution for `n` trials with category
+    /// probabilities `p` (which should sum to 1).
+    pub fn new(n: usize, p: &[f64]) -> Self {
+        assert!(!p.is_empty(), "p must be non-empty");
+        Self { n, p: p.to_vec() }
+    }
+
+    /// Log probability mass function. Returns `-inf` unless the counts are
+    /// non-negative and sum to `n` (scipy's convention).
+    pub fn logpmf(&self, x: &[f64]) -> f64 {
+        if x.len() != self.p.len() {
+            return f64::NEG_INFINITY;
+        }
+        let sum: f64 = x.iter().sum();
+        if (sum - self.n as f64).abs() > 1e-9 || x.iter().any(|&xi| xi < 0.0) {
+            return f64::NEG_INFINITY;
+        }
+        let mut lp = ln_gamma(self.n as f64 + 1.0);
+        for (&xi, &pi) in x.iter().zip(&self.p) {
+            lp -= ln_gamma(xi + 1.0);
+            if xi > 0.0 {
+                // 0 * ln(0) = 0; a positive count with zero probability is impossible.
+                lp += if pi > 0.0 { xi * pi.ln() } else { f64::NEG_INFINITY };
+            }
+        }
+        lp
+    }
+
+    /// Probability mass function.
+    pub fn pmf(&self, x: &[f64]) -> f64 {
+        self.logpmf(x).exp()
+    }
+
+    /// Mean vector `n·p`.
+    pub fn mean(&self) -> Vec<f64> {
+        self.p.iter().map(|&pi| self.n as f64 * pi).collect()
+    }
+
+    /// Covariance matrix `cov[i][j] = n·p_i·(δ_ij − p_j)`.
+    pub fn cov(&self) -> Vec<Vec<f64>> {
+        let k = self.p.len();
+        let nf = self.n as f64;
+        (0..k)
+            .map(|i| {
+                (0..k)
+                    .map(|j| {
+                        let delta = if i == j { 1.0 } else { 0.0 };
+                        nf * self.p[i] * (delta - self.p[j])
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// Differential entropy, matching scipy's expression
+    /// `−ln n! − n Σ p_i ln p_i + Σ_i Σ_{x=1}^{n} Binom(x; n, p_i)·ln x!`.
+    pub fn entropy(&self) -> f64 {
+        let nf = self.n as f64;
+        // term1 = n·Σ entr(p_i) − ln(n!), entr(p) = −p ln p.
+        let mut h = -ln_gamma(nf + 1.0);
+        for &pi in &self.p {
+            if pi > 0.0 {
+                h += nf * (-pi * pi.ln());
+            }
+        }
+        // term2 = Σ_i Σ_{x=1}^{n} C(n,x) p_i^x (1−p_i)^{n−x} · ln(x!).
+        let ln_n_fact = ln_gamma(nf + 1.0);
+        for &pi in &self.p {
+            if pi <= 0.0 || pi >= 1.0 {
+                continue;
+            }
+            let (lp, lq) = (pi.ln(), (1.0 - pi).ln());
+            for xk in 1..=self.n {
+                let xf = xk as f64;
+                let log_binom = ln_n_fact - ln_gamma(xf + 1.0) - ln_gamma(nf - xf + 1.0)
+                    + xf * lp
+                    + (nf - xf) * lq;
+                h += log_binom.exp() * ln_gamma(xf + 1.0);
+            }
+        }
+        h
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Von Mises Distribution
 // ══════════════════════════════════════════════════════════════════════
@@ -41882,6 +41973,27 @@ mod tests {
         let best = ppcc_max(&x, (0.0, 1.0));
         assert!((best - 0.35779018).abs() < 1e-4, "ppcc_max {best}");
         assert!(ppcc_plot(&x, 2.0, -2.0, 5).is_err());
+    }
+
+    #[test]
+    fn multinomial_matches_scipy() {
+        let mn = Multinomial::new(10, &[0.2, 0.3, 0.5]);
+        assert!((mn.pmf(&[2.0, 3.0, 5.0]) - 0.08504999999999999).abs() < 1e-12);
+        assert!((mn.logpmf(&[2.0, 3.0, 5.0]) - (-2.4645159601402664)).abs() < 1e-12);
+        assert_eq!(mn.pmf(&[2.0, 3.0, 4.0]), 0.0); // sum != n
+        assert_eq!(mn.mean(), vec![2.0, 3.0, 5.0]);
+        let cov = mn.cov();
+        let cov_exp = [
+            [1.6, -0.6, -1.0],
+            [-0.6, 2.1, -1.5],
+            [-1.0, -1.5, 2.5],
+        ];
+        for i in 0..3 {
+            for j in 0..3 {
+                assert!((cov[i][j] - cov_exp[i][j]).abs() < 1e-9, "cov[{i}][{j}]");
+            }
+        }
+        assert!((mn.entropy() - 3.3412185163945054).abs() < 1e-9, "entropy {}", mn.entropy());
     }
 
     #[test]
