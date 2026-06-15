@@ -4200,6 +4200,68 @@ pub fn spalde(
     Ok(out)
 }
 
+/// Evaluate a bivariate (tensor-product) B-spline on the grid `x × y`.
+///
+/// `tck` is `(tx, ty, c, kx, ky)`: the knot vectors in each direction, the flat
+/// coefficient array (row-major over the `(len(tx)-kx-1, len(ty)-ky-1)` grid,
+/// the FITPACK / scipy layout), and the two degrees. Returns `z` with
+/// `z[i][j] == spline(x[i], y[j])`.
+///
+/// Matches `scipy.interpolate.bisplev(x, y, tck)` for the value case
+/// (`dx == dy == 0`). The coefficient layout is scipy's, so a `tck` produced by
+/// `scipy.interpolate.bisplrep` can be evaluated directly.
+///
+/// # Errors
+/// Returns `InterpError::InvalidArgument` if the knot/coefficient sizes are
+/// inconsistent (`c.len() != (len(tx)-kx-1)·(len(ty)-ky-1)`).
+pub fn bisplev(
+    x: &[f64],
+    y: &[f64],
+    tck: &(Vec<f64>, Vec<f64>, Vec<f64>, usize, usize),
+) -> Result<Vec<Vec<f64>>, InterpError> {
+    let (tx, ty, c, kx, ky) = tck;
+    let (kx, ky) = (*kx, *ky);
+
+    if tx.len() < kx + 2 || ty.len() < ky + 2 {
+        return Err(InterpError::InvalidArgument {
+            detail: "knot vectors too short for the requested degree".to_string(),
+        });
+    }
+    let nx_c = tx.len() - kx - 1;
+    let ny_c = ty.len() - ky - 1;
+    if c.len() != nx_c * ny_c {
+        return Err(InterpError::InvalidArgument {
+            detail: format!(
+                "coefficient array has {} entries, expected {nx_c}·{ny_c} = {}",
+                c.len(),
+                nx_c * ny_c
+            ),
+        });
+    }
+
+    // Pre-compute the y-direction basis once per output column (independent of x).
+    let by_all: Vec<Vec<f64>> = y.iter().map(|&yj| eval_basis_all(ty, yj, ky, ny_c)).collect();
+
+    let mut out = vec![vec![0.0; y.len()]; x.len()];
+    for (i, &xi) in x.iter().enumerate() {
+        let bx = eval_basis_all(tx, xi, kx, nx_c);
+        for (j, by) in by_all.iter().enumerate() {
+            let mut s = 0.0;
+            for (a, &bxa) in bx.iter().enumerate() {
+                if bxa == 0.0 {
+                    continue;
+                }
+                let row = a * ny_c;
+                for (b, &byb) in by.iter().enumerate() {
+                    s += c[row + b] * bxa * byb;
+                }
+            }
+            out[i][j] = s;
+        }
+    }
+    Ok(out)
+}
+
 /// Compute the antiderivative (integral) of a B-spline.
 ///
 /// Accepts both the FrankenSciPy "tight" tck convention
@@ -7936,6 +7998,36 @@ mod tests {
         let vals = splev(&[1.0, 2.5], &tck).unwrap();
         assert!((res[0][0] - vals[0]).abs() < 1e-15);
         assert!((res[1][0] - vals[1]).abs() < 1e-15);
+    }
+
+    #[test]
+    fn bisplev_matches_scipy_on_shared_tck() {
+        // tck from scipy.interpolate.bisplrep (kx=ky=3) on scattered data; the
+        // SAME tck is evaluated here and golden values come from scipy.bisplev.
+        let tx = vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0];
+        let ty = tx.clone();
+        let c = vec![
+            0.0007036914835632136, 0.005926321740951743, -0.06160310345403084,
+            -0.0001221843016128943, 0.9557129046360605, 1.62140389861632, 0.23776490140582782,
+            -0.26516573732626564, 1.6567096611867258, 1.262245622926786, 0.6532855323355665,
+            -0.402172884515181, 0.14105879414771977, 0.08629198314637655, 0.5637006125242106,
+            0.5145217038568174,
+        ];
+        let tck = (tx, ty, c, 3usize, 3usize);
+
+        let x = [0.0_f64, 0.5, 1.0];
+        let y = [0.0_f64, 0.5, 1.0];
+        let z = bisplev(&x, &y, &tck).unwrap();
+        assert_eq!(z.len(), 3);
+        assert_eq!(z[0].len(), 3);
+        // scipy.interpolate.bisplev([0,0.5,1],[0,0.5,1],tck) corners/centre.
+        assert!((z[0][0] - 0.0007036914835632136).abs() < 1e-12, "z00 = {}", z[0][0]);
+        assert!((z[2][2] - 0.5145217038568174).abs() < 1e-12, "z22 = {}", z[2][2]);
+        assert!((z[1][1] - 0.660_104_076_196_305_1).abs() < 1e-9, "z11 = {}", z[1][1]);
+
+        // Inconsistent coefficient count -> error.
+        let bad = (vec![0.0; 8], vec![0.0; 8], vec![0.0; 9], 3usize, 3usize);
+        assert!(bisplev(&x, &y, &bad).is_err());
     }
 
     #[test]
