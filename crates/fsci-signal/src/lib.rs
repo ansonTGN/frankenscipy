@@ -13408,6 +13408,118 @@ pub fn zpk2ss(
     tf2ss(&ba.b, &ba.a)
 }
 
+/// Discretize a continuous SISO state-space realization `(A, B, C, D)` with
+/// sample time `dt` using the generalized bilinear transform with parameter
+/// `alpha` (euler/forward = 0, tustin/bilinear = 0.5, backward = 1).
+#[allow(clippy::type_complexity)]
+fn c2d_gbt(
+    a: &[Vec<f64>],
+    b: &[f64],
+    c: &[f64],
+    d: f64,
+    dt: f64,
+    alpha: f64,
+) -> Result<(Vec<Vec<f64>>, Vec<f64>, Vec<f64>, f64), SignalError> {
+    let n = a.len();
+    let opts = fsci_linalg::SolveOptions {
+        mode: fsci_runtime::RuntimeMode::Strict,
+        ..Default::default()
+    };
+    let solve_col = |m: &[Vec<f64>], rhs: &[f64]| -> Result<Vec<f64>, SignalError> {
+        fsci_linalg::solve(m, rhs, opts)
+            .map(|r| r.x)
+            .map_err(|e| SignalError::InvalidArgument(format!("cont2discrete solve failed: {e}")))
+    };
+    // ima = I - alpha·dt·A
+    let ima: Vec<Vec<f64>> = (0..n)
+        .map(|i| {
+            (0..n)
+                .map(|j| if i == j { 1.0 } else { 0.0 } - alpha * dt * a[i][j])
+                .collect()
+        })
+        .collect();
+    // ad = ima^{-1} (I + (1-alpha)·dt·A): solve column by column.
+    let mut ad = vec![vec![0.0_f64; n]; n];
+    for j in 0..n {
+        let rhs: Vec<f64> = (0..n)
+            .map(|i| if i == j { 1.0 } else { 0.0 } + (1.0 - alpha) * dt * a[i][j])
+            .collect();
+        let col = solve_col(&ima, &rhs)?;
+        for (i, &v) in col.iter().enumerate() {
+            ad[i][j] = v;
+        }
+    }
+    // bd = ima^{-1} (dt·B)
+    let dtb: Vec<f64> = b.iter().map(|&v| dt * v).collect();
+    let bd = if n == 0 { Vec::new() } else { solve_col(&ima, &dtb)? };
+    // cd = (ima^T)^{-1} C  (since cd = solve(ima.T, C.T).T)
+    let cd = if n == 0 {
+        Vec::new()
+    } else {
+        let imat: Vec<Vec<f64>> = (0..n)
+            .map(|i| (0..n).map(|j| ima[j][i]).collect())
+            .collect();
+        solve_col(&imat, c)?
+    };
+    // dd = D + alpha · (C · bd)
+    let dd = d + alpha * c.iter().zip(&bd).map(|(&ci, &bi)| ci * bi).sum::<f64>();
+    Ok((ad, bd, cd, dd))
+}
+
+/// Convert a continuous-time transfer function to a discrete-time one, matching
+/// `scipy.signal.cont2discrete((num, den), dt, method, alpha)`.
+///
+/// Supported methods: `"zoh"` (zero-order hold, via the matrix exponential),
+/// `"euler"`/`"forward_diff"`, `"backward_diff"`, `"bilinear"`/`"tustin"`, and
+/// `"gbt"` (generalized bilinear transform, requires `alpha`). The system is
+/// taken to state space (scipy's [`tf2ss`] form), discretized, and converted
+/// back with [`ss2tf`]; the resulting `(num_d, den_d)` matches scipy.
+pub fn cont2discrete(
+    num: &[f64],
+    den: &[f64],
+    dt: f64,
+    method: &str,
+    alpha: Option<f64>,
+) -> Result<(Vec<f64>, Vec<f64>), SignalError> {
+    let (a, b, c, d) = tf2ss(num, den)?;
+    let n = a.len();
+    let (ad, bd, cd, dd) = if method == "zoh" {
+        if n == 0 {
+            (Vec::new(), Vec::new(), Vec::new(), d)
+        } else {
+            // M = [[A·dt, B·dt], [0, 0]] of size (n+1)×(n+1); expm; extract blocks.
+            let mut m = vec![vec![0.0_f64; n + 1]; n + 1];
+            for i in 0..n {
+                for j in 0..n {
+                    m[i][j] = a[i][j] * dt;
+                }
+                m[i][n] = b[i] * dt;
+            }
+            let em = fsci_linalg::expm(&m, fsci_linalg::DecompOptions::default())
+                .map_err(|e| SignalError::InvalidArgument(format!("cont2discrete expm failed: {e}")))?;
+            let ad: Vec<Vec<f64>> = (0..n).map(|i| em[i][..n].to_vec()).collect();
+            let bd: Vec<f64> = (0..n).map(|i| em[i][n]).collect();
+            (ad, bd, c.clone(), d)
+        }
+    } else {
+        let alpha = match method {
+            "gbt" => alpha.ok_or_else(|| {
+                SignalError::InvalidArgument("gbt method requires alpha".to_string())
+            })?,
+            "euler" | "forward_diff" => 0.0,
+            "backward_diff" => 1.0,
+            "bilinear" | "tustin" => 0.5,
+            other => {
+                return Err(SignalError::InvalidArgument(format!(
+                    "unknown cont2discrete method: {other}"
+                )));
+            }
+        };
+        c2d_gbt(&a, &b, &c, d, dt, alpha)?
+    };
+    ss2tf(&ad, &bd, &cd, dd)
+}
+
 /// Simulate step response using RK4 integration.
 fn simulate_lti_step(
     a: &[Vec<f64>],
@@ -16481,6 +16593,34 @@ mod tests {
             .min_by(|(_, a), (_, b)| ((**a) - omega).abs().total_cmp(&((**b) - omega).abs()))
             .map(|(i, _)| i)
             .unwrap_or(0)
+    }
+
+    #[test]
+    fn cont2discrete_matches_scipy() {
+        // H(s) = (s+2)/(s^2+3s+2), dt=0.1; references from scipy.signal.cont2discrete.
+        let num = [1.0, 2.0];
+        let den = [1.0, 3.0, 2.0];
+        let cases: &[(&str, [f64; 3], [f64; 3])] = &[
+            ("zoh", [0.0, 0.095162582, -0.0779125324], [1.0, -1.7235681711, 0.7408182207]),
+            ("euler", [0.0, 0.1, -0.08], [1.0, -1.7, 0.72]),
+            ("bilinear", [0.0476190476, 0.0086580087, -0.038961039], [1.0, -1.7229437229, 0.7402597403]),
+            ("backward_diff", [0.0909090909, -0.0757575758, 0.0], [1.0, -1.7424242424, 0.7575757576]),
+        ];
+        for (method, nexp, dexp) in cases {
+            let (nd, dd) = cont2discrete(&num, &den, 0.1, method, None).unwrap();
+            for (g, e) in nd.iter().zip(nexp) {
+                assert!((g - e).abs() < 1e-8, "{method} num {g} vs {e}");
+            }
+            for (g, e) in dd.iter().zip(dexp) {
+                assert!((g - e).abs() < 1e-8, "{method} den {g} vs {e}");
+            }
+        }
+        // gbt requires alpha; unknown method errors.
+        assert!(cont2discrete(&num, &den, 0.1, "gbt", None).is_err());
+        assert!(cont2discrete(&num, &den, 0.1, "bogus", None).is_err());
+        // gbt(alpha=0.5) == bilinear.
+        let (ngbt, _) = cont2discrete(&num, &den, 0.1, "gbt", Some(0.5)).unwrap();
+        assert!((ngbt[0] - 0.0476190476).abs() < 1e-8);
     }
 
     #[test]
