@@ -40006,6 +40006,124 @@ pub fn binned_statistic_2d(
     (stats, x_edges, y_edges)
 }
 
+/// Compute a binned statistic for a set of data in N dimensions.
+///
+/// Generalizes [`binned_statistic`] / [`binned_statistic_2d`] to arbitrary
+/// dimension `D`. `sample[i]` holds the `D` coordinates of point `i`, and
+/// `values[i]` is the scalar associated with that point. Each dimension is
+/// split into `bins` equal-width bins spanning `[min_d, max_d]`.
+///
+/// Returns `(statistic, edges)` where `statistic` is the result flattened in
+/// row-major (C) order over the `D` axes (length `bins.pow(D)`, matching
+/// `numpy`'s `.ravel()` of scipy's `(bins, …, bins)` array), and `edges[d]` is
+/// the `bins + 1` bin edges along dimension `d`.
+///
+/// Matches `scipy.stats.binned_statistic_dd(sample, values, statistic, bins)`
+/// for `statistic` in `{"mean", "count", "sum", "min", "max", "median", "std"}`
+/// on non-degenerate data (when a dimension is constant, the bin width falls
+/// back to 1.0 rather than scipy's `[v ± 0.5]` expansion, as in the 2-D case).
+/// `count`/`sum` are 0 for empty bins; the others are NaN.
+pub fn binned_statistic_dd(
+    sample: &[Vec<f64>],
+    values: &[f64],
+    bins: usize,
+    statistic: &str,
+) -> (Vec<f64>, Vec<Vec<f64>>) {
+    if sample.is_empty()
+        || sample.len() != values.len()
+        || bins == 0
+        || sample[0].is_empty()
+        || sample.iter().any(|p| p.len() != sample[0].len())
+        || sample.iter().any(|p| p.iter().any(|v| !v.is_finite()))
+    {
+        return (vec![], vec![]);
+    }
+
+    let ndim = sample[0].len();
+
+    let nan_min = |it: &dyn Fn(usize) -> f64, n: usize| {
+        (0..n).map(it).fold(f64::INFINITY, |a: f64, b: f64| {
+            if a.is_nan() || b.is_nan() { f64::NAN } else { a.min(b) }
+        })
+    };
+    let nan_max = |it: &dyn Fn(usize) -> f64, n: usize| {
+        (0..n).map(it).fold(f64::NEG_INFINITY, |a: f64, b: f64| {
+            if a.is_nan() || b.is_nan() { f64::NAN } else { a.max(b) }
+        })
+    };
+
+    // Per-dimension min/max/bin-width/edges.
+    let mut mins = vec![0.0; ndim];
+    let mut bws = vec![0.0; ndim];
+    let mut edges: Vec<Vec<f64>> = Vec::with_capacity(ndim);
+    for d in 0..ndim {
+        let getter = |i: usize| sample[i][d];
+        let lo = nan_min(&getter, sample.len());
+        let hi = nan_max(&getter, sample.len());
+        let bw = if hi > lo { (hi - lo) / bins as f64 } else { 1.0 };
+        mins[d] = lo;
+        bws[d] = bw;
+        edges.push((0..=bins).map(|i| lo + i as f64 * bw).collect());
+    }
+
+    // Strides for row-major (C) flattening over the D axes.
+    let total = bins.pow(ndim as u32);
+    let mut bin_values: Vec<Vec<f64>> = vec![Vec::new(); total];
+    for (point, &v) in sample.iter().zip(values.iter()) {
+        let mut flat = 0usize;
+        for d in 0..ndim {
+            let bd = (((point[d] - mins[d]) / bws[d]).floor() as usize).min(bins - 1);
+            flat = flat * bins + bd;
+        }
+        bin_values[flat].push(v);
+    }
+
+    let nan_min_slice = |bv: &[f64]| {
+        bv.iter().cloned().fold(f64::INFINITY, |a: f64, b: f64| {
+            if a.is_nan() || b.is_nan() { f64::NAN } else { a.min(b) }
+        })
+    };
+    let nan_max_slice = |bv: &[f64]| {
+        bv.iter().cloned().fold(f64::NEG_INFINITY, |a: f64, b: f64| {
+            if a.is_nan() || b.is_nan() { f64::NAN } else { a.max(b) }
+        })
+    };
+
+    let cell_stat = |bv: &[f64]| -> f64 {
+        match statistic {
+            "count" => return bv.len() as f64,
+            "sum" => return bv.iter().sum(),
+            _ => {}
+        }
+        if bv.is_empty() {
+            return f64::NAN;
+        }
+        match statistic {
+            "mean" => bv.iter().sum::<f64>() / bv.len() as f64,
+            "min" => nan_min_slice(bv),
+            "max" => nan_max_slice(bv),
+            "median" => {
+                let mut sorted = bv.to_vec();
+                sorted.sort_by(|a, b| a.total_cmp(b));
+                let n = sorted.len();
+                if n.is_multiple_of(2) {
+                    (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
+                } else {
+                    sorted[n / 2]
+                }
+            }
+            "std" => {
+                let mean = bv.iter().sum::<f64>() / bv.len() as f64;
+                (bv.iter().map(|&v| (v - mean).powi(2)).sum::<f64>() / bv.len() as f64).sqrt()
+            }
+            _ => bv.iter().sum::<f64>() / bv.len() as f64,
+        }
+    };
+
+    let stats: Vec<f64> = bin_values.iter().map(|bv| cell_stat(bv)).collect();
+    (stats, edges)
+}
+
 /// Compute the relative frequency histogram.
 ///
 /// Returns (relative_frequencies, bin_edges).
@@ -69330,6 +69448,50 @@ mod tests {
         // Invalid input -> empty.
         let (e, ex2, ey2) = binned_statistic_2d(&x, &y[..3], &v, 2, "mean");
         assert!(e.is_empty() && ex2.is_empty() && ey2.is_empty());
+    }
+
+    #[test]
+    fn binned_statistic_dd_matches_scipy_reference_values() {
+        // 2-D case must agree with binned_statistic_2d (flattened C order:
+        // flat = i_x * bins + i_y).
+        let close = |a: f64, b: f64| (a - b).abs() < 1e-12;
+        let sample = vec![
+            vec![0.1, 0.1],
+            vec![0.1, 0.9],
+            vec![0.6, 0.6],
+            vec![0.9, 0.2],
+            vec![0.4, 0.4],
+        ];
+        let v = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let (m, edges) = binned_statistic_dd(&sample, &v, 2, "mean");
+        assert_eq!(m.len(), 4); // 2^2
+        assert_eq!(edges.len(), 2);
+        // [i_x][i_y] -> flat i_x*2 + i_y; scipy mean = [[3,2],[4,3]].
+        assert!(close(m[0], 3.0) && close(m[1], 2.0));
+        assert!(close(m[2], 4.0) && close(m[3], 3.0));
+
+        // 3-D count: each axis split into 2 bins, 8 cells, counts sum to N.
+        let s3 = vec![
+            vec![0.1, 0.1, 0.1],
+            vec![0.9, 0.9, 0.9],
+            vec![0.1, 0.9, 0.1],
+            vec![0.9, 0.1, 0.9],
+        ];
+        let v3 = [1.0, 2.0, 3.0, 4.0];
+        let (c3, e3) = binned_statistic_dd(&s3, &v3, 2, "count");
+        assert_eq!(c3.len(), 8); // 2^3
+        assert_eq!(e3.len(), 3);
+        assert!(close(c3.iter().sum::<f64>(), 4.0));
+        // (0,0,0) -> flat 0; (1,1,1) -> flat 7.
+        assert!(close(c3[0], 1.0) && close(c3[7], 1.0));
+
+        // sum over all cells equals the total of values.
+        let (sum3, _) = binned_statistic_dd(&s3, &v3, 2, "sum");
+        assert!(close(sum3.iter().sum::<f64>(), 1.0 + 2.0 + 3.0 + 4.0));
+
+        // Invalid input -> empty.
+        let (e, ee) = binned_statistic_dd(&s3, &v3[..2], 2, "mean");
+        assert!(e.is_empty() && ee.is_empty());
     }
 
     #[test]
