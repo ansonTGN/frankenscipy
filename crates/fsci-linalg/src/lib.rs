@@ -4747,6 +4747,114 @@ pub fn solveh_banded(ab: &[Vec<f64>], b: &[f64], lower: bool) -> Result<SolveRes
     cho_solve_banded(&cb, b, lower)
 }
 
+/// Cholesky factorization of a symmetric positive-definite banded matrix.
+///
+/// Given a symmetric positive-definite banded matrix A stored in the SciPy
+/// banded format `ab`, returns its Cholesky factor in the same banded format.
+///
+/// This matches `scipy.linalg.cholesky_banded(ab, lower)`, which uses LAPACK
+/// `?pbtrf` conventions:
+/// - If `lower == false` (default): `ab[u + i - j, j] == A[i, j]` for
+///   `max(0, j - u) <= i <= j`, where `u` is the number of super-diagonals
+///   (`u == ab.len() - 1`). The diagonal lives in the **last** row `ab[u]`, and
+///   the returned factor `c` satisfies `A == cᵀ · c` with `c` upper triangular.
+/// - If `lower == true`: `ab[i - j, j] == A[i, j]` for `j <= i <= min(n-1, j+u)`.
+///   The diagonal lives in row `ab[0]`, and the returned factor satisfies
+///   `A == c · cᵀ` with `c` lower triangular.
+///
+/// Entries of `ab` outside the band (the unused corner triangle) are ignored on
+/// input and left untouched in the output, exactly as SciPy does.
+///
+/// # Arguments
+/// * `ab` - Banded matrix in lower or upper band storage, shape `(u+1, n)`
+/// * `lower` - If true, `ab` holds the lower band; otherwise the upper band
+///
+/// # Errors
+/// Returns `LinalgError::InvalidArgument` if `ab` is empty, rows are ragged, or
+/// the matrix is not positive definite.
+pub fn cholesky_banded(ab: &[Vec<f64>], lower: bool) -> Result<Vec<Vec<f64>>, LinalgError> {
+    if ab.is_empty() {
+        return Err(LinalgError::InvalidArgument {
+            detail: "ab must not be empty".to_string(),
+        });
+    }
+
+    let kd = ab.len() - 1;
+    let n = ab[0].len();
+
+    for row in ab.iter() {
+        if row.len() != n {
+            return Err(LinalgError::InvalidArgument {
+                detail: "All rows in ab must have the same length".to_string(),
+            });
+        }
+    }
+
+    let mut c = ab.to_vec();
+    if n == 0 {
+        return Ok(c);
+    }
+
+    if lower {
+        // Lower banded Cholesky: c[k][j] holds L[j+k][j], diagonal in c[0].
+        for j in 0..n {
+            let mut diag = c[0][j];
+            for k in 1..=kd {
+                if j >= k {
+                    let l = c[k][j - k];
+                    diag -= l * l;
+                }
+            }
+            if diag <= 0.0 {
+                return Err(LinalgError::InvalidArgument {
+                    detail: "Matrix is not positive definite".to_string(),
+                });
+            }
+            c[0][j] = diag.sqrt();
+
+            for i in 1..=kd {
+                if j + i < n {
+                    let mut sum = c[i][j];
+                    for k in 1..=kd {
+                        if j >= k && i + k <= kd {
+                            sum -= c[k][j - k] * c[i + k][j - k];
+                        }
+                    }
+                    c[i][j] = sum / c[0][j];
+                }
+            }
+        }
+    } else {
+        // Upper banded Cholesky: U[i][j] (i <= j) is stored at c[kd - (j - i)][j];
+        // the diagonal U[j][j] lives in the last row c[kd]. A = Uᵀ U.
+        for j in 0..n {
+            let lo = j.saturating_sub(kd);
+            // Off-diagonal entries U[i][j] for lo <= i < j (ascending in i).
+            for i in lo..j {
+                let mut sum = c[kd - (j - i)][j];
+                for m in lo..i {
+                    sum -= c[kd - (i - m)][i] * c[kd - (j - m)][j];
+                }
+                c[kd - (j - i)][j] = sum / c[kd][i];
+            }
+            // Diagonal entry U[j][j].
+            let mut diag = c[kd][j];
+            for m in lo..j {
+                let u = c[kd - (j - m)][j];
+                diag -= u * u;
+            }
+            if diag <= 0.0 {
+                return Err(LinalgError::InvalidArgument {
+                    detail: "Matrix is not positive definite".to_string(),
+                });
+            }
+            c[kd][j] = diag.sqrt();
+        }
+    }
+
+    Ok(c)
+}
+
 /// LDL decomposition for symmetric indefinite matrices.
 ///
 /// Factors A = L * D * Lᵀ where L is unit lower triangular and D is diagonal.
@@ -25847,5 +25955,47 @@ mod proptest_tests {
             (result.p[0][1] - result.p[1][0]).abs() < 1e-6,
             "P should be symmetric"
         );
+    }
+
+    #[test]
+    fn cholesky_banded_matches_scipy_pentadiagonal() {
+        // scipy.linalg.cholesky_banded reference (kd = 2, SPD pentadiagonal).
+        // Upper band storage: diagonal in the LAST row.
+        let ab_u = vec![
+            vec![0.0, 0.0, 0.5, 0.5, 0.5, 0.5],
+            vec![0.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            vec![4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+        ];
+        let cu = cholesky_banded(&ab_u, false).expect("upper cholesky_banded");
+        // scipy reference values for the diagonal (last) row.
+        let diag_ref = [
+            2.0,
+            2.179_449_471_770_337,
+            2.403_396_719_119_356,
+            2.608_576_183_260_216,
+            2.798_562_571_149_946,
+            2.975_278_548_546_838,
+        ];
+        for (j, &r) in diag_ref.iter().enumerate() {
+            assert!((cu[2][j] - r).abs() < 1e-12, "upper diag[{j}] = {}", cu[2][j]);
+        }
+        // First super-diagonal row.
+        assert!((cu[1][1] - 0.5).abs() < 1e-12);
+        assert!((cu[0][2] - 0.25).abs() < 1e-12);
+
+        // Lower band storage of the same matrix: factor must transpose-match.
+        let ab_l = vec![
+            vec![4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+            vec![1.0, 1.0, 1.0, 1.0, 1.0, 0.0],
+            vec![0.5, 0.5, 0.5, 0.5, 0.0, 0.0],
+        ];
+        let cl = cholesky_banded(&ab_l, true).expect("lower cholesky_banded");
+        for (j, &r) in diag_ref.iter().enumerate() {
+            assert!((cl[0][j] - r).abs() < 1e-12, "lower diag[{j}] = {}", cl[0][j]);
+        }
+
+        // Non-positive-definite matrix must be rejected.
+        let bad = vec![vec![1.0, 1.0], vec![2.0, 0.0]];
+        assert!(cholesky_banded(&bad, true).is_err());
     }
 }
