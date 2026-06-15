@@ -13278,6 +13278,44 @@ fn matmul_flat_workspace(
     Some(c)
 }
 
+/// Compute the orthogonal matrix that most nearly maps `A` onto `B`.
+///
+/// Matches `scipy.linalg.orthogonal_procrustes(A, B)`: given two `m × k`
+/// matrices, returns the `k × k` orthogonal `R` minimising the Frobenius norm
+/// `‖A R − B‖_F`, together with `scale = Σ σᵢ` (the sum of the singular values of
+/// `Aᵀ B`). With the SVD `Aᵀ B = U Σ Vᵀ`, `R = U Vᵀ`; that product is invariant
+/// to the SVD's column-sign conventions, so it matches scipy up to the SVD's own
+/// numerical accuracy.
+pub fn orthogonal_procrustes(
+    a: &[Vec<f64>],
+    b: &[Vec<f64>],
+) -> Result<(Vec<Vec<f64>>, f64), LinalgError> {
+    let m = a.len();
+    if m == 0 || b.len() != m {
+        return Err(LinalgError::InvalidArgument {
+            detail: "orthogonal_procrustes: A and B must have the same non-zero row count"
+                .to_string(),
+        });
+    }
+    let k = a[0].len();
+    if k == 0
+        || b[0].len() != k
+        || a.iter().any(|r| r.len() != k)
+        || b.iter().any(|r| r.len() != k)
+    {
+        return Err(LinalgError::InvalidArgument {
+            detail: "orthogonal_procrustes: A and B must have the same shape".to_string(),
+        });
+    }
+    // M = Aᵀ·B  (k×k); SVD M = U Σ Vᵀ; R = U·Vᵀ; scale = Σσ.
+    let at = transpose(a);
+    let m_mat = matmul(&at, b)?;
+    let SvdResult { u, s, vt } = svd(&m_mat, DecompOptions::default())?;
+    let r = matmul(&u, &vt)?;
+    let scale = s.iter().sum();
+    Ok((r, scale))
+}
+
 pub fn matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, LinalgError> {
     if a.is_empty() || b.is_empty() {
         return Ok(vec![]);
@@ -21984,6 +22022,46 @@ mod tests {
         // n=1 and unknown kind.
         assert_eq!(invpascal(1, "symmetric"), vec![vec![1.0]]);
         assert!(invpascal(4, "bogus").is_empty());
+    }
+
+    #[test]
+    fn orthogonal_procrustes_matches_scipy() {
+        // scipy.linalg.orthogonal_procrustes(A, B)
+        let a = vec![vec![1.0, 2.0], vec![3.0, 4.0], vec![5.0, 6.0]];
+        let b = vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![1.0, 1.0]];
+        let (r, scale) = orthogonal_procrustes(&a, &b).unwrap();
+        let want = [
+            [-0.242535625036333, 0.9701425001453321],
+            [0.970142500145332, 0.24253562503633302],
+        ];
+        for i in 0..2 {
+            for j in 0..2 {
+                assert!((r[i][j] - want[i][j]).abs() < 1e-9, "R[{i}][{j}] = {}", r[i][j]);
+            }
+        }
+        assert!((scale - 16.492422502470646).abs() < 1e-9, "scale {scale}");
+
+        // R is orthogonal: RᵀR == I.
+        for i in 0..2 {
+            for j in 0..2 {
+                let dot: f64 = (0..2).map(|t| r[t][i] * r[t][j]).sum();
+                let expect = if i == j { 1.0 } else { 0.0 };
+                assert!((dot - expect).abs() < 1e-9, "RtR[{i}][{j}] = {dot}");
+            }
+        }
+
+        // Identity target: B = A·Q for orthogonal Q recovers R = Q.
+        let q = vec![vec![0.0, -1.0], vec![1.0, 0.0]]; // 90° rotation
+        let aq = matmul(&a, &q).unwrap();
+        let (r2, _) = orthogonal_procrustes(&a, &aq).unwrap();
+        for i in 0..2 {
+            for j in 0..2 {
+                assert!((r2[i][j] - q[i][j]).abs() < 1e-9, "recovered Q[{i}][{j}] = {}", r2[i][j]);
+            }
+        }
+
+        // Shape mismatch rejected.
+        assert!(orthogonal_procrustes(&a, &b[..2]).is_err());
     }
 
     #[test]
