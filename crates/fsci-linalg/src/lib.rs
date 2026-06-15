@@ -12028,6 +12028,58 @@ pub fn pascal(n: usize, symmetric: bool) -> Vec<Vec<f64>> {
     }
 }
 
+/// Inverse of an `n × n` Pascal matrix.
+///
+/// Matches `scipy.linalg.invpascal(n, kind)` for `kind ∈ {"symmetric", "lower",
+/// "upper"}` (the default is `"symmetric"`). The lower-Pascal inverse has the
+/// closed form `Lᐨ¹[i][j] = (−1)^(i+j) · C(i, j)` for `j ≤ i` (else 0); the upper
+/// inverse is its transpose; and the symmetric inverse is `(Lᐨ¹)ᵀ · Lᐨ¹`. All
+/// entries are integers, returned as `f64` (exact for matrices small enough that
+/// the binomials stay below 2⁵³). Returns an empty matrix for an unknown `kind`.
+pub fn invpascal(n: usize, kind: &str) -> Vec<Vec<f64>> {
+    // Inverse lower-triangular Pascal: Linv[i][j] = (-1)^(i+j) C(i, j), j <= i.
+    // Build C(i, j) by Pascal's recurrence, then apply the alternating sign.
+    let mut linv: Vec<Vec<f64>> = vec![vec![0.0; n]; n];
+    for i in 0..n {
+        linv[i][0] = if i % 2 == 0 { 1.0 } else { -1.0 };
+        for j in 1..=i {
+            // |C(i,j)| from |C(i-1,j-1)| + |C(i-1,j)| with signs folded out:
+            // C(i,j) = C(i-1,j-1) + C(i-1,j); signs (-1)^(i+j) handled via abs.
+            let c = linv[i - 1][j - 1].abs() + linv[i - 1].get(j).copied().unwrap_or(0.0).abs();
+            linv[i][j] = if (i + j) % 2 == 0 { c } else { -c };
+        }
+    }
+
+    match kind {
+        "lower" => linv,
+        "upper" => {
+            // Upper inverse is the transpose of the lower inverse.
+            let mut u = vec![vec![0.0; n]; n];
+            for i in 0..n {
+                for j in 0..n {
+                    u[i][j] = linv[j][i];
+                }
+            }
+            u
+        }
+        "symmetric" => {
+            // Symmetric inverse: (Linv)^T · Linv  (Gram matrix of Linv's columns).
+            let mut s = vec![vec![0.0; n]; n];
+            for i in 0..n {
+                for j in 0..n {
+                    let mut acc = 0.0;
+                    for row in linv.iter() {
+                        acc += row[i] * row[j];
+                    }
+                    s[i][j] = acc;
+                }
+            }
+            s
+        }
+        _ => Vec::new(),
+    }
+}
+
 /// DFT matrix of size n.
 ///
 /// `F[j][k] = exp(-2πijk/n) / sqrt(n)`  (unitary normalization).
@@ -21878,6 +21930,60 @@ mod tests {
         assert_eq!(p[0], vec![1.0, 1.0, 1.0]);
         assert_eq!(p[1], vec![1.0, 2.0, 3.0]);
         assert_eq!(p[2], vec![1.0, 3.0, 6.0]);
+    }
+
+    #[test]
+    fn invpascal_matches_scipy() {
+        // scipy.linalg.invpascal(4, kind=...)
+        let sym = invpascal(4, "symmetric");
+        assert_eq!(
+            sym,
+            vec![
+                vec![4.0, -6.0, 4.0, -1.0],
+                vec![-6.0, 14.0, -11.0, 3.0],
+                vec![4.0, -11.0, 10.0, -3.0],
+                vec![-1.0, 3.0, -3.0, 1.0],
+            ]
+        );
+        let lower = invpascal(4, "lower");
+        assert_eq!(
+            lower,
+            vec![
+                vec![1.0, 0.0, 0.0, 0.0],
+                vec![-1.0, 1.0, 0.0, 0.0],
+                vec![1.0, -2.0, 1.0, 0.0],
+                vec![-1.0, 3.0, -3.0, 1.0],
+            ]
+        );
+        let upper = invpascal(4, "upper");
+        assert_eq!(
+            upper,
+            vec![
+                vec![1.0, -1.0, 1.0, -1.0],
+                vec![0.0, 1.0, -2.0, 3.0],
+                vec![0.0, 0.0, 1.0, -3.0],
+                vec![0.0, 0.0, 0.0, 1.0],
+            ]
+        );
+
+        // n=5 symmetric, plus the defining property invpascal · pascal == I.
+        let sym5 = invpascal(5, "symmetric");
+        assert_eq!(sym5[1], vec![-10.0, 30.0, -35.0, 19.0, -4.0]);
+        let p5 = pascal(5, true);
+        for i in 0..5 {
+            for j in 0..5 {
+                let mut acc = 0.0;
+                for k in 0..5 {
+                    acc += sym5[i][k] * p5[k][j];
+                }
+                let expect = if i == j { 1.0 } else { 0.0 };
+                assert!((acc - expect).abs() < 1e-9, "I[{i}][{j}] = {acc}");
+            }
+        }
+
+        // n=1 and unknown kind.
+        assert_eq!(invpascal(1, "symmetric"), vec![vec![1.0]]);
+        assert!(invpascal(4, "bogus").is_empty());
     }
 
     #[test]
