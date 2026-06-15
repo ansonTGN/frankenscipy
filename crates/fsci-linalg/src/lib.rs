@@ -5472,6 +5472,20 @@ fn symmetric_lower_band_lanczos_eigenvalues(
     Ok(eigenvalues)
 }
 
+/// Eigenvalues of a real symmetric banded matrix, in ascending order.
+///
+/// Matches `scipy.linalg.eigvals_banded(a_band, lower)`: the eigenvalue-only
+/// path of [`eig_banded`]. `ab` is the banded storage (bandwidth+1 rows × n);
+/// only `lower = true` storage is supported, as for [`eig_banded`].
+pub fn eigvals_banded(
+    ab: &[Vec<f64>],
+    lower: bool,
+    options: DecompOptions,
+) -> Result<Vec<f64>, LinalgError> {
+    let (eigenvalues, _) = eig_banded(ab, lower, true, options)?;
+    Ok(eigenvalues)
+}
+
 /// Eigenvalues and eigenvectors of a symmetric banded matrix.
 ///
 /// Given a symmetric banded matrix in banded storage format, computes eigenvalues
@@ -11417,6 +11431,19 @@ pub fn solve_sylvester(
     });
 
     Ok(rows_from_dmatrix(&x))
+}
+
+/// Solve the continuous Lyapunov equation AX + XAᴴ = Q.
+///
+/// Alias for [`solve_continuous_lyapunov`], matching
+/// `scipy.linalg.solve_lyapunov` (which scipy itself exposes as an alias of
+/// `solve_continuous_lyapunov`).
+pub fn solve_lyapunov(
+    a: &[Vec<f64>],
+    q: &[Vec<f64>],
+    options: DecompOptions,
+) -> Result<Vec<Vec<f64>>, LinalgError> {
+    solve_continuous_lyapunov(a, q, options)
 }
 
 /// Solve the continuous Lyapunov equation AX + XA^T = Q.
@@ -25997,5 +26024,39 @@ mod proptest_tests {
         // Non-positive-definite matrix must be rejected.
         let bad = vec![vec![1.0, 1.0], vec![2.0, 0.0]];
         assert!(cholesky_banded(&bad, true).is_err());
+    }
+
+    #[test]
+    fn eigvals_banded_matches_scipy_pentadiagonal() {
+        // scipy.linalg.eigvals_banded on a symmetric pentadiagonal matrix
+        // (lower band storage, kd = 2).
+        let ab = vec![
+            vec![4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+            vec![1.0, 1.0, 1.0, 1.0, 1.0, 0.0],
+            vec![0.5, 0.5, 0.5, 0.5, 0.0, 0.0],
+        ];
+        let w = eigvals_banded(&ab, true, DecompOptions::default()).unwrap();
+        let expected = [
+            3.360_090_025_648_421,
+            4.611_323_122_680_376,
+            5.853_437_512_327_018,
+            6.957_378_794_349_398,
+            8.151_267_952_282_344,
+            10.066_502_592_712_434,
+        ];
+        assert_eq!(w.len(), 6);
+        for (got, e) in w.iter().zip(expected.iter()) {
+            assert!((got - e).abs() < 1e-9, "eigval {got}, expected {e}");
+        }
+    }
+
+    #[test]
+    fn solve_lyapunov_is_alias_of_continuous() {
+        // solve_lyapunov must produce identical output to solve_continuous_lyapunov.
+        let a = vec![vec![-3.0, 1.0], vec![2.0, -4.0]];
+        let q = vec![vec![-1.0, 0.0], vec![0.0, -1.0]];
+        let x1 = solve_lyapunov(&a, &q, DecompOptions::default()).unwrap();
+        let x2 = solve_continuous_lyapunov(&a, &q, DecompOptions::default()).unwrap();
+        assert_eq!(x1, x2);
     }
 }
