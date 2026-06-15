@@ -3705,6 +3705,88 @@ impl KroghInterpolator {
         // each eval unchanged, so the result is bit-identical to the serial map.
         par_query_map(xs, self.coeffs.len(), |&x| self.evaluate(x))
     }
+
+    /// Re-express the stored Newton form as a Taylor (shifted-power) series about
+    /// `x0`: returns `b` with `P(t) = Σ b[j]·(t − x0)^j`, so `b[j] = P⁽ʲ⁾(x0)/j!`.
+    /// `b` has one entry per interpolation node (polynomial degree + 1).
+    fn newton_to_taylor(&self, x0: f64) -> Vec<f64> {
+        let n = self.coeffs.len();
+        let mut acc = vec![0.0; n];
+        acc[0] = self.coeffs[n - 1];
+        let mut len = 1usize; // current number of valid (ascending) coefficients
+        // Fold in the remaining Newton factors high-to-low: multiply the running
+        // polynomial in s = (t − x0) by (s + (x0 − xi[k])) and add dd[k].
+        for k in (0..n - 1).rev() {
+            let shift = x0 - self.xi[k];
+            acc[len] = acc[len - 1]; // new leading term (old acc[len] == 0)
+            for j in (1..len).rev() {
+                acc[j] = acc[j - 1] + shift * acc[j];
+            }
+            acc[0] = shift * acc[0] + self.coeffs[k];
+            len += 1;
+        }
+        acc
+    }
+
+    /// Evaluate the polynomial and its derivatives at `x`, returning
+    /// `[P(x), P'(x), …, P⁽ᵈᵉʳ⁻¹⁾(x)]` (`der` values).
+    ///
+    /// Matches `scipy.interpolate.KroghInterpolator.derivatives(x, der)` for 1-D
+    /// real inputs. Derivative orders beyond the polynomial degree are `0`.
+    pub fn derivatives(&self, x: f64, der: usize) -> Vec<f64> {
+        if !x.is_finite() {
+            return vec![f64::NAN; der];
+        }
+        let taylor = self.newton_to_taylor(x);
+        let mut out = Vec::with_capacity(der);
+        let mut factorial = 1.0_f64;
+        for j in 0..der {
+            if j > 0 {
+                factorial *= j as f64;
+            }
+            let bj = taylor.get(j).copied().unwrap_or(0.0);
+            out.push(bj * factorial);
+        }
+        out
+    }
+}
+
+/// Estimate the Taylor polynomial of `f` at `x` by polynomial fitting.
+///
+/// Matches `scipy.interpolate.approximate_taylor_polynomial(f, x, degree, scale,
+/// order)`. `f` is sampled at `order + 1` Chebyshev-like abscissae spread over a
+/// window of width `scale` centred on `x` (`order` defaults to `degree`); a Krogh
+/// interpolant through those samples is re-expanded about `x` to recover the
+/// Taylor coefficients.
+///
+/// Returns the polynomial coefficients in `numpy.poly1d` order — highest degree
+/// first, length `degree + 1` — translated to the origin so that evaluating the
+/// returned polynomial at `0` gives `f(x)` (the last coefficient). Choosing
+/// `order` somewhat larger than `degree` improves the higher-order terms; the
+/// fit becomes ill-conditioned past order ~30.
+pub fn approximate_taylor_polynomial<F: Fn(f64) -> f64>(
+    f: F,
+    x: f64,
+    degree: usize,
+    scale: f64,
+    order: Option<usize>,
+) -> Result<Vec<f64>, InterpError> {
+    let order = order.unwrap_or(degree);
+    let n = order + 1;
+    // xs[i] = scale·cos(i·π/n) + x  (numpy linspace(0, π, n, endpoint=False)).
+    let xs: Vec<f64> = (0..n)
+        .map(|i| scale * (std::f64::consts::PI * i as f64 / n as f64).cos() + x)
+        .collect();
+    let ys: Vec<f64> = xs.iter().map(|&xi| f(xi)).collect();
+    let interp = KroghInterpolator::new(&xs, &ys)?;
+    let taylor = interp.newton_to_taylor(x);
+    // Ascending Taylor coefficients b_0..b_degree (b_j = P^(j)(x)/j!), zero-padded
+    // if degree exceeds the interpolant degree, then reversed to poly1d order.
+    let mut coeffs: Vec<f64> = (0..=degree)
+        .map(|j| taylor.get(j).copied().unwrap_or(0.0))
+        .collect();
+    coeffs.reverse();
+    Ok(coeffs)
 }
 
 /// One-shot Krogh interpolation: build a `KroghInterpolator` from
@@ -7948,6 +8030,63 @@ mod tests {
             "krogh(2.5) got {}, expected 6.25",
             result[1]
         );
+    }
+
+    #[test]
+    fn krogh_derivatives_match_taylor_of_known_polynomial() {
+        // P(t) = t^3 - 2t + 5 through 4 nodes; derivatives at t=2 are exact:
+        // P(2)=9, P'(2)=10, P''(2)=12, P'''(2)=6, P''''(2)=0.
+        let x = [-1.0, 0.0, 1.0, 3.0];
+        let p = |t: f64| t * t * t - 2.0 * t + 5.0;
+        let y: Vec<f64> = x.iter().map(|&t| p(t)).collect();
+        let interp = KroghInterpolator::new(&x, &y).unwrap();
+        let d = interp.derivatives(2.0, 5);
+        let want = [9.0, 10.0, 12.0, 6.0, 0.0];
+        for (g, w) in d.iter().zip(want.iter()) {
+            assert!((g - w).abs() < 1e-9, "derivative {g} vs {w}");
+        }
+    }
+
+    #[test]
+    fn approximate_taylor_polynomial_matches_scipy() {
+        let close = |a: f64, b: f64, t: f64| (a - b).abs() <= t;
+
+        // scipy: approximate_taylor_polynomial(x**3, 2.0, 3, 1.0, order=5)
+        // -> poly1d coeffs (desc) [1, 6, 12, 8].
+        let c = approximate_taylor_polynomial(|t| t * t * t, 2.0, 3, 1.0, Some(5)).unwrap();
+        assert_eq!(c.len(), 4);
+        let want = [1.0, 6.0, 12.0, 8.0];
+        for (g, w) in c.iter().zip(want.iter()) {
+            assert!(close(*g, *w, 1e-7), "x^3 coeff {g} vs {w}");
+        }
+
+        // scipy: approximate_taylor_polynomial(sin, 0, 5, 1.0, order=7)
+        // -> [0.008327592, ~0, -0.166664813, ~0, 0.999999831, ~0].
+        let s = approximate_taylor_polynomial(|t: f64| t.sin(), 0.0, 5, 1.0, Some(7)).unwrap();
+        let sw = [
+            0.008327592134467668,
+            0.0,
+            -0.16666481316597495,
+            0.0,
+            0.9999998316400153,
+            0.0,
+        ];
+        for (g, w) in s.iter().zip(sw.iter()) {
+            assert!(close(*g, *w, 1e-9), "sin coeff {g} vs {w}");
+        }
+
+        // scipy: approximate_taylor_polynomial(exp, 0, 4, 1.0) (order=None -> 4).
+        let e = approximate_taylor_polynomial(|t: f64| t.exp(), 0.0, 4, 1.0, None).unwrap();
+        let ew = [
+            0.05284056311102009,
+            0.1730167826453521,
+            0.4923222196318288,
+            0.999469779438879,
+            1.000632483631965,
+        ];
+        for (g, w) in e.iter().zip(ew.iter()) {
+            assert!(close(*g, *w, 1e-9), "exp coeff {g} vs {w}");
+        }
     }
 
     #[test]
