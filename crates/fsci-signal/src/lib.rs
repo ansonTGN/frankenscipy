@@ -13520,6 +13520,180 @@ pub fn cont2discrete(
     ss2tf(&ad, &bd, &cd, dd)
 }
 
+/// Complex multiply.
+fn c_mul(a: (f64, f64), b: (f64, f64)) -> (f64, f64) {
+    (a.0 * b.0 - a.1 * b.1, a.0 * b.1 + a.1 * b.0)
+}
+
+/// Complex polynomial multiplication (descending-power coefficient vectors).
+fn c_polymul(a: &[(f64, f64)], b: &[(f64, f64)]) -> Vec<(f64, f64)> {
+    if a.is_empty() || b.is_empty() {
+        return vec![(0.0, 0.0)];
+    }
+    let mut out = vec![(0.0, 0.0); a.len() + b.len() - 1];
+    for (i, &ai) in a.iter().enumerate() {
+        for (j, &bj) in b.iter().enumerate() {
+            let m = c_mul(ai, bj);
+            out[i + j].0 += m.0;
+            out[i + j].1 += m.1;
+        }
+    }
+    out
+}
+
+/// Complex polynomial addition aligning highest-degree terms (numpy `polyadd`).
+fn c_polyadd(a: &[(f64, f64)], b: &[(f64, f64)]) -> Vec<(f64, f64)> {
+    let n = a.len().max(b.len());
+    let mut out = vec![(0.0, 0.0); n];
+    for (i, &v) in a.iter().enumerate() {
+        let idx = i + (n - a.len());
+        out[idx].0 += v.0;
+        out[idx].1 += v.1;
+    }
+    for (i, &v) in b.iter().enumerate() {
+        let idx = i + (n - b.len());
+        out[idx].0 += v.0;
+        out[idx].1 += v.1;
+    }
+    out
+}
+
+/// Group adjacent poles that are within `tol`, returning the first pole of each
+/// group as its representative and the group multiplicity (scipy `_group_poles`
+/// with `rtype='avg'`, whose averaged block is the repeated reference pole).
+fn group_poles(p: &[(f64, f64)], tol: f64) -> (Vec<(f64, f64)>, Vec<usize>) {
+    let mut unique = Vec::new();
+    let mut mult = Vec::new();
+    if p.is_empty() {
+        return (unique, mult);
+    }
+    let mut pole = p[0];
+    let mut count = 1;
+    for &q in &p[1..] {
+        if (q.0 - pole.0).hypot(q.1 - pole.1) <= tol {
+            count += 1;
+        } else {
+            unique.push(pole);
+            mult.push(count);
+            pole = q;
+            count = 1;
+        }
+    }
+    unique.push(pole);
+    mult.push(count);
+    (unique, mult)
+}
+
+/// Port of scipy `_compute_factors(roots, multiplicity, include_powers=True)`:
+/// returns, for each (power of each) root, the full polynomial divided by that
+/// factor, plus the full denominator polynomial.
+fn compute_factors(
+    roots: &[(f64, f64)],
+    mult: &[usize],
+) -> (Vec<Vec<(f64, f64)>>, Vec<(f64, f64)>) {
+    let one = vec![(1.0, 0.0)];
+    let mut current = one.clone();
+    let mut suffixes = vec![current.clone()];
+    for idx in (1..roots.len()).rev() {
+        let pole = roots[idx];
+        let monomial = vec![(1.0, 0.0), (-pole.0, -pole.1)];
+        for _ in 0..mult[idx] {
+            current = c_polymul(&current, &monomial);
+        }
+        suffixes.push(current.clone());
+    }
+    suffixes.reverse();
+
+    let mut factors: Vec<Vec<(f64, f64)>> = Vec::new();
+    let mut current = one;
+    for (i, &pole) in roots.iter().enumerate() {
+        let monomial = vec![(1.0, 0.0), (-pole.0, -pole.1)];
+        let mut block: Vec<Vec<(f64, f64)>> = Vec::new();
+        for _ in 0..mult[i] {
+            block.push(c_polymul(&current, &suffixes[i]));
+            current = c_polymul(&current, &monomial);
+        }
+        block.reverse();
+        factors.extend(block);
+    }
+    (factors, current)
+}
+
+/// Inverse of [`residue`]: reconstruct the `(b, a)` transfer-function
+/// coefficients from a partial-fraction expansion, matching
+/// `scipy.signal.invres(r, p, k)` (positive powers of s).
+///
+/// `r`/`p` are the complex residues/poles as `(re, im)` pairs (repeated poles
+/// adjacent, residues ordered ascending by fraction power); `k` are the direct
+/// polynomial terms. `tol` groups near-equal poles (scipy default `1e-3`). The
+/// returned `(b, a)` are real (the imaginary parts cancel for real systems) and
+/// are realization-independent, so they match scipy.
+pub fn invres(
+    r: &[(f64, f64)],
+    p: &[(f64, f64)],
+    k: &[f64],
+    tol: f64,
+) -> Result<(Vec<f64>, Vec<f64>), SignalError> {
+    if r.len() != p.len() {
+        return Err(SignalError::InvalidArgument(
+            "r and p must have the same length".to_string(),
+        ));
+    }
+    // Trim leading zeros from k (numpy trim_zeros 'f').
+    let kstart = k.iter().position(|&v| v != 0.0).unwrap_or(k.len());
+    let kc: Vec<(f64, f64)> = k[kstart..].iter().map(|&v| (v, 0.0)).collect();
+    let (unique, mult) = group_poles(p, tol);
+    let (factors, denom) = compute_factors(&unique, &mult);
+    let mut numerator = if kc.is_empty() {
+        vec![(0.0, 0.0)]
+    } else {
+        c_polymul(&kc, &denom)
+    };
+    for (residue, factor) in r.iter().zip(&factors) {
+        let scaled: Vec<(f64, f64)> = factor.iter().map(|&f| c_mul(*residue, f)).collect();
+        numerator = c_polyadd(&numerator, &scaled);
+    }
+    Ok((
+        numerator.iter().map(|&(re, _)| re).collect(),
+        denom.iter().map(|&(re, _)| re).collect(),
+    ))
+}
+
+/// Inverse of [`residuez`]: reconstruct `(b, a)` from a partial-fraction
+/// expansion in negative powers of `z`, matching `scipy.signal.invresz(r, p, k)`.
+pub fn invresz(
+    r: &[(f64, f64)],
+    p: &[(f64, f64)],
+    k: &[f64],
+    tol: f64,
+) -> Result<(Vec<f64>, Vec<f64>), SignalError> {
+    if r.len() != p.len() {
+        return Err(SignalError::InvalidArgument(
+            "r and p must have the same length".to_string(),
+        ));
+    }
+    // Trim trailing zeros from k (numpy trim_zeros 'b').
+    let kend = k.iter().rposition(|&v| v != 0.0).map_or(0, |i| i + 1);
+    let kc: Vec<(f64, f64)> = k[..kend].iter().map(|&v| (v, 0.0)).collect();
+    let (unique, mult) = group_poles(p, tol);
+    let (factors, denom) = compute_factors(&unique, &mult);
+    let mut numerator = if kc.is_empty() {
+        vec![(0.0, 0.0)]
+    } else {
+        let kr: Vec<(f64, f64)> = kc.iter().rev().copied().collect();
+        let dr: Vec<(f64, f64)> = denom.iter().rev().copied().collect();
+        c_polymul(&kr, &dr)
+    };
+    for (residue, factor) in r.iter().zip(&factors) {
+        let scaled: Vec<(f64, f64)> = factor.iter().rev().map(|&f| c_mul(*residue, f)).collect();
+        numerator = c_polyadd(&numerator, &scaled);
+    }
+    Ok((
+        numerator.iter().rev().map(|&(re, _)| re).collect(),
+        denom.iter().map(|&(re, _)| re).collect(),
+    ))
+}
+
 /// Simulate step response using RK4 integration.
 fn simulate_lti_step(
     a: &[Vec<f64>],
@@ -16593,6 +16767,35 @@ mod tests {
             .min_by(|(_, a), (_, b)| ((**a) - omega).abs().total_cmp(&((**b) - omega).abs()))
             .map(|(i, _)| i)
             .unwrap_or(0)
+    }
+
+    #[test]
+    fn invres_invresz_match_scipy() {
+        let re = |v: &[f64]| -> Vec<(f64, f64)> { v.iter().map(|&x| (x, 0.0)).collect() };
+        // invres distinct: r=[2,-1], p=[-1,-3], k=[1] -> b=[1,5,8], a=[1,4,3].
+        let (b, a) = invres(&re(&[2.0, -1.0]), &re(&[-1.0, -3.0]), &[1.0], 1e-3).unwrap();
+        for (g, e) in b.iter().zip(&[1.0, 5.0, 8.0]) {
+            assert!((g - e).abs() < 1e-9, "b {g} vs {e}");
+        }
+        for (g, e) in a.iter().zip(&[1.0, 4.0, 3.0]) {
+            assert!((g - e).abs() < 1e-9, "a {g} vs {e}");
+        }
+        // invres repeated: r=[1,2,3], p=[-1,-1,-2], k=[] -> b=[4,11,9], a=[1,4,5,2].
+        let (b2, a2) = invres(&re(&[1.0, 2.0, 3.0]), &re(&[-1.0, -1.0, -2.0]), &[], 1e-3).unwrap();
+        for (g, e) in b2.iter().zip(&[4.0, 11.0, 9.0]) {
+            assert!((g - e).abs() < 1e-9, "b2 {g} vs {e}");
+        }
+        for (g, e) in a2.iter().zip(&[1.0, 4.0, 5.0, 2.0]) {
+            assert!((g - e).abs() < 1e-9, "a2 {g} vs {e}");
+        }
+        // invresz: r=[2,-1], p=[0.5,-0.5], k=[1] -> b=[2,1.5,-0.25], a=[1,0,-0.25].
+        let (bz, az) = invresz(&re(&[2.0, -1.0]), &re(&[0.5, -0.5]), &[1.0], 1e-3).unwrap();
+        for (g, e) in bz.iter().zip(&[2.0, 1.5, -0.25]) {
+            assert!((g - e).abs() < 1e-9, "bz {g} vs {e}");
+        }
+        for (g, e) in az.iter().zip(&[1.0, 0.0, -0.25]) {
+            assert!((g - e).abs() < 1e-9, "az {g} vs {e}");
+        }
     }
 
     #[test]
