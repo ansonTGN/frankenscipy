@@ -11800,6 +11800,25 @@ pub fn polar(a: &[Vec<f64>], options: DecompOptions) -> Result<PolarResult, Lina
 ///
 /// A Toeplitz matrix has constant diagonals. The first column is `c` and
 /// the first row is `r`. If `r` is None, the matrix is symmetric.
+/// Construct the `M × N` Σ matrix of an SVD from its singular values.
+///
+/// Matches `scipy.linalg.diagsvd(s, M, N)`: places `s` on the leading diagonal of
+/// an otherwise-zero `M × N` matrix, so that `A = U · diagsvd(s, M, N) · Vᵀ`.
+/// scipy requires `len(s)` to equal `M` or `N`; that constraint is enforced here.
+pub fn diagsvd(s: &[f64], m: usize, n: usize) -> Result<Vec<Vec<f64>>, LinalgError> {
+    let k = s.len();
+    if k != m && k != n {
+        return Err(LinalgError::InvalidArgument {
+            detail: "diagsvd: length of s must equal M or N".to_string(),
+        });
+    }
+    let mut out = vec![vec![0.0; n]; m];
+    for (i, &value) in s.iter().enumerate().take(m.min(n)) {
+        out[i][i] = value;
+    }
+    Ok(out)
+}
+
 /// Multiply a Toeplitz matrix by a matrix: `T · x`.
 ///
 /// Matches `scipy.linalg.matmul_toeplitz`. `T` is the Toeplitz matrix with first
@@ -22088,6 +22107,38 @@ mod tests {
         // n=1 and unknown kind.
         assert_eq!(invpascal(1, "symmetric"), vec![vec![1.0]]);
         assert!(invpascal(4, "bogus").is_empty());
+    }
+
+    #[test]
+    fn diagsvd_matches_scipy() {
+        // scipy.linalg.diagsvd([2,1], 2, 4) — wide.
+        let wide = diagsvd(&[2.0, 1.0], 2, 4).unwrap();
+        assert_eq!(
+            wide,
+            vec![vec![2.0, 0.0, 0.0, 0.0], vec![0.0, 1.0, 0.0, 0.0]]
+        );
+        // diagsvd([2,1], 4, 2) — tall.
+        let tall = diagsvd(&[2.0, 1.0], 4, 2).unwrap();
+        assert_eq!(
+            tall,
+            vec![
+                vec![2.0, 0.0],
+                vec![0.0, 1.0],
+                vec![0.0, 0.0],
+                vec![0.0, 0.0],
+            ]
+        );
+        // square
+        assert_eq!(
+            diagsvd(&[3.0, 2.0, 1.0], 3, 3).unwrap(),
+            vec![
+                vec![3.0, 0.0, 0.0],
+                vec![0.0, 2.0, 0.0],
+                vec![0.0, 0.0, 1.0],
+            ]
+        );
+        // len(s) neither M nor N -> error (matches scipy ValueError).
+        assert!(diagsvd(&[2.0, 1.0], 3, 4).is_err());
     }
 
     #[test]
