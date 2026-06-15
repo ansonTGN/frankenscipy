@@ -1,0 +1,9 @@
+aa3334aff1cf0198fc89e2a42e2273f617bc5f14d258e16aee914a2110046a81  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-o3gu7-compact-wy-triangle/EVIDENCE.md
+8b95053567d9aaaf30249248042d417cabf0f8df882f90c7f78060a8660acc03  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-o3gu7-compact-wy-triangle/after_compact_wy_panel_kernel_rch.txt
+99540717fe2384d88dd8ecccadd0e21f421648f20309ef7520673aad888cf672  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-o3gu7-compact-wy-triangle/after_compact_wy_triangle_replay_rch.txt
+c8ba59442beccda3ffe1459690dddd78e67fc8a799ade3c37d6f2b1616417517  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-o3gu7-compact-wy-triangle/check_fsci_linalg_lib_rch.txt
+80a528a1d9b811ded8d25b39362da38603531677c36b9c5d1f01eb1a2a39ef58  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-o3gu7-compact-wy-triangle/clippy_fsci_linalg_lib_nodeps_rch.txt
+0eb87fa9948ab5cd6f3b88a2661dc79c5aa609c560f7013b32f1295ba623ae2c  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-o3gu7-compact-wy-triangle/fmt_fsci_linalg_check.txt
+92e08480bec5398e840e8fd7bb408339cf54e037e038cf8802759a0a764d08fc  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-o3gu7-compact-wy-triangle/proof_compact_wy_triangle_rch.txt
+6be749da85a5010e1a801918a90cfe555b95d649fdaeeeba3947697e47b8f2e1  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-o3gu7-compact-wy-triangle/proof_public_eigh_golden_rch.txt
+cb1b22bfeb243e75bc7295fc92f8b248dfbf056eabb9b41a8be73816225fe240  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-o3gu7-compact-wy-triangle/ubs_fsci_linalg_lib.txt

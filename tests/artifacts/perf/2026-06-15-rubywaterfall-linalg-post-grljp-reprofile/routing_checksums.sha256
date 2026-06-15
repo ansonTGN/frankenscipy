@@ -1,0 +1,5 @@
+06022fc5223ddd7d2a1a85354c54e74f356af4e7dc231a7e62f49c1e06b171f2  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-post-grljp-reprofile/ROUTING.md
+3d8602b74f42af990c1704a116655520a19b816e9e32d25fecd3030f4b9557cc  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-post-grljp-reprofile/baseline_compact_wy_full_to_band_replay_rch.txt
+db794e8e1c6d133d9d8af150c2c4960482509b3318bce5682ea33275eef567aa  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-post-grljp-reprofile/baseline_eigh_dense_criterion_rch.txt
+8be2442885ab86689ed520a2d12c2f1b0fe69678a93bc991880e3a086563b5fc  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-post-grljp-reprofile/perf_probe_capability_rch.txt
+2824c397a0a10cfcd80537d448fd3fb5ac7e46523dfcee4fa8b94df83c566cb9  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-post-grljp-reprofile/public_native_route_rch.txt

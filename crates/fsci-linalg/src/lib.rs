@@ -8690,15 +8690,21 @@ fn apply_compact_wy_symmetric_update(
 
     let data = matrix.as_mut_slice();
     for col_rel in 0..row_count {
-        let col_base = (active_start + col_rel) * n + active_start;
-        for row_rel in 0..row_count {
+        let col = active_start + col_rel;
+        let col_base = col * n + active_start;
+        for row_rel in col_rel..row_count {
             let mut delta = 0.0;
             for k_idx in 0..k_count {
                 let base = k_idx * row_count;
                 delta += panel.v_by_k_row[base + row_rel] * w_by_k_row[base + col_rel];
                 delta += w_by_k_row[base + row_rel] * panel.v_by_k_row[base + col_rel];
             }
-            data[col_base + row_rel] -= delta;
+            let value = data[col_base + row_rel] - delta;
+            data[col_base + row_rel] = value;
+            if row_rel != col_rel {
+                let row_col_base = (active_start + row_rel) * n + active_start;
+                data[row_col_base + col_rel] = value;
+            }
         }
     }
 

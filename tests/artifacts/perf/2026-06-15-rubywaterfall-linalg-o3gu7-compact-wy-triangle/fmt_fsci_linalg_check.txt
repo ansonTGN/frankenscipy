@@ -1,0 +1,41 @@
+Diff in /data/projects/.scratch/frankenscipy-ruby-psn7x-next-20260615T1849Z/crates/fsci-linalg/src/bin/diff_expm_frechet.rs:11:
+             vec![vec![0.5, 0.1], vec![0.2, 0.3]],
+         ),
+         (
+-            vec![vec![-0.3, 0.2, 0.6], vec![0.6, 0.3, -0.1], vec![-0.7, 1.2, 0.9]],
+-            vec![vec![0.1, 0.0, -0.2], vec![0.3, 0.4, 0.1], vec![0.0, -0.1, 0.2]],
++            vec![
++                vec![-0.3, 0.2, 0.6],
++                vec![0.6, 0.3, -0.1],
++                vec![-0.7, 1.2, 0.9],
++            ],
++            vec![
++                vec![0.1, 0.0, -0.2],
++                vec![0.3, 0.4, 0.1],
++                vec![0.0, -0.1, 0.2],
++            ],
+         ),
+     ];
+
+Diff in /data/projects/.scratch/frankenscipy-ruby-psn7x-next-20260615T1849Z/crates/fsci-linalg/src/lib.rs:6332:
+
+     let sigma_max = svdvals(&k, options)?.into_iter().fold(0.0_f64, f64::max);
+
+-    let frob =
+-        |m: &[Vec<f64>]| -> f64 { m.iter().flatten().map(|&v| v * v).sum::<f64>().sqrt() };
++    let frob = |m: &[Vec<f64>]| -> f64 { m.iter().flatten().map(|&v| v * v).sum::<f64>().sqrt() };
+     let expm_a = expm(a, options)?;
+     let x_norm = frob(&expm_a);
+     let a_norm = frob(a);
+Diff in /data/projects/.scratch/frankenscipy-ruby-psn7x-next-20260615T1849Z/crates/fsci-linalg/src/lib.rs:26288:
+             vec![-0.7, 1.2, 0.9],
+         ];
+         let kappa = expm_cond(&b, DecompOptions::default()).unwrap();
+-        assert!((kappa - 1.778_780_586_446_986_6).abs() < 1e-9, "expm_cond = {kappa}");
++        assert!(
++            (kappa - 1.778_780_586_446_986_6).abs() < 1e-9,
++            "expm_cond = {kappa}"
++        );
+
+         // Shape mismatch -> error.
+         let bad_e = vec![vec![1.0, 2.0, 3.0]];
