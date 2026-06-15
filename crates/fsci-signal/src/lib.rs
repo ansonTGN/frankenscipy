@@ -1761,6 +1761,32 @@ pub fn czt(
     Ok(result)
 }
 
+/// The points (in the complex plane) at which a chirp Z-transform samples the
+/// Z-transform, matching `scipy.signal.czt_points`.
+///
+/// Returns `z_k = a · w^{-k}` for `k = 0..m-1`, where `w` and `a` use the same
+/// polar `(magnitude, angle)` convention as [`czt`]: the default `w =
+/// (1, -2π/m)` (unit-circle DFT step) and `a = (1, 0)` (start at `z = 1`) yield
+/// the `m`th roots of unity. Output points are returned as `(re, im)` pairs.
+#[must_use]
+pub fn czt_points(m: usize, w: Option<(f64, f64)>, a: Option<(f64, f64)>) -> Vec<(f64, f64)> {
+    if m == 0 {
+        return Vec::new();
+    }
+    let two_pi = 2.0 * std::f64::consts::PI;
+    let (w_mag, w_ang) = w.unwrap_or((1.0, -two_pi / m as f64));
+    let (a_mag, a_ang) = a.unwrap_or((1.0, 0.0));
+    (0..m)
+        .map(|k| {
+            let kf = k as f64;
+            // z_k = a · w^{-k}; in polar: mag = a_mag · w_mag^{-k}, angle = a_ang − w_ang·k.
+            let mag = a_mag * w_mag.powf(-kf);
+            let ang = a_ang - w_ang * kf;
+            (mag * ang.cos(), mag * ang.sin())
+        })
+        .collect()
+}
+
 /// Zoom FFT: compute the DFT over a frequency sub-range [f1, f2] with M points.
 ///
 /// This uses the Chirp Z-Transform to evaluate the Z-transform at M equally
@@ -12902,6 +12928,31 @@ pub fn daub(p: usize) -> Result<Vec<f64>, SignalError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn czt_points_match_scipy() {
+        // Default: 5th roots of unity (scipy.signal.czt_points(5)).
+        let pts = czt_points(5, None, None);
+        let expected = [
+            (1.0, 0.0),
+            (0.309_016_994_374_947_45, 0.951_056_516_295_153_5),
+            (-0.809_016_994_374_947_3, 0.587_785_252_292_473_2),
+            (-0.809_016_994_374_947_6, -0.587_785_252_292_473),
+            (0.309_016_994_374_947_23, -0.951_056_516_295_153_6),
+        ];
+        assert_eq!(pts.len(), 5);
+        for ((re, im), (ere, eim)) in pts.iter().zip(&expected) {
+            assert!((re - ere).abs() < 1e-12, "re {re} vs {ere}");
+            assert!((im - eim).abs() < 1e-12, "im {im} vs {eim}");
+        }
+        // Explicit w = exp(-2πj/8) gives the first 4 eighth-roots of unity.
+        let pts8 = czt_points(4, Some((1.0, -2.0 * std::f64::consts::PI / 8.0)), None);
+        let s = std::f64::consts::FRAC_1_SQRT_2;
+        let exp8 = [(1.0, 0.0), (s, s), (0.0, 1.0), (-s, s)];
+        for ((re, im), (ere, eim)) in pts8.iter().zip(&exp8) {
+            assert!((re - ere).abs() < 1e-12 && (im - eim).abs() < 1e-12);
+        }
+    }
 
     #[test]
     fn check_cola_nola_match_scipy() {
