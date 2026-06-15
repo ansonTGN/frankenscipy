@@ -13694,6 +13694,248 @@ pub fn invresz(
     ))
 }
 
+/// Complex division `a / b`.
+fn c_div(a: (f64, f64), b: (f64, f64)) -> (f64, f64) {
+    let denom = b.0 * b.0 + b.1 * b.1;
+    ((a.0 * b.0 + a.1 * b.1) / denom, (a.1 * b.0 - a.0 * b.1) / denom)
+}
+
+/// Evaluate a complex polynomial (descending powers) at a complex point.
+fn c_polyval(p: &[(f64, f64)], x: (f64, f64)) -> (f64, f64) {
+    let mut acc = (0.0, 0.0);
+    for &c in p {
+        let m = c_mul(acc, x);
+        acc = (m.0 + c.0, m.1 + c.1);
+    }
+    acc
+}
+
+/// Complex polynomial division (numpy `polydiv`): returns `(quotient, remainder)`.
+fn c_polydiv(num: &[(f64, f64)], den: &[(f64, f64)]) -> (Vec<(f64, f64)>, Vec<(f64, f64)>) {
+    let dn = den.len();
+    if num.len() < dn || dn == 0 {
+        return (vec![(0.0, 0.0)], num.to_vec());
+    }
+    let mut rem = num.to_vec();
+    let lead = den[0];
+    let qlen = num.len() - dn + 1;
+    let mut quot = Vec::with_capacity(qlen);
+    for i in 0..qlen {
+        let coef = c_div(rem[i], lead);
+        quot.push(coef);
+        for j in 0..dn {
+            let m = c_mul(coef, den[j]);
+            rem[i + j].0 -= m.0;
+            rem[i + j].1 -= m.1;
+        }
+    }
+    // Remainder is the tail (degree < den); trim leading (near-)zeros.
+    let mut r: Vec<(f64, f64)> = rem[qlen..].to_vec();
+    let start = r
+        .iter()
+        .position(|&(re, im)| re.abs() > 1e-300 || im.abs() > 1e-300)
+        .unwrap_or(r.len().saturating_sub(1));
+    r = r[start..].to_vec();
+    if r.is_empty() {
+        r.push((0.0, 0.0));
+    }
+    (quot, r)
+}
+
+/// Greedy clustering of roots within `tol` (scipy `unique_roots`, rtype='avg':
+/// representative = mean of each group), preserving input order for grouping.
+fn unique_roots_avg(p: &[(f64, f64)], tol: f64) -> (Vec<(f64, f64)>, Vec<usize>) {
+    let n = p.len();
+    let mut used = vec![false; n];
+    let mut unique = Vec::new();
+    let mut mult = Vec::new();
+    for i in 0..n {
+        if used[i] {
+            continue;
+        }
+        let mut sum = (0.0, 0.0);
+        let mut count = 0usize;
+        for (j, &q) in p.iter().enumerate() {
+            if !used[j] && (q.0 - p[i].0).hypot(q.1 - p[i].1) <= tol {
+                used[j] = true;
+                sum.0 += q.0;
+                sum.1 += q.1;
+                count += 1;
+            }
+        }
+        unique.push((sum.0 / count as f64, sum.1 / count as f64));
+        mult.push(count);
+    }
+    (unique, mult)
+}
+
+/// Stable sort of roots by magnitude (scipy `_cmplx_sort` = argsort of `|p|`),
+/// returning the sorted roots and the permutation indices.
+fn cmplx_sort(p: &[(f64, f64)]) -> (Vec<(f64, f64)>, Vec<usize>) {
+    let mut idx: Vec<usize> = (0..p.len()).collect();
+    idx.sort_by(|&a, &b| {
+        let ma = p[a].0.hypot(p[a].1);
+        let mb = p[b].0.hypot(p[b].1);
+        ma.total_cmp(&mb)
+    });
+    let sorted = idx.iter().map(|&i| p[i]).collect();
+    (sorted, idx)
+}
+
+/// Port of scipy `_compute_residues(poles, multiplicity, numerator)`.
+fn compute_residues(
+    poles: &[(f64, f64)],
+    mult: &[usize],
+    numerator: &[(f64, f64)],
+) -> Vec<(f64, f64)> {
+    let (factors, _) = compute_factors(poles, mult);
+    let mut residues = Vec::new();
+    for (i, &pole) in poles.iter().enumerate() {
+        let factor = &factors[i];
+        if mult[i] == 1 {
+            residues.push(c_div(c_polyval(numerator, pole), c_polyval(factor, pole)));
+        } else {
+            let mut numer = numerator.to_vec();
+            let monomial = vec![(1.0, 0.0), (-pole.0, -pole.1)];
+            let (factor_q, d) = c_polydiv(factor, &monomial);
+            let mut block = Vec::new();
+            let mut fac = factor_q;
+            for _ in 0..mult[i] {
+                let (q, n) = c_polydiv(&numer, &monomial);
+                let r = c_div(n[0], d[0]);
+                // numer = q - r * fac
+                let scaled: Vec<(f64, f64)> = fac.iter().map(|&f| c_mul(r, f)).collect();
+                let neg: Vec<(f64, f64)> = scaled.iter().map(|&(re, im)| (-re, -im)).collect();
+                numer = c_polyadd(&q, &neg);
+                block.push(r);
+            }
+            block.reverse();
+            residues.extend(block);
+        }
+    }
+    residues
+}
+
+/// Partial-fraction expansion of `b(s)/a(s)`, matching `scipy.signal.residue`.
+///
+/// Returns `(r, p, k)`: residues, poles (grouped within `tol` then ordered by
+/// magnitude), and direct polynomial terms (when `deg(b) >= deg(a)`). Poles are
+/// found via the companion-matrix eigenvalues, so the result matches scipy to
+/// numerical tolerance for systems with distinct pole magnitudes; for any input
+/// it is a valid PFE (verifiable by reconstructing with [`invres`]).
+#[allow(clippy::type_complexity)]
+pub fn residue(
+    b: &[f64],
+    a: &[f64],
+    tol: f64,
+) -> Result<(Vec<(f64, f64)>, Vec<(f64, f64)>, Vec<f64>), SignalError> {
+    // Trim leading zeros.
+    let bs = b.iter().position(|&v| v != 0.0).unwrap_or(b.len());
+    let as_ = a.iter().position(|&v| v != 0.0).unwrap_or(a.len());
+    let b = &b[bs..];
+    let a = &a[as_..];
+    if a.is_empty() {
+        return Err(SignalError::InvalidArgument("denominator is zero".to_string()));
+    }
+    let (pre, pim) = poly_roots(a)?;
+    let poles: Vec<(f64, f64)> = pre.iter().zip(&pim).map(|(&r, &i)| (r, i)).collect();
+    if b.is_empty() {
+        let (sorted, _) = cmplx_sort(&poles);
+        return Ok((vec![(0.0, 0.0); poles.len()], sorted, Vec::new()));
+    }
+    let bc: Vec<(f64, f64)> = b.iter().map(|&v| (v, 0.0)).collect();
+    let ac: Vec<(f64, f64)> = a.iter().map(|&v| (v, 0.0)).collect();
+    let (k, num) = if b.len() < a.len() {
+        (Vec::new(), bc)
+    } else {
+        let (q, r) = c_polydiv(&bc, &ac);
+        (q.iter().map(|&(re, _)| re).collect::<Vec<f64>>(), r)
+    };
+    let (uniq, mult) = unique_roots_avg(&poles, tol);
+    let (uniq_sorted, order) = cmplx_sort(&uniq);
+    let mult_sorted: Vec<usize> = order.iter().map(|&i| mult[i]).collect();
+    let residues = compute_residues(&uniq_sorted, &mult_sorted, &num);
+    let a0 = a[0];
+    let r: Vec<(f64, f64)> = residues.iter().map(|&v| (v.0 / a0, v.1 / a0)).collect();
+    // Expand poles to full multiplicity (in sorted-unique order).
+    let mut poles_full = Vec::new();
+    for (&pole, &m) in uniq_sorted.iter().zip(&mult_sorted) {
+        for _ in 0..m {
+            poles_full.push(pole);
+        }
+    }
+    Ok((r, poles_full, k))
+}
+
+/// Partial-fraction expansion of `b(z)/a(z)` in negative powers of `z`, matching
+/// `scipy.signal.residuez`. Returns `(r, p, k)` as in [`residue`].
+#[allow(clippy::type_complexity)]
+pub fn residuez(
+    b: &[f64],
+    a: &[f64],
+    tol: f64,
+) -> Result<(Vec<(f64, f64)>, Vec<(f64, f64)>, Vec<f64>), SignalError> {
+    // Trim trailing zeros.
+    let bend = b.iter().rposition(|&v| v != 0.0).map_or(0, |i| i + 1);
+    let aend = a.iter().rposition(|&v| v != 0.0).map_or(0, |i| i + 1);
+    let b = &b[..bend];
+    let a = &a[..aend];
+    if a.is_empty() {
+        return Err(SignalError::InvalidArgument("denominator is zero".to_string()));
+    }
+    if a[0] == 0.0 {
+        return Err(SignalError::InvalidArgument(
+            "first coefficient of `a` must be non-zero".to_string(),
+        ));
+    }
+    let (pre, pim) = poly_roots(a)?;
+    let poles: Vec<(f64, f64)> = pre.iter().zip(&pim).map(|(&r, &i)| (r, i)).collect();
+    if b.is_empty() {
+        let (sorted, _) = cmplx_sort(&poles);
+        return Ok((vec![(0.0, 0.0); poles.len()], sorted, Vec::new()));
+    }
+    // Reverse for the z^-1 domain.
+    let b_rev: Vec<(f64, f64)> = b.iter().rev().map(|&v| (v, 0.0)).collect();
+    let a_rev: Vec<(f64, f64)> = a.iter().rev().map(|&v| (v, 0.0)).collect();
+    let (k_rev, num_rev) = if b_rev.len() < a_rev.len() {
+        (Vec::new(), b_rev.clone())
+    } else {
+        let (q, r) = c_polydiv(&b_rev, &a_rev);
+        (q, r)
+    };
+    let (uniq, mult) = unique_roots_avg(&poles, tol);
+    let (uniq_sorted, order) = cmplx_sort(&uniq);
+    let mult_sorted: Vec<usize> = order.iter().map(|&i| mult[i]).collect();
+    // residues evaluated at reciprocal poles.
+    let inv_poles: Vec<(f64, f64)> = uniq_sorted.iter().map(|&p| c_div((1.0, 0.0), p)).collect();
+    let residues = compute_residues(&inv_poles, &mult_sorted, &num_rev);
+    let a_rev0 = a_rev[0];
+    // Expand poles + powers, then scale residues by (-pole)^power / a_rev[0].
+    let mut poles_full = Vec::new();
+    let mut powers = Vec::new();
+    for (&pole, &m) in uniq_sorted.iter().zip(&mult_sorted) {
+        for j in 0..m {
+            poles_full.push(pole);
+            powers.push(j + 1);
+        }
+    }
+    let r: Vec<(f64, f64)> = residues
+        .iter()
+        .zip(poles_full.iter().zip(&powers))
+        .map(|(&res, (&pole, &pw))| {
+            let mut scale = (1.0, 0.0);
+            let negp = (-pole.0, -pole.1);
+            for _ in 0..pw {
+                scale = c_mul(scale, negp);
+            }
+            let scaled = c_mul(res, scale);
+            c_div(scaled, a_rev0)
+        })
+        .collect();
+    let k: Vec<f64> = k_rev.iter().rev().map(|&(re, _)| re).collect();
+    Ok((r, poles_full, k))
+}
+
 /// Simulate step response using RK4 integration.
 fn simulate_lti_step(
     a: &[Vec<f64>],
@@ -16767,6 +17009,48 @@ mod tests {
             .min_by(|(_, a), (_, b)| ((**a) - omega).abs().total_cmp(&((**b) - omega).abs()))
             .map(|(i, _)| i)
             .unwrap_or(0)
+    }
+
+    #[test]
+    fn residue_residuez_match_scipy() {
+        // residue([1,5,8],[1,4,3]) -> r=[2,-1], p=[-1,-3], k=[1].
+        let (r, p, k) = residue(&[1.0, 5.0, 8.0], &[1.0, 4.0, 3.0], 1e-3).unwrap();
+        for (g, e) in r.iter().zip(&[2.0, -1.0]) {
+            assert!((g.0 - e).abs() < 1e-8 && g.1.abs() < 1e-8, "r {g:?} vs {e}");
+        }
+        for (g, e) in p.iter().zip(&[-1.0, -3.0]) {
+            assert!((g.0 - e).abs() < 1e-8, "p {g:?} vs {e}");
+        }
+        assert!((k[0] - 1.0).abs() < 1e-8 && k.len() == 1);
+
+        // improper: residue([1,6,2],[1,3,2]) -> r=[-3,6], p=[-1,-2], k=[1].
+        let (r2, p2, k2) = residue(&[1.0, 6.0, 2.0], &[1.0, 3.0, 2.0], 1e-3).unwrap();
+        for (g, e) in r2.iter().zip(&[-3.0, 6.0]) {
+            assert!((g.0 - e).abs() < 1e-8, "r2 {g:?} vs {e}");
+        }
+        for (g, e) in p2.iter().zip(&[-1.0, -2.0]) {
+            assert!((g.0 - e).abs() < 1e-8, "p2 {g:?} vs {e}");
+        }
+        assert!((k2[0] - 1.0).abs() < 1e-8);
+
+        // Round-trip: invres(residue(b,a)) == (b,a).
+        let (rb, ra) = invres(&r, &p, &k, 1e-3).unwrap();
+        for (g, e) in rb.iter().zip(&[1.0, 5.0, 8.0]) {
+            assert!((g - e).abs() < 1e-7, "roundtrip b {g} vs {e}");
+        }
+        for (g, e) in ra.iter().zip(&[1.0, 4.0, 3.0]) {
+            assert!((g - e).abs() < 1e-7, "roundtrip a {g} vs {e}");
+        }
+
+        // residuez([1,0],[1,-0.5,0.06]) -> r=[-2,3], p=[0.2,0.3], k=[].
+        let (rz, pz, kz) = residuez(&[1.0, 0.0], &[1.0, -0.5, 0.06], 1e-3).unwrap();
+        for (g, e) in rz.iter().zip(&[-2.0, 3.0]) {
+            assert!((g.0 - e).abs() < 1e-7, "rz {g:?} vs {e}");
+        }
+        for (g, e) in pz.iter().zip(&[0.2, 0.3]) {
+            assert!((g.0 - e).abs() < 1e-7, "pz {g:?} vs {e}");
+        }
+        assert!(kz.is_empty());
     }
 
     #[test]
