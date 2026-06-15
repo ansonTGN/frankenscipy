@@ -918,6 +918,80 @@ pub fn fftconvolve(a: &[f64], b: &[f64], mode: ConvolveMode) -> Result<Vec<f64>,
     }
 }
 
+/// Linear convolution of two 1D arrays via the overlap-add method, matching
+/// `scipy.signal.oaconvolve(a, b, mode)`.
+///
+/// The longer input is split into blocks that are each FFT-convolved with the
+/// shorter input and accumulated (overlap-add). The result is the same linear
+/// convolution as [`fftconvolve`] / [`convolve`] (to floating-point tolerance),
+/// but the block decomposition keeps the working FFT size bounded when the two
+/// inputs differ greatly in length. `mode` trims the `len(a)+len(b)-1` full
+/// output exactly as `fftconvolve` does.
+pub fn oaconvolve(a: &[f64], b: &[f64], mode: ConvolveMode) -> Result<Vec<f64>, SignalError> {
+    if a.is_empty() || b.is_empty() {
+        return Err(SignalError::InvalidArgument(
+            "inputs must be non-empty".to_string(),
+        ));
+    }
+    let na = a.len();
+    let nb = b.len();
+    let full_len = na + nb - 1;
+
+    // Convolve the longer signal `x` against the shorter kernel `h`.
+    let (x, h): (&[f64], &[f64]) = if na >= nb { (a, b) } else { (b, a) };
+    let nx = x.len();
+    let nh = h.len();
+
+    let opts = fsci_fft::FftOptions::default();
+    // FFT block size: at least 2*nh so each block does useful work, rounded up
+    // to a power of two; the per-block input length is `block = fft_len - nh + 1`.
+    let fft_len = (2 * nh).next_power_of_two().max(nh + 1);
+    let block = fft_len - nh + 1;
+
+    // Pre-transform the zero-padded kernel once.
+    let mut h_pad: Vec<fsci_fft::Complex64> = h.iter().map(|&v| (v, 0.0)).collect();
+    h_pad.resize(fft_len, (0.0, 0.0));
+    let fh =
+        fsci_fft::fft(&h_pad, &opts).map_err(|e| SignalError::InvalidArgument(format!("{e}")))?;
+
+    let mut full = vec![0.0_f64; full_len];
+    let mut start = 0;
+    while start < nx {
+        let len = block.min(nx - start);
+        let mut seg: Vec<fsci_fft::Complex64> =
+            x[start..start + len].iter().map(|&v| (v, 0.0)).collect();
+        seg.resize(fft_len, (0.0, 0.0));
+        let fs = fsci_fft::fft(&seg, &opts)
+            .map_err(|e| SignalError::InvalidArgument(format!("{e}")))?;
+        let prod: Vec<fsci_fft::Complex64> = fs
+            .iter()
+            .zip(fh.iter())
+            .map(|(&(sr, si), &(hr, hi))| (sr * hr - si * hi, sr * hi + si * hr))
+            .collect();
+        let conv = fsci_fft::ifft(&prod, &opts)
+            .map_err(|e| SignalError::InvalidArgument(format!("{e}")))?;
+        // This block contributes len+nh-1 samples starting at `start`.
+        let contrib = len + nh - 1;
+        for (k, &(re, _)) in conv.iter().take(contrib).enumerate() {
+            full[start + k] += re;
+        }
+        start += block;
+    }
+
+    match mode {
+        ConvolveMode::Full => Ok(full),
+        ConvolveMode::Same => {
+            let start = (nb - 1) / 2;
+            Ok(full[start..start + na].to_vec())
+        }
+        ConvolveMode::Valid => {
+            let valid_len = na.max(nb) - na.min(nb) + 1;
+            let start = na.min(nb) - 1;
+            Ok(full[start..start + valid_len].to_vec())
+        }
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Cross-correlation
 // ══════════════════════════════════════════════════════════════════════
@@ -22254,6 +22328,38 @@ mod tests {
         }
         assert_eq!(left_bases, expected_left, "left_bases mismatch");
         assert_eq!(right_bases, expected_right, "right_bases mismatch");
+    }
+
+    #[test]
+    fn oaconvolve_matches_scipy_reference_values() {
+        let a: Vec<f64> = (1..=15).map(|v| v as f64).collect();
+        let b = vec![0.5, -1.0, 2.0, 0.25];
+        let full = oaconvolve(&a, &b, ConvolveMode::Full).unwrap();
+        let exp_full = [
+            0.5, 0.0, 1.5, 3.25, 5.0, 6.75, 8.5, 10.25, 12.0, 13.75, 15.5, 17.25, 19.0, 20.75,
+            22.5, 16.25, 33.5, 3.75,
+        ];
+        assert_eq!(full.len(), exp_full.len());
+        for (g, e) in full.iter().zip(&exp_full) {
+            assert!((g - e).abs() < 1e-9, "full {g} vs {e}");
+        }
+        // 'same' keeps the central len(a) samples; 'valid' the fully-overlapping ones.
+        let same = oaconvolve(&a, &b, ConvolveMode::Same).unwrap();
+        assert_eq!(same.len(), 15);
+        assert!((same[0] - 0.0).abs() < 1e-9 && (same[14] - 16.25).abs() < 1e-9);
+        let valid = oaconvolve(&a, &b, ConvolveMode::Valid).unwrap();
+        assert_eq!(valid.len(), 12);
+        assert!((valid[0] - 3.25).abs() < 1e-9 && (valid[11] - 22.5).abs() < 1e-9);
+        // Argument order is symmetric for 'full' (matches scipy).
+        let rev = oaconvolve(&b, &a, ConvolveMode::Full).unwrap();
+        for (g, e) in rev.iter().zip(&exp_full) {
+            assert!((g - e).abs() < 1e-9, "rev {g} vs {e}");
+        }
+        // Result agrees with fftconvolve to FP tolerance (same linear convolution).
+        let fftc = fftconvolve(&a, &b, ConvolveMode::Full).unwrap();
+        for (g, e) in full.iter().zip(&fftc) {
+            assert!((g - e).abs() < 1e-9);
+        }
     }
 
     #[test]
