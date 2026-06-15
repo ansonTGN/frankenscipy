@@ -5583,6 +5583,20 @@ pub fn eig_banded(
     Ok((eigenvalues, eigenvectors))
 }
 
+/// Eigenvalues of a real symmetric tridiagonal matrix, in ascending order.
+///
+/// Matches `scipy.linalg.eigvalsh_tridiagonal(d, e)`: `d` is the main diagonal
+/// (length `n`) and `e` the off-diagonal (length `n − 1`). Returns only the
+/// eigenvalues — the eigenvalue-only path of [`eigh_tridiagonal`].
+pub fn eigvalsh_tridiagonal(
+    d: &[f64],
+    e: &[f64],
+    options: DecompOptions,
+) -> Result<Vec<f64>, LinalgError> {
+    let (eigenvalues, _) = eigh_tridiagonal(d, e, true, options)?;
+    Ok(eigenvalues)
+}
+
 /// Eigenvalues and eigenvectors of a symmetric tridiagonal matrix.
 ///
 /// Given the diagonal elements `d` and off-diagonal elements `e` of a
@@ -24536,6 +24550,27 @@ mod proptest_tests {
             eigh_tridiagonal(&d, &e, true, DecompOptions::default()).expect("eigvals only");
         assert_eq!(eigenvalues.len(), 3);
         assert!(eigenvectors.is_none());
+    }
+
+    #[test]
+    fn eigvalsh_tridiagonal_matches_scipy() {
+        // scipy.linalg.eigvalsh_tridiagonal([2,2,2,2], [1,1,1])
+        let d = [2.0, 2.0, 2.0, 2.0];
+        let e = [1.0, 1.0, 1.0];
+        let vals = eigvalsh_tridiagonal(&d, &e, DecompOptions::default()).unwrap();
+        let want = [
+            0.3819660112501049,
+            1.3819660112501053,
+            2.618033988749895,
+            3.6180339887498953,
+        ];
+        assert_eq!(vals.len(), 4);
+        for (g, w) in vals.iter().zip(want.iter()) {
+            assert!((g - w).abs() < 1e-9, "eigval {g} vs {w}");
+        }
+        // Matches the eigenvalue-only path of eigh_tridiagonal exactly.
+        let (ev, _) = eigh_tridiagonal(&d, &e, true, DecompOptions::default()).unwrap();
+        assert_eq!(vals, ev);
     }
 
     #[test]
