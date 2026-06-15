@@ -1,0 +1,15 @@
+87512082848b7c6bb393d70a5ebf173b4aeed83d13b711c1840de4445c26af82  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-i3gnj-post-rank2-eigh-profile/EVIDENCE.md
+c8194a919e630a49ab2f6b30b85e4bf3d4135571fee47bd9b0cc855c3ac360a7  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-i3gnj-post-rank2-eigh-profile/after_criterion_eigh_dense_rch.txt
+fb29faa90824f1d79bec297bc50beaebf04c5cd0fdd7a7b51e51b0bac831f089  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-i3gnj-post-rank2-eigh-profile/after_native_vs_nalgebra_rch.txt
+84eeffdfbdeb5fe5dd2656c27c961745e69e2242105740d04fc09332f70b94a9  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-i3gnj-post-rank2-eigh-profile/after_public_eigh_route_rch.txt
+c610277b98bb42f8741d9f6f0809c2f3a4478ab9690c18ad08c0d627965505d0  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-i3gnj-post-rank2-eigh-profile/baseline_criterion_eigh_dense_rch.txt
+50c7f042c59aa18a356e18492e3716ac049143b71af0ac48ca9207c5993b7ee7  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-i3gnj-post-rank2-eigh-profile/baseline_native_vs_nalgebra_rch.txt
+37ce250fed994519587eb8165ffb141742f7ed21050e95b9b025993d8153a443  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-i3gnj-post-rank2-eigh-profile/baseline_public_eigh_route_rch.txt
+2dab9df0998a2ce574ede9da5246c9015d88891097b8d9958f105553830006f5  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-i3gnj-post-rank2-eigh-profile/check_fsci_linalg_lib_rch.txt
+0ec396a4a371d4145b4d27daacc49d164a9e5f6eb962a294981dd150440ac14c  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-i3gnj-post-rank2-eigh-profile/clippy_fsci_linalg_lib_rch.txt
+4587978bb5d28c2534e9b6c6ffbaae0dda6ff6a52875b9616b119f9bc53173f1  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-i3gnj-post-rank2-eigh-profile/golden_output_i3gnj.sha256
+9d873404ce180887c383ec05397b18b4522bd53bfd79f11118643551c94f230f  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-i3gnj-post-rank2-eigh-profile/golden_output_i3gnj.txt
+b391c4674ba21853f22f35bb6ce8fb1e9405d688059e1e329b6c76e760ced32d  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-i3gnj-post-rank2-eigh-profile/proof_eigh_behavior_golden_rch.txt
+5c5266d7ea6e14c95090911e2fcbf0d92be7667b1c052a6f94d4791642d0199b  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-i3gnj-post-rank2-eigh-profile/proof_rank2_lower_storage_rch.txt
+ae0ec7ac80ce6df51e2d8cf7c4a4b0e5b1461da176a6b177be1e7593e412ea25  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-i3gnj-post-rank2-eigh-profile/stage_breakdown_native_eigh_rch.txt
+165657b7e68625bce9f992b72733ea3d2fdcd0571dd7468ee28a6a08aa9bdbfd  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-i3gnj-post-rank2-eigh-profile/ubs_linalg_lib_rch_local.txt

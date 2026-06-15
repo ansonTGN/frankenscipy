@@ -8320,6 +8320,69 @@ fn apply_symmetric_householder_trailing_rank2(
     }
 }
 
+#[allow(dead_code, clippy::needless_range_loop)]
+fn apply_symmetric_householder_trailing_rank2_lower_storage(
+    matrix: &mut DMatrix<f64>,
+    reflector: &HouseholderReflector,
+    p: &mut [f64],
+    w: &mut [f64],
+) {
+    if reflector.tau == 0.0 || reflector.values.is_empty() {
+        return;
+    }
+
+    debug_assert_eq!(matrix.nrows(), matrix.ncols());
+    let n = matrix.nrows();
+    let start = reflector.start;
+    let active = reflector.values.len();
+    debug_assert!(start + active <= n);
+    debug_assert!(p.len() >= active);
+    debug_assert!(w.len() >= active);
+
+    p[..active].fill(0.0);
+    let data = matrix.as_slice();
+    for col_offset in 0..active {
+        let v_col = reflector.values[col_offset];
+        if v_col == 0.0 {
+            continue;
+        }
+        let col = start + col_offset;
+        for row_offset in 0..col_offset {
+            let row = start + row_offset;
+            p[row_offset] += data[row * n + col] * v_col;
+        }
+        let col_base = col * n;
+        for row_offset in col_offset..active {
+            p[row_offset] += data[col_base + start + row_offset] * v_col;
+        }
+    }
+
+    let mut v_dot_p = 0.0;
+    for row_offset in 0..active {
+        p[row_offset] *= reflector.tau;
+        v_dot_p += reflector.values[row_offset] * p[row_offset];
+    }
+    let correction = 0.5 * reflector.tau * v_dot_p;
+    for row_offset in 0..active {
+        w[row_offset] = p[row_offset] - correction * reflector.values[row_offset];
+    }
+
+    let data = matrix.as_mut_slice();
+    for col_offset in 0..active {
+        let w_col = w[col_offset];
+        let col = start + col_offset;
+        let v_col = reflector.values[col_offset];
+        let col_base = col * n;
+        for row_offset in col_offset..active {
+            let w_row = w[row_offset];
+            let row = start + row_offset;
+            let v_row = reflector.values[row_offset];
+            let update = v_row * w_col + w_row * v_col;
+            data[col_base + row] -= update;
+        }
+    }
+}
+
 #[allow(dead_code)]
 fn apply_left_reflectors_column_chunks(
     matrix: &mut DMatrix<f64>,
@@ -9709,8 +9772,15 @@ fn symmetric_eigh_native(matrix: &DMatrix<f64>) -> Option<(Vec<f64>, DMatrix<f64
         let beta = first - refl.values[0];
         if refl.tau != 0.0 {
             // Similarity transform P*M*P on the active symmetric suffix, using
-            // A - v*w^T - w*v^T instead of two full Householder passes.
-            apply_symmetric_householder_trailing_rank2(&mut m, &refl, &mut rank2_p, &mut rank2_w);
+            // A - v*w^T - w*v^T instead of two full Householder passes. Only
+            // the lower triangle is read after this point, so the upper mirror
+            // stores are intentionally skipped.
+            apply_symmetric_householder_trailing_rank2_lower_storage(
+                &mut m,
+                &refl,
+                &mut rank2_p,
+                &mut rank2_w,
+            );
         }
         m[(k + 1, k)] = beta;
         m[(k, k + 1)] = beta;
@@ -21294,6 +21364,68 @@ mod tests {
                     columnwise[(row, col)].to_bits(),
                     "matrix bit mismatch at ({row}, {col})"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn symmetric_rank2_lower_storage_matches_full_update_lower_bits() {
+        let n = 96usize;
+        let mut full = DMatrix::<f64>::zeros(n, n);
+        for row in 0..n {
+            for col in row..n {
+                let value = ((row * 29 + col * 31 + 17) % 67) as f64 / 61.0 - 0.5;
+                full[(row, col)] = value;
+                full[(col, row)] = value;
+            }
+        }
+        let mut lower_storage = full.clone();
+
+        for &start in &[3usize, 11, 24] {
+            let values: Vec<f64> = (start..n)
+                .map(|idx| ((idx * 17 + start * 7 + 19) % 71) as f64 / 73.0 - 0.4)
+                .collect();
+            let reflector = make_householder_reflector(start, values);
+            assert_ne!(reflector.tau, 0.0);
+
+            let mut p_full = vec![0.0; n];
+            let mut w_full = vec![0.0; n];
+            let mut p_lower = vec![0.0; n];
+            let mut w_lower = vec![0.0; n];
+            apply_symmetric_householder_trailing_rank2(
+                &mut full,
+                &reflector,
+                &mut p_full,
+                &mut w_full,
+            );
+            apply_symmetric_householder_trailing_rank2_lower_storage(
+                &mut lower_storage,
+                &reflector,
+                &mut p_lower,
+                &mut w_lower,
+            );
+
+            for idx in 0..reflector.values.len() {
+                assert_eq!(
+                    p_full[idx].to_bits(),
+                    p_lower[idx].to_bits(),
+                    "p[{idx}] changed at start={start}"
+                );
+                assert_eq!(
+                    w_full[idx].to_bits(),
+                    w_lower[idx].to_bits(),
+                    "w[{idx}] changed at start={start}"
+                );
+            }
+
+            for col in 0..n {
+                for row in col..n {
+                    assert_eq!(
+                        full[(row, col)].to_bits(),
+                        lower_storage[(row, col)].to_bits(),
+                        "lower triangle mismatch at ({row}, {col}) after start={start}"
+                    );
+                }
             }
         }
     }

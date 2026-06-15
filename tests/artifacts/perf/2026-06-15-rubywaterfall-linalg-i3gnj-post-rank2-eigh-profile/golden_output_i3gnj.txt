@@ -1,0 +1,4 @@
+eigh_index_sort_public_golden_digest=0x287a5d3679a8bc6a
+public_values_digest_400=0x4b8334c92ce624eb
+public_values_digest_800=0xad8a7e5fa1980bfb
+public_values_digest_1200=0x181b3486089d0e4a
