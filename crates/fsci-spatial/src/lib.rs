@@ -2224,6 +2224,24 @@ impl Delaunay {
     }
 }
 
+/// Find the simplices containing the given points, matching
+/// `scipy.spatial.tsearch(tri, xi)`.
+///
+/// This is the functional form of [`Delaunay::find_simplex`]: for each query
+/// point it returns the index of the containing simplex, or `-1` for points
+/// that fall outside the triangulation (scipy's sentinel). As with
+/// [`Delaunay::find_simplex`], the simplex indices refer to this crate's own
+/// Bowyer-Watson triangulation ordering rather than qhull's.
+#[must_use]
+pub fn tsearch(tri: &Delaunay, xi: &[(f64, f64)]) -> Vec<i64> {
+    xi.iter()
+        .map(|&point| match tri.find_simplex(point) {
+            Some((idx, _, _, _)) => idx as i64,
+            None => -1,
+        })
+        .collect()
+}
+
 /// Cross product of vectors OA and OB where O, A, B are 2D points.
 /// Positive = counter-clockwise, negative = clockwise, zero = collinear.
 fn cross(o: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
@@ -6454,6 +6472,34 @@ mod tests {
         let points = [(0.0, 0.0), (2.0, 0.0), (0.0, 2.0)];
         let tri = Delaunay::new(&points).expect("triangulation");
         assert!(tri.find_simplex((3.0, 3.0)).is_none());
+    }
+
+    #[test]
+    fn tsearch_matches_find_simplex_and_marks_outside() {
+        // Unit square -> two triangles; mix of inside and outside query points.
+        let points = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)];
+        let tri = Delaunay::new(&points).expect("triangulation");
+        let xi = [(0.25, 0.25), (0.75, 0.75), (5.0, 5.0), (-1.0, 0.5)];
+        let got = tsearch(&tri, &xi);
+        assert_eq!(got.len(), xi.len());
+        for (&point, &idx) in xi.iter().zip(&got) {
+            // tsearch is the functional form of find_simplex: same index, -1 outside.
+            match tri.find_simplex(point) {
+                Some((expected, _, _, _)) => assert_eq!(idx, expected as i64),
+                None => assert_eq!(idx, -1),
+            }
+            // When a simplex is reported, the point must actually lie in it.
+            if idx >= 0 {
+                let (a, b, c) = tri.simplices[idx as usize];
+                let (l1, l2, l3) =
+                    barycentric_2d(tri.points[a], tri.points[b], tri.points[c], point);
+                assert!(l1 >= -1e-10 && l2 >= -1e-10 && l3 >= -1e-10);
+            }
+        }
+        // The two interior points sit in real triangles; the two far points are out.
+        assert!(got[0] >= 0 && got[1] >= 0);
+        assert_eq!(got[2], -1);
+        assert_eq!(got[3], -1);
     }
 
     #[test]
