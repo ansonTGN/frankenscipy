@@ -9224,9 +9224,8 @@ fn symmetric_eigh_native(matrix: &DMatrix<f64>) -> Option<(Vec<f64>, DMatrix<f64
     // Back-transform: eigvecs(A) = Q·eigvecs(T), Q = P₀P₁…P_{n-3}; apply the reflectors to the
     // eigenvector matrix from the left in reverse order.
     let mut vecs = eig.eigenvectors;
-    for refl in reflectors.iter().rev() {
-        apply_householder_left(&mut vecs, refl, 0);
-    }
+    let worker_count = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+    apply_left_reflectors_column_chunks(&mut vecs, &reflectors, worker_count);
 
     // Ascending eigenvalue order (matches the EighResult contract), reorder the columns to match.
     let mut order: Vec<usize> = (0..n).collect();
@@ -20507,6 +20506,43 @@ mod tests {
             na.sort_by(|x, y| x.total_cmp(y));
             for (x, y) in evals.iter().zip(&na) {
                 assert!((x - y).abs() < 1e-8, "eigenvalue mismatch {x} vs {y}");
+            }
+        }
+    }
+
+    #[test]
+    fn symmetric_eigh_backtransform_parallel_matches_serial_bits() {
+        let n = 160usize;
+        let mut serial = DMatrix::<f64>::zeros(n, n);
+        for row in 0..n {
+            for col in 0..n {
+                serial[(row, col)] = ((row * 17 + col * 31 + 5) % 29) as f64 / 23.0 - 0.5;
+            }
+        }
+
+        let mut reflectors = Vec::new();
+        for &start in &[1usize, 7, 19] {
+            let values: Vec<f64> = (start..n)
+                .map(|idx| ((idx * 13 + start * 3 + 11) % 37) as f64 / 41.0 - 0.4)
+                .collect();
+            let reflector = make_householder_reflector(start, values);
+            assert_ne!(reflector.tau, 0.0);
+            reflectors.push(reflector);
+        }
+
+        let mut parallel = serial.clone();
+        for reflector in reflectors.iter().rev() {
+            apply_householder_left(&mut serial, reflector, 0);
+        }
+        apply_left_reflectors_column_chunks(&mut parallel, &reflectors, 4);
+
+        for row in 0..n {
+            for col in 0..n {
+                assert_eq!(
+                    serial[(row, col)].to_bits(),
+                    parallel[(row, col)].to_bits(),
+                    "bit mismatch at ({row}, {col})"
+                );
             }
         }
     }
