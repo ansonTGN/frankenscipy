@@ -33281,6 +33281,46 @@ pub struct Chi2ContingencyResult {
     pub expected: Vec<Vec<f64>>,
 }
 
+/// Build a contingency (cross-tabulation) table from two categorical arrays.
+///
+/// Returns `(levels_a, levels_b, count)` where `levels_a`/`levels_b` are the
+/// sorted unique values of `a` and `b`, and `count[i][j]` is the number of
+/// observations with `a == levels_a[i]` and `b == levels_b[j]`.
+///
+/// Matches `scipy.stats.contingency.crosstab(a, b)` for the common two-input
+/// case (scipy's variadic form returns the same `elements`/`count`). Returns
+/// empty results if the inputs differ in length or are empty.
+pub fn crosstab(a: &[f64], b: &[f64]) -> (Vec<f64>, Vec<f64>, Vec<Vec<u64>>) {
+    if a.is_empty() || a.len() != b.len() {
+        return (vec![], vec![], vec![]);
+    }
+
+    let sorted_unique = |data: &[f64]| -> Vec<f64> {
+        let mut v = data.to_vec();
+        v.sort_by(|x, y| x.total_cmp(y));
+        v.dedup_by(|x, y| x.total_cmp(y) == std::cmp::Ordering::Equal);
+        v
+    };
+    let levels_a = sorted_unique(a);
+    let levels_b = sorted_unique(b);
+
+    // Index of a value within its sorted-unique level vector (total_cmp order).
+    let index_of = |levels: &[f64], value: f64| -> usize {
+        levels
+            .binary_search_by(|probe| probe.total_cmp(&value))
+            .expect("value must be present in its own level set")
+    };
+
+    let mut count = vec![vec![0u64; levels_b.len()]; levels_a.len()];
+    for (&ai, &bi) in a.iter().zip(b.iter()) {
+        let i = index_of(&levels_a, ai);
+        let j = index_of(&levels_b, bi);
+        count[i][j] += 1;
+    }
+
+    (levels_a, levels_b, count)
+}
+
 /// Chi-squared test of independence for a contingency table.
 ///
 /// Tests whether the row and column variables are independent.
@@ -53722,6 +53762,25 @@ mod tests {
     }
 
     // ── Chi-squared contingency tests ────────────────────────────────
+
+    #[test]
+    fn crosstab_matches_scipy_reference() {
+        // scipy.stats.contingency.crosstab([0,0,1,1,2,0,1], [10,20,10,10,20,10,20])
+        let a = [0.0, 0.0, 1.0, 1.0, 2.0, 0.0, 1.0];
+        let b = [10.0, 20.0, 10.0, 10.0, 20.0, 10.0, 20.0];
+        let (la, lb, count) = crosstab(&a, &b);
+        assert_eq!(la, vec![0.0, 1.0, 2.0]);
+        assert_eq!(lb, vec![10.0, 20.0]);
+        // elements ([0,1,2],[10,20]); count [[2,1],[2,1],[0,1]]
+        assert_eq!(count, vec![vec![2, 1], vec![2, 1], vec![0, 1]]);
+        // Total count equals the number of observations.
+        let total: u64 = count.iter().flatten().sum();
+        assert_eq!(total, a.len() as u64);
+
+        // Length mismatch / empty -> empty results.
+        let (e1, e2, e3) = crosstab(&a, &b[..3]);
+        assert!(e1.is_empty() && e2.is_empty() && e3.is_empty());
+    }
 
     #[test]
     fn chi2_contingency_2x2_known() {
