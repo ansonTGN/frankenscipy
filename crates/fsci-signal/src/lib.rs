@@ -3298,6 +3298,120 @@ pub fn buttap(
     Ok((Vec::new(), poles, 1.0))
 }
 
+/// Frequency normalization for the analog Bessel prototype [`besselap`].
+///
+/// Mirrors the `norm` argument of `scipy.signal.besselap`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BesselNorm {
+    /// Phase-matched: the phase response reaches its midpoint at ω = 1 rad/s and
+    /// the magnitude asymptotes match a Butterworth filter. Gain is always 1.
+    /// This is scipy's default.
+    #[default]
+    Phase,
+    /// Group delay in the passband normalized to 1 — the "natural" Bessel form
+    /// obtained directly from the reverse Bessel polynomial roots.
+    Delay,
+    /// Magnitude is −3 dB at ω = 1 rad/s ("frequency normalization", Bond).
+    Mag,
+}
+
+/// Analog Bessel/Thomson lowpass prototype.
+///
+/// Matches `scipy.signal.besselap(N, norm)`. Returns `(zeros, poles, gain)` for
+/// the normalized analog Bessel lowpass of order `N`:
+///   - `zeros` — always empty (all-pole filter);
+///   - `poles` — roots of the reverse Bessel polynomial, scaled per `norm`;
+///   - `gain`  — `1` for [`BesselNorm::Phase`], `a_last` for [`BesselNorm::Delay`],
+///     and `norm_factor⁻ᴺ · a_last` for [`BesselNorm::Mag`], where
+///     `a_last = (2N)! / (N!·2ᴺ)` is the constant term of the reverse Bessel
+///     polynomial.
+///
+/// The raw roots of the reverse Bessel polynomial are already group-delay-of-1
+/// normalized ([`BesselNorm::Delay`]). [`BesselNorm::Phase`] additionally rescales
+/// them by `a_last^(−1/N)` and [`BesselNorm::Mag`] by the numerically-solved
+/// −3 dB frequency.
+pub fn besselap(
+    n: u32,
+    norm: BesselNorm,
+) -> Result<(Vec<fsci_fft::Complex64>, Vec<fsci_fft::Complex64>, f64), SignalError> {
+    // scipy.signal.besselap(0) returns ([], [], 1) silently — match that.
+    if n == 0 {
+        return Ok((Vec::new(), Vec::new(), 1.0));
+    }
+    let order = n as usize;
+    let coeffs = reverse_bessel_polynomial(order)?;
+    // Delay-normalized poles: roots of the reverse Bessel polynomial.
+    let (poles_re, poles_im) = poly_roots(&coeffs)?;
+    // a_last = (2N)! / (N! · 2^N) — the constant term of the reverse Bessel poly,
+    // equal to scipy's `_falling_factorial(2N, N) // 2^N`.
+    let double_order = order * 2;
+    let a_last = factorial_f64_checked(double_order)?
+        / (factorial_f64_checked(order)? * 2.0_f64.powi(order as i32));
+
+    let (scale, gain) = match norm {
+        BesselNorm::Delay => (1.0, a_last),
+        BesselNorm::Phase => (reverse_bessel_phase_scale(order)?, 1.0),
+        BesselNorm::Mag => {
+            // Locate ω where |H(jω)| = 1/√2 for the delay-normalized filter
+            // (gain a_last), then rescale poles so that point lands at ω = 1.
+            let norm_factor = bessel_mag_norm_factor(&poles_re, &poles_im, a_last);
+            (
+                1.0 / norm_factor,
+                norm_factor.powi(-(order as i32)) * a_last,
+            )
+        }
+    };
+
+    let poles: Vec<fsci_fft::Complex64> = poles_re
+        .iter()
+        .zip(poles_im.iter())
+        .map(|(&re, &im)| (re * scale, im * scale))
+        .collect();
+    Ok((Vec::new(), poles, gain))
+}
+
+/// Replicate `scipy.signal._filter_design._norm_factor`: numerically find the
+/// angular frequency at which the delay-normalized Bessel filter's magnitude is
+/// −3 dB (1/√2). Mirrors `scipy.optimize.newton(cutoff, 1.5)` (secant method).
+fn bessel_mag_norm_factor(poles_re: &[f64], poles_im: &[f64], k: f64) -> f64 {
+    // G(w) = |k / Π (j·w − p)| ; cutoff(w) = G(w) − 1/√2.
+    let cutoff = |w: f64| -> f64 {
+        let mut prod_re = 1.0_f64;
+        let mut prod_im = 0.0_f64;
+        for (&pr, &pi) in poles_re.iter().zip(poles_im.iter()) {
+            // (j·w − p) has real part −Re(p) and imag part w − Im(p).
+            let fr = -pr;
+            let fi = w - pi;
+            let nr = prod_re * fr - prod_im * fi;
+            let ni = prod_re * fi + prod_im * fr;
+            prod_re = nr;
+            prod_im = ni;
+        }
+        let mag = (prod_re * prod_re + prod_im * prod_im).sqrt();
+        k.abs() / mag - std::f64::consts::FRAC_1_SQRT_2
+    };
+    // Secant method matching scipy.optimize.newton defaults (x0 = 1.5, eps = 1e-4,
+    // tol = 1.48e-8, maxiter = 50).
+    let mut p0 = 1.5_f64;
+    let mut p1 = p0 * (1.0 + 1e-4) + 1e-4;
+    let mut q0 = cutoff(p0);
+    let mut q1 = cutoff(p1);
+    for _ in 0..50 {
+        if q1 == q0 {
+            return 0.5 * (p0 + p1);
+        }
+        let p = p1 - q1 * (p1 - p0) / (q1 - q0);
+        if (p - p1).abs() < 1.48e-8 {
+            return p;
+        }
+        p0 = p1;
+        q0 = q1;
+        p1 = p;
+        q1 = cutoff(p);
+    }
+    p1
+}
+
 /// Elliptic (Cauer) filter order and natural frequency for analog
 /// lowpass design.
 ///
@@ -13897,6 +14011,94 @@ mod tests {
         // N=0 → empty, gain 1
         let (z0, p0, k0) = cheb2ap(0, 40.0).unwrap();
         assert!(z0.is_empty() && p0.is_empty() && k0 == 1.0);
+    }
+
+    #[test]
+    fn besselap_matches_scipy() {
+        // Sort poles by (re, im) to compare against scipy as an unordered set.
+        fn sorted(mut p: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
+            p.sort_by(|a, b| {
+                a.0.partial_cmp(&b.0)
+                    .unwrap()
+                    .then(a.1.partial_cmp(&b.1).unwrap())
+            });
+            p
+        }
+        let cmp = |got: Vec<(f64, f64)>, want: &[(f64, f64)], k: f64, wk: f64, tol: f64| {
+            let g = sorted(got);
+            assert_eq!(g.len(), want.len());
+            for (a, b) in g.iter().zip(want.iter()) {
+                assert!(
+                    (a.0 - b.0).abs() <= tol && (a.1 - b.1).abs() <= tol,
+                    "pole {a:?} vs {b:?}"
+                );
+            }
+            assert!((k - wk).abs() <= tol.max(1e-9 * wk.abs()), "gain {k} vs {wk}");
+        };
+
+        // N=3, phase (scipy default): zeros empty, gain 1.
+        let (z, p, k) = besselap(3, BesselNorm::Phase).unwrap();
+        assert!(z.is_empty());
+        cmp(
+            p,
+            &[
+                (-0.9416000265332067, 0.0),
+                (-0.7456403858480766, -0.7113666249728351),
+                (-0.7456403858480766, 0.7113666249728351),
+            ],
+            k,
+            1.0,
+            1e-10,
+        );
+
+        // N=4, delay: poles are the raw reverse-Bessel roots, gain = a_last = 105.
+        let (_, p, k) = besselap(4, BesselNorm::Delay).unwrap();
+        cmp(
+            p,
+            &[
+                (-2.896210602820372, -0.8672341289345038),
+                (-2.896210602820372, 0.8672341289345038),
+                (-2.1037893971796273, -2.657418041856752),
+                (-2.1037893971796273, 2.657418041856752),
+            ],
+            k,
+            105.0,
+            1e-9,
+        );
+
+        // N=5, mag: −3 dB at ω=1 via the numerically-solved norm factor.
+        let (_, p, k) = besselap(5, BesselNorm::Mag).unwrap();
+        cmp(
+            p,
+            &[
+                (-1.5023162714474785, 0.0),
+                (-1.3808773258604392, -0.717909587626768),
+                (-1.3808773258604392, 0.717909587626768),
+                (-0.9576765485626815, -1.4711243207303943),
+                (-0.9576765485626815, 1.4711243207303943),
+            ],
+            k,
+            11.212836685370513,
+            1e-6,
+        );
+
+        // N=1: single real pole at −1 for every norm.
+        for norm in [BesselNorm::Phase, BesselNorm::Delay, BesselNorm::Mag] {
+            let (_, p, _) = besselap(1, norm).unwrap();
+            assert_eq!(p.len(), 1);
+            assert!((p[0].0 + 1.0).abs() <= 1e-9 && p[0].1.abs() <= 1e-9);
+        }
+
+        // N=0 → empty, gain 1 (matches scipy).
+        let (z0, p0, k0) = besselap(0, BesselNorm::Phase).unwrap();
+        assert!(z0.is_empty() && p0.is_empty() && k0 == 1.0);
+
+        // Metamorphic: all poles strictly in the left half-plane (stable).
+        for n in 1..=8u32 {
+            let (_, p, _) = besselap(n, BesselNorm::Phase).unwrap();
+            assert_eq!(p.len(), n as usize);
+            assert!(p.iter().all(|c| c.0 < 0.0), "N={n} pole not in LHP");
+        }
     }
 
     #[test]
