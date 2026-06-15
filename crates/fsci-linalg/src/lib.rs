@@ -12473,6 +12473,83 @@ pub fn cdf2rdf(
     Ok((wr, vr))
 }
 
+/// Convert a real Schur form `(T, Z)` to complex Schur form, matching
+/// `scipy.linalg.rsf2csf(T, Z)`.
+///
+/// `T` is real quasi-upper-triangular (with 2×2 blocks for complex-conjugate
+/// eigenvalue pairs) and `Z` orthogonal, as from a real Schur decomposition.
+/// Returns complex `(Tc, Zc)` with `Tc` strictly upper triangular (each 2×2
+/// block rotated away by a complex Givens rotation) and `Zc` unitary, so that
+/// `Zc · Tc · Zcᴴ` equals the original matrix. Output is returned as `(re, im)`
+/// pair matrices.
+#[allow(clippy::type_complexity)]
+pub fn rsf2csf(
+    t: &[Vec<f64>],
+    z: &[Vec<f64>],
+) -> Result<(Vec<Vec<(f64, f64)>>, Vec<Vec<(f64, f64)>>), LinalgError> {
+    let n = t.len();
+    if n == 0 || t.iter().any(|r| r.len() != n) || z.len() != n || z.iter().any(|r| r.len() != n) {
+        return Err(LinalgError::InvalidArgument {
+            detail: "rsf2csf: T and Z must be square matrices of the same size".to_string(),
+        });
+    }
+    // Complex helpers.
+    let cmul = |a: (f64, f64), b: (f64, f64)| (a.0 * b.0 - a.1 * b.1, a.0 * b.1 + a.1 * b.0);
+    let cadd = |a: (f64, f64), b: (f64, f64)| (a.0 + b.0, a.1 + b.1);
+    let cconj = |a: (f64, f64)| (a.0, -a.1);
+    let cscale = |a: (f64, f64), s: f64| (a.0 * s, a.1 * s);
+    let cabs = |a: (f64, f64)| a.0.hypot(a.1);
+
+    let mut tc: Vec<Vec<(f64, f64)>> =
+        t.iter().map(|row| row.iter().map(|&v| (v, 0.0)).collect()).collect();
+    let mut zc: Vec<Vec<(f64, f64)>> =
+        z.iter().map(|row| row.iter().map(|&v| (v, 0.0)).collect()).collect();
+    let eps = f64::EPSILON;
+
+    for m in (1..n).rev() {
+        let sub = tc[m][m - 1];
+        if cabs(sub) > eps * (cabs(tc[m - 1][m - 1]) + cabs(tc[m][m])) {
+            // The block is still real at this point (real-Schur 2×2 blocks are
+            // disjoint), so its eigenvalues are a±bi (b>0, LAPACK ordering).
+            let p = tc[m - 1][m - 1].0;
+            let q = tc[m - 1][m].0;
+            let r = tc[m][m - 1].0;
+            let s = tc[m][m].0;
+            let tr = p + s;
+            let det = p * s - q * r;
+            let b = (4.0 * det - tr * tr).max(0.0).sqrt() / 2.0;
+            let a = tr / 2.0;
+            let mu = (a - s, b); // first eigenvalue minus T[m,m]
+            let rn = (mu.0 * mu.0 + mu.1 * mu.1 + r * r).sqrt();
+            let c = (mu.0 / rn, mu.1 / rn);
+            let s_rot = r / rn;
+            // T[m-1:m+1, m-1:] = G @ T[m-1:m+1, m-1:]
+            for col in (m - 1)..n {
+                let t0 = tc[m - 1][col];
+                let t1 = tc[m][col];
+                tc[m - 1][col] = cadd(cmul(cconj(c), t0), cscale(t1, s_rot));
+                tc[m][col] = cadd(cscale(t0, -s_rot), cmul(c, t1));
+            }
+            // T[:m+1, m-1:m+1] = T[:m+1, m-1:m+1] @ G.conj().T
+            for row in 0..=m {
+                let a0 = tc[row][m - 1];
+                let a1 = tc[row][m];
+                tc[row][m - 1] = cadd(cmul(a0, c), cscale(a1, s_rot));
+                tc[row][m] = cadd(cscale(a0, -s_rot), cmul(a1, cconj(c)));
+            }
+            // Z[:, m-1:m+1] = Z[:, m-1:m+1] @ G.conj().T
+            for row in 0..n {
+                let a0 = zc[row][m - 1];
+                let a1 = zc[row][m];
+                zc[row][m - 1] = cadd(cmul(a0, c), cscale(a1, s_rot));
+                zc[row][m] = cadd(cscale(a0, -s_rot), cmul(a1, cconj(c)));
+            }
+        }
+        tc[m][m - 1] = (0.0, 0.0);
+    }
+    Ok((tc, zc))
+}
+
 /// Multiply a Toeplitz matrix by a matrix: `T · x`.
 ///
 /// Matches `scipy.linalg.matmul_toeplitz`. `T` is the Toeplitz matrix with first
@@ -15006,6 +15083,56 @@ pub fn vnorm(v: &[f64]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rsf2csf_matches_scipy() {
+        // Real Schur form with a 2x2 block (eigs 1±2i) + reals 3, -1.
+        let t = vec![
+            vec![1.0, -2.0, 0.5, 0.1],
+            vec![2.0, 1.0, 0.3, 0.2],
+            vec![0.0, 0.0, 3.0, 1.0],
+            vec![0.0, 0.0, 0.0, -1.0],
+        ];
+        let z = vec![
+            vec![1.0, 0.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0, 0.0],
+            vec![0.0, 0.0, 1.0, 0.0],
+            vec![0.0, 0.0, 0.0, 1.0],
+        ];
+        let (tc, zc) = rsf2csf(&t, &z).unwrap();
+        let tc_re = [
+            [1.0, 0.0, 0.2121320344, 0.1414213562],
+            [0.0, 1.0, -0.3535533906, -0.0707106781],
+            [0.0, 0.0, 3.0, 1.0],
+            [0.0, 0.0, 0.0, -1.0],
+        ];
+        let tc_im = [
+            [2.0, 0.0, -0.3535533906, -0.0707106781],
+            [0.0, -2.0, 0.2121320344, 0.1414213562],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+        ];
+        let zc_re = [
+            [0.0, -0.7071067812, 0.0, 0.0],
+            [0.7071067812, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ];
+        let zc_im = [
+            [0.7071067812, 0.0, 0.0, 0.0],
+            [0.0, -0.7071067812, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+        ];
+        for i in 0..4 {
+            for j in 0..4 {
+                assert!((tc[i][j].0 - tc_re[i][j]).abs() < 1e-9, "tc_re[{i}][{j}]");
+                assert!((tc[i][j].1 - tc_im[i][j]).abs() < 1e-9, "tc_im[{i}][{j}]");
+                assert!((zc[i][j].0 - zc_re[i][j]).abs() < 1e-9, "zc_re[{i}][{j}]");
+                assert!((zc[i][j].1 - zc_im[i][j]).abs() < 1e-9, "zc_im[{i}][{j}]");
+            }
+        }
+    }
 
     #[test]
     fn cdf2rdf_matches_scipy() {
