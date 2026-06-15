@@ -12407,6 +12407,72 @@ pub fn diagsvd(s: &[f64], m: usize, n: usize) -> Result<Vec<Vec<f64>>, LinalgErr
     Ok(out)
 }
 
+/// Convert complex diagonal eigenvalues/eigenvectors to real block-diagonal
+/// form, matching `scipy.linalg.cdf2rdf(w, v)`.
+///
+/// `w` are the (complex) eigenvalues as `(re, im)` pairs with conjugate pairs
+/// adjacent; `v` is the `n×n` complex eigenvector matrix (column `j` is the
+/// eigenvector for `w[j]`), rows of `(re, im)` pairs. Returns `(wr, vr)`: real
+/// eigenvalues in block-diagonal form (each conjugate pair `a±bi` becomes a
+/// `[[a, b], [-b, a]]` block) and the associated real eigenvectors `vr =
+/// Re(v · u)`, such that `vr · wr == X · vr`. The result is determined by the
+/// inputs, so it matches scipy for any consistent `(w, v)`.
+#[allow(clippy::type_complexity)]
+pub fn cdf2rdf(
+    w: &[(f64, f64)],
+    v: &[Vec<(f64, f64)>],
+) -> Result<(Vec<Vec<f64>>, Vec<Vec<f64>>), LinalgError> {
+    let n = w.len();
+    if v.len() != n || v.iter().any(|row| row.len() != n) {
+        return Err(LinalgError::InvalidArgument {
+            detail: "cdf2rdf: v must be an n×n matrix matching the eigenvalues".to_string(),
+        });
+    }
+    let complex_idx: Vec<usize> = (0..n).filter(|&i| w[i].1 != 0.0).collect();
+    if complex_idx.len() % 2 != 0 {
+        return Err(LinalgError::InvalidArgument {
+            detail: "expected complex-conjugate pairs of eigenvalues".to_string(),
+        });
+    }
+
+    // Real eigenvalues on the diagonal; conjugate pairs become 2×2 blocks.
+    let mut wr = vec![vec![0.0_f64; n]; n];
+    for (i, &(re, _)) in w.iter().enumerate() {
+        wr[i][i] = re;
+    }
+    // Complex transform u (identity, with a 2×2 complex block per pair).
+    let mut u = vec![vec![(0.0_f64, 0.0_f64); n]; n];
+    for (i, row) in u.iter_mut().enumerate() {
+        row[i] = (1.0, 0.0);
+    }
+    let mut p = 0;
+    while p < complex_idx.len() {
+        let (j, k) = (complex_idx[p], complex_idx[p + 1]);
+        wr[j][k] = w[j].1;
+        wr[k][j] = w[k].1;
+        u[j][j] = (0.0, 0.5);
+        u[j][k] = (0.5, 0.0);
+        u[k][j] = (0.0, -0.5);
+        u[k][k] = (0.5, 0.0);
+        p += 2;
+    }
+
+    // vr = Re(v · u).
+    let mut vr = vec![vec![0.0_f64; n]; n];
+    for (i, vrow) in vr.iter_mut().enumerate() {
+        for (col, out) in vrow.iter_mut().enumerate() {
+            let mut re = 0.0;
+            for t in 0..n {
+                let (ar, ai) = v[i][t];
+                let (br, bi) = u[t][col];
+                re += ar * br - ai * bi;
+            }
+            *out = re;
+        }
+    }
+    Ok((wr, vr))
+}
+
 /// Multiply a Toeplitz matrix by a matrix: `T · x`.
 ///
 /// Matches `scipy.linalg.matmul_toeplitz`. `T` is the Toeplitz matrix with first
@@ -14940,6 +15006,36 @@ pub fn vnorm(v: &[f64]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cdf2rdf_matches_scipy() {
+        // eig of [[1,-2,0.5],[2,1,0.3],[0,0,3]] -> conjugate pair 1±2i + real 3.
+        let w = [(1.0, 2.0000000000000004), (1.0, -2.0000000000000004), (3.0, 0.0)];
+        let v = vec![
+            vec![(0.0, 0.7071067811865475), (0.0, -0.7071067811865475), (0.04897021068743917, 0.0)],
+            vec![(0.7071067811865476, 0.0), (0.7071067811865476, -0.0), (0.19588084274975673, 0.0)],
+            vec![(0.0, 0.0), (0.0, -0.0), (0.9794042137487836, 0.0)],
+        ];
+        let (wr, vr) = cdf2rdf(&w, &v).unwrap();
+        let wr_exp = [
+            [1.0, 2.0000000000000004, 0.0],
+            [-2.0000000000000004, 1.0, 0.0],
+            [0.0, 0.0, 3.0],
+        ];
+        let vr_exp = [
+            [-0.7071067811865475, 0.0, 0.04897021068743917],
+            [0.0, 0.7071067811865476, 0.19588084274975673],
+            [0.0, 0.0, 0.9794042137487836],
+        ];
+        for i in 0..3 {
+            for j in 0..3 {
+                assert!((wr[i][j] - wr_exp[i][j]).abs() < 1e-12, "wr[{i}][{j}]");
+                assert!((vr[i][j] - vr_exp[i][j]).abs() < 1e-12, "vr[{i}][{j}]");
+            }
+        }
+        // Odd number of complex eigenvalues is rejected.
+        assert!(cdf2rdf(&[(1.0, 1.0), (2.0, 0.0)], &vec![vec![(1.0, 0.0); 2]; 2]).is_err());
+    }
 
     /// Isomorphism proof for the matmul ikj reorder [frankenscipy-vx65u]: the
     /// cache-friendly ikj order must be BIT-IDENTICAL to the naive ijk triple
