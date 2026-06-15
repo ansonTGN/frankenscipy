@@ -1437,6 +1437,50 @@ pub fn convolve2d_with_boundary(
     ))
 }
 
+/// Convolve a 2-D array with a separable FIR filter, matching
+/// `scipy.signal.sepfir2d(input, hrow, hcol)`.
+///
+/// `input` is a row-major `rows × cols` array; `hrow`/`hcol` are the 1-D filter
+/// taps applied along the row (axis 1) and column (axis 0) directions. The
+/// result is the same-size convolution with the rank-1 outer-product kernel
+/// `hcol ⊗ hrow` under mirror-symmetric (`symm`, edge-duplicated) boundary
+/// conditions — scipy's convention.
+pub fn sepfir2d(
+    input: &[f64],
+    shape: (usize, usize),
+    hrow: &[f64],
+    hcol: &[f64],
+) -> Result<Vec<f64>, SignalError> {
+    let (rows, cols) = shape;
+    if input.len() != rows * cols {
+        return Err(SignalError::InvalidArgument(
+            "input length must match rows * cols".to_string(),
+        ));
+    }
+    if hrow.is_empty() || hcol.is_empty() {
+        return Err(SignalError::InvalidArgument(
+            "filter taps must be non-empty".to_string(),
+        ));
+    }
+    let (nhr, nhc) = (hrow.len(), hcol.len());
+    // Separable kernel K[i][j] = hcol[i] * hrow[j].
+    let mut kernel = vec![0.0_f64; nhc * nhr];
+    for i in 0..nhc {
+        for j in 0..nhr {
+            kernel[i * nhr + j] = hcol[i] * hrow[j];
+        }
+    }
+    convolve2d_with_boundary(
+        input,
+        shape,
+        &kernel,
+        (nhc, nhr),
+        ConvolveMode::Same,
+        Boundary2d::Symm,
+        0.0,
+    )
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Hilbert Transform / Analytic Signal
 // ══════════════════════════════════════════════════════════════════════
@@ -22328,6 +22372,23 @@ mod tests {
         }
         assert_eq!(left_bases, expected_left, "left_bases mismatch");
         assert_eq!(right_bases, expected_right, "right_bases mismatch");
+    }
+
+    #[test]
+    fn sepfir2d_matches_scipy_reference_values() {
+        // scipy.signal.sepfir2d(arange(12).reshape(3,4), [.25,.5,.25], [.2,.6,.2]).
+        let x: Vec<f64> = (0..12).map(|v| v as f64).collect();
+        let hrow = [0.25, 0.5, 0.25];
+        let hcol = [0.2, 0.6, 0.2];
+        let out = sepfir2d(&x, (3, 4), &hrow, &hcol).unwrap();
+        let expected = [
+            1.05, 1.8, 2.8, 3.55, 4.25, 5.0, 6.0, 6.75, 7.45, 8.2, 9.2, 9.95,
+        ];
+        assert_eq!(out.len(), expected.len());
+        for (g, e) in out.iter().zip(&expected) {
+            assert!((g - e).abs() < 1e-12, "{g} vs {e}");
+        }
+        assert!(sepfir2d(&x, (3, 5), &hrow, &hcol).is_err());
     }
 
     #[test]
