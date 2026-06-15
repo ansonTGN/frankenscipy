@@ -1,0 +1,4 @@
+c93018136d8407491d4fefd372dcff65c1bb5598b3d746673a38b3bb9fbdca74  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-on2st-eigvalsh-native-values/baseline_public_eigvalsh_values_rch.txt
+ec0661d7c16a2e9028196d5ea2cc72f1d4436ab07c681b239e5c8ba53ccd8102  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-on2st-eigvalsh-native-values/after_public_eigvalsh_native_values_rch.txt
+a1ea591b6d6e4b3883cabe82d21c12c96ca0f5c14cb64a4f92f708bfc8a9abad  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-on2st-eigvalsh-native-values/after_public_eigvalsh_native_values_ab_rch.txt
+86a56b5e461fe746ab9fc4d51b8cc48cd8af0d9c30d607be261ca3ec686c434a  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-on2st-eigvalsh-native-values/REJECT.md
