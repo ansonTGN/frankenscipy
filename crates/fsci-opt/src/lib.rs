@@ -2616,6 +2616,20 @@ where
     brent_minimize(f, bounds.0, bounds.1, tol, maxiter)
 }
 
+/// Bounded scalar minimization, returning the minimizer.
+///
+/// Matches `scipy.optimize.fminbound(func, x1, x2)`: finds the `x ∈ [x1, x2]`
+/// minimising `func` with the bounded Brent method, using scipy's defaults
+/// (`xtol = 1e-5`, `maxfun = 500`). Returns the minimizer `x` (scipy's first
+/// output); use [`minimize_scalar_bounded`] for the `(x, f(x))` pair or custom
+/// tolerances.
+pub fn fminbound<F>(func: F, x1: f64, x2: f64) -> f64
+where
+    F: Fn(f64) -> f64,
+{
+    minimize_scalar_bounded(func, (x1, x2), 1e-5, 500).0
+}
+
 /// Fixed-point iteration: find x such that f(x) = x.
 ///
 /// Matches `scipy.optimize.fixed_point`.
@@ -5844,5 +5858,18 @@ mod tests {
         let (xmin, fmin) = minimize_scalar_bounded(|x| (x - 2.0).powi(2), (0.0, 4.0), 1e-8, 500);
         assert!((xmin - 2.0).abs() < 1e-6, "xmin = {xmin}, expected 2.0");
         assert!(fmin.abs() < 1e-12, "fmin = {fmin}, expected 0.0");
+    }
+
+    #[test]
+    fn fminbound_matches_scipy_reference() {
+        // scipy.optimize.fminbound(lambda x: (x-1.3)**2, 0, 3) -> 1.3
+        let x = crate::fminbound(|x| (x - 1.3).powi(2), 0.0, 3.0);
+        assert!((x - 1.3).abs() < 1e-4, "fminbound parabola got {x}");
+        // scipy.optimize.fminbound(np.cos, 0, 2*pi) -> pi
+        let xc = crate::fminbound(|x: f64| x.cos(), 0.0, 2.0 * std::f64::consts::PI);
+        assert!(
+            (xc - std::f64::consts::PI).abs() < 1e-4,
+            "fminbound cos got {xc}"
+        );
     }
 }
