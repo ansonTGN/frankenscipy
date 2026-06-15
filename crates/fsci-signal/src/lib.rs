@@ -12835,7 +12835,7 @@ impl Lti {
             return Ok(Vec::new());
         }
         // Convert to state-space and simulate
-        let (a, b, c, d) = tf2ss(&self.num, &self.den)?;
+        let (a, b, c, d) = tf2ss_controllable(&self.num, &self.den)?;
         simulate_lti_step(&a, &b, &c, d, t)
     }
 
@@ -12844,7 +12844,7 @@ impl Lti {
         if t.is_empty() {
             return Ok(Vec::new());
         }
-        let (a, b, c, d) = tf2ss(&self.num, &self.den)?;
+        let (a, b, c, d) = tf2ss_controllable(&self.num, &self.den)?;
         simulate_lti_impulse(&a, &b, &c, d, t)
     }
 
@@ -12883,7 +12883,7 @@ impl Lti {
             )));
         }
 
-        let (a, b, c, d) = tf2ss(&self.num, &self.den)?;
+        let (a, b, c, d) = tf2ss_controllable(&self.num, &self.den)?;
         let n = b.len();
 
         // Initialize state
@@ -13191,10 +13191,14 @@ fn poly_eval_complex(coeffs: &[f64], z_re: f64, z_im: f64) -> (f64, f64) {
     (re, im)
 }
 
-/// Convert transfer function to state-space (controllable canonical form).
+/// Internal transfer-function → state-space realization used by the LTI
+/// simulation helpers. This uses a different (equally valid) canonical form
+/// than scipy's [`tf2ss`]; since simulation output is realization-independent,
+/// the two are interchangeable for the simulators. Public scipy-matching
+/// conversion is [`tf2ss`].
 type StateSpace = (Vec<Vec<f64>>, Vec<f64>, Vec<f64>, f64);
 
-fn tf2ss(num: &[f64], den: &[f64]) -> Result<StateSpace, SignalError> {
+fn tf2ss_controllable(num: &[f64], den: &[f64]) -> Result<StateSpace, SignalError> {
     if den.is_empty() || den[0] == 0.0 {
         return Err(SignalError::InvalidArgument(
             "denominator leading coefficient cannot be zero".to_string(),
@@ -13339,6 +13343,69 @@ pub fn ss2tf(
 pub fn ss2zpk(a: &[Vec<f64>], b: &[f64], c: &[f64], d: f64) -> Result<ZpkCoeffs, SignalError> {
     let (num, den) = ss2tf(a, b, c, d)?;
     tf2zpk(&num, &den)
+}
+
+/// Convert a transfer function to a single-input/single-output state-space
+/// realization in scipy's controller canonical form, matching
+/// `scipy.signal.tf2ss(num, den)`.
+///
+/// Returns `(A, B, C, D)` where `A` is `n×n` with `-den[1:]/den[0]` in the first
+/// row and a unit subdiagonal, `B = [1, 0, …]`, `C = num_pad[1:] −
+/// num_pad[0]·den_norm[1:]`, and `D = num_pad[0]` (the numerator is left-padded
+/// to the denominator length). Unlike the internal realization, this exactly
+/// reproduces scipy's matrices.
+#[allow(clippy::type_complexity)]
+pub fn tf2ss(
+    num: &[f64],
+    den: &[f64],
+) -> Result<(Vec<Vec<f64>>, Vec<f64>, Vec<f64>, f64), SignalError> {
+    if den.is_empty() || den[0] == 0.0 {
+        return Err(SignalError::InvalidArgument(
+            "denominator leading coefficient cannot be zero".to_string(),
+        ));
+    }
+    let n = den.len() - 1; // system order
+    let a0 = den[0];
+    let den_norm: Vec<f64> = den.iter().map(|&x| x / a0).collect();
+    // Left-pad the numerator to the denominator length.
+    let mut num_pad = vec![0.0_f64; den.len()];
+    let offset = den.len().saturating_sub(num.len());
+    for (i, &c) in num.iter().enumerate() {
+        if offset + i < num_pad.len() {
+            num_pad[offset + i] = c / a0;
+        }
+    }
+    let d = num_pad[0];
+    if n == 0 {
+        return Ok((Vec::new(), Vec::new(), Vec::new(), d));
+    }
+    // A: first row = -den_norm[1..], unit subdiagonal.
+    let mut a = vec![vec![0.0_f64; n]; n];
+    for j in 0..n {
+        a[0][j] = -den_norm[j + 1];
+    }
+    for i in 1..n {
+        a[i][i - 1] = 1.0;
+    }
+    let mut b = vec![0.0_f64; n];
+    b[0] = 1.0;
+    // C[i] = num_pad[i+1] - num_pad[0] * den_norm[i+1].
+    let c: Vec<f64> = (0..n)
+        .map(|i| num_pad[i + 1] - num_pad[0] * den_norm[i + 1])
+        .collect();
+    Ok((a, b, c, d))
+}
+
+/// Convert a zero-pole-gain system to a state-space realization in scipy's
+/// controller canonical form, matching `scipy.signal.zpk2ss(z, p, k)`.
+///
+/// Composes [`zpk2tf`] with [`tf2ss`].
+#[allow(clippy::type_complexity)]
+pub fn zpk2ss(
+    zpk: &ZpkCoeffs,
+) -> Result<(Vec<Vec<f64>>, Vec<f64>, Vec<f64>, f64), SignalError> {
+    let ba = zpk2tf(zpk);
+    tf2ss(&ba.b, &ba.a)
 }
 
 /// Simulate step response using RK4 integration.
@@ -16414,6 +16481,35 @@ mod tests {
             .min_by(|(_, a), (_, b)| ((**a) - omega).abs().total_cmp(&((**b) - omega).abs()))
             .map(|(i, _)| i)
             .unwrap_or(0)
+    }
+
+    #[test]
+    fn tf2ss_zpk2ss_match_scipy() {
+        // scipy.signal.tf2ss([1,3],[1,2,5]).
+        let (a, b, c, d) = tf2ss(&[1.0, 3.0], &[1.0, 2.0, 5.0]).unwrap();
+        assert_eq!(a, vec![vec![-2.0, -5.0], vec![1.0, 0.0]]);
+        assert_eq!(b, vec![1.0, 0.0]);
+        assert_eq!(c, vec![1.0, 3.0]);
+        assert_eq!(d, 0.0);
+
+        // scipy.signal.zpk2ss([-1], [-2,-3], 2) -> num=[2,2], den=[1,5,6].
+        let zpk = ZpkCoeffs {
+            zeros_re: vec![-1.0],
+            zeros_im: vec![0.0],
+            poles_re: vec![-2.0, -3.0],
+            poles_im: vec![0.0, 0.0],
+            gain: 2.0,
+        };
+        let (a2, b2, c2, d2) = zpk2ss(&zpk).unwrap();
+        for (g, e) in a2[0].iter().zip(&[-5.0, -6.0]) {
+            assert!((g - e).abs() < 1e-9, "a {g} vs {e}");
+        }
+        assert_eq!(a2[1], vec![1.0, 0.0]);
+        assert_eq!(b2, vec![1.0, 0.0]);
+        for (g, e) in c2.iter().zip(&[2.0, 2.0]) {
+            assert!((g - e).abs() < 1e-9, "c {g} vs {e}");
+        }
+        assert!((d2).abs() < 1e-9);
     }
 
     #[test]
