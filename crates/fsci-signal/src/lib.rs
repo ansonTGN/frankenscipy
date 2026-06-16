@@ -2372,6 +2372,220 @@ where
     Ok(result)
 }
 
+/// Options for [`find_peaks_cwt`]; `None` fields take scipy's defaults.
+#[derive(Debug, Clone)]
+pub struct FindPeaksCwtOptions {
+    /// Per-row max column distance for connecting a ridge (default `widths/4`).
+    pub max_distances: Option<Vec<f64>>,
+    /// Max consecutive gap before a ridge is discontinued (default `ceil(widths[0])`).
+    pub gap_thresh: Option<f64>,
+    /// Minimum ridge length to accept (default `ceil(n_widths/4)`).
+    pub min_length: Option<usize>,
+    /// Minimum SNR (default 1.0).
+    pub min_snr: f64,
+    /// Percentile of the noise floor window (default 10.0).
+    pub noise_perc: f64,
+    /// Noise-floor window size (default `ceil(n_samples/20)`).
+    pub window_size: Option<usize>,
+}
+
+impl Default for FindPeaksCwtOptions {
+    fn default() -> Self {
+        Self {
+            max_distances: None,
+            gap_thresh: None,
+            min_length: None,
+            min_snr: 1.0,
+            noise_perc: 10.0,
+            window_size: None,
+        }
+    }
+}
+
+/// Linear-interpolation percentile, matching `scipy.stats.scoreatpercentile`
+/// with the default `interpolation_method='fraction'`.
+fn score_at_percentile_linear(slice: &[f64], per: f64) -> f64 {
+    let mut v = slice.to_vec();
+    v.sort_by(f64::total_cmp);
+    let n = v.len();
+    if n == 0 {
+        return f64::NAN;
+    }
+    if n == 1 {
+        return v[0];
+    }
+    let idx = per / 100.0 * (n - 1) as f64;
+    let lo = idx.floor() as usize;
+    let frac = idx - lo as f64;
+    if lo + 1 < n {
+        v[lo] * (1.0 - frac) + v[lo + 1] * frac
+    } else {
+        v[n - 1]
+    }
+}
+
+/// A ridge line during identification: `rows`/`cols` are appended in strictly
+/// decreasing row order, so the entry at the smallest row is the last pushed.
+struct RidgeLine {
+    rows: Vec<usize>,
+    cols: Vec<usize>,
+    gap: usize,
+}
+
+/// Find peaks in a 1-D signal via the continuous wavelet transform, matching
+/// `scipy.signal.find_peaks_cwt(vector, widths, ...)` with the default ricker
+/// wavelet.
+///
+/// The signal is convolved with a ricker wavelet at each width; relative maxima
+/// that form ridge lines across enough scales with sufficient SNR are accepted.
+/// Returns the sorted sample indices of the detected peaks. The internal CWT
+/// follows scipy's `_cwt` exactly (wavelet length `ceil(min(10·width, n))`).
+#[must_use]
+pub fn find_peaks_cwt(vector: &[f64], widths: &[f64], opts: &FindPeaksCwtOptions) -> Vec<usize> {
+    let n = vector.len();
+    let nrows = widths.len();
+    if n == 0 || nrows == 0 {
+        return Vec::new();
+    }
+    let gap_thresh = opts.gap_thresh.unwrap_or_else(|| widths[0].ceil());
+    let max_distances = opts
+        .max_distances
+        .clone()
+        .unwrap_or_else(|| widths.iter().map(|w| w / 4.0).collect());
+
+    // Build the CWT matrix exactly like scipy's _cwt (ricker, reversed+conj is
+    // a no-op for the symmetric real ricker; convolve 'same').
+    let mut matr: Vec<Vec<f64>> = Vec::with_capacity(nrows);
+    for &width in widths {
+        let wl = (10.0 * width).min(n as f64).ceil().max(1.0) as usize;
+        let wavelet = ricker(wl, width);
+        let row = convolve(vector, &wavelet, ConvolveMode::Same).unwrap_or_default();
+        matr.push(row);
+    }
+
+    let ridge_lines = identify_ridge_lines(&matr, &max_distances, gap_thresh);
+
+    // Filter ridge lines (length + SNR).
+    let min_length = opts
+        .min_length
+        .unwrap_or_else(|| (nrows as f64 / 4.0).ceil() as usize);
+    let window_size = opts
+        .window_size
+        .unwrap_or_else(|| (n as f64 / 20.0).ceil() as usize);
+    let hf_window = window_size / 2;
+    let odd = window_size % 2;
+    let row_one = &matr[0];
+    let noises: Vec<f64> = (0..n)
+        .map(|ind| {
+            let start = ind.saturating_sub(hf_window);
+            let end = (ind + hf_window + odd).min(n);
+            score_at_percentile_linear(&row_one[start..end], opts.noise_perc)
+        })
+        .collect();
+
+    let mut max_locs: Vec<usize> = ridge_lines
+        .iter()
+        .filter(|line| {
+            if line.rows.len() < min_length {
+                return false;
+            }
+            // The entry at the smallest row is the last appended.
+            let first_row = *line.rows.last().unwrap();
+            let first_col = *line.cols.last().unwrap();
+            let snr = (matr[first_row][first_col] / noises[first_col]).abs();
+            snr >= opts.min_snr
+        })
+        .map(|line| *line.cols.last().unwrap())
+        .collect();
+    max_locs.sort_unstable();
+    max_locs
+}
+
+/// Per-row relative maxima (scipy `_boolrelextrema(np.greater, axis=1, order=1,
+/// mode='clip')`): column `c` is a max iff `row[c] > row[c-1]` and `row[c] >
+/// row[c+1]`; the clip edges are never maxima.
+fn bool_relextrema_row(row: &[f64]) -> Vec<bool> {
+    let n = row.len();
+    let mut res = vec![false; n];
+    if n >= 3 {
+        for c in 1..n - 1 {
+            if row[c] > row[c - 1] && row[c] > row[c + 1] {
+                res[c] = true;
+            }
+        }
+    }
+    res
+}
+
+/// Port of scipy `_identify_ridge_lines`. Returns ridge lines whose `rows`/`cols`
+/// are in strictly decreasing row order (as built).
+fn identify_ridge_lines(matr: &[Vec<f64>], max_distances: &[f64], gap_thresh: f64) -> Vec<RidgeLine> {
+    let nrows = matr.len();
+    let all_max: Vec<Vec<bool>> = matr.iter().map(|r| bool_relextrema_row(r)).collect();
+    // Highest row index with any relative maximum.
+    let start_row = match (0..nrows).rev().find(|&r| all_max[r].iter().any(|&b| b)) {
+        Some(r) => r,
+        None => return Vec::new(),
+    };
+
+    let mut ridge_lines: Vec<RidgeLine> = (0..matr[start_row].len())
+        .filter(|&c| all_max[start_row][c])
+        .map(|c| RidgeLine {
+            rows: vec![start_row],
+            cols: vec![c],
+            gap: 0,
+        })
+        .collect();
+    let mut final_lines: Vec<RidgeLine> = Vec::new();
+
+    for row in (0..start_row).rev() {
+        let this_max_cols: Vec<usize> = (0..all_max[row].len()).filter(|&c| all_max[row][c]).collect();
+        for line in ridge_lines.iter_mut() {
+            line.gap += 1;
+        }
+        // Snapshot of last columns BEFORE connecting (matches scipy).
+        let prev_ridge_cols: Vec<usize> = ridge_lines.iter().map(|l| *l.cols.last().unwrap()).collect();
+        for &col in &this_max_cols {
+            let mut connect: Option<usize> = None;
+            if !prev_ridge_cols.is_empty() {
+                // First-minimum argmin of |col - prev|.
+                let mut best = 0usize;
+                let mut best_diff = (col as i64 - prev_ridge_cols[0] as i64).unsigned_abs();
+                for (i, &p) in prev_ridge_cols.iter().enumerate().skip(1) {
+                    let d = (col as i64 - p as i64).unsigned_abs();
+                    if d < best_diff {
+                        best_diff = d;
+                        best = i;
+                    }
+                }
+                if best_diff as f64 <= max_distances[row] {
+                    connect = Some(best);
+                }
+            }
+            match connect {
+                Some(idx) => {
+                    ridge_lines[idx].cols.push(col);
+                    ridge_lines[idx].rows.push(row);
+                    ridge_lines[idx].gap = 0;
+                }
+                None => ridge_lines.push(RidgeLine {
+                    rows: vec![row],
+                    cols: vec![col],
+                    gap: 0,
+                }),
+            }
+        }
+        // Remove ridge lines whose gap exceeds the threshold (backwards).
+        for ind in (0..ridge_lines.len()).rev() {
+            if ridge_lines[ind].gap as f64 > gap_thresh {
+                final_lines.push(ridge_lines.remove(ind));
+            }
+        }
+    }
+    final_lines.extend(ridge_lines);
+    final_lines
+}
+
 // ── Additional window functions ──────────────────────────────────────
 
 /// Tukey (tapered cosine) window.
@@ -15923,6 +16137,43 @@ mod tests {
         for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
             assert!((r - e).abs() < 1e-12, "conv[{i}] = {r}, expected {e}");
         }
+    }
+
+    #[test]
+    fn find_peaks_cwt_matches_scipy() {
+        // Same formula scipy oracle used (regenerated bit-for-bit in Rust).
+        let data: Vec<f64> = (0..200)
+            .map(|i| {
+                let x = i as f64;
+                (-((x - 30.0).powi(2)) / (2.0 * 25.0)).exp()
+                    + 0.8 * (-((x - 90.0).powi(2)) / (2.0 * 64.0)).exp()
+                    + 1.2 * (-((x - 150.0).powi(2)) / (2.0 * 36.0)).exp()
+            })
+            .collect();
+        let widths: Vec<f64> = (1..=20).map(|i| i as f64).collect();
+
+        let def = find_peaks_cwt(&data, &widths, &FindPeaksCwtOptions::default());
+        assert_eq!(def, vec![30, 57, 90, 122, 151]);
+
+        let snr2 = find_peaks_cwt(
+            &data,
+            &widths,
+            &FindPeaksCwtOptions {
+                min_snr: 2.0,
+                ..Default::default()
+            },
+        );
+        assert_eq!(snr2, vec![30, 57, 122, 151]);
+
+        let ml5 = find_peaks_cwt(
+            &data,
+            &widths,
+            &FindPeaksCwtOptions {
+                min_length: Some(5),
+                ..Default::default()
+            },
+        );
+        assert_eq!(ml5, vec![30, 57, 90, 122, 151]);
     }
 
     #[test]
