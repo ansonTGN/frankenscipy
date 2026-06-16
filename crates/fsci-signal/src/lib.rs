@@ -10698,6 +10698,26 @@ pub fn symiirorder1(
     Ok(symiirorder1_1d(signal, c0, z1, precision))
 }
 
+/// Design a 2-D FIR filter as the outer product of two 1-D windowed-sinc
+/// filters, matching the separable (non-circular) case of
+/// `scipy.signal.firwin_2d(hsize, (window_row, window_col), fc=cutoff,
+/// pass_zero=pass_zero)`. Returns a `hsize.0 × hsize.1` kernel (row-major
+/// `Vec<Vec<f64>>`).
+pub fn firwin_2d(
+    hsize: (usize, usize),
+    cutoff: &[f64],
+    window_row: FirWindow,
+    window_col: FirWindow,
+    pass_zero: bool,
+) -> Result<Vec<Vec<f64>>, SignalError> {
+    let row = firwin(hsize.0, cutoff, window_row, pass_zero)?;
+    let col = firwin(hsize.1, cutoff, window_col, pass_zero)?;
+    Ok(row
+        .iter()
+        .map(|&r| col.iter().map(|&c| r * c).collect())
+        .collect())
+}
+
 /// Row/column dimensions of a matrix (`(0, 0)` if empty), erroring if ragged.
 fn abcd_shape(m: &[Vec<f64>], name: &str) -> Result<(usize, usize), SignalError> {
     if m.is_empty() {
@@ -24523,6 +24543,17 @@ mod tests {
             assert!((c[i * cols + j] - cwant[k]).abs() <= 1e-5, "c {} vs {}", c[i * cols + j], cwant[k]);
             assert!((q[i * cols + j] - qwant[k]).abs() <= 1e-5, "q {} vs {}", q[i * cols + j], qwant[k]);
         }
+    }
+
+    #[test]
+    fn firwin_2d_matches_scipy() {
+        // scipy.signal.firwin_2d((5,7), ('hamming','hann'), fc=0.3).
+        let w = firwin_2d((5, 7), &[0.3], FirWindow::Hamming, FirWindow::Hann, true).unwrap();
+        assert_eq!(w.len(), 5);
+        assert_eq!(w[0].len(), 7);
+        assert!((w[0][1] - 0.0009984137669744168).abs() <= 1e-9);
+        assert!((w[2][3] - 0.19609664354401002).abs() <= 1e-9);
+        assert!(w[4][6].abs() <= 1e-12);
     }
 
     #[test]
