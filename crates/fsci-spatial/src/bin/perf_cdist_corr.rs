@@ -25,7 +25,10 @@ fn digest(m: &[Vec<f64>]) -> u64 {
 // Old-style cdist: per-pair metric call, parallel over xa rows.
 fn old_cdist(xa: &[Vec<f64>], xb: &[Vec<f64>], f: fn(&[f64], &[f64]) -> f64) -> Vec<Vec<f64>> {
     let na = xa.len();
-    let nth = std::thread::available_parallelism().map(|c| c.get()).unwrap_or(1).min(na.max(1));
+    let nth = std::thread::available_parallelism()
+        .map(|c| c.get())
+        .unwrap_or(1)
+        .min(na.max(1));
     let chunk = na.div_ceil(nth);
     std::thread::scope(|s| {
         let hs: Vec<_> = (0..nth)
@@ -50,15 +53,29 @@ fn old_cdist(xa: &[Vec<f64>], xb: &[Vec<f64>], f: fn(&[f64], &[f64]) -> f64) -> 
 fn main() {
     let mut s = 0xBEEFu64;
     let mut next = || {
-        s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        s = s
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         (s >> 11) as f64 / (1u64 << 53) as f64
     };
-    for &(na, nb, d) in &[(600usize, 600usize, 64usize), (1000, 1000, 128), (1500, 1500, 256)] {
+    for &(na, nb, d) in &[
+        (600usize, 600usize, 64usize),
+        (1000, 1000, 128),
+        (1500, 1500, 256),
+    ] {
         let xa: Vec<Vec<f64>> = (0..na).map(|_| (0..d).map(|_| next()).collect()).collect();
         let xb: Vec<Vec<f64>> = (0..nb).map(|_| (0..d).map(|_| next()).collect()).collect();
         for (name, metric, f) in [
-            ("cosine", DistanceMetric::Cosine, cosine as fn(&[f64], &[f64]) -> f64),
-            ("correl", DistanceMetric::Correlation, correlation as fn(&[f64], &[f64]) -> f64),
+            (
+                "cosine",
+                DistanceMetric::Cosine,
+                cosine as fn(&[f64], &[f64]) -> f64,
+            ),
+            (
+                "correl",
+                DistanceMetric::Correlation,
+                correlation as fn(&[f64], &[f64]) -> f64,
+            ),
         ] {
             let new = cdist_metric(&xa, &xb, metric).unwrap();
             let old = old_cdist(&xa, &xb, f);

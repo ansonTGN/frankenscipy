@@ -1,4 +1,4 @@
-use fsci_fft::{hfft, hfft2, ihfft, ihfft2, Complex64, FftOptions, Normalization};
+use fsci_fft::{Complex64, FftOptions, Normalization, hfft, hfft2, ihfft, ihfft2};
 fn opts(n: Normalization) -> FftOptions {
     FftOptions::default().with_normalization(n)
 }

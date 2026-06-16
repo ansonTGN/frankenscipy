@@ -3,7 +3,7 @@
 // (what fsci would do without the randomized route). Both must converge to the same model;
 // the speedup is the wall-clock ratio (the per-iteration top-k SVD dominates).
 use fsci_cluster::factor_analysis;
-use fsci_linalg::{svd, DecompOptions};
+use fsci_linalg::{DecompOptions, svd};
 use std::f64::consts::PI;
 use std::hint::black_box;
 use std::time::Instant;
@@ -14,9 +14,16 @@ const SMALL: f64 = 1e-12;
 fn fa_full(x: &[Vec<f64>], k: usize, max_iter: usize, tol: f64) -> (Vec<Vec<f64>>, f64, usize) {
     let n = x.len();
     let d = x[0].len();
-    let mean: Vec<f64> = (0..d).map(|j| x.iter().map(|r| r[j]).sum::<f64>() / n as f64).collect();
-    let xc: Vec<Vec<f64>> = x.iter().map(|r| (0..d).map(|j| r[j] - mean[j]).collect()).collect();
-    let var: Vec<f64> = (0..d).map(|j| xc.iter().map(|r| r[j] * r[j]).sum::<f64>() / n as f64).collect();
+    let mean: Vec<f64> = (0..d)
+        .map(|j| x.iter().map(|r| r[j]).sum::<f64>() / n as f64)
+        .collect();
+    let xc: Vec<Vec<f64>> = x
+        .iter()
+        .map(|r| (0..d).map(|j| r[j] - mean[j]).collect())
+        .collect();
+    let var: Vec<f64> = (0..d)
+        .map(|j| xc.iter().map(|r| r[j] * r[j]).sum::<f64>() / n as f64)
+        .collect();
     let nsqrt = (n as f64).sqrt();
     let llconst = d as f64 * (2.0 * PI).ln() + k as f64;
     let mut psi = vec![1.0f64; d];
@@ -27,7 +34,10 @@ fn fa_full(x: &[Vec<f64>], k: usize, max_iter: usize, tol: f64) -> (Vec<Vec<f64>
     for it in 0..max_iter {
         iters = it + 1;
         let sp: Vec<f64> = psi.iter().map(|&p| p.sqrt() + SMALL).collect();
-        let xs: Vec<Vec<f64>> = xc.iter().map(|r| (0..d).map(|j| r[j] / (sp[j] * nsqrt)).collect()).collect();
+        let xs: Vec<Vec<f64>> = xc
+            .iter()
+            .map(|r| (0..d).map(|j| r[j] / (sp[j] * nsqrt)).collect())
+            .collect();
         let fro2: f64 = xs.iter().flatten().map(|v| v * v).sum();
         let dec = svd(&xs, DecompOptions::default()).expect("svd");
         let s2: Vec<f64> = dec.s.iter().take(k).map(|&s| s * s).collect();
@@ -59,9 +69,13 @@ fn main() {
     let tol = 1e-3;
     let mut st: u64 = 0x243f_6a88_85a3_08d3;
     let mut gauss = || {
-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        st = st
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         let u1 = ((st >> 11) as f64) / (1u64 << 53) as f64 + 1e-12;
-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        st = st
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         let u2 = ((st >> 11) as f64) / (1u64 << 53) as f64;
         (-2.0 * u1.ln()).sqrt() * (2.0 * PI * u2).cos()
     };
@@ -70,7 +84,9 @@ fn main() {
     let x: Vec<Vec<f64>> = (0..n)
         .map(|_| {
             let z: Vec<f64> = (0..r).map(|_| gauss()).collect();
-            (0..d).map(|j| (0..r).map(|t| z[t] * load[t][j]).sum::<f64>() + 0.4 * gauss()).collect()
+            (0..d)
+                .map(|j| (0..r).map(|t| z[t] * load[t][j]).sum::<f64>() + 0.4 * gauss())
+                .collect()
         })
         .collect();
 
@@ -78,7 +94,11 @@ fn main() {
     let (_wf, llf, itf) = fa_full(&x, k, max_iter, tol);
     println!(
         "factor_analysis loglike={:.4} ({} it) | full-SVD FA loglike={:.4} ({} it) | dll={:.2e}",
-        fa.loglike, fa.n_iter, llf, itf, (fa.loglike - llf).abs()
+        fa.loglike,
+        fa.n_iter,
+        llf,
+        itf,
+        (fa.loglike - llf).abs()
     );
 
     let trials = 3;
@@ -96,5 +116,8 @@ fn main() {
     tf.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let r_ms = tr[trials / 2] * 1e3;
     let f_ms = tf[trials / 2] * 1e3;
-    println!("full-SVD FA {f_ms:.2} ms | randomized factor_analysis {r_ms:.2} ms | speedup {:.2}x  (n={n} d={d} k={k})", f_ms / r_ms);
+    println!(
+        "full-SVD FA {f_ms:.2} ms | randomized factor_analysis {r_ms:.2} ms | speedup {:.2}x  (n={n} d={d} k={k})",
+        f_ms / r_ms
+    );
 }

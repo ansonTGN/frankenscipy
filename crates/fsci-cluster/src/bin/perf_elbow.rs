@@ -12,7 +12,9 @@ use std::time::Instant;
 use fsci_cluster::elbow_inertias;
 
 fn lcg(s: &mut u64) -> f64 {
-    *s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    *s = s
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
     (*s >> 11) as f64 / (1u64 << 53) as f64
 }
 
@@ -33,7 +35,10 @@ fn main() {
         for seed in [42u64, 12345] {
             let v = elbow_inertias(&data, max_k, seed);
             let bits: Vec<String> = v.iter().map(|x| format!("{:016x}", x.to_bits())).collect();
-            println!("n={n} d={d} max_k={max_k} seed={seed} inertias={}", bits.join(","));
+            println!(
+                "n={n} d={d} max_k={max_k} seed={seed} inertias={}",
+                bits.join(",")
+            );
         }
     }
     println!("===GOLDEN_PAYLOAD_END===");
@@ -48,6 +53,9 @@ fn main() {
             let v = elbow_inertias(black_box(&data), max_k, 1);
             acc += v.iter().sum::<f64>();
         }
-        println!("n={n} d={d} max_k={max_k}  {:>10.3?}/call (acc={acc:.6})", t0.elapsed() / reps);
+        println!(
+            "n={n} d={d} max_k={max_k}  {:>10.3?}/call (acc={acc:.6})",
+            t0.elapsed() / reps
+        );
     }
 }

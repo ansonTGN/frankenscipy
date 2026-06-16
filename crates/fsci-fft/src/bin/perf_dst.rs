@@ -32,7 +32,9 @@ fn main() {
 
     println!("===GOLDEN_PAYLOAD_BEGIN===");
     let mut worst = 0.0f64;
-    for &n in &[2usize, 3, 4, 5, 8, 12, 16, 17, 24, 32, 60, 64, 128, 360, 1000] {
+    for &n in &[
+        2usize, 3, 4, 5, 8, 12, 16, 17, 24, 32, 60, 64, 128, 360, 1000,
+    ] {
         let x = signal(n, n as u64 * 3331 + 11);
         let fwd = dst_ii(&x, &opts).expect("dst_ii");
         let inv = dst_iii(&fwd, &opts).expect("dst_iii");
@@ -62,7 +64,11 @@ fn main() {
                     let r = $f(black_box(&x), &opts).unwrap();
                     acc += r[r.len() / 2];
                 }
-                println!("{:<8} n={n:>6} {:>10.3?}/call (acc={acc:.3})", $name, t0.elapsed() / reps);
+                println!(
+                    "{:<8} n={n:>6} {:>10.3?}/call (acc={acc:.3})",
+                    $name,
+                    t0.elapsed() / reps
+                );
             }};
         }
         time!("dst_ii", dst_ii);

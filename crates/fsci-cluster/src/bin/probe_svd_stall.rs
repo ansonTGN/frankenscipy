@@ -1,20 +1,26 @@
 // Characterize the fsci_linalg::svd / eigh stall on rank-deficient / clustered spectra
 // (bead frankenscipy-9xrce). Times svd on a few shapes/ranks to see whether the cost tracks
 // O(n^3) (genuine) or blows up pathologically on degenerate spectra (a fixable stall).
-use fsci_linalg::{eigh, svd, DecompOptions};
+use fsci_linalg::{DecompOptions, eigh, svd};
 use std::hint::black_box;
 use std::time::Instant;
 
 fn lowrank(m: usize, n: usize, r: usize, noise: f64, seed: u64) -> Vec<Vec<f64>> {
     let mut st = seed;
     let mut rng = || {
-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        st = st
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5
     };
     let b: Vec<Vec<f64>> = (0..m).map(|_| (0..r).map(|_| rng()).collect()).collect();
     let g: Vec<Vec<f64>> = (0..r).map(|_| (0..n).map(|_| rng()).collect()).collect();
     (0..m)
-        .map(|i| (0..n).map(|j| (0..r).map(|t| b[i][t] * g[t][j]).sum::<f64>() + noise * rng()).collect())
+        .map(|i| {
+            (0..n)
+                .map(|j| (0..r).map(|t| b[i][t] * g[t][j]).sum::<f64>() + noise * rng())
+                .collect()
+        })
         .collect()
 }
 
@@ -39,13 +45,27 @@ fn main() {
     }
 
     // eigh on a rank-deficient symmetric kernel vs full-rank, n=800.
-    for &(n, r, tag) in &[(800usize, 30usize, "K=BBᵀ rank-30"), (800, 800, "K full-rank")] {
+    for &(n, r, tag) in &[
+        (800usize, 30usize, "K=BBᵀ rank-30"),
+        (800, 800, "K full-rank"),
+    ] {
         let b = lowrank(n, r, r, 0.0, 0xaa + n as u64);
         let k: Vec<Vec<f64>> = (0..n)
-            .map(|i| (0..n).map(|j| (0..r).map(|t| b[i][t] * b[j][t]).sum()).collect())
+            .map(|i| {
+                (0..n)
+                    .map(|j| (0..r).map(|t| b[i][t] * b[j][t]).sum())
+                    .collect()
+            })
             .collect();
         let t = Instant::now();
-        black_box(eigh(&k, DecompOptions::default()).expect("eigh").eigenvalues[0]);
-        println!("eigh {tag} (n={n}): {:.1} ms", t.elapsed().as_secs_f64() * 1e3);
+        black_box(
+            eigh(&k, DecompOptions::default())
+                .expect("eigh")
+                .eigenvalues[0],
+        );
+        println!(
+            "eigh {tag} (n={n}): {:.1} ms",
+            t.elapsed().as_secs_f64() * 1e3
+        );
     }
 }

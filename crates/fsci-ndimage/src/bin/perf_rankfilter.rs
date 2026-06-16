@@ -37,7 +37,9 @@ fn main() {
         let bit = digest(&new.data) == digest(&old.data);
         let reps = 12usize;
         let t_new = time(reps, || {
-            black_box(rank_filter(black_box(&arr), rank, size, BoundaryMode::Reflect, 0.0).unwrap());
+            black_box(
+                rank_filter(black_box(&arr), rank, size, BoundaryMode::Reflect, 0.0).unwrap(),
+            );
         });
         let t_old = time(reps, || {
             black_box(rank_filter_perpixel_ref(

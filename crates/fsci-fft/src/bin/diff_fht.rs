@@ -1,6 +1,6 @@
 //! Differential oracle probe: fast Hankel transform (fht/ifht/fhtoffset) vs scipy.fft (gitignored).
 //! Lines: `name,i,value`. Inputs defined identically in the python comparator.
-use fsci_fft::{fht, fhtoffset, ifht, FftOptions};
+use fsci_fft::{FftOptions, fht, fhtoffset, ifht};
 
 fn dump(name: &str, v: &[f64]) {
     for (i, &x) in v.iter().enumerate() {

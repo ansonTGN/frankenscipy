@@ -1,5 +1,5 @@
 //! Dense-output accuracy probe vs analytic + scipy (gitignored).
-use fsci_integrate::{solve_ivp, SolveIvpOptions, SolverKind, ToleranceValue};
+use fsci_integrate::{SolveIvpOptions, SolverKind, ToleranceValue, solve_ivp};
 use fsci_runtime::RuntimeMode;
 fn main() {
     // y' = -y, y(0)=1 -> exp(-t). BDF/Radau take large steps as it flattens.

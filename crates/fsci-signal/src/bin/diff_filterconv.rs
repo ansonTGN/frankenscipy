@@ -1,6 +1,6 @@
 //! Differential oracle probe: filter representation conversions vs scipy.signal (gitignored).
 //! Lines: `name,i,value` (or `name,i,re,im` for complex). Inputs match the python comparator.
-use fsci_signal::{group_delay, sos2tf, tf2sos, tf2zpk, zpk2tf, BaCoeffs, SosSection, ZpkCoeffs};
+use fsci_signal::{BaCoeffs, SosSection, ZpkCoeffs, group_delay, sos2tf, tf2sos, tf2zpk, zpk2tf};
 
 fn dump(name: &str, v: &[f64]) {
     for (i, &x) in v.iter().enumerate() {
@@ -70,7 +70,10 @@ fn main() {
 
     // tf2sos -> sos2tf round trip should recover (b, a) up to scaling.
     if let Ok(sos) = tf2sos(&b, &a) {
-        let flat: Vec<f64> = sos.iter().flat_map(|s: &SosSection| s.iter().copied()).collect();
+        let flat: Vec<f64> = sos
+            .iter()
+            .flat_map(|s: &SosSection| s.iter().copied())
+            .collect();
         dump("tf2sos_flat", &flat);
         let recon = sos2tf(&sos);
         dump("sos2tf_b", &recon.b);

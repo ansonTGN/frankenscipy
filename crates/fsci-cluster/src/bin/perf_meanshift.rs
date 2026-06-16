@@ -12,7 +12,9 @@ use std::time::Instant;
 use fsci_cluster::mean_shift;
 
 fn lcg(s: &mut u64) -> f64 {
-    *s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    *s = s
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
     (*s >> 11) as f64 / (1u64 << 53) as f64
 }
 
@@ -42,7 +44,11 @@ fn main() {
     for &(n, d) in &[(60usize, 2usize), (200, 3), (500, 4)] {
         let data = dataset(n, d, 7);
         let (c, lbl) = mean_shift(&data, 2.0, 100).expect("mean_shift");
-        println!("n={n} d={d} ncenters={} digest={:016x}", c.len(), digest(&c, &lbl));
+        println!(
+            "n={n} d={d} ncenters={} digest={:016x}",
+            c.len(),
+            digest(&c, &lbl)
+        );
     }
     println!("===GOLDEN_PAYLOAD_END===");
 
@@ -56,6 +62,9 @@ fn main() {
             let (c, _) = mean_shift(black_box(&data), 2.0, 100).unwrap();
             acc += c[0][0];
         }
-        println!("n={n} d={d}  {:>10.3?}/call (acc={acc:.6})", t0.elapsed() / reps);
+        println!(
+            "n={n} d={d}  {:>10.3?}/call (acc={acc:.6})",
+            t0.elapsed() / reps
+        );
     }
 }

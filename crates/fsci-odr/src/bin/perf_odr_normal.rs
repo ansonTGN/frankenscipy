@@ -99,10 +99,16 @@ fn main() {
                 payload.push_str(&format!("MISMATCH trial={trial} rows={rows} n={n}\n"));
             }
         }
-        let digest: u64 = nb.iter().flatten().chain(&rb).fold(1469598103934665603u64, |h, v| {
-            (h ^ v.to_bits()).wrapping_mul(1099511628211)
-        });
-        payload.push_str(&format!("trial={trial} rows={rows} n={n} digest={digest:016x}\n"));
+        let digest: u64 = nb
+            .iter()
+            .flatten()
+            .chain(&rb)
+            .fold(1469598103934665603u64, |h, v| {
+                (h ^ v.to_bits()).wrapping_mul(1099511628211)
+            });
+        payload.push_str(&format!(
+            "trial={trial} rows={rows} n={n} digest={digest:016x}\n"
+        ));
     }
     println!("===GOLDEN_PAYLOAD_BEGIN===");
     print!("{payload}");
@@ -139,9 +145,14 @@ fn main() {
     // Fit y = b0 + b1*x to a noiseless line; expect b≈[1.0, 2.0].
     let xs: Vec<f64> = (0..30).map(|k| k as f64 * 0.2).collect();
     let ys: Vec<f64> = xs.iter().map(|&x| 1.0 + 2.0 * x).collect();
-    let model = |beta: &[f64], x: &[f64]| -> Vec<f64> { x.iter().map(|&xi| beta[0] + beta[1] * xi).collect() };
+    let model = |beta: &[f64], x: &[f64]| -> Vec<f64> {
+        x.iter().map(|&xi| beta[0] + beta[1] * xi).collect()
+    };
     match odr(model, vec![0.0, 0.0], ys, xs) {
-        Ok(out) => println!("odr ok: beta≈[{:.4}, {:.4}] (expect ~[1.0, 2.0])", out.beta[0], out.beta[1]),
+        Ok(out) => println!(
+            "odr ok: beta≈[{:.4}, {:.4}] (expect ~[1.0, 2.0])",
+            out.beta[0], out.beta[1]
+        ),
         Err(e) => println!("odr err: {e:?}"),
     }
 }

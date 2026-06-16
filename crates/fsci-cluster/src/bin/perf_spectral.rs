@@ -2,14 +2,16 @@
 // clustering, on well-separated RBF-affinity blobs. The randomized version must recover the
 // blobs; the speedup is the wall-clock ratio (the eigendecomposition dominates).
 use fsci_cluster::{kmeans, spectral_clustering};
-use fsci_linalg::{eigh, DecompOptions};
+use fsci_linalg::{DecompOptions, eigh};
 use std::hint::black_box;
 use std::time::Instant;
 
 fn build(n_per: usize, n_clusters: usize) -> (Vec<Vec<f64>>, Vec<usize>) {
     let mut st: u64 = 0x243f_6a88_85a3_08d3;
     let mut rng = || {
-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        st = st
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5
     };
     let n = n_per * n_clusters;
@@ -26,7 +28,11 @@ fn build(n_per: usize, n_clusters: usize) -> (Vec<Vec<f64>>, Vec<usize>) {
         .map(|i| {
             (0..n)
                 .map(|j| {
-                    let d2: f64 = pts[i].iter().zip(&pts[j]).map(|(&a, &b)| (a - b) * (a - b)).sum();
+                    let d2: f64 = pts[i]
+                        .iter()
+                        .zip(&pts[j])
+                        .map(|(&a, &b)| (a - b) * (a - b))
+                        .sum();
                     (-0.5 * d2).exp()
                 })
                 .collect()
@@ -60,7 +66,11 @@ fn full_eigh_spectral(aff: &[Vec<f64>], k: usize, seed: u64) -> Vec<usize> {
         })
         .collect();
     let norm: Vec<Vec<f64>> = (0..n)
-        .map(|i| (0..n).map(|j| aff[i][j] * inv_sqrt[i] * inv_sqrt[j]).collect())
+        .map(|i| {
+            (0..n)
+                .map(|j| aff[i][j] * inv_sqrt[i] * inv_sqrt[j])
+                .collect()
+        })
         .collect();
     let e = eigh(&norm, DecompOptions::default()).expect("eigh"); // ascending
     // Top-k eigenvectors = last k columns.
@@ -88,7 +98,10 @@ fn main() {
     let n = aff.len();
 
     let labels = spectral_clustering(&aff, k, 100, 7).expect("spectral");
-    println!("spectral_clustering purity = {:.4}  (n={n} k={k})", purity(&labels, &truth, k));
+    println!(
+        "spectral_clustering purity = {:.4}  (n={n} k={k})",
+        purity(&labels, &truth, k)
+    );
 
     let trials = 3;
     let mut tr = Vec::new();
@@ -105,5 +118,8 @@ fn main() {
     tf.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let r_ms = tr[trials / 2] * 1e3;
     let f_ms = tf[trials / 2] * 1e3;
-    println!("full-eigh spectral {f_ms:.2} ms | randomized spectral_clustering {r_ms:.2} ms | speedup {:.2}x", f_ms / r_ms);
+    println!(
+        "full-eigh spectral {f_ms:.2} ms | randomized spectral_clustering {r_ms:.2} ms | speedup {:.2}x",
+        f_ms / r_ms
+    );
 }

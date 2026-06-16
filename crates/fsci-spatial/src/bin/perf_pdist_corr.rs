@@ -28,7 +28,10 @@ fn old_pdist(x: &[Vec<f64>], f: fn(&[f64], &[f64]) -> f64) -> Vec<f64> {
     let total = n * (n - 1) / 2;
     let mut out = vec![0.0f64; total];
     let off = |r: usize| -> usize { r * (n - 1) - r * (r.saturating_sub(1)) / 2 };
-    let nth = std::thread::available_parallelism().map(|c| c.get()).unwrap_or(1).min(n.max(1));
+    let nth = std::thread::available_parallelism()
+        .map(|c| c.get())
+        .unwrap_or(1)
+        .min(n.max(1));
     let chunk_rows = n.div_ceil(nth);
     std::thread::scope(|s| {
         let mut rest: &mut [f64] = &mut out;
@@ -60,14 +63,24 @@ fn old_pdist(x: &[Vec<f64>], f: fn(&[f64], &[f64]) -> f64) -> Vec<f64> {
 fn main() {
     let mut s = 0xC0FFEEu64;
     let mut next = || {
-        s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        s = s
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         (s >> 11) as f64 / (1u64 << 53) as f64
     };
     for &(n, d) in &[(800usize, 64usize), (1500, 128), (2500, 256)] {
         let x: Vec<Vec<f64>> = (0..n).map(|_| (0..d).map(|_| next()).collect()).collect();
         for (name, metric, f) in [
-            ("cosine", DistanceMetric::Cosine, cosine as fn(&[f64], &[f64]) -> f64),
-            ("correl", DistanceMetric::Correlation, correlation as fn(&[f64], &[f64]) -> f64),
+            (
+                "cosine",
+                DistanceMetric::Cosine,
+                cosine as fn(&[f64], &[f64]) -> f64,
+            ),
+            (
+                "correl",
+                DistanceMetric::Correlation,
+                correlation as fn(&[f64], &[f64]) -> f64,
+            ),
         ] {
             let new = pdist(&x, metric).unwrap();
             let old = old_pdist(&x, f);

@@ -2,7 +2,7 @@
 // Gram matrix) vs a full symmetric eigendecomposition of the same B. The embedding must
 // reproduce the input pairwise distances; the speedup is the wall-clock ratio.
 use fsci_cluster::classical_mds;
-use fsci_linalg::{eigh, DecompOptions};
+use fsci_linalg::{DecompOptions, eigh};
 use std::hint::black_box;
 use std::time::Instant;
 
@@ -14,10 +14,17 @@ fn full_mds_time(dist: &[Vec<f64>], k: usize) -> f64 {
         .iter()
         .map(|row| row.iter().map(|&v| v * v).collect())
         .collect();
-    let row_mean: Vec<f64> = d2.iter().map(|r| r.iter().sum::<f64>() / n as f64).collect();
+    let row_mean: Vec<f64> = d2
+        .iter()
+        .map(|r| r.iter().sum::<f64>() / n as f64)
+        .collect();
     let total: f64 = row_mean.iter().sum::<f64>() / n as f64;
     let b: Vec<Vec<f64>> = (0..n)
-        .map(|i| (0..n).map(|j| -0.5 * (d2[i][j] - row_mean[i] - row_mean[j] + total)).collect())
+        .map(|i| {
+            (0..n)
+                .map(|j| -0.5 * (d2[i][j] - row_mean[i] - row_mean[j] + total))
+                .collect()
+        })
         .collect();
     let e = eigh(&b, DecompOptions::default()).expect("eigh");
     e.eigenvalues.iter().rev().take(k).sum()
@@ -29,14 +36,21 @@ fn main() {
     let k = 8usize;
     let mut st: u64 = 0x243f_6a88_85a3_08d3;
     let mut rng = || {
-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        st = st
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5
     };
     let pts: Vec<Vec<f64>> = (0..n).map(|_| (0..r).map(|_| rng()).collect()).collect();
     let dist: Vec<Vec<f64>> = (0..n)
         .map(|i| {
             (0..n)
-                .map(|j| (0..r).map(|t| (pts[i][t] - pts[j][t]).powi(2)).sum::<f64>().sqrt())
+                .map(|j| {
+                    (0..r)
+                        .map(|t| (pts[i][t] - pts[j][t]).powi(2))
+                        .sum::<f64>()
+                        .sqrt()
+                })
                 .collect()
         })
         .collect();
@@ -70,5 +84,8 @@ fn main() {
     tf.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let r_ms = tr[trials / 2] * 1e3;
     let f_ms = tf[trials / 2] * 1e3;
-    println!("full eigh MDS {f_ms:.2} ms | randomized classical_mds {r_ms:.2} ms | speedup {:.2}x  (n={n} r={r} k={k})", f_ms / r_ms);
+    println!(
+        "full eigh MDS {f_ms:.2} ms | randomized classical_mds {r_ms:.2} ms | speedup {:.2}x  (n={n} r={r} k={k})",
+        f_ms / r_ms
+    );
 }

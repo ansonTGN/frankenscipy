@@ -10,13 +10,21 @@ fn main() {
     let d = 64usize;
     let mut s: u64 = 0x9e3779b97f4a7c15;
     let mut rng = || {
-        s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        s = s
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((s >> 11) as f64) / (1u64 << 53) as f64
     };
-    let xa: Vec<Vec<f64>> = (0..na).map(|_| (0..d).map(|_| rng() * 2.0 - 1.0).collect()).collect();
-    let xb: Vec<Vec<f64>> = (0..nb).map(|_| (0..d).map(|_| rng() * 2.0 - 1.0).collect()).collect();
+    let xa: Vec<Vec<f64>> = (0..na)
+        .map(|_| (0..d).map(|_| rng() * 2.0 - 1.0).collect())
+        .collect();
+    let xb: Vec<Vec<f64>> = (0..nb)
+        .map(|_| (0..d).map(|_| rng() * 2.0 - 1.0).collect())
+        .collect();
     // A symmetric positive-definite VI = M·Mᵀ/d + I (well-conditioned inverse covariance).
-    let m: Vec<Vec<f64>> = (0..d).map(|_| (0..d).map(|_| rng() - 0.5).collect()).collect();
+    let m: Vec<Vec<f64>> = (0..d)
+        .map(|_| (0..d).map(|_| rng() - 0.5).collect())
+        .collect();
     let mut vi = vec![vec![0.0; d]; d];
     for i in 0..d {
         for j in 0..d {
@@ -70,7 +78,9 @@ fn main() {
 
     // pdist (self-pairs, condensed) — same lever.
     let np = 560usize;
-    let xp: Vec<Vec<f64>> = (0..np).map(|_| (0..d).map(|_| rng() * 2.0 - 1.0).collect()).collect();
+    let xp: Vec<Vec<f64>> = (0..np)
+        .map(|_| (0..d).map(|_| rng() * 2.0 - 1.0).collect())
+        .collect();
     let mut pe = Vec::new();
     let mut pn = Vec::new();
     for _ in 0..trials {

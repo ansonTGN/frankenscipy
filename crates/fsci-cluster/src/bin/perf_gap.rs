@@ -13,7 +13,9 @@ use std::time::Instant;
 use fsci_cluster::gap_statistic;
 
 fn lcg(s: &mut u64) -> f64 {
-    *s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    *s = s
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
     (*s >> 11) as f64 / (1u64 << 53) as f64
 }
 
@@ -35,7 +37,10 @@ fn main() {
         for seed in [42u64, 12345] {
             let g = gap_statistic(&data, max_k, n_ref, seed);
             let bits: Vec<String> = g.iter().map(|v| format!("{:016x}", v.to_bits())).collect();
-            println!("n={n} d={d} max_k={max_k} n_ref={n_ref} seed={seed} gaps={}", bits.join(","));
+            println!(
+                "n={n} d={d} max_k={max_k} n_ref={n_ref} seed={seed} gaps={}",
+                bits.join(",")
+            );
         }
     }
     println!("===GOLDEN_PAYLOAD_END===");
@@ -50,6 +55,9 @@ fn main() {
             let g = gap_statistic(black_box(&data), max_k, n_ref, 1);
             acc += g.iter().sum::<f64>();
         }
-        println!("n={n} d={d} max_k={max_k} n_ref={n_ref}  {:>10.3?}/call (acc={acc:.6})", t0.elapsed() / reps);
+        println!(
+            "n={n} d={d} max_k={max_k} n_ref={n_ref}  {:>10.3?}/call (acc={acc:.6})",
+            t0.elapsed() / reps
+        );
     }
 }

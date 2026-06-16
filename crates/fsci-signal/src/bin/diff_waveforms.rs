@@ -33,5 +33,9 @@ fn main() {
     // gausspulse on symmetric t about 0
     let t2: Vec<f64> = (0..200).map(|i| (i as f64 - 100.0) * 0.005).collect();
     dump("gausspulse", "5|0.5", &sig::gausspulse(&t2, 5.0, 0.5));
-    dump("sweep_poly", "poly", &sig::sweep_poly(&t, &[0.025, -0.36, 1.25, 2.0]));
+    dump(
+        "sweep_poly",
+        "poly",
+        &sig::sweep_poly(&t, &[0.025, -0.36, 1.25, 2.0]),
+    );
 }

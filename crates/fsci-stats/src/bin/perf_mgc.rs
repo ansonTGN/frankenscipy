@@ -13,11 +13,15 @@ fn main() {
     let reps = 2000usize;
     println!(
         "available_parallelism = {}",
-        std::thread::available_parallelism().map(|v| v.get()).unwrap_or(0)
+        std::thread::available_parallelism()
+            .map(|v| v.get())
+            .unwrap_or(0)
     );
     let mut s: u64 = 0x243f6a8885a308d3;
     let mut rng = || {
-        s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        s = s
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((s >> 33) as f64) / (1u64 << 31) as f64 - 1.0 // ~[-1,1)
     };
     let x: Vec<Vec<f64>> = (0..n).map(|_| (0..d).map(|_| rng()).collect()).collect();

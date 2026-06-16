@@ -10,7 +10,9 @@ use std::time::Instant;
 use fsci_io::read_csv;
 
 fn lcg(s: &mut u64) -> f64 {
-    *s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    *s = s
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
     (*s >> 11) as f64 / (1u64 << 53) as f64
 }
 
@@ -69,8 +71,13 @@ fn main() {
         let t0 = Instant::now();
         let mut acc = 0.0;
         for _ in 0..reps {
-            acc += read_csv(black_box(&content), ',', true).expect("read_csv").1[0][0];
+            acc += read_csv(black_box(&content), ',', true)
+                .expect("read_csv")
+                .1[0][0];
         }
-        println!("rows={r} cols={c}  {:>10.3?}/call (acc={acc:.6})", t0.elapsed() / reps);
+        println!(
+            "rows={r} cols={c}  {:>10.3?}/call (acc={acc:.6})",
+            t0.elapsed() / reps
+        );
     }
 }

@@ -2,14 +2,16 @@
 // dataset. The randomized top-k explained variance must match the full PCA's; the speedup
 // is the wall-clock ratio.
 use fsci_cluster::pca;
-use fsci_linalg::{svd, DecompOptions};
+use fsci_linalg::{DecompOptions, svd};
 use std::hint::black_box;
 use std::time::Instant;
 
 fn full_pca_explained_variance(x: &[Vec<f64>], k: usize) -> Vec<f64> {
     let n = x.len();
     let d = x[0].len();
-    let mean: Vec<f64> = (0..d).map(|j| x.iter().map(|r| r[j]).sum::<f64>() / n as f64).collect();
+    let mean: Vec<f64> = (0..d)
+        .map(|j| x.iter().map(|r| r[j]).sum::<f64>() / n as f64)
+        .collect();
     let xc: Vec<Vec<f64>> = x
         .iter()
         .map(|r| r.iter().zip(&mean).map(|(&v, &m)| v - m).collect())
@@ -26,7 +28,9 @@ fn main() {
     let k = 15usize;
     let mut st: u64 = 0x243f_6a88_85a3_08d3;
     let mut rng = || {
-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        st = st
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5
     };
     // X = U_signal · V_signalᵀ (rank r) + small noise.
@@ -34,7 +38,11 @@ fn main() {
     let v: Vec<Vec<f64>> = (0..r).map(|_| (0..d).map(|_| rng()).collect()).collect();
     let x: Vec<Vec<f64>> = u
         .iter()
-        .map(|ui| (0..d).map(|j| (0..r).map(|t| ui[t] * v[t][j]).sum::<f64>() + 1e-4 * rng()).collect())
+        .map(|ui| {
+            (0..d)
+                .map(|j| (0..r).map(|t| ui[t] * v[t][j]).sum::<f64>() + 1e-4 * rng())
+                .collect()
+        })
         .collect();
 
     let p = pca(&x, k, 7).expect("pca");
@@ -65,5 +73,8 @@ fn main() {
     tf.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let r_ms = tr[trials / 2] * 1e3;
     let f_ms = tf[trials / 2] * 1e3;
-    println!("full-SVD PCA {f_ms:.2} ms | randomized pca {r_ms:.2} ms | speedup {:.2}x  (n={n} d={d} k={k})", f_ms / r_ms);
+    println!(
+        "full-SVD PCA {f_ms:.2} ms | randomized pca {r_ms:.2} ms | speedup {:.2}x  (n={n} d={d} k={k})",
+        f_ms / r_ms
+    );
 }

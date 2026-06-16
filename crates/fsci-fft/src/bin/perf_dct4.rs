@@ -64,8 +64,16 @@ fn main() {
         let s = dst_iv(&x, &opts).expect("dst_iv");
         let wc = naive_dct4(&x);
         let ws = naive_dst4(&x);
-        let ec = c.iter().zip(&wc).map(|(a, b)| (a - b).abs()).fold(0.0f64, f64::max);
-        let es = s.iter().zip(&ws).map(|(a, b)| (a - b).abs()).fold(0.0f64, f64::max);
+        let ec = c
+            .iter()
+            .zip(&wc)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f64, f64::max);
+        let es = s
+            .iter()
+            .zip(&ws)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f64, f64::max);
         worst = worst.max(ec).max(es);
         println!("n={n:>4} dct4_err={ec:.3e} dst4_err={es:.3e}");
     }
@@ -85,7 +93,11 @@ fn main() {
                     let r = $f(black_box(&x), &opts).unwrap();
                     acc += r[r.len() / 2];
                 }
-                println!("{:<7} n={n:>6} {:>10.3?}/call (acc={acc:.3})", $name, t0.elapsed() / reps);
+                println!(
+                    "{:<7} n={n:>6} {:>10.3?}/call (acc={acc:.3})",
+                    $name,
+                    t0.elapsed() / reps
+                );
             }};
         }
         time!("dct_iv", dct_iv);

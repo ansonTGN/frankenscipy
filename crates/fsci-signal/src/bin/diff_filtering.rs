@@ -1,7 +1,7 @@
 //! Differential oracle probe: lfilter/filtfilt/sosfilt/sosfiltfilt/hilbert/detrend/deconvolve
 //! vs scipy.signal (gitignored). Lines: `name|v0;v1;...`.
 use fsci_signal::{
-    deconvolve, detrend, filtfilt, hilbert, lfilter, sosfilt, sosfiltfilt, DetrendType, SosSection,
+    DetrendType, SosSection, deconvolve, detrend, filtfilt, hilbert, lfilter, sosfilt, sosfiltfilt,
 };
 
 fn dump(name: &str, v: &[f64]) {
@@ -57,7 +57,10 @@ fn main() {
     dump("hilbert_im", &hi);
 
     dump("detrend_linear", &detrend(&x, DetrendType::Linear).unwrap());
-    dump("detrend_const", &detrend(&x, DetrendType::Constant).unwrap());
+    dump(
+        "detrend_const",
+        &detrend(&x, DetrendType::Constant).unwrap(),
+    );
 
     // deconvolve: x convolved-ish; use a simple divisor
     let sig = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];

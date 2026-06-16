@@ -38,7 +38,8 @@ fn main() {
         )
         .unwrap();
         let new = correlate(&arr, &w, BoundaryMode::Reflect, 0.0).unwrap();
-        let old = nd_filter_perpixel_ref(&arr, &w, &origins, BoundaryMode::Reflect, 0.0, false).unwrap();
+        let old =
+            nd_filter_perpixel_ref(&arr, &w, &origins, BoundaryMode::Reflect, 0.0, false).unwrap();
         let bit = digest(&new.data) == digest(&old.data);
         let reps = 20usize;
         let t_new = time(reps, || {
@@ -46,8 +47,15 @@ fn main() {
         });
         let t_old = time(reps, || {
             black_box(
-                nd_filter_perpixel_ref(black_box(&arr), &w, &origins, BoundaryMode::Reflect, 0.0, false)
-                    .unwrap(),
+                nd_filter_perpixel_ref(
+                    black_box(&arr),
+                    &w,
+                    &origins,
+                    BoundaryMode::Reflect,
+                    0.0,
+                    false,
+                )
+                .unwrap(),
             );
         });
         println!(
@@ -56,15 +64,23 @@ fn main() {
         );
 
         let cnew = convolve(&arr, &w, BoundaryMode::Reflect, 0.0).unwrap();
-        let cold = nd_filter_perpixel_ref(&arr, &w, &origins, BoundaryMode::Reflect, 0.0, true).unwrap();
+        let cold =
+            nd_filter_perpixel_ref(&arr, &w, &origins, BoundaryMode::Reflect, 0.0, true).unwrap();
         let cbit = digest(&cnew.data) == digest(&cold.data);
         let tc_new = time(reps, || {
             black_box(convolve(black_box(&arr), &w, BoundaryMode::Reflect, 0.0).unwrap());
         });
         let tc_old = time(reps, || {
             black_box(
-                nd_filter_perpixel_ref(black_box(&arr), &w, &origins, BoundaryMode::Reflect, 0.0, true)
-                    .unwrap(),
+                nd_filter_perpixel_ref(
+                    black_box(&arr),
+                    &w,
+                    &origins,
+                    BoundaryMode::Reflect,
+                    0.0,
+                    true,
+                )
+                .unwrap(),
             );
         });
         println!(

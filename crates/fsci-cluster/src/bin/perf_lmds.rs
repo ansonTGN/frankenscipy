@@ -12,7 +12,10 @@ fn max_distance_err(emb: &[Vec<f64>], dist: &[Vec<f64>]) -> f64 {
     let mut maxerr = 0.0f64;
     for i in 0..n {
         for j in 0..n {
-            let de: f64 = (0..k).map(|t| (emb[i][t] - emb[j][t]).powi(2)).sum::<f64>().sqrt();
+            let de: f64 = (0..k)
+                .map(|t| (emb[i][t] - emb[j][t]).powi(2))
+                .sum::<f64>()
+                .sqrt();
             maxerr = maxerr.max((de - dist[i][j]).abs());
         }
     }
@@ -26,14 +29,21 @@ fn main() {
     let m = 40usize; // landmarks
     let mut st: u64 = 0x243f_6a88_85a3_08d3;
     let mut rng = || {
-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        st = st
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5
     };
     let pts: Vec<Vec<f64>> = (0..n).map(|_| (0..r).map(|_| rng()).collect()).collect();
     let dist: Vec<Vec<f64>> = (0..n)
         .map(|i| {
             (0..n)
-                .map(|j| (0..r).map(|t| (pts[i][t] - pts[j][t]).powi(2)).sum::<f64>().sqrt())
+                .map(|j| {
+                    (0..r)
+                        .map(|t| (pts[i][t] - pts[j][t]).powi(2))
+                        .sum::<f64>()
+                        .sqrt()
+                })
                 .collect()
         })
         .collect();
@@ -59,5 +69,8 @@ fn main() {
     tc.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let l_ms = tl[trials / 2] * 1e3;
     let c_ms = tc[trials / 2] * 1e3;
-    println!("classical_mds (full n×n) {c_ms:.2} ms | landmark_mds {l_ms:.2} ms | speedup {:.2}x  (n={n} k={k} m={m})", c_ms / l_ms);
+    println!(
+        "classical_mds (full n×n) {c_ms:.2} ms | landmark_mds {l_ms:.2} ms | speedup {:.2}x  (n={n} k={k} m={m})",
+        c_ms / l_ms
+    );
 }

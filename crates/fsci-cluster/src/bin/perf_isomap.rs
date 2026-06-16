@@ -31,11 +31,20 @@ impl PartialOrd for Node {
 
 fn knn_graph(data: &[Vec<f64>], k: usize) -> Vec<Vec<(usize, f64)>> {
     let n = data.len();
-    let ed = |a: &[f64], b: &[f64]| a.iter().zip(b).map(|(&x, &y)| (x - y) * (x - y)).sum::<f64>().sqrt();
+    let ed = |a: &[f64], b: &[f64]| {
+        a.iter()
+            .zip(b)
+            .map(|(&x, &y)| (x - y) * (x - y))
+            .sum::<f64>()
+            .sqrt()
+    };
     let mut adj = vec![Vec::new(); n];
     let mut seen = vec![std::collections::HashSet::new(); n];
     for i in 0..n {
-        let mut d: Vec<(f64, usize)> = (0..n).filter(|&j| j != i).map(|j| (ed(&data[i], &data[j]), j)).collect();
+        let mut d: Vec<(f64, usize)> = (0..n)
+            .filter(|&j| j != i)
+            .map(|j| (ed(&data[i], &data[j]), j))
+            .collect();
         d.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
         for &(w, j) in d.iter().take(k) {
             if seen[i].insert(j) {
@@ -54,7 +63,10 @@ fn dijkstra(adj: &[Vec<(usize, f64)>], src: usize) -> Vec<f64> {
     let mut dist = vec![f64::INFINITY; n];
     dist[src] = 0.0;
     let mut heap = BinaryHeap::new();
-    heap.push(Node { dist: 0.0, node: src });
+    heap.push(Node {
+        dist: 0.0,
+        node: src,
+    });
     while let Some(Node { dist: d, node }) = heap.pop() {
         if d > dist[node] {
             continue;
@@ -63,7 +75,10 @@ fn dijkstra(adj: &[Vec<(usize, f64)>], src: usize) -> Vec<f64> {
             let nd = d + w;
             if nd < dist[nbr] {
                 dist[nbr] = nd;
-                heap.push(Node { dist: nd, node: nbr });
+                heap.push(Node {
+                    dist: nd,
+                    node: nbr,
+                });
             }
         }
     }
@@ -112,5 +127,8 @@ fn main() {
     tf.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let l_ms = tl[trials / 2] * 1e3;
     let f_ms = tf[trials / 2] * 1e3;
-    println!("full Isomap (n-source geodesics + classical_mds) {f_ms:.2} ms | landmark_isomap {l_ms:.2} ms | speedup {:.2}x  (n={n} m={m})", f_ms / l_ms);
+    println!(
+        "full Isomap (n-source geodesics + classical_mds) {f_ms:.2} ms | landmark_isomap {l_ms:.2} ms | speedup {:.2}x  (n={n} m={m})",
+        f_ms / l_ms
+    );
 }

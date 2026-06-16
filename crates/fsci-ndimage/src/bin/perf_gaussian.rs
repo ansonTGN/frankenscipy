@@ -33,9 +33,15 @@ fn main() {
         println!("gaussian_filter1d {rows}x{cols}, axis={axis}, Reflect (vs old convolve path):");
         for &sigma in &[1.0f64, 2.0, 4.0, 8.0] {
             let new = gaussian_filter1d(&arr, sigma, axis, 0, BoundaryMode::Reflect, 0.0).unwrap();
-            let old =
-                gaussian_filter1d_via_convolve_ref(&arr, sigma, axis, 0, BoundaryMode::Reflect, 0.0)
-                    .unwrap();
+            let old = gaussian_filter1d_via_convolve_ref(
+                &arr,
+                sigma,
+                axis,
+                0,
+                BoundaryMode::Reflect,
+                0.0,
+            )
+            .unwrap();
             let bitident = digest(&new.data) == digest(&old.data);
             let reps = 30usize;
             let t_new = time(reps, || {

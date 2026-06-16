@@ -1,20 +1,26 @@
 // jacobi_svd robustness/throughput on the exactly-rank-deficient inputs that stall the
 // implicit-shift svd() (~32 s, bead 9xrce). Times jacobi_svd and checks reconstruction; the
 // implicit-shift svd() numbers come from the probe_svd_stall repro (not re-run here — it hangs).
-use fsci_linalg::{jacobi_svd, DecompOptions};
+use fsci_linalg::{DecompOptions, jacobi_svd};
 use std::hint::black_box;
 use std::time::Instant;
 
 fn lowrank(m: usize, n: usize, r: usize, seed: u64) -> Vec<Vec<f64>> {
     let mut st = seed;
     let mut rng = || {
-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        st = st
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5
     };
     let b: Vec<Vec<f64>> = (0..m).map(|_| (0..r).map(|_| rng()).collect()).collect();
     let g: Vec<Vec<f64>> = (0..r).map(|_| (0..n).map(|_| rng()).collect()).collect();
     (0..m)
-        .map(|i| (0..n).map(|j| (0..r).map(|t| b[i][t] * g[t][j]).sum()).collect())
+        .map(|i| {
+            (0..n)
+                .map(|j| (0..r).map(|t| b[i][t] * g[t][j]).sum())
+                .collect()
+        })
         .collect()
 }
 
@@ -34,7 +40,12 @@ fn recon_err(a: &[Vec<f64>], res: &fsci_linalg::SvdResult) -> f64 {
 
 fn main() {
     for &(m, n, r, tag) in &[
-        (800usize, 600usize, 30usize, "800x600 rank-30 EXACT (svd() stalls ~35s)"),
+        (
+            800usize,
+            600usize,
+            30usize,
+            "800x600 rank-30 EXACT (svd() stalls ~35s)",
+        ),
         (600, 600, 30, "600x600 rank-30 EXACT (svd() stalls ~28s)"),
         (800, 600, 600, "800x600 FULL rank"),
     ] {

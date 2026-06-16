@@ -1,7 +1,7 @@
 //! Differential oracle probe: DCT/DST family vs scipy.fft (gitignored).
 //! Lines: `name,norm,i,value`. Fixed input defined identically in the python comparator.
-use fsci_fft::{dct, dct_i, dct_iii, dct_iv, dst_i, dst_ii, dst_iii, dst_iv, FftOptions};
 use fsci_fft::Normalization;
+use fsci_fft::{FftOptions, dct, dct_i, dct_iii, dct_iv, dst_i, dst_ii, dst_iii, dst_iv};
 
 fn opts(n: Normalization) -> FftOptions {
     let mut o = FftOptions::default();

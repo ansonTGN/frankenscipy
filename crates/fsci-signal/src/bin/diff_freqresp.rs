@@ -1,6 +1,6 @@
 //! Differential oracle probe: frequency-response + bilinear vs scipy.signal (gitignored).
 //! Lines: `name,kind,i,value`. kind in {w, hre, him, b, a}. Inputs match python comparator.
-use fsci_signal::{bilinear, freqs, freqz, lfilter_zi, sosfreqz, SosSection};
+use fsci_signal::{SosSection, bilinear, freqs, freqz, lfilter_zi, sosfreqz};
 
 fn dump_resp(name: &str, w: &[f64], mag: &[f64], phase: &[f64]) {
     for (i, &x) in w.iter().enumerate() {

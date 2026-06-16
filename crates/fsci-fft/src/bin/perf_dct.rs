@@ -46,7 +46,9 @@ fn main() {
 
     println!("===GOLDEN_PAYLOAD_BEGIN===");
     let mut worst = 0.0f64;
-    for &n in &[2usize, 3, 4, 5, 8, 12, 16, 17, 24, 32, 60, 64, 100, 128, 360] {
+    for &n in &[
+        2usize, 3, 4, 5, 8, 12, 16, 17, 24, 32, 60, 64, 100, 128, 360,
+    ] {
         let x = signal(n, n as u64 * 1231 + 7);
         let got = dct(&x, &opts).expect("dct");
         let want = naive_dct2(&x);

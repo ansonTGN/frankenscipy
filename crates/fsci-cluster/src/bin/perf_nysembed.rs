@@ -27,7 +27,11 @@ fn build_aff(pts: &[Vec<f64>], gamma: f64) -> Vec<Vec<f64>> {
         .map(|i| {
             (0..n)
                 .map(|j| {
-                    let d2: f64 = pts[i].iter().zip(&pts[j]).map(|(&a, &b)| (a - b) * (a - b)).sum();
+                    let d2: f64 = pts[i]
+                        .iter()
+                        .zip(&pts[j])
+                        .map(|(&a, &b)| (a - b) * (a - b))
+                        .sum();
                     (-gamma * d2).exp()
                 })
                 .collect()
@@ -43,7 +47,9 @@ fn main() {
     let gamma = 0.5f64;
     let mut st: u64 = 0x243f_6a88_85a3_08d3;
     let mut rng = || {
-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        st = st
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5
     };
     let mut pts = Vec::new();
@@ -57,7 +63,10 @@ fn main() {
 
     let nys = nystroem_spectral_embedding(&pts, k, m, gamma, 7).expect("nys-embed");
     let nys_labels = kmeans(&nys.embedding, k, 100, 7).expect("km").labels;
-    println!("nystroem_spectral_embedding purity={:.3}  (n={n} m={m})", purity(&nys_labels, &truth, k));
+    println!(
+        "nystroem_spectral_embedding purity={:.3}  (n={n} m={m})",
+        purity(&nys_labels, &truth, k)
+    );
 
     let trials = 3;
     let mut tn = Vec::new();
@@ -75,5 +84,8 @@ fn main() {
     tf.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let n_ms = tn[trials / 2] * 1e3;
     let f_ms = tf[trials / 2] * 1e3;
-    println!("full affinity+spectral_embedding {f_ms:.2} ms | nystroem_spectral_embedding {n_ms:.2} ms | speedup {:.2}x  (n={n} m={m} k={k})", f_ms / n_ms);
+    println!(
+        "full affinity+spectral_embedding {f_ms:.2} ms | nystroem_spectral_embedding {n_ms:.2} ms | speedup {:.2}x  (n={n} m={m} k={k})",
+        f_ms / n_ms
+    );
 }

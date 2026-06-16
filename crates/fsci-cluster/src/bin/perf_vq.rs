@@ -12,13 +12,17 @@ use std::time::Instant;
 use fsci_cluster::vq;
 
 fn lcg(s: &mut u64) -> f64 {
-    *s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    *s = s
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
     (*s >> 11) as f64 / (1u64 << 53) as f64
 }
 
 fn points(n: usize, d: usize, seed: u64) -> Vec<Vec<f64>> {
     let mut s = seed;
-    (0..n).map(|_| (0..d).map(|_| lcg(&mut s) * 10.0).collect()).collect()
+    (0..n)
+        .map(|_| (0..d).map(|_| lcg(&mut s) * 10.0).collect())
+        .collect()
 }
 
 fn digest(labels: &[usize], dists: &[f64]) -> u64 {
@@ -42,7 +46,11 @@ fn main() {
     }
     println!("===GOLDEN_PAYLOAD_END===");
 
-    for &(n, d, k) in &[(20000usize, 8usize, 32usize), (50000, 16, 64), (100000, 24, 128)] {
+    for &(n, d, k) in &[
+        (20000usize, 8usize, 32usize),
+        (50000, 16, 64),
+        (100000, 24, 128),
+    ] {
         let data = points(n, d, 7);
         let cents = points(k, d, 99);
         let reps = 5;
@@ -53,6 +61,9 @@ fn main() {
             let (_, dists) = vq(black_box(&data), &cents).unwrap();
             acc += dists[n / 2];
         }
-        println!("n={n} d={d} k={k}  {:>10.3?}/call (acc={acc:.6})", t0.elapsed() / reps);
+        println!(
+            "n={n} d={d} k={k}  {:>10.3?}/call (acc={acc:.6})",
+            t0.elapsed() / reps
+        );
     }
 }

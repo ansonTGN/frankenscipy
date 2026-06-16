@@ -3,7 +3,7 @@
 // (what fsci would do without the randomized route). A ≈ C·U·R must hold; the speedup is
 // the wall-clock ratio (the SVD for leverage scores dominates).
 use fsci_cluster::cur_decomposition;
-use fsci_linalg::{matmul, svd, DecompOptions};
+use fsci_linalg::{DecompOptions, matmul, svd};
 use std::hint::black_box;
 use std::time::Instant;
 
@@ -13,7 +13,9 @@ fn full_cur_time(a: &[Vec<f64>], k: usize) -> f64 {
     let n = a[0].len();
     let mut acc = 0.0;
     for j in 0..n {
-        acc += (0..k.min(dec.s.len())).map(|t| dec.vt[t][j].powi(2)).sum::<f64>();
+        acc += (0..k.min(dec.s.len()))
+            .map(|t| dec.vt[t][j].powi(2))
+            .sum::<f64>();
     }
     acc
 }
@@ -25,14 +27,20 @@ fn main() {
     let k = 40usize;
     let mut st: u64 = 0x243f_6a88_85a3_08d3;
     let mut rng = || {
-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        st = st
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5
     };
     let bb: Vec<Vec<f64>> = (0..m).map(|_| (0..r).map(|_| rng()).collect()).collect();
     let gg: Vec<Vec<f64>> = (0..r).map(|_| (0..n).map(|_| rng()).collect()).collect();
     let a: Vec<Vec<f64>> = bb
         .iter()
-        .map(|bi| (0..n).map(|j| (0..r).map(|t| bi[t] * gg[t][j]).sum::<f64>() + 1e-6 * rng()).collect())
+        .map(|bi| {
+            (0..n)
+                .map(|j| (0..r).map(|t| bi[t] * gg[t][j]).sum::<f64>() + 1e-6 * rng())
+                .collect()
+        })
         .collect();
 
     let cur = cur_decomposition(&a, k, 10, 7).expect("cur");
@@ -46,7 +54,10 @@ fn main() {
             den += a[i][j] * a[i][j];
         }
     }
-    println!("cur_decomposition rel_reconstruction_err={:.3e}", (num / den).sqrt());
+    println!(
+        "cur_decomposition rel_reconstruction_err={:.3e}",
+        (num / den).sqrt()
+    );
 
     let trials = 3;
     let mut tr = Vec::new();
@@ -63,5 +74,8 @@ fn main() {
     tf.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let r_ms = tr[trials / 2] * 1e3;
     let f_ms = tf[trials / 2] * 1e3;
-    println!("full-SVD CUR {f_ms:.2} ms | randomized cur_decomposition {r_ms:.2} ms | speedup {:.2}x  (m={m} n={n} r={r} k={k})", f_ms / r_ms);
+    println!(
+        "full-SVD CUR {f_ms:.2} ms | randomized cur_decomposition {r_ms:.2} ms | speedup {:.2}x  (m={m} n={n} r={r} k={k})",
+        f_ms / r_ms
+    );
 }

@@ -56,17 +56,39 @@ fn main() {
 
     let _ = par_perwindow(&data, 1, 1, 1); // keep helper referenced
     for axis in [1usize, 0usize] {
-        println!("uniform_filter1d {rows}x{cols}, axis={axis}, Nearest (vs library old per-window path):");
+        println!(
+            "uniform_filter1d {rows}x{cols}, axis={axis}, Nearest (vs library old per-window path):"
+        );
         for &size in &[3usize, 5, 9, 15, 31, 51] {
             let new = uniform_filter1d(&arr, size, axis, BoundaryMode::Nearest, 0.0).unwrap();
-            let old = uniform_filter1d_perwindow_ref(&arr, size, axis, BoundaryMode::Nearest, 0.0, 0).unwrap();
-            let max_dx = new.data.iter().zip(&old.data).map(|(a, b)| (a - b).abs()).fold(0.0_f64, f64::max);
+            let old =
+                uniform_filter1d_perwindow_ref(&arr, size, axis, BoundaryMode::Nearest, 0.0, 0)
+                    .unwrap();
+            let max_dx = new
+                .data
+                .iter()
+                .zip(&old.data)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0_f64, f64::max);
             let reps = 60usize;
             let t_new = time(reps, || {
-                black_box(uniform_filter1d(black_box(&arr), size, axis, BoundaryMode::Nearest, 0.0).unwrap());
+                black_box(
+                    uniform_filter1d(black_box(&arr), size, axis, BoundaryMode::Nearest, 0.0)
+                        .unwrap(),
+                );
             });
             let t_old = time(reps, || {
-                black_box(uniform_filter1d_perwindow_ref(black_box(&arr), size, axis, BoundaryMode::Nearest, 0.0, 0).unwrap());
+                black_box(
+                    uniform_filter1d_perwindow_ref(
+                        black_box(&arr),
+                        size,
+                        axis,
+                        BoundaryMode::Nearest,
+                        0.0,
+                        0,
+                    )
+                    .unwrap(),
+                );
             });
             println!(
                 "  size={size:>3}: old={t_old:>8.4}ms  new(running-sum)={t_new:>8.4}ms  speedup={:>6.2}x  max|dx|={max_dx:.2e}",

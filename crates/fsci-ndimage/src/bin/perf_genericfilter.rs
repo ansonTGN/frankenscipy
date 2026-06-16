@@ -50,10 +50,19 @@ fn main() {
         let bit = digest(&new.data) == digest(&old.data);
         let reps = 12usize;
         let t_new = time(reps, || {
-            black_box(generic_filter(black_box(&arr), range_fn, size, BoundaryMode::Reflect, 0.0).unwrap());
+            black_box(
+                generic_filter(black_box(&arr), range_fn, size, BoundaryMode::Reflect, 0.0)
+                    .unwrap(),
+            );
         });
         let t_old = time(reps, || {
-            black_box(generic_filter_perpixel_ref(black_box(&arr), range_fn, size, BoundaryMode::Reflect, 0.0));
+            black_box(generic_filter_perpixel_ref(
+                black_box(&arr),
+                range_fn,
+                size,
+                BoundaryMode::Reflect,
+                0.0,
+            ));
         });
         println!(
             "generic_filter {rows}x{cols} size={size} (footprint {}): old={t_old:>9.4}ms  new={t_new:>8.4}ms  speedup={:>6.2}x  bit_identical={bit}",

@@ -24,7 +24,9 @@ fn scattered_pentadiagonal(n: usize, seed: u64) -> CsrMatrix {
     let mut q: Vec<usize> = (0..n).collect();
     let mut s = seed;
     for i in (1..n).rev() {
-        s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        s = s
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         let j = (s >> 11) as usize % (i + 1);
         q.swap(i, j);
     }
@@ -48,7 +50,10 @@ fn scattered_pentadiagonal(n: usize, seed: u64) -> CsrMatrix {
 }
 
 fn opts_with(ordering: PermutationOrdering) -> SolveOptions {
-    SolveOptions { ordering, ..SolveOptions::default() }
+    SolveOptions {
+        ordering,
+        ..SolveOptions::default()
+    }
 }
 
 // Diagonally-dominant banded matrix, half-bandwidth `hb` (2·hb+1 nnz/row). For hb>8 this
@@ -186,13 +191,23 @@ fn main() {
     for &(n, hb) in &[(1024usize, 16usize), (2048, 24), (3000, 30)] {
         let a = banded(n, hb);
         let b: Vec<f64> = (0..n).map(|i| 1.0 + (i % 13) as f64 * 0.5).collect();
-        let x_sparse = spsolve(&a, &b, SolveOptions::default()).expect("spsolve").solution;
+        let x_sparse = spsolve(&a, &b, SolveOptions::default())
+            .expect("spsolve")
+            .solution;
         let x_dense = dense_solve_baseline(&a, &b);
-        let max_dx = x_sparse.iter().zip(&x_dense).map(|(s, d)| (s - d).abs()).fold(0.0_f64, f64::max);
+        let max_dx = x_sparse
+            .iter()
+            .zip(&x_dense)
+            .map(|(s, d)| (s - d).abs())
+            .fold(0.0_f64, f64::max);
         let reps_s = (20_000_000 / (n + 1)).clamp(10, 3000);
-        let t_sparse = time(reps_s, || { black_box(spsolve(black_box(&a), black_box(&b), SolveOptions::default()).unwrap()); });
+        let t_sparse = time(reps_s, || {
+            black_box(spsolve(black_box(&a), black_box(&b), SolveOptions::default()).unwrap());
+        });
         let reps_d = if n >= 2048 { 2 } else { 4 };
-        let t_dense = time(reps_d, || { black_box(dense_solve_baseline(black_box(&a), black_box(&b))); });
+        let t_dense = time(reps_d, || {
+            black_box(dense_solve_baseline(black_box(&a), black_box(&b)));
+        });
         println!(
             "banded n={n:>5} hb={hb:>3} ({} nnz/row): dense={t_dense:>10.4}ms  sparse={t_sparse:>9.5}ms  speedup={:>9.1}x  max|dx|={max_dx:.2e}",
             2 * hb + 1,
@@ -206,7 +221,9 @@ fn main() {
         let b: Vec<f64> = (0..n).map(|i| 1.0 + (i % 13) as f64 * 0.5).collect();
 
         // correctness: sparse-routed result vs old dense result
-        let x_sparse = spsolve(&a, &b, SolveOptions::default()).expect("spsolve").solution;
+        let x_sparse = spsolve(&a, &b, SolveOptions::default())
+            .expect("spsolve")
+            .solution;
         let x_dense = dense_solve_baseline(&a, &b);
         let max_dx = x_sparse
             .iter()
@@ -281,10 +298,24 @@ fn main() {
 
         let reps = (5_000_000 / (n + 1)).clamp(5, 2000);
         let t_nat = time(reps, || {
-            black_box(spsolve(black_box(&a), black_box(&b), opts_with(PermutationOrdering::Natural)).unwrap());
+            black_box(
+                spsolve(
+                    black_box(&a),
+                    black_box(&b),
+                    opts_with(PermutationOrdering::Natural),
+                )
+                .unwrap(),
+            );
         });
         let t_rcm = time(reps, || {
-            black_box(spsolve(black_box(&a), black_box(&b), opts_with(PermutationOrdering::Colamd)).unwrap());
+            black_box(
+                spsolve(
+                    black_box(&a),
+                    black_box(&b),
+                    opts_with(PermutationOrdering::Colamd),
+                )
+                .unwrap(),
+            );
         });
         println!(
             "ordering n={n:>5}: natural={t_nat:>10.4}ms  rcm={t_rcm:>9.5}ms  speedup={:>9.1}x  max|dx|={max_dx:.2e}",
@@ -298,15 +329,37 @@ fn main() {
         let a = laplacian_2d(k);
         let n = k * k;
         let b: Vec<f64> = (0..n).map(|i| 1.0 + (i % 13) as f64 * 0.5).collect();
-        let x_rcm = spsolve(&a, &b, opts_with(PermutationOrdering::Colamd)).expect("rcm").solution;
-        let x_mmd = spsolve(&a, &b, opts_with(PermutationOrdering::MmdAtPlusA)).expect("mmd").solution;
-        let max_dx = x_rcm.iter().zip(&x_mmd).map(|(s, d)| (s - d).abs()).fold(0.0_f64, f64::max);
+        let x_rcm = spsolve(&a, &b, opts_with(PermutationOrdering::Colamd))
+            .expect("rcm")
+            .solution;
+        let x_mmd = spsolve(&a, &b, opts_with(PermutationOrdering::MmdAtPlusA))
+            .expect("mmd")
+            .solution;
+        let max_dx = x_rcm
+            .iter()
+            .zip(&x_mmd)
+            .map(|(s, d)| (s - d).abs())
+            .fold(0.0_f64, f64::max);
         let reps = (8_000_000 / (n + 1)).clamp(3, 2000);
         let t_rcm = time(reps, || {
-            black_box(spsolve(black_box(&a), black_box(&b), opts_with(PermutationOrdering::Colamd)).unwrap());
+            black_box(
+                spsolve(
+                    black_box(&a),
+                    black_box(&b),
+                    opts_with(PermutationOrdering::Colamd),
+                )
+                .unwrap(),
+            );
         });
         let t_mmd = time(reps, || {
-            black_box(spsolve(black_box(&a), black_box(&b), opts_with(PermutationOrdering::MmdAtPlusA)).unwrap());
+            black_box(
+                spsolve(
+                    black_box(&a),
+                    black_box(&b),
+                    opts_with(PermutationOrdering::MmdAtPlusA),
+                )
+                .unwrap(),
+            );
         });
         println!(
             "lap2d k={k:>3} n={n:>5}: rcm={t_rcm:>10.4}ms  mmd={t_mmd:>9.5}ms  speedup={:>7.2}x  max|dx|={max_dx:.2e}",
@@ -323,18 +376,40 @@ fn main() {
         let b: Vec<f64> = (0..n).map(|i| 1.0 + (i % 13) as f64 * 0.5).collect();
         let m = 200usize;
 
-        let lu_rcm = splu(&a_csc, LuOptions { ordering: PermutationOrdering::Colamd, ..LuOptions::default() }).expect("rcm");
-        let lu_mmd = splu(&a_csc, LuOptions { ordering: PermutationOrdering::MmdAtPlusA, ..LuOptions::default() }).expect("mmd");
+        let lu_rcm = splu(
+            &a_csc,
+            LuOptions {
+                ordering: PermutationOrdering::Colamd,
+                ..LuOptions::default()
+            },
+        )
+        .expect("rcm");
+        let lu_mmd = splu(
+            &a_csc,
+            LuOptions {
+                ordering: PermutationOrdering::MmdAtPlusA,
+                ..LuOptions::default()
+            },
+        )
+        .expect("mmd");
         let xr = splu_solve(&lu_rcm, &b).unwrap();
         let xm = splu_solve(&lu_mmd, &b).unwrap();
-        let max_dx = xr.iter().zip(&xm).map(|(s, d)| (s - d).abs()).fold(0.0_f64, f64::max);
+        let max_dx = xr
+            .iter()
+            .zip(&xm)
+            .map(|(s, d)| (s - d).abs())
+            .fold(0.0_f64, f64::max);
 
         let reps = 30;
         let t_rcm = time(reps, || {
-            for _ in 0..m { black_box(splu_solve(black_box(&lu_rcm), black_box(&b)).unwrap()); }
+            for _ in 0..m {
+                black_box(splu_solve(black_box(&lu_rcm), black_box(&b)).unwrap());
+            }
         });
         let t_mmd = time(reps, || {
-            for _ in 0..m { black_box(splu_solve(black_box(&lu_mmd), black_box(&b)).unwrap()); }
+            for _ in 0..m {
+                black_box(splu_solve(black_box(&lu_mmd), black_box(&b)).unwrap());
+            }
         });
         println!(
             "solve×{m} k={k:>3} n={n:>5}: rcm={t_rcm:>9.4}ms  mmd={t_mmd:>9.4}ms  per-solve speedup={:>6.2}x  max|dx|={max_dx:.2e}",
@@ -361,10 +436,24 @@ fn main() {
 
         let reps = (5_000_000 / (n + 1)).clamp(5, 2000);
         let t_rcm = time(reps, || {
-            black_box(spsolve(black_box(&a), black_box(&b), opts_with(PermutationOrdering::Colamd)).unwrap());
+            black_box(
+                spsolve(
+                    black_box(&a),
+                    black_box(&b),
+                    opts_with(PermutationOrdering::Colamd),
+                )
+                .unwrap(),
+            );
         });
         let t_mmd = time(reps, || {
-            black_box(spsolve(black_box(&a), black_box(&b), opts_with(PermutationOrdering::MmdAtPlusA)).unwrap());
+            black_box(
+                spsolve(
+                    black_box(&a),
+                    black_box(&b),
+                    opts_with(PermutationOrdering::MmdAtPlusA),
+                )
+                .unwrap(),
+            );
         });
         println!(
             "arrowhd n={n:>5}: rcm={t_rcm:>10.4}ms  mmd={t_mmd:>9.5}ms  speedup={:>9.1}x  max|dx|={max_dx:.2e}",

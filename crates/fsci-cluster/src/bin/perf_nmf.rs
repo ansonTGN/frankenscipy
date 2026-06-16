@@ -1,7 +1,7 @@
 // Correctness + A/B for NMF: NNDSVD initialization (seeded by randomized_svd) vs the
 // classic random initialization. On a non-negative low-rank X both reach a good
 // factorization, but NNDSVD converges in far fewer iterations / less time.
-use fsci_cluster::{nmf, NmfInit};
+use fsci_cluster::{NmfInit, nmf};
 use std::hint::black_box;
 use std::time::Instant;
 
@@ -14,7 +14,9 @@ fn main() {
     let tol = 0.0;
     let mut st: u64 = 0x243f_6a88_85a3_08d3;
     let mut rng = || {
-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        st = st
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         (st >> 11) as f64 / (1u64 << 53) as f64
     };
     // Non-negative low-rank X = W_true · H_true.
@@ -22,7 +24,11 @@ fn main() {
     let ht: Vec<Vec<f64>> = (0..r).map(|_| (0..d).map(|_| rng()).collect()).collect();
     let x: Vec<Vec<f64>> = wt
         .iter()
-        .map(|wr| (0..d).map(|j| (0..r).map(|t| wr[t] * ht[t][j]).sum()).collect())
+        .map(|wr| {
+            (0..d)
+                .map(|j| (0..r).map(|t| wr[t] * ht[t][j]).sum())
+                .collect()
+        })
         .collect();
 
     let nnd = nmf(&x, k, max_iter, tol, NmfInit::Nndsvd, 7).expect("nmf nndsvd");
@@ -49,5 +55,8 @@ fn main() {
     tr.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let nn = tn[trials / 2] * 1e3;
     let rr = tr[trials / 2] * 1e3;
-    println!("Random-init {rr:.2} ms | NNDSVD-init {nn:.2} ms | speedup {:.2}x  (n={n} d={d} k={k})", rr / nn);
+    println!(
+        "Random-init {rr:.2} ms | NNDSVD-init {nn:.2} ms | speedup {:.2}x  (n={n} d={d} k={k})",
+        rr / nn
+    );
 }

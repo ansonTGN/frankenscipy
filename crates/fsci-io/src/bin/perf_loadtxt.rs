@@ -10,7 +10,9 @@ use std::time::Instant;
 use fsci_io::loadtxt;
 
 fn lcg(s: &mut u64) -> f64 {
-    *s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    *s = s
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
     (*s >> 11) as f64 / (1u64 << 53) as f64
 }
 
@@ -61,6 +63,9 @@ fn main() {
         for _ in 0..reps {
             acc += loadtxt(black_box(&content)).expect("loadtxt").2[0];
         }
-        println!("rows={r} cols={c}  {:>10.3?}/call (acc={acc:.6})", t0.elapsed() / reps);
+        println!(
+            "rows={r} cols={c}  {:>10.3?}/call (acc={acc:.6})",
+            t0.elapsed() / reps
+        );
     }
 }

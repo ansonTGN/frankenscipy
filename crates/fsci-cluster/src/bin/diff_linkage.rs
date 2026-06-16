@@ -1,6 +1,6 @@
 //! Differential oracle probe: hierarchical linkage vs scipy.cluster.hierarchy (gitignored).
 //! Lines: `method,kind,i,value`. kind in {coph, dist}. Inputs match the python comparator.
-use fsci_cluster::{cophenet, linkage, LinkageMethod};
+use fsci_cluster::{LinkageMethod, cophenet, linkage};
 
 fn main() {
     // 8 deterministic 2-D points

@@ -31,7 +31,10 @@ fn old_axes_median(data: &[f64], shape: [usize; 3], size: usize) -> Vec<f64> {
     let mut out = vec![0.0f64; d0 * d1 * d2];
     let clamp = |c: i64, n: usize| c.clamp(0, n as i64 - 1) as usize;
     std::thread::scope(|s| {
-        let nth = std::thread::available_parallelism().map(|c| c.get()).unwrap_or(1).min(d0.max(1));
+        let nth = std::thread::available_parallelism()
+            .map(|c| c.get())
+            .unwrap_or(1)
+            .min(d0.max(1));
         let chunk = d0.div_ceil(nth);
         for (t, oc) in out.chunks_mut(chunk * d1 * d2).enumerate() {
             let r0 = t * chunk;
@@ -55,7 +58,8 @@ fn old_axes_median(data: &[f64], shape: [usize; 3], size: usize) -> Vec<f64> {
                                 let j2 = clamp(in_idx[2], d2);
                                 nb.push(data[(j0 * d1 + j1) * d2 + j2]);
                             }
-                            let (_, m, _) = nb.select_nth_unstable_by(ktot / 2, |a, b| a.total_cmp(b));
+                            let (_, m, _) =
+                                nb.select_nth_unstable_by(ktot / 2, |a, b| a.total_cmp(b));
                             plane[i1 * d2 + i2] = *m;
                         }
                     }
@@ -81,7 +85,17 @@ fn main() {
         let bit = digest(&new.data) == digest(&old);
         let reps = 8usize;
         let t_new = time(reps, || {
-            black_box(rank_filter_axes(black_box(&arr), rank, size, &[1, 2], BoundaryMode::Nearest, 0.0).unwrap());
+            black_box(
+                rank_filter_axes(
+                    black_box(&arr),
+                    rank,
+                    size,
+                    &[1, 2],
+                    BoundaryMode::Nearest,
+                    0.0,
+                )
+                .unwrap(),
+            );
         });
         let t_old = time(reps, || {
             black_box(old_axes_median(black_box(&data), shape, size));

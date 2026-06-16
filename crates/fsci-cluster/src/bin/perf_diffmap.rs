@@ -27,7 +27,11 @@ fn full_diffusion(pts: &[Vec<f64>], k: usize, gamma: f64, t: f64) -> Vec<Vec<f64
         .map(|i| {
             (0..n)
                 .map(|j| {
-                    let d2: f64 = pts[i].iter().zip(&pts[j]).map(|(&a, &b)| (a - b) * (a - b)).sum();
+                    let d2: f64 = pts[i]
+                        .iter()
+                        .zip(&pts[j])
+                        .map(|(&a, &b)| (a - b) * (a - b))
+                        .sum();
                     (-gamma * d2).exp()
                 })
                 .collect()
@@ -36,7 +40,11 @@ fn full_diffusion(pts: &[Vec<f64>], k: usize, gamma: f64, t: f64) -> Vec<Vec<f64
     let se = spectral_embedding(&aff, k + 1, 7).expect("se");
     // drop trivial col 0, scale by μ^t
     (0..n)
-        .map(|i| (1..=k).map(|j| se.embedding[i][j] * se.eigenvalues[j].max(0.0).powf(t)).collect())
+        .map(|i| {
+            (1..=k)
+                .map(|j| se.embedding[i][j] * se.eigenvalues[j].max(0.0).powf(t))
+                .collect()
+        })
         .collect()
 }
 
@@ -49,7 +57,9 @@ fn main() {
     let t = 1.0f64;
     let mut st: u64 = 0x243f_6a88_85a3_08d3;
     let mut rng = || {
-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        st = st
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5
     };
     let mut pts = Vec::new();
@@ -63,7 +73,10 @@ fn main() {
 
     let dm = diffusion_map(&pts, k, m, gamma, t, 7).expect("diffusion_map");
     let labels = kmeans(&dm.embedding, k, 100, 7).expect("km").labels;
-    println!("diffusion_map purity={:.3}  (n={n} m={m})", purity(&labels, &truth, k));
+    println!(
+        "diffusion_map purity={:.3}  (n={n} m={m})",
+        purity(&labels, &truth, k)
+    );
 
     let trials = 3;
     let mut td = Vec::new();
@@ -80,5 +93,8 @@ fn main() {
     tf.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let d_ms = td[trials / 2] * 1e3;
     let f_ms = tf[trials / 2] * 1e3;
-    println!("full affinity diffusion {f_ms:.2} ms | diffusion_map {d_ms:.2} ms | speedup {:.2}x  (n={n} m={m} k={k})", f_ms / d_ms);
+    println!(
+        "full affinity diffusion {f_ms:.2} ms | diffusion_map {d_ms:.2} ms | speedup {:.2}x  (n={n} m={m} k={k})",
+        f_ms / d_ms
+    );
 }

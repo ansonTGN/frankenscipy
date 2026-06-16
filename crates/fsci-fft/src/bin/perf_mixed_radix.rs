@@ -49,7 +49,9 @@ fn main() {
     // ---- Correctness vs naive DFT (small composite sizes) ----
     println!("===GOLDEN_PAYLOAD_BEGIN===");
     let mut worst = 0.0f64;
-    for &n in &[6usize, 9, 12, 15, 20, 24, 30, 36, 45, 60, 100, 105, 120, 210, 360] {
+    for &n in &[
+        6usize, 9, 12, 15, 20, 24, 30, 36, 45, 60, 100, 105, 120, 210, 360,
+    ] {
         let x = signal(n, n as u64 * 2718 + 1);
         let got = fft(&x, &opts).expect("fft");
         let want = naive_dft(&x);

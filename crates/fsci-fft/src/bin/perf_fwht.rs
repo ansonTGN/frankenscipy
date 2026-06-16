@@ -1,6 +1,6 @@
 // Correctness + A/B for fwht (fast Walsh-Hadamard, O(n log n)) vs the naive O(n²) Hadamard
 // matrix-vector product H_n·x (the way scipy.linalg.hadamard(n) @ x would compute it).
-use fsci_fft::{fwht, FftOptions};
+use fsci_fft::{FftOptions, fwht};
 use std::hint::black_box;
 use std::time::Instant;
 
@@ -26,7 +26,9 @@ fn main() {
     let n = 4096usize;
     let mut st: u64 = 0x243f_6a88_85a3_08d3;
     let mut rng = || {
-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        st = st
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5
     };
     let x: Vec<f64> = (0..n).map(|_| rng()).collect();
@@ -66,5 +68,8 @@ fn main() {
     ts.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let f = tf[trials / 2] * 1e3;
     let s = ts[trials / 2] * 1e3;
-    println!("naive O(n²) {s:.3} ms | fwht O(n log n) {f:.3} ms | speedup {:.1}x  (n={n})", s / f);
+    println!(
+        "naive O(n²) {s:.3} ms | fwht O(n log n) {f:.3} ms | speedup {:.1}x  (n={n})",
+        s / f
+    );
 }

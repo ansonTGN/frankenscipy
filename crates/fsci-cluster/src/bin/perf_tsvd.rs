@@ -1,7 +1,7 @@
 // Correctness + A/B for truncated_svd (randomized) vs a full-SVD truncation, on a low-rank
 // matrix. transformed·components must reconstruct X; the speedup is the wall-clock ratio.
 use fsci_cluster::truncated_svd;
-use fsci_linalg::{svd, DecompOptions};
+use fsci_linalg::{DecompOptions, svd};
 use std::hint::black_box;
 use std::time::Instant;
 
@@ -17,14 +17,20 @@ fn main() {
     let k = 25usize;
     let mut st: u64 = 0x243f_6a88_85a3_08d3;
     let mut rng = || {
-        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        st = st
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((st >> 11) as f64) / (1u64 << 53) as f64 - 0.5
     };
     let u: Vec<Vec<f64>> = (0..n).map(|_| (0..r).map(|_| rng()).collect()).collect();
     let v: Vec<Vec<f64>> = (0..r).map(|_| (0..d).map(|_| rng()).collect()).collect();
     let x: Vec<Vec<f64>> = u
         .iter()
-        .map(|ui| (0..d).map(|j| (0..r).map(|t| ui[t] * v[t][j]).sum::<f64>() + 1e-5 * rng()).collect())
+        .map(|ui| {
+            (0..d)
+                .map(|j| (0..r).map(|t| ui[t] * v[t][j]).sum::<f64>() + 1e-5 * rng())
+                .collect()
+        })
         .collect();
 
     let ts = truncated_svd(&x, k, 7).expect("truncated_svd");
@@ -34,7 +40,9 @@ fn main() {
     let mut den = 0.0f64;
     for i in 0..n {
         for j in 0..d {
-            let approx: f64 = (0..kk).map(|t| ts.transformed[i][t] * ts.components[t][j]).sum();
+            let approx: f64 = (0..kk)
+                .map(|t| ts.transformed[i][t] * ts.components[t][j])
+                .sum();
             num += (x[i][j] - approx).powi(2);
             den += x[i][j] * x[i][j];
         }
@@ -60,5 +68,8 @@ fn main() {
     tf.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let r_ms = tr[trials / 2] * 1e3;
     let f_ms = tf[trials / 2] * 1e3;
-    println!("full SVD {f_ms:.2} ms | randomized truncated_svd {r_ms:.2} ms | speedup {:.2}x  (n={n} d={d} k={k})", f_ms / r_ms);
+    println!(
+        "full SVD {f_ms:.2} ms | randomized truncated_svd {r_ms:.2} ms | speedup {:.2}x  (n={n} d={d} k={k})",
+        f_ms / r_ms
+    );
 }
