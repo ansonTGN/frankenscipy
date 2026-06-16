@@ -7584,6 +7584,37 @@ impl GenHyperbolic {
     }
 }
 
+/// The Jones and Faddy skew-t distribution, matching
+/// `scipy.stats.jf_skew_t(a, b)`.
+pub struct JfSkewT {
+    a: f64,
+    b: f64,
+}
+
+impl JfSkewT {
+    /// Create the distribution with shape parameters `a`, `b > 0`.
+    pub fn new(a: f64, b: f64) -> Self {
+        Self { a, b }
+    }
+
+    /// Log probability density at `x`.
+    pub fn logpdf(&self, x: f64) -> f64 {
+        let (a, b) = (self.a, self.b);
+        let s = (a + b + x * x).sqrt();
+        let u = x / s;
+        // ln c = -(a+b-1)ln2 - lnB(a,b) - ½ln(a+b); lnB = lnΓ(a)+lnΓ(b)-lnΓ(a+b).
+        let ln_beta = ln_gamma(a) + ln_gamma(b) - ln_gamma(a + b);
+        -(a + b - 1.0) * 2.0_f64.ln() - ln_beta - 0.5 * (a + b).ln()
+            + (a + 0.5) * (1.0 + u).ln()
+            + (b + 0.5) * (1.0 - u).ln()
+    }
+
+    /// Probability density at `x`.
+    pub fn pdf(&self, x: f64) -> f64 {
+        self.logpdf(x).exp()
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Von Mises Distribution
 // ══════════════════════════════════════════════════════════════════════
@@ -42735,6 +42766,13 @@ mod tests {
         let best = ppcc_max(&x, (0.0, 1.0));
         assert!((best - 0.35779018).abs() < 1e-4, "ppcc_max {best}");
         assert!(ppcc_plot(&x, 2.0, -2.0, 5).is_err());
+    }
+
+    #[test]
+    fn jf_skew_t_matches_scipy() {
+        let d = JfSkewT::new(3.0, 2.0);
+        assert!((d.pdf(0.5) - 0.3616829086463129).abs() < 1e-12);
+        assert!((d.logpdf(0.5) - (-1.0169873939845695)).abs() < 1e-10);
     }
 
     #[test]
