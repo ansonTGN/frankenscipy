@@ -17,6 +17,9 @@
 use fsci_runtime::RuntimeMode;
 use std::collections::HashMap;
 
+mod surfit;
+pub use surfit::bisplrep;
+
 /// Interpolation method for `interp1d`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InterpKind {
