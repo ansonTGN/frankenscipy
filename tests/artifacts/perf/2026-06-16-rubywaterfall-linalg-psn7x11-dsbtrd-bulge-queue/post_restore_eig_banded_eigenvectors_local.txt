@@ -1,0 +1,38 @@
+warning: unused variable: `total`
+  --> crates/fsci-fft/src/helpers.rs:58:9
+   |
+58 |     let total: usize = input.len();
+   |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_total`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `fsci-fft` (lib) generated 1 warning (run `cargo fix --lib -p fsci-fft` to apply 1 suggestion)
+   Compiling fsci-linalg v0.1.0 (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x7-20260616-1954/crates/fsci-linalg)
+    Finished `release` profile [optimized] target(s) in 35.28s
+     Running unittests src/lib.rs (/data/tmp/cargo-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+test proptest_tests::eig_banded_eigenvectors_perf_probe ... EIG_BANDED_EIGENVECTORS_PERF_BEGIN
+shape=128x128
+bandwidth=32
+candidate_ms=3.661038
+max_abs_diff=7.56017470848746598e-12
+residual=1.64845914696343243e-12
+candidate_values_digest=0xd6dbb9200f65bd92
+candidate_vectors_digest=0x6cf3573b5b50c275
+dense_values_digest=0x7bdbe4513b62a730
+EIG_BANDED_EIGENVECTORS_PERF_END
+EIG_BANDED_EIGENVECTORS_PERF_BEGIN
+shape=256x256
+bandwidth=32
+candidate_ms=16.792421
+max_abs_diff=4.16093826061114669e-11
+residual=7.73070496506989002e-12
+candidate_values_digest=0x09ed4d367faab431
+candidate_vectors_digest=0xc32797c0d224a75a
+dense_values_digest=0xbc00c62977653f28
+EIG_BANDED_EIGENVECTORS_PERF_END
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 471 filtered out; finished in 0.05s
+
