@@ -28064,6 +28064,39 @@ pub fn rsh(data: &[f64], points: Option<&[f64]>) -> Vec<f64> {
         .collect()
 }
 
+/// Seasonal Theil-Sen and Kendall slope estimators.
+///
+/// Matches `scipy.stats.mstats.sen_seasonal_slopes(x)`. `data` is row-major:
+/// `data[t][s]` is the observation at time `t` for season (column) `s`; the
+/// independent variable for each season is `0..nrows`. Within season `s`, the
+/// pairwise slopes are `d = (x_k − x_j)/(k − j)` for all row indices `j < k`.
+/// Returns `(intra_slope, inter_slope)`: `intra_slope[s]` is the median of the
+/// within-season slopes (the Theil-Sen estimator for that season), and
+/// `inter_slope` is the median of all within-season slopes across all seasons
+/// (the seasonal Kendall slope estimator).
+#[must_use]
+pub fn sen_seasonal_slopes(data: &[Vec<f64>]) -> (Vec<f64>, f64) {
+    let n = data.len();
+    if n == 0 {
+        return (Vec::new(), f64::NAN);
+    }
+    let ncols = data[0].len();
+    let mut intra = vec![f64::NAN; ncols];
+    let mut all_slopes: Vec<f64> = Vec::new();
+    for c in 0..ncols {
+        let mut col_slopes: Vec<f64> = Vec::new();
+        for j in 0..n {
+            for k in (j + 1)..n {
+                col_slopes.push((data[k][c] - data[j][c]) / ((k - j) as f64));
+            }
+        }
+        intra[c] = median(&col_slopes);
+        all_slopes.extend_from_slice(&col_slopes);
+    }
+    let inter = median(&all_slopes);
+    (intra, inter)
+}
+
 /// Computes alpha-level confidence interval for the median.
 ///
 /// Matches `scipy.stats.mstats.median_cihs(data, alpha)`.
@@ -45903,6 +45936,23 @@ mod tests {
         for (x, y) in rp.iter().zip(want_rp.iter()) {
             assert!((x - y).abs() <= 1e-12, "rsh_pt {x} vs {y}");
         }
+    }
+
+    #[test]
+    fn sen_seasonal_slopes_matches_scipy() {
+        let x = vec![
+            vec![1.0, 5.0, 2.0],
+            vec![3.0, 4.0, 8.0],
+            vec![2.0, 9.0, 1.0],
+            vec![7.0, 6.0, 5.0],
+            vec![4.0, 2.0, 9.0],
+        ];
+        let (intra, inter) = sen_seasonal_slopes(&x);
+        let want_intra = [0.875, -0.7083333333333333, 1.375];
+        for (a, b) in intra.iter().zip(want_intra.iter()) {
+            assert!((a - b).abs() <= 1e-12, "intra {a} vs {b}");
+        }
+        assert!((inter - 0.625).abs() <= 1e-12, "inter {inter}");
     }
 
     #[test]
