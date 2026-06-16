@@ -440,6 +440,8 @@ fn fpsurf(
     eta: f64,
     tol: f64,
     maxit: usize,
+    // For iopt < 0: the user-supplied full knot vectors (1-based, len nx0+1/ny0+1).
+    provided: Option<(usize, Vec<f64>, usize, Vec<f64>)>,
 ) -> FpsurfResult {
     let con1 = 0.1f64;
     let con9 = 0.9f64;
@@ -500,9 +502,26 @@ fn fpsurf(
     let eps = eta.sqrt();
     let acc = tol * s;
 
-    let mut nx = 2 * kx1;
-    let mut ny = 2 * ky1;
-    let mut ier: i32 = -2;
+    let mut nx;
+    let mut ny;
+    let mut ier: i32;
+    if iopt < 0 {
+        // Least-squares spline for a user-given set of knots.
+        let (pnx, ptx, pny, pty) = provided.expect("iopt<0 requires provided knots");
+        nx = pnx;
+        ny = pny;
+        for i in 1..=nx {
+            tx[i] = ptx[i];
+        }
+        for i in 1..=ny {
+            ty[i] = pty[i];
+        }
+        ier = 0;
+    } else {
+        nx = 2 * kx1;
+        ny = 2 * ky1;
+        ier = -2;
+    }
     let mut fp0 = 0.0f64;
     let mut fp = 0.0f64;
     let mut fpms;
@@ -1212,11 +1231,120 @@ pub fn bisplrep(
     }
 
     let res = fpsurf(
-        0, m, xv, yv, &zv, &wv, xb, xe, yb, ye, kx, ky, s, nxest, nyest, 1e-16, 1e-3, 20,
+        0, m, xv, yv, &zv, &wv, xb, xe, yb, ye, kx, ky, s, nxest, nyest, 1e-16, 1e-3, 20, None,
     );
     if res.ier > 0 {
         return Err(InterpError::InvalidArgument {
             detail: format!("surfit failed (ier={})", res.ier),
+        });
+    }
+    Ok((res.tx, res.ty, res.c, kx, ky))
+}
+
+/// Weighted least-squares bivariate spline with user-given interior knots,
+/// matching `scipy.interpolate.LSQBivariateSpline` (FITPACK `surfit` with
+/// `task=-1`). `tx_interior`/`ty_interior` are the interior knots only; the
+/// boundary knots (multiplicity `kx+1` at the data extents) are added
+/// internally. Returns the tck tuple `(tx, ty, c, kx, ky)` for [`crate::bisplev`].
+#[allow(clippy::type_complexity)]
+pub fn lsq_bivariate_spline(
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+    tx_interior: &[f64],
+    ty_interior: &[f64],
+    kx: usize,
+    ky: usize,
+) -> Result<(Vec<f64>, Vec<f64>, Vec<f64>, usize, usize), InterpError> {
+    let m = x.len();
+    if y.len() != m || z.len() != m {
+        return Err(InterpError::InvalidArgument {
+            detail: "x, y, z must have equal length".to_string(),
+        });
+    }
+    if !(1..=5).contains(&kx) || !(1..=5).contains(&ky) {
+        return Err(InterpError::InvalidArgument {
+            detail: format!("kx,ky={kx},{ky} unsupported (1<=k<=5)"),
+        });
+    }
+    let xb = x.iter().cloned().fold(f64::INFINITY, f64::min);
+    let xe = x.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let yb = y.iter().cloned().fold(f64::INFINITY, f64::min);
+    let ye = y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let kx1 = kx + 1;
+    let ky1 = ky + 1;
+    let nx = 2 * kx1 + tx_interior.len();
+    let ny = 2 * ky1 + ty_interior.len();
+    // Build 1-based full knot vectors with the boundary multiplicities.
+    let mut ptx = vec![0.0f64; nx + 1];
+    let mut pty = vec![0.0f64; ny + 1];
+    for i in 1..=kx1 {
+        ptx[i] = xb;
+        ptx[nx - kx1 + i] = xe;
+    }
+    for (j, &t) in tx_interior.iter().enumerate() {
+        ptx[kx1 + 1 + j] = t;
+    }
+    for i in 1..=ky1 {
+        pty[i] = yb;
+        pty[ny - ky1 + i] = ye;
+    }
+    for (j, &t) in ty_interior.iter().enumerate() {
+        pty[ky1 + 1 + j] = t;
+    }
+    // Validate strict interior-knot ordering inside the domain.
+    for i in kx1..nx - kx1 {
+        if ptx[i + 1] <= ptx[i] {
+            return Err(InterpError::InvalidArgument {
+                detail: "x knots must be strictly increasing within (xb, xe)".to_string(),
+            });
+        }
+    }
+    for i in ky1..ny - ky1 {
+        if pty[i + 1] <= pty[i] {
+            return Err(InterpError::InvalidArgument {
+                detail: "y knots must be strictly increasing within (yb, ye)".to_string(),
+            });
+        }
+    }
+
+    let mut xv = vec![0.0f64; m + 2];
+    let mut yv = vec![0.0f64; m + 2];
+    let mut zv = vec![0.0f64; m + 2];
+    let mut wv = vec![0.0f64; m + 2];
+    for i in 1..=m {
+        xv[i] = x[i - 1];
+        yv[i] = y[i - 1];
+        zv[i] = z[i - 1];
+        wv[i] = 1.0;
+    }
+    // nxest/nyest must bound the supplied knot counts.
+    let nxest = nx.max(2 * kx + 3);
+    let nyest = ny.max(2 * ky + 3);
+    let res = fpsurf(
+        -1,
+        m,
+        xv,
+        yv,
+        &zv,
+        &wv,
+        xb,
+        xe,
+        yb,
+        ye,
+        kx,
+        ky,
+        0.0,
+        nxest,
+        nyest,
+        1e-16,
+        1e-3,
+        20,
+        Some((nx, ptx, ny, pty)),
+    );
+    if res.ier > 0 {
+        return Err(InterpError::InvalidArgument {
+            detail: format!("surfit (task=-1) failed (ier={})", res.ier),
         });
     }
     Ok((res.tx, res.ty, res.c, kx, ky))
@@ -1341,8 +1469,31 @@ pub fn bisplev_derivative(
 
 #[cfg(test)]
 mod tests {
-    use super::{bisplev_derivative, bisplrep};
+    use super::{bisplev_derivative, bisplrep, lsq_bivariate_spline};
     use crate::bisplev;
+
+    #[test]
+    fn lsq_bivariate_spline_matches_scipy() {
+        let (x, y, z) = make_data(11, 4.0, 3.0);
+        let tx = [0.35, 0.65];
+        let ty = [0.4, 0.75];
+        let (txf, tyf, c, kx, ky) = lsq_bivariate_spline(&x, &y, &z, &tx, &ty, 3, 3).unwrap();
+        // boundary(4)+interior(2) per axis -> 10 knots each.
+        assert_eq!(txf.len(), 10);
+        assert_eq!(tyf.len(), 10);
+        let ev = bisplev(&[0.3, 0.65], &[0.25, 0.7], &(txf, tyf, c, kx, ky)).unwrap();
+        let flat: Vec<f64> = ev.into_iter().flatten().collect();
+        // scipy.interpolate.LSQBivariateSpline oracle.
+        let want = [
+            0.6825051319867358,
+            -0.4725558036296167,
+            0.37799170888496864,
+            -0.2617155056951865,
+        ];
+        for (a, b) in flat.iter().zip(want.iter()) {
+            assert!((a - b).abs() <= 1e-6, "{a} vs {b}");
+        }
+    }
 
     fn make_data(n: usize, fx: f64, fy: f64) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
         let (mut x, mut y, mut z) = (vec![], vec![], vec![]);
