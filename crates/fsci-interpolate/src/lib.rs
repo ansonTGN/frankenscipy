@@ -4692,6 +4692,79 @@ fn binom(n: usize, k: usize) -> f64 {
     result
 }
 
+/// N-D tensor-product B-spline, matching `scipy.interpolate.NdBSpline`.
+///
+/// `t[d]` are the knots of dimension `d` (degree `k` all dimensions); `c` is the
+/// flat row-major coefficient tensor of shape `[n0, …, n_{D-1}]` with
+/// `n_d = len(t[d]) − k − 1`. The value is the contraction of the per-dimension
+/// B-spline basis vectors with `c`.
+pub struct NdBSpline {
+    /// Per-dimension knot vectors.
+    pub t: Vec<Vec<f64>>,
+    /// Flat row-major coefficient tensor of shape `[n0, …, n_{D-1}]`.
+    pub c: Vec<f64>,
+    /// Spline degree (same for all dimensions).
+    pub k: usize,
+}
+
+impl NdBSpline {
+    /// Build an N-D B-spline; validates the coefficient count against the knots.
+    pub fn new(t: Vec<Vec<f64>>, c: Vec<f64>, k: usize) -> Result<Self, InterpError> {
+        let ndim = t.len();
+        let mut prod = 1usize;
+        for d in 0..ndim {
+            if t[d].len() < 2 * k + 2 {
+                return Err(InterpError::InvalidArgument {
+                    detail: format!("dimension {d}: need >= {} knots for degree {k}", 2 * k + 2),
+                });
+            }
+            prod *= t[d].len() - k - 1;
+        }
+        if c.len() != prod {
+            return Err(InterpError::InvalidArgument {
+                detail: format!("c has {} entries, expected {prod}", c.len()),
+            });
+        }
+        Ok(Self { t, c, k })
+    }
+
+    /// Evaluate at `point` (length `ndim`).
+    pub fn evaluate(&self, point: &[f64]) -> f64 {
+        let ndim = self.t.len();
+        let ns: Vec<usize> = (0..ndim).map(|d| self.t[d].len() - self.k - 1).collect();
+        let bases: Vec<Vec<f64>> = (0..ndim)
+            .map(|d| eval_basis_all(&self.t[d], point[d], self.k, ns[d]))
+            .collect();
+        // Row-major strides over the coefficient tensor [n0,…,n_{D-1}].
+        let mut stride = vec![1usize; ndim];
+        for i in (0..ndim.saturating_sub(1)).rev() {
+            stride[i] = stride[i + 1] * ns[i + 1];
+        }
+        let total: usize = ns.iter().product();
+        let mut idx = vec![0usize; ndim];
+        let mut sum = 0.0f64;
+        for _ in 0..total {
+            let mut off = 0usize;
+            let mut w = 1.0f64;
+            for d in 0..ndim {
+                off += idx[d] * stride[d];
+                w *= bases[d][idx[d]];
+            }
+            if w != 0.0 {
+                sum += self.c[off] * w;
+            }
+            for d in (0..ndim).rev() {
+                idx[d] += 1;
+                if idx[d] < ns[d] {
+                    break;
+                }
+                idx[d] = 0;
+            }
+        }
+        sum
+    }
+}
+
 /// N-D tensor-product piecewise polynomial, matching `scipy.interpolate.NdPPoly`.
 ///
 /// `c` is the flat (row-major) coefficient tensor of shape
@@ -7945,6 +8018,27 @@ fn smooth_bivariate_solve_coefficients(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ndbspline_matches_scipy() {
+        let tx = vec![0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 3.0, 3.0, 3.0];
+        let t = vec![tx.clone(), tx];
+        // c = rng.standard_normal((6,6)) from numpy default_rng(0), row-major.
+        let c = vec![
+            0.12573, -0.132105, 0.640423, 0.1049, -0.535669, 0.361595, 1.304, 0.947081, -0.703735,
+            -1.265421, -0.623274, 0.041326, -2.325031, -0.218792, -1.245911, -0.732267, -0.544259,
+            -0.3163, 0.411631, 1.042513, -0.128535, 1.366463, -0.665195, 0.35151, 0.90347, 0.094012,
+            -0.743499, -0.921725, -0.457726, 0.220195, -1.009618, -0.209176, -0.159225, 0.540846,
+            0.214659, 0.355373,
+        ];
+        let nb = NdBSpline::new(t, c, 3).unwrap();
+        let pts = [[0.5, 0.5], [1.5, 1.5], [2.2, 0.8]];
+        let want = [0.1353603362742121, -0.22157982666576687, 0.007605438853110404];
+        for (pt, w) in pts.iter().zip(want.iter()) {
+            // c is rounded to 6 digits, so allow ~1e-5.
+            assert!((nb.evaluate(pt) - w).abs() <= 1e-5, "{:?}: {} vs {w}", pt, nb.evaluate(pt));
+        }
+    }
 
     #[test]
     fn ndppoly_matches_scipy() {
