@@ -3104,6 +3104,168 @@ pub fn nnls(a: &[Vec<f64>], b: &[f64]) -> Result<(Vec<f64>, f64), OptError> {
     Ok((x, residual.sqrt()))
 }
 
+/// Solve a small symmetric positive-definite system `M z = rhs` by Gaussian
+/// elimination with partial pivoting. Returns `None` on (near-)singularity.
+fn dense_spd_solve(m: &[Vec<f64>], rhs: &[f64]) -> Option<Vec<f64>> {
+    let n = rhs.len();
+    if n == 0 {
+        return Some(Vec::new());
+    }
+    let mut aug: Vec<Vec<f64>> = (0..n)
+        .map(|i| {
+            let mut row = m[i].clone();
+            row.push(rhs[i]);
+            row
+        })
+        .collect();
+    for col in 0..n {
+        let mut piv = col;
+        for r in (col + 1)..n {
+            if aug[r][col].abs() > aug[piv][col].abs() {
+                piv = r;
+            }
+        }
+        if aug[piv][col].abs() < 1e-300 {
+            return None;
+        }
+        aug.swap(col, piv);
+        for r in 0..n {
+            if r != col {
+                let f = aug[r][col] / aug[col][col];
+                if f != 0.0 {
+                    for k in col..=n {
+                        aug[r][k] -= f * aug[col][k];
+                    }
+                }
+            }
+        }
+    }
+    Some((0..n).map(|i| aug[i][n] / aug[i][i]).collect())
+}
+
+/// Solve the bound-constrained linear least-squares problem
+/// `min ‖A·x − b‖²` subject to `lb ≤ x ≤ ub`, matching
+/// `scipy.optimize.lsq_linear(A, b, bounds=(lb, ub), method='bvls')`.
+///
+/// Uses the BVLS active-set algorithm (Stark & Parker). Bounds may be infinite
+/// (`f64::NEG_INFINITY`/`INFINITY`) for one-sided or unconstrained variables.
+/// The problem is convex, so the returned minimiser matches scipy's `bvls`
+/// solution to solver tolerance.
+pub fn lsq_linear(
+    a: &[Vec<f64>],
+    b: &[f64],
+    lb: &[f64],
+    ub: &[f64],
+) -> Result<Vec<f64>, OptError> {
+    let m = a.len();
+    if m == 0 {
+        return Err(OptError::InvalidArgument { detail: "empty matrix".to_string() });
+    }
+    let n = a[0].len();
+    if b.len() != m || lb.len() != n || ub.len() != n {
+        return Err(OptError::InvalidArgument {
+            detail: "inconsistent A/b/bounds dimensions".to_string(),
+        });
+    }
+    // Gram = AᵀA, atb = Aᵀb.
+    let mut gram = vec![vec![0.0_f64; n]; n];
+    for j1 in 0..n {
+        for j2 in 0..n {
+            gram[j1][j2] = a.iter().map(|row| row[j1] * row[j2]).sum();
+        }
+    }
+    let atb: Vec<f64> = (0..n).map(|j| a.iter().zip(b).map(|(r, &bi)| r[j] * bi).sum()).collect();
+
+    // State: -1 = at lower, +1 = at upper, 0 = free. Start each variable at a bound.
+    let mut state = vec![0i8; n];
+    let mut x = vec![0.0_f64; n];
+    for j in 0..n {
+        if lb[j].is_infinite() && ub[j].is_infinite() {
+            state[j] = 0;
+            x[j] = 0.0;
+        } else if lb[j].is_finite() {
+            state[j] = -1;
+            x[j] = lb[j];
+        } else {
+            state[j] = 1;
+            x[j] = ub[j];
+        }
+    }
+    let tol = 1e-10;
+    let max_outer = 10 * (n + 1);
+    for _ in 0..max_outer {
+        // Inner active-set loop: solve the free subproblem, fixing blocking vars.
+        loop {
+            let free: Vec<usize> = (0..n).filter(|&j| state[j] == 0).collect();
+            if free.is_empty() {
+                break;
+            }
+            let sub_gram: Vec<Vec<f64>> = free
+                .iter()
+                .map(|&i| free.iter().map(|&jj| gram[i][jj]).collect())
+                .collect();
+            let sub_rhs: Vec<f64> = free
+                .iter()
+                .map(|&i| {
+                    atb[i] - (0..n).filter(|&k| state[k] != 0).map(|k| gram[i][k] * x[k]).sum::<f64>()
+                })
+                .collect();
+            let Some(z) = dense_spd_solve(&sub_gram, &sub_rhs) else {
+                break;
+            };
+            // Step toward z; if any free var would cross a bound, clamp the
+            // most-binding one and fix it, then re-solve.
+            let mut alpha = 1.0_f64;
+            let mut block: Option<(usize, i8)> = None;
+            for (fi, &j) in free.iter().enumerate() {
+                if z[fi] < lb[j] - tol {
+                    let a_j = (lb[j] - x[j]) / (z[fi] - x[j]);
+                    if a_j < alpha {
+                        alpha = a_j;
+                        block = Some((j, -1));
+                    }
+                } else if z[fi] > ub[j] + tol {
+                    let a_j = (ub[j] - x[j]) / (z[fi] - x[j]);
+                    if a_j < alpha {
+                        alpha = a_j;
+                        block = Some((j, 1));
+                    }
+                }
+            }
+            for (fi, &j) in free.iter().enumerate() {
+                x[j] += alpha * (z[fi] - x[j]);
+            }
+            match block {
+                Some((j, side)) => {
+                    x[j] = if side == -1 { lb[j] } else { ub[j] };
+                    state[j] = side;
+                }
+                None => break, // all free vars within bounds: subproblem solved
+            }
+        }
+        // KKT check: free the bound variable that most violates optimality.
+        // Gradient g = Gram·x − atb = Aᵀ(Ax − b).
+        let g: Vec<f64> =
+            (0..n).map(|j| (0..n).map(|k| gram[j][k] * x[k]).sum::<f64>() - atb[j]).collect();
+        let mut best = None;
+        let mut best_score = tol;
+        for j in 0..n {
+            let score = match state[j] {
+                -1 => -g[j], // at lower, negative gradient wants to increase x
+                1 => g[j],   // at upper, positive gradient wants to decrease x
+                _ => continue,
+            };
+            if score > best_score {
+                best_score = score;
+                best = Some(j);
+            }
+        }
+        let Some(j_free) = best else { break };
+        state[j_free] = 0;
+    }
+    Ok(x)
+}
+
 fn solve_small_system(a: &[Vec<f64>], b: &[f64]) -> Vec<f64> {
     let n = a.len();
     let mut aug: Vec<Vec<f64>> = a
@@ -4446,6 +4608,40 @@ mod tests {
         linprog, milp, minimize_scalar_bounded, nnls, projected_gradient_descent, pso, rosen,
         rosen_der, rosen_hess, rosen_hess_prod, shgo,
     };
+
+    #[test]
+    fn lsq_linear_matches_scipy_bvls() {
+        use crate::lsq_linear;
+        let a = vec![
+            vec![1.0, 2.0, 0.0],
+            vec![0.0, 3.0, 1.0],
+            vec![1.0, 0.0, 2.0],
+            vec![2.0, 1.0, 1.0],
+            vec![0.0, 1.0, 3.0],
+        ];
+        let b = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let inf = f64::INFINITY;
+        // Unconstrained optimum (wide bounds).
+        let x0 = lsq_linear(&a, &b, &[-inf, -inf, -inf], &[inf, inf, inf]).unwrap();
+        for (g, e) in x0.iter().zip(&[0.88, 0.215, 1.465]) {
+            assert!((g - e).abs() < 1e-8, "unc {g} vs {e}");
+        }
+        // Upper bounds active on two variables.
+        let x1 = lsq_linear(&a, &b, &[0.0, 0.0, 0.0], &[0.3, 1.0, 0.8]).unwrap();
+        for (g, e) in x1.iter().zip(&[0.3, 0.68, 0.8]) {
+            assert!((g - e).abs() < 1e-8, "ub {g} vs {e}");
+        }
+        // All upper bounds binding.
+        let x2 = lsq_linear(&a, &b, &[0.0, 0.0, 0.0], &[0.5, 0.5, 1.0]).unwrap();
+        for (g, e) in x2.iter().zip(&[0.5, 0.5, 1.0]) {
+            assert!((g - e).abs() < 1e-8, "ub2 {g} vs {e}");
+        }
+        // Lower bound active on x0.
+        let x3 = lsq_linear(&a, &b, &[0.9, 0.0, 0.0], &[2.0, 2.0, 2.0]).unwrap();
+        for (g, e) in x3.iter().zip(&[0.9, 0.2113636364, 1.4613636364]) {
+            assert!((g - e).abs() < 1e-8, "lb {g} vs {e}");
+        }
+    }
 
     #[test]
     fn nonlinear_mixing_solvers_find_root() {
