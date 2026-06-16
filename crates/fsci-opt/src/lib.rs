@@ -167,6 +167,225 @@ where
     Ok(gradient)
 }
 
+/// Finite-difference scheme used by [`approx_derivative`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FiniteDiffMethod {
+    /// Forward difference `(f(x+h) - f(x)) / h` (scipy `'2-point'`).
+    TwoPoint,
+    /// Central difference `(f(x+h) - f(x-h)) / 2h` (scipy `'3-point'`).
+    ThreePoint,
+}
+
+impl FiniteDiffMethod {
+    /// Relative step `EPS**0.5` (2-point) or `EPS**(1/3)` (3-point).
+    fn rel_eps(self) -> f64 {
+        match self {
+            FiniteDiffMethod::TwoPoint => f64::EPSILON.powf(0.5),
+            FiniteDiffMethod::ThreePoint => f64::EPSILON.powf(1.0 / 3.0),
+        }
+    }
+}
+
+/// Compute a finite-difference approximation of the Jacobian of a vector
+/// function `fun: ℝⁿ → ℝᵐ` at `x0`.
+///
+/// Matches the dense path of `scipy.optimize.approx_derivative` for the
+/// `'2-point'` and `'3-point'` methods, including its relative/absolute step
+/// selection and bound-aware step adjustment. The complex-step (`'cs'`),
+/// sparse, and linear-operator variants are not supported. Returns the
+/// `m × n` Jacobian; for a scalar function (`m == 1`) the single row is the
+/// gradient.
+///
+/// `rel_step`/`abs_step` are scalars broadcast to every component (`None`
+/// selects scipy's default relative step). `bounds` is `None` for the
+/// unconstrained case or `Some((lb, ub))` with per-variable bounds.
+pub fn approx_derivative<F>(
+    fun: F,
+    x0: &[f64],
+    method: FiniteDiffMethod,
+    rel_step: Option<f64>,
+    abs_step: Option<f64>,
+    bounds: Option<(&[f64], &[f64])>,
+) -> Result<Vec<Vec<f64>>, OptError>
+where
+    F: Fn(&[f64]) -> Vec<f64>,
+{
+    let n = x0.len();
+    if n == 0 {
+        return Err(OptError::InvalidArgument {
+            detail: "x0 must have at least one element".to_string(),
+        });
+    }
+    if x0.iter().any(|v| !v.is_finite()) {
+        return Err(OptError::NonFiniteInput {
+            detail: "x0 must not contain NaN or Inf".to_string(),
+        });
+    }
+
+    let neg_inf = f64::NEG_INFINITY;
+    let pos_inf = f64::INFINITY;
+    let lb: Vec<f64> = match bounds {
+        Some((l, _)) => l.to_vec(),
+        None => vec![neg_inf; n],
+    };
+    let ub: Vec<f64> = match bounds {
+        Some((_, u)) => u.to_vec(),
+        None => vec![pos_inf; n],
+    };
+    if lb.len() != n || ub.len() != n {
+        return Err(OptError::InvalidArgument {
+            detail: "bounds must match x0 length".to_string(),
+        });
+    }
+    if (0..n).any(|i| x0[i] < lb[i] || x0[i] > ub[i]) {
+        return Err(OptError::InvalidArgument {
+            detail: "x0 violates bound constraints".to_string(),
+        });
+    }
+
+    let f0 = fun(x0);
+    let m = f0.len();
+    let rstep = method.rel_eps();
+
+    // Absolute step per component (scipy _compute_absolute_step / abs_step path).
+    let mut h = vec![0.0_f64; n];
+    for i in 0..n {
+        let sign = if x0[i] >= 0.0 { 1.0 } else { -1.0 };
+        match abs_step {
+            None => {
+                h[i] = match rel_step {
+                    None => rstep * sign * x0[i].abs().max(1.0),
+                    Some(rs) => {
+                        let step = rs * sign * x0[i].abs();
+                        if (x0[i] + step) - x0[i] == 0.0 {
+                            rstep * sign * x0[i].abs().max(1.0)
+                        } else {
+                            step
+                        }
+                    }
+                };
+            }
+            Some(abs) => {
+                // Fall back to a relative step if the absolute one underflows.
+                if (x0[i] + abs) - x0[i] == 0.0 {
+                    h[i] = rstep * sign * x0[i].abs().max(1.0);
+                } else {
+                    h[i] = abs;
+                }
+            }
+        }
+    }
+
+    // Adjust the scheme to the bounds (num_steps = 1 for both methods).
+    let all_unbounded = lb.iter().all(|&v| v == neg_inf) && ub.iter().all(|&v| v == pos_inf);
+    let mut use_one_sided = vec![matches!(method, FiniteDiffMethod::TwoPoint); n];
+    match method {
+        FiniteDiffMethod::TwoPoint => {
+            // '1-sided': use_one_sided already all true.
+            if !all_unbounded {
+                for i in 0..n {
+                    let h_total = h[i];
+                    let lower = x0[i] - lb[i];
+                    let upper = ub[i] - x0[i];
+                    let x = x0[i] + h_total;
+                    let violated = x < lb[i] || x > ub[i];
+                    let fitting = h_total.abs() <= lower.max(upper);
+                    if violated && fitting {
+                        h[i] = -h[i];
+                    } else if !fitting {
+                        if upper >= lower {
+                            h[i] = upper;
+                        } else {
+                            h[i] = -lower;
+                        }
+                    }
+                }
+            }
+        }
+        FiniteDiffMethod::ThreePoint => {
+            // '2-sided': h = |h|, use_one_sided all false initially.
+            for hi in h.iter_mut() {
+                *hi = hi.abs();
+            }
+            for u in use_one_sided.iter_mut() {
+                *u = false;
+            }
+            if !all_unbounded {
+                for i in 0..n {
+                    let h_total = h[i];
+                    let lower = x0[i] - lb[i];
+                    let upper = ub[i] - x0[i];
+                    let central = lower >= h_total && upper >= h_total;
+                    if !central {
+                        if upper >= lower {
+                            h[i] = h[i].min(0.5 * upper);
+                            use_one_sided[i] = true;
+                        } else {
+                            h[i] = -(h[i].min(0.5 * lower));
+                            use_one_sided[i] = true;
+                        }
+                        let min_dist = upper.min(lower);
+                        if h[i].abs() <= min_dist {
+                            h[i] = min_dist;
+                            use_one_sided[i] = false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Dense difference: J_transposed[i] is the i-th column of the Jacobian.
+    let mut jt = vec![vec![0.0_f64; m]; n];
+    for i in 0..n {
+        match method {
+            FiniteDiffMethod::TwoPoint => {
+                let mut x1 = x0.to_vec();
+                x1[i] = x0[i] + h[i];
+                let f1 = fun(&x1);
+                let dx = (x0[i] + h[i]) - x0[i];
+                for k in 0..m {
+                    jt[i][k] = (f1[k] - f0[k]) / dx;
+                }
+            }
+            FiniteDiffMethod::ThreePoint => {
+                if use_one_sided[i] {
+                    let mut x1 = x0.to_vec();
+                    let mut x2 = x0.to_vec();
+                    x1[i] = x0[i] + h[i];
+                    x2[i] = x0[i] + 2.0 * h[i];
+                    let f1 = fun(&x1);
+                    let f2 = fun(&x2);
+                    let dx = (x0[i] + 2.0 * h[i]) - x0[i];
+                    for k in 0..m {
+                        jt[i][k] = (-3.0 * f0[k] + 4.0 * f1[k] - f2[k]) / dx;
+                    }
+                } else {
+                    let mut x1 = x0.to_vec();
+                    let mut x2 = x0.to_vec();
+                    x1[i] = x0[i] - h[i];
+                    x2[i] = x0[i] + h[i];
+                    let f1 = fun(&x1);
+                    let f2 = fun(&x2);
+                    let dx = (x0[i] + h[i]) - (x0[i] - h[i]);
+                    for k in 0..m {
+                        jt[i][k] = (f2[k] - f1[k]) / dx;
+                    }
+                }
+            }
+        }
+    }
+
+    // Transpose to the m × n Jacobian.
+    let mut j = vec![vec![0.0_f64; n]; m];
+    for (i, col) in jt.iter().enumerate() {
+        for (k, &v) in col.iter().enumerate() {
+            j[k][i] = v;
+        }
+    }
+    Ok(j)
+}
+
 /// Compare an analytical gradient to a finite-difference approximation.
 ///
 /// Matches `scipy.optimize.check_grad`.
@@ -6061,6 +6280,73 @@ mod tests {
         assert!(
             (x_opt - 2.0).abs() < 1e-8,
             "brent (x-2)^2 minimum at {x_opt}, expected ~2"
+        );
+    }
+
+    #[test]
+    fn approx_derivative_matches_scipy() {
+        use crate::{FiniteDiffMethod, approx_derivative};
+        // R^3 -> R^2: f = [x0^2 x1, x1 sin(x2)].
+        let fun = |x: &[f64]| vec![x[0] * x[0] * x[1], x[1] * x[2].sin()];
+        let x0 = [1.5, 2.0, 0.5];
+
+        let j2 = approx_derivative(fun, &x0, FiniteDiffMethod::TwoPoint, None, None, None).unwrap();
+        let exp2 = [
+            [6.000000039736, 2.25, 0.0],
+            [0.0, 0.479425538331, 1.755165114999],
+        ];
+        for i in 0..2 {
+            for k in 0..3 {
+                assert!((j2[i][k] - exp2[i][k]).abs() < 1e-7, "2pt[{i}][{k}] {} vs {}", j2[i][k], exp2[i][k]);
+            }
+        }
+
+        let j3 =
+            approx_derivative(fun, &x0, FiniteDiffMethod::ThreePoint, None, None, None).unwrap();
+        let exp3 = [
+            [6.0, 2.249999999989, 0.0],
+            [0.0, 0.479425538604, 1.755165123766],
+        ];
+        for i in 0..2 {
+            for k in 0..3 {
+                assert!((j3[i][k] - exp3[i][k]).abs() < 1e-7, "3pt[{i}][{k}] {} vs {}", j3[i][k], exp3[i][k]);
+            }
+        }
+
+        // Custom relative step (2-point).
+        let jr =
+            approx_derivative(fun, &x0, FiniteDiffMethod::TwoPoint, Some(1e-6), None, None).unwrap();
+        assert!((jr[0][0] - 6.000002999971).abs() < 1e-6);
+        assert!((jr[1][2] - 1.755164884021).abs() < 1e-6);
+
+        // 3-point with x0 sitting exactly on an upper bound (forces one-sided).
+        let f2 = |x: &[f64]| vec![x[0] * x[0] * x[0] + x[1] * x[1]];
+        let x0b = [2.0, 1.0];
+        let lb = [f64::NEG_INFINITY, f64::NEG_INFINITY];
+        let ub = [2.0, f64::INFINITY];
+        let jb = approx_derivative(
+            f2,
+            &x0b,
+            FiniteDiffMethod::ThreePoint,
+            None,
+            None,
+            Some((&lb, &ub)),
+        )
+        .unwrap();
+        assert!((jb[0][0] - 12.0).abs() < 1e-6, "bound dx0 {}", jb[0][0]);
+        assert!((jb[0][1] - 2.0).abs() < 1e-6, "bound dx1 {}", jb[0][1]);
+
+        // x0 outside bounds is rejected.
+        assert!(
+            approx_derivative(
+                f2,
+                &[3.0, 1.0],
+                FiniteDiffMethod::ThreePoint,
+                None,
+                None,
+                Some((&lb, &ub))
+            )
+            .is_err()
         );
     }
 
