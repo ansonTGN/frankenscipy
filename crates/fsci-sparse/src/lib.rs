@@ -11,8 +11,8 @@ pub use audit::{
 };
 
 pub use construct::{
-    HstackOutput, block_diag, bmat, diags, eye, eye_rectangular, hstack, hstack_with_format,
-    identity, kron, kronsum, random, spdiags, vstack,
+    HstackOutput, block_array, block_diag, bmat, diags, diags_array, eye, eye_array,
+    eye_rectangular, hstack, hstack_with_format, identity, kron, kronsum, random, spdiags, vstack,
 };
 pub use formats::{
     BsrMatrix, CanonicalMeta, ConstructionLogEntry, CooMatrix, CscMatrix, CsrMatrix, DiaMatrix,
@@ -1438,6 +1438,45 @@ mod tests {
         let offsets = vec![0];
         let dia = DiaMatrix::new(shape, data, offsets).expect("dia");
         assert_eq!(dia.nnz(), 2); // only nonzero entries count
+    }
+
+    #[test]
+    fn array_api_constructors_match_scipy() {
+        let dense = |m: &CsrMatrix| dense_from_coo(&m.to_coo().expect("coo"));
+        // eye_array(3,4,k=1) and eye_array(4,3,k=-1) vs scipy.sparse.eye_array.
+        let e1 = eye_array(3, 4, 1).expect("eye_array");
+        assert_eq!(
+            dense(&e1),
+            vec![
+                vec![0.0, 1.0, 0.0, 0.0],
+                vec![0.0, 0.0, 1.0, 0.0],
+                vec![0.0, 0.0, 0.0, 1.0],
+            ]
+        );
+        let e2 = eye_array(4, 3, -1).expect("eye_array");
+        assert_eq!(
+            dense(&e2),
+            vec![
+                vec![0.0, 0.0, 0.0],
+                vec![1.0, 0.0, 0.0],
+                vec![0.0, 1.0, 0.0],
+                vec![0.0, 0.0, 1.0],
+            ]
+        );
+        // diags_array == diags.
+        let d_arr = diags_array(&[vec![1.0, 2.0, 3.0], vec![4.0, 5.0]], &[0, 1], None)
+            .expect("diags_array");
+        let d_old = diags(&[vec![1.0, 2.0, 3.0], vec![4.0, 5.0]], &[0, 1], None).expect("diags");
+        assert_eq!(dense(&d_arr), dense(&d_old));
+        // block_array == bmat.
+        let id2 = eye(2).expect("eye2");
+        let blocks = vec![
+            vec![Some(&id2), None],
+            vec![None, Some(&id2)],
+        ];
+        let ba = block_array(&blocks).expect("block_array");
+        let bm = bmat(&blocks).expect("bmat");
+        assert_eq!(dense(&ba), dense(&bm));
     }
 
     #[test]

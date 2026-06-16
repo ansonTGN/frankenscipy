@@ -14,6 +14,15 @@ pub fn eye(size: usize) -> SparseResult<CsrMatrix> {
     CsrMatrix::from_components(shape, data, indices, indptr, true)
 }
 
+/// Identity-like sparse array with ones on the `k`-th diagonal, matching
+/// `scipy.sparse.eye_array(m, n, k)`.
+///
+/// Returns an `m × n` matrix with `1.0` wherever `column = row + k` (in range);
+/// the array-API spelling of [`eye_rectangular`].
+pub fn eye_array(m: usize, n: usize, k: isize) -> SparseResult<CsrMatrix> {
+    eye_rectangular(m, n, k)
+}
+
 /// Construct a square sparse identity matrix.
 ///
 /// Mirrors `scipy.sparse.identity(n)`. The Rust constructor returns CSR to
@@ -154,6 +163,18 @@ pub fn spdiags(
     cols: usize,
 ) -> SparseResult<DiaMatrix> {
     DiaMatrix::new(Shape2D::new(rows, cols), data.to_vec(), offsets.to_vec())
+}
+
+/// Construct a sparse array from diagonals, matching `scipy.sparse.diags_array`.
+///
+/// The array-API equivalent of [`diags`] (same result; scipy distinguishes only
+/// the returned container type, which fsci unifies).
+pub fn diags_array(
+    diagonals: &[Vec<f64>],
+    offsets: &[isize],
+    shape: Option<Shape2D>,
+) -> SparseResult<CsrMatrix> {
+    diags(diagonals, offsets, shape)
 }
 
 pub fn random(shape: Shape2D, density: f64, seed: u64) -> SparseResult<CooMatrix> {
@@ -392,6 +413,16 @@ pub fn bmat(blocks: &[Vec<Option<&CsrMatrix>>]) -> SparseResult<CsrMatrix> {
 
     let coo = CooMatrix::from_triplets(shape, all_data, all_rows, all_cols, false)?;
     coo.to_csr()
+}
+
+/// Build a sparse array from a 2-D grid of (optional) blocks, matching
+/// `scipy.sparse.block_array`.
+///
+/// The array-API equivalent of [`bmat`] (same result; scipy distinguishes only
+/// the returned container type, which fsci unifies). `None` entries are treated
+/// as all-zero blocks.
+pub fn block_array(blocks: &[Vec<Option<&CsrMatrix>>]) -> SparseResult<CsrMatrix> {
+    bmat(blocks)
 }
 
 /// Stack sparse matrices vertically (row wise).
