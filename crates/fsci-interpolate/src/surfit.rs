@@ -1222,9 +1222,126 @@ pub fn bisplrep(
     Ok((res.tx, res.ty, res.c, kx, ky))
 }
 
+/// Evaluate the partial derivative of order `(nux, nuy)` of a bivariate spline
+/// on the grid `x × y`, matching `scipy.interpolate.bisplev(x, y, tck, nux, nuy)`
+/// (FITPACK `parder`). `0 <= nux < kx`, `0 <= nuy < ky`.
+///
+/// The derivative of a bivariate spline is itself a (lower-degree) bivariate
+/// spline; we form its B-spline coefficients via the de Boor difference
+/// recurrence and evaluate with [`crate::bisplev`].
+#[allow(clippy::type_complexity)]
+pub fn bisplev_derivative(
+    x: &[f64],
+    y: &[f64],
+    tck: &(Vec<f64>, Vec<f64>, Vec<f64>, usize, usize),
+    nux: usize,
+    nuy: usize,
+) -> Result<Vec<Vec<f64>>, InterpError> {
+    let (tx0, ty0, c0, kx, ky) = tck;
+    let (kx, ky) = (*kx, *ky);
+    if nux >= kx || nuy >= ky {
+        return Err(InterpError::InvalidArgument {
+            detail: format!("derivative orders must satisfy 0<=nux<kx, 0<=nuy<ky (got {nux},{nuy})"),
+        });
+    }
+    let nx = tx0.len();
+    let ny = ty0.len();
+    let kx1 = kx + 1;
+    let ky1 = ky + 1;
+    let nkx1 = nx - kx1;
+    let nky1 = ny - ky1;
+    let nc = nkx1 * nky1;
+    if c0.len() != nc {
+        return Err(InterpError::InvalidArgument {
+            detail: "coefficient array length does not match knot vectors".to_string(),
+        });
+    }
+    // 1-based copies.
+    let mut tx = vec![0.0f64; nx + 1];
+    let mut ty = vec![0.0f64; ny + 1];
+    for i in 1..=nx {
+        tx[i] = tx0[i - 1];
+    }
+    for i in 1..=ny {
+        ty[i] = ty0[i - 1];
+    }
+    let mut wrk = vec![0.0f64; nc + 2];
+    for i in 1..=nc {
+        wrk[i] = c0[i - 1];
+    }
+    let mut nxx = nkx1;
+    let mut nyy = nky1;
+    let mut kkx = kx;
+    let mut kky = ky;
+    // x-direction differencing.
+    if nux > 0 {
+        let mut lx = 1usize;
+        for _j in 1..=nux {
+            let ak = kkx as f64;
+            nxx -= 1;
+            let mut l1 = lx;
+            let mut m0 = 1usize;
+            for _i in 1..=nxx {
+                l1 += 1;
+                let l2 = l1 + kkx;
+                let fac = tx[l2] - tx[l1];
+                if fac > 0.0 {
+                    for _m in 1..=nyy {
+                        let m1 = m0 + nyy;
+                        wrk[m0] = (wrk[m1] - wrk[m0]) * ak / fac;
+                        m0 += 1;
+                    }
+                }
+            }
+            lx += 1;
+            kkx -= 1;
+        }
+    }
+    // y-direction differencing.
+    if nuy > 0 {
+        let mut ly = 1usize;
+        for _j in 1..=nuy {
+            let ak = kky as f64;
+            nyy -= 1;
+            let mut l1 = ly;
+            for i in 1..=nyy {
+                l1 += 1;
+                let l2 = l1 + kky;
+                let fac = ty[l2] - ty[l1];
+                if fac > 0.0 {
+                    let mut m0 = i;
+                    for _m in 1..=nxx {
+                        let m1 = m0 + 1;
+                        wrk[m0] = (wrk[m1] - wrk[m0]) * ak / fac;
+                        m0 += nky1;
+                    }
+                }
+            }
+            ly += 1;
+            kky -= 1;
+        }
+        // compact the coefficients from stride nky1 to stride nyy.
+        let mut m0 = nyy;
+        let mut m1 = nky1;
+        for _m in 2..=nxx {
+            for _i in 1..=nyy {
+                m0 += 1;
+                m1 += 1;
+                wrk[m0] = wrk[m1];
+            }
+            m1 += nuy;
+        }
+    }
+    // Build the (reduced) derivative spline and evaluate it.
+    let txd: Vec<f64> = tx[(nux + 1)..=(nx - nux)].to_vec();
+    let tyd: Vec<f64> = ty[(nuy + 1)..=(ny - nuy)].to_vec();
+    let cd: Vec<f64> = wrk[1..=(nxx * nyy)].to_vec();
+    crate::bisplev(x, y, &(txd, tyd, cd, kkx, kky))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::bisplrep;
+    use super::{bisplev_derivative, bisplrep};
     use crate::bisplev;
 
     fn make_data(n: usize, fx: f64, fy: f64) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
@@ -1259,6 +1376,40 @@ mod tests {
         ];
         for (a, b) in flat.iter().zip(want.iter()) {
             assert!((a - b).abs() <= 1e-6, "{a} vs {b}");
+        }
+    }
+
+    #[test]
+    fn bisplev_derivative_matches_scipy() {
+        let (x, y, z) = make_data(11, 4.0, 3.0);
+        let tck = bisplrep(&x, &y, &z, 3, 3, 0.05).unwrap();
+        let xe = [0.3, 0.65];
+        let ye = [0.25, 0.7];
+        // scipy.interpolate.bisplev(xe, ye, tck, dx, dy) oracles.
+        let cases: [((usize, usize), [f64; 4]); 4] = [
+            (
+                (1, 0),
+                [0.7974601971394006, -0.5384285552518469, -2.275513914343819, 1.5535999993784064],
+            ),
+            (
+                (0, 1),
+                [-1.9562629281796118, -2.4238517238365818, -1.0659886054383279, -1.3183170341165176],
+            ),
+            (
+                (1, 1),
+                [-2.410409438743434, -2.8636666378869515, 6.630816594290233, 8.105481076423876],
+            ),
+            (
+                (2, 0),
+                [-10.30580102423366, 7.080537822045849, -5.32053684518824, 3.6468391345560938],
+            ),
+        ];
+        for ((dx, dy), want) in cases {
+            let ev = bisplev_derivative(&xe, &ye, &tck, dx, dy).unwrap();
+            let flat: Vec<f64> = ev.into_iter().flatten().collect();
+            for (a, b) in flat.iter().zip(want.iter()) {
+                assert!((a - b).abs() <= 1e-6 * b.abs().max(1.0), "D{dx}{dy}: {a} vs {b}");
+            }
         }
     }
 
