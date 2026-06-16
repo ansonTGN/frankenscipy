@@ -4183,6 +4183,32 @@ pub fn to_tree(z: &[[f64; 4]]) -> Result<ClusterNode, ClusterError> {
         .ok_or_else(|| ClusterError::InvalidArgument("failed to build tree root".to_string()))
 }
 
+/// Single-linkage (nearest-point) clustering of an observation matrix.
+/// Matches `scipy.cluster.hierarchy.single(X)`.
+pub fn single(data: &[Vec<f64>]) -> Result<Vec<[f64; 4]>, ClusterError> {
+    linkage(data, LinkageMethod::Single)
+}
+
+/// Complete-linkage (farthest-point) clustering. Matches `scipy.cluster.hierarchy.complete(X)`.
+pub fn complete(data: &[Vec<f64>]) -> Result<Vec<[f64; 4]>, ClusterError> {
+    linkage(data, LinkageMethod::Complete)
+}
+
+/// Average-linkage (UPGMA) clustering. Matches `scipy.cluster.hierarchy.average(X)`.
+pub fn average(data: &[Vec<f64>]) -> Result<Vec<[f64; 4]>, ClusterError> {
+    linkage(data, LinkageMethod::Average)
+}
+
+/// Weighted-average (WPGMA) linkage. Matches `scipy.cluster.hierarchy.weighted(X)`.
+pub fn weighted(data: &[Vec<f64>]) -> Result<Vec<[f64; 4]>, ClusterError> {
+    linkage(data, LinkageMethod::Weighted)
+}
+
+/// Ward's minimum-variance linkage. Matches `scipy.cluster.hierarchy.ward(X)`.
+pub fn ward(data: &[Vec<f64>]) -> Result<Vec<[f64; 4]>, ClusterError> {
+    linkage(data, LinkageMethod::Ward)
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // DBSCAN
 // ══════════════════════════════════════════════════════════════════════
@@ -7999,6 +8025,25 @@ mod tests {
             }
         }
         assert!(kmeans2(&data, &init, 0).is_err());
+    }
+
+    #[test]
+    fn linkage_method_wrappers_match_linkage() {
+        let data = vec![
+            vec![0.0, 0.0],
+            vec![0.1, 0.2],
+            vec![3.0, 3.0],
+            vec![3.2, 2.9],
+            vec![6.0, 0.0],
+            vec![5.8, 0.3],
+        ];
+        // Each convenience wrapper equals linkage(data, method) — and scipy's
+        // single/complete/average/weighted/ward(X) equal linkage(X, method=...).
+        assert_eq!(single(&data).unwrap(), linkage(&data, LinkageMethod::Single).unwrap());
+        assert_eq!(complete(&data).unwrap(), linkage(&data, LinkageMethod::Complete).unwrap());
+        assert_eq!(average(&data).unwrap(), linkage(&data, LinkageMethod::Average).unwrap());
+        assert_eq!(weighted(&data).unwrap(), linkage(&data, LinkageMethod::Weighted).unwrap());
+        assert_eq!(ward(&data).unwrap(), linkage(&data, LinkageMethod::Ward).unwrap());
     }
 
     #[test]
