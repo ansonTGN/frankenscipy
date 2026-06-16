@@ -91,7 +91,11 @@ impl FftBackend for CooleyTukeyBackend {
             return;
         }
         if n.is_power_of_two() {
-            cooley_tukey_radix2_inplace(data, inverse);
+            // Radix-2² (fused-radix-4) sweep: halves the number of full passes
+            // over `data` vs the flat radix-2 kernel (the memory-bandwidth
+            // bottleneck at large n) while staying bit-identical to it.
+            let twiddles = get_or_compute_twiddles(n, inverse);
+            cooley_tukey_radix4_inplace_with_twiddles(data, &twiddles);
         } else {
             // Non-power-of-2: recursive mixed-radix Cooley-Tukey. Decomposes
             // along the prime factors (radix-2 butterflies for the even part,
@@ -233,6 +237,84 @@ fn cooley_tukey_radix2_inplace_with_twiddles(data: &mut [Complex64], twiddles: &
             base += stage_len;
         }
         stage_len *= 2;
+    }
+}
+
+/// Radix-2² (split-stage radix-4) Cooley-Tukey FFT for power-of-2 lengths.
+///
+/// Algebraically fuses every pair of consecutive radix-2 stages into a single
+/// radix-4 butterfly, halving the number of full passes over `data` (the
+/// memory-bandwidth bottleneck at large `n`). All three twiddle factors are
+/// fetched from the *same* full-length table at the *same indices* the two
+/// radix-2 stages would use, and the adds/mults run in the same order, so the
+/// result is **bit-identical** to [`cooley_tukey_radix2_inplace_with_twiddles`].
+/// An odd `log2(n)` is handled with one leading radix-2 stage.
+fn cooley_tukey_radix4_inplace_with_twiddles(data: &mut [Complex64], twiddles: &[Complex64]) {
+    let n = data.len();
+    debug_assert!(n.is_power_of_two());
+    debug_assert!(twiddles.len() >= n);
+    let log_n = n.trailing_zeros() as usize;
+
+    // Shared bit-reversal permutation (identical to the radix-2 path).
+    for i in 0..n {
+        let j = bit_reverse(i, log_n);
+        if i < j {
+            data.swap(i, j);
+        }
+    }
+
+    // `l` = size of already-combined sub-transforms.
+    let mut l = 1usize;
+
+    // Odd number of stages: one leading radix-2 stage (stage_len = 2).
+    if log_n % 2 == 1 {
+        let mut base = 0;
+        while base < n {
+            let even = data[base];
+            // k == 0 only (half == 1), twiddle == twiddles[0] == 1.
+            let odd = data[base + 1];
+            data[base] = complex_add(even, odd);
+            data[base + 1] = complex_sub(even, odd);
+            base += 2;
+        }
+        l = 2;
+    }
+
+    let quarter = n / 4;
+    // Radix-4 fused stages: combine four size-`l` blocks into one size-`4l`.
+    while l < n {
+        let stride2 = n / (2 * l); // twiddle stride for the inner (2l) stage
+        let stride4 = n / (4 * l); // twiddle stride for the outer (4l) stage
+        let mut base = 0;
+        while base < n {
+            for k in 0..l {
+                let a = base + k;
+                let b = a + l;
+                let c = b + l;
+                let d = c + l;
+                let wa = twiddles[k * stride2];
+                let wb1 = twiddles[k * stride4];
+                let wb2 = twiddles[k * stride4 + quarter];
+
+                // Inner radix-2 stage (size 2l) on (a,b) and (c,d).
+                let tb = complex_mul(data[b], wa);
+                let a1 = complex_add(data[a], tb);
+                let b1 = complex_sub(data[a], tb);
+                let td = complex_mul(data[d], wa);
+                let c1 = complex_add(data[c], td);
+                let d1 = complex_sub(data[c], td);
+
+                // Outer radix-2 stage (size 4l) on (a1,c1) and (b1,d1).
+                let tc = complex_mul(c1, wb1);
+                data[a] = complex_add(a1, tc);
+                data[c] = complex_sub(a1, tc);
+                let td2 = complex_mul(d1, wb2);
+                data[b] = complex_add(b1, td2);
+                data[d] = complex_sub(b1, td2);
+            }
+            base += 4 * l;
+        }
+        l *= 4;
     }
 }
 
@@ -3835,6 +3917,36 @@ mod tests {
         irfftn, is_fast_len, next_fast_len, prev_fast_len, rfft, rfft_with_audit, rfft2, rfftn,
         sync_audit_ledger, take_transform_traces,
     };
+    use super::{
+        cooley_tukey_radix2_inplace, cooley_tukey_radix4_inplace_with_twiddles,
+        get_or_compute_twiddles,
+    };
+
+    #[test]
+    fn radix4_bit_identical_to_radix2() {
+        // The fused radix-2² kernel must be BIT-IDENTICAL to the radix-2 sweep
+        // (same twiddle indices, same op order) across even and odd log2(n).
+        let mut seed = 0xD1B54A32D192ED03u64;
+        let mut rnd = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 11) as f64 / (1u64 << 53) as f64 - 0.5
+        };
+        for &e in &[1usize, 2, 3, 4, 5, 6, 7, 10, 11, 12, 14, 15, 16] {
+            let n = 1usize << e;
+            let x: Vec<Complex64> = (0..n).map(|_| (rnd(), rnd())).collect();
+            for inverse in [false, true] {
+                let tw = get_or_compute_twiddles(n, inverse);
+                let mut a = x.clone();
+                let mut b = x.clone();
+                cooley_tukey_radix2_inplace(&mut a, inverse);
+                cooley_tukey_radix4_inplace_with_twiddles(&mut b, &tw);
+                assert_eq!(a, b, "radix4 != radix2 e={e} inverse={inverse}");
+            }
+        }
+    }
+
 
     #[test]
     fn hfft_ihfft_match_scipy_all_norms() {
