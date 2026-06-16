@@ -4542,6 +4542,120 @@ impl PPoly {
     }
 }
 
+/// Piecewise polynomial in the Bernstein basis, matching
+/// `scipy.interpolate.BPoly`.
+///
+/// On the i-th interval `[x[i], x[i+1]]` with local coordinate
+/// `s = (xval - x[i]) / (x[i+1] - x[i])`, the value is
+/// `Σ_{a=0}^{k} c[i][a] · C(k,a) · s^a · (1-s)^{k-a}`.
+///
+/// Note: coefficients are interval-major (`c[i][a]`, Bernstein order `a = 0..=k`)
+/// — the transpose of SciPy's `c[a, i]` layout, matching fsci [`PPoly`].
+/// Evaluation extrapolates using the nearest interval (SciPy's default).
+pub struct BPoly {
+    /// Bernstein coefficients: `c[i][a]` for interval i, order a.
+    pub c: Vec<Vec<f64>>,
+    /// Breakpoints (`n+1` values for `n` intervals).
+    pub x: Vec<f64>,
+}
+
+impl BPoly {
+    /// Create a Bernstein-basis piecewise polynomial.
+    pub fn new(c: Vec<Vec<f64>>, x: Vec<f64>) -> Result<Self, InterpError> {
+        if c.is_empty() {
+            return Err(InterpError::TooFewPoints {
+                minimum: 1,
+                actual: 0,
+            });
+        }
+        if c.len() + 1 != x.len() {
+            return Err(InterpError::InvalidArgument {
+                detail: format!(
+                    "need {} intervals for {} breakpoints, got {}",
+                    x.len() - 1,
+                    x.len(),
+                    c.len()
+                ),
+            });
+        }
+        Ok(Self { c, x })
+    }
+
+    fn segment(&self, xval: f64) -> usize {
+        let n = self.x.len() - 1;
+        let mut seg = 0;
+        for i in 1..n {
+            if xval >= self.x[i] {
+                seg = i;
+            } else {
+                break;
+            }
+        }
+        seg
+    }
+
+    /// Evaluate the polynomial at a point.
+    pub fn evaluate(&self, xval: f64) -> f64 {
+        if xval.is_nan() {
+            return f64::NAN;
+        }
+        let seg = self.segment(xval);
+        let coeffs = &self.c[seg];
+        let k = coeffs.len() - 1;
+        let d = self.x[seg + 1] - self.x[seg];
+        let s = (xval - self.x[seg]) / d;
+        let s1 = 1.0 - s;
+        let mut value = 0.0;
+        for (a, &ca) in coeffs.iter().enumerate() {
+            value += ca * binom(k, a) * s.powi(a as i32) * s1.powi((k - a) as i32);
+        }
+        value
+    }
+
+    /// Evaluate at multiple points.
+    pub fn evaluate_many(&self, xs: &[f64]) -> Vec<f64> {
+        xs.iter().map(|&x| self.evaluate(x)).collect()
+    }
+
+    /// The first derivative as a degree `k-1` Bernstein polynomial; the
+    /// derivative of a degree-0 piece is the zero polynomial.
+    pub fn derivative(&self) -> BPoly {
+        let dc: Vec<Vec<f64>> = self
+            .c
+            .iter()
+            .enumerate()
+            .map(|(i, coeffs)| {
+                let k = coeffs.len() - 1;
+                if k == 0 {
+                    return vec![0.0];
+                }
+                let d = self.x[i + 1] - self.x[i];
+                (0..k)
+                    .map(|a| k as f64 * (coeffs[a + 1] - coeffs[a]) / d)
+                    .collect()
+            })
+            .collect();
+        BPoly {
+            c: dc,
+            x: self.x.clone(),
+        }
+    }
+}
+
+/// Binomial coefficient `C(n, k)` for small `n` (exact via the multiplicative
+/// formula).
+fn binom(n: usize, k: usize) -> f64 {
+    if k > n {
+        return 0.0;
+    }
+    let k = k.min(n - k);
+    let mut result = 1.0_f64;
+    for i in 0..k {
+        result = result * (n - i) as f64 / (i + 1) as f64;
+    }
+    result
+}
+
 /// Smoothing spline representation (splrep equivalent).
 ///
 /// Returns (knots, coefficients, degree) that can be used with `splev`.
@@ -7688,6 +7802,32 @@ fn smooth_bivariate_solve_coefficients(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bpoly_matches_scipy() {
+        // scipy c shape (4,2) = [coeff][interval]; fsci is [interval][coeff].
+        let c = vec![vec![1.0, 2.0, 0.0, 1.5], vec![0.5, 1.0, 2.5, 2.0]];
+        let x = vec![0.0, 0.5, 1.0];
+        let bp = BPoly::new(c, x).unwrap();
+        let pts = [0.1, 0.4, 0.5, 0.6, 0.9, 1.1, -0.1];
+        let want = [
+            1.2920000000000003,
+            0.9680000000000002,
+            0.5,
+            0.896,
+            2.084,
+            1.435999999999999,
+            -0.011999999999999782,
+        ];
+        for (&p, &w) in pts.iter().zip(want.iter()) {
+            assert!((bp.evaluate(p) - w).abs() <= 1e-9, "eval({p}): {} vs {w}", bp.evaluate(p));
+        }
+        let d = bp.derivative();
+        let dwant = [(0.1, 0.36000000000000004), (0.6, 4.68), (0.9, 1.0799999999999992)];
+        for (p, w) in dwant {
+            assert!((d.evaluate(p) - w).abs() <= 1e-9, "deriv({p}): {} vs {w}", d.evaluate(p));
+        }
+    }
 
     #[test]
     fn make_smoothing_spline_lam_matches_scipy() {
