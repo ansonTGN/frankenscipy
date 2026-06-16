@@ -10718,6 +10718,59 @@ pub fn firwin_2d(
         .collect())
 }
 
+/// Design a circularly-symmetric 2-D FIR filter, matching the `circular=True`
+/// case of `scipy.signal.firwin_2d(hsize, window, fc=cutoff, circular=True)`.
+///
+/// A 1-D windowed-sinc filter is designed at 8× oversampling and sampled
+/// radially over the normalized grid. Note the SciPy shape quirk: the returned
+/// kernel is `hsize.1 × hsize.0` (transposed relative to the separable case),
+/// because SciPy uses `np.meshgrid(..., indexing='xy')`.
+pub fn firwin_2d_circular(
+    hsize: (usize, usize),
+    cutoff: &[f64],
+    window: FirWindow,
+    pass_zero: bool,
+) -> Result<Vec<Vec<f64>>, SignalError> {
+    let (h0, h1) = hsize;
+    let n_r = h0.max(h1) * 8;
+    let win_r = firwin(n_r, cutoff, window, pass_zero)?;
+    // Linear interpolation of `win_r` over r in [0,1], clamped at the ends
+    // (np.interp semantics).
+    let interp = |r: f64| -> f64 {
+        if r <= 0.0 {
+            return win_r[0];
+        }
+        if r >= 1.0 {
+            return win_r[n_r - 1];
+        }
+        let pos = r * (n_r - 1) as f64;
+        let i = pos.floor() as usize;
+        let frac = pos - i as f64;
+        if i + 1 >= n_r {
+            win_r[n_r - 1]
+        } else {
+            win_r[i] * (1.0 - frac) + win_r[i + 1] * frac
+        }
+    };
+    let lin = |len: usize, idx: usize| -> f64 {
+        if len <= 1 {
+            -1.0
+        } else {
+            -1.0 + 2.0 * idx as f64 / (len - 1) as f64
+        }
+    };
+    // Output is (h1, h0) per the meshgrid('xy') convention.
+    let mut out = vec![vec![0.0_f64; h0]; h1];
+    for i in 0..h1 {
+        let f2 = lin(h1, i);
+        for j in 0..h0 {
+            let f1 = lin(h0, j);
+            out[i][j] = interp((f1 * f1 + f2 * f2).sqrt());
+        }
+    }
+    Ok(out)
+}
+
 /// Row/column dimensions of a matrix (`(0, 0)` if empty), erroring if ragged.
 fn abcd_shape(m: &[Vec<f64>], name: &str) -> Result<(usize, usize), SignalError> {
     if m.is_empty() {
@@ -24554,6 +24607,17 @@ mod tests {
         assert!((w[0][1] - 0.0009984137669744168).abs() <= 1e-9);
         assert!((w[2][3] - 0.19609664354401002).abs() <= 1e-9);
         assert!(w[4][6].abs() <= 1e-12);
+    }
+
+    #[test]
+    fn firwin_2d_circular_matches_scipy() {
+        // scipy.signal.firwin_2d((5,7),'hamming',fc=0.3,circular=True) -> shape (7,5).
+        let w = firwin_2d_circular((5, 7), &[0.3], FirWindow::Hamming, true).unwrap();
+        assert_eq!(w.len(), 7);
+        assert_eq!(w[0].len(), 5);
+        assert!((w[0][0] - 0.0006551380274083376).abs() <= 1e-6);
+        assert!((w[2][3] - (-0.045010346014029146)).abs() <= 1e-6);
+        assert!((w[6][3] - 0.0006551380274083376).abs() <= 1e-6);
     }
 
     #[test]
