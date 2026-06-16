@@ -3136,6 +3136,53 @@ where
     fmin_with_method(func, x0, OptimizeMethod::Bfgs)
 }
 
+/// Minimize a function using the L-BFGS-B method (finite-difference gradient).
+///
+/// Matches `scipy.optimize.fmin_l_bfgs_b(func, x0)`: returns the minimiser
+/// `xopt` (the first element of scipy's output tuple). Use [`minimize`] with
+/// [`OptimizeMethod::LBfgsB`] for the full result.
+pub fn fmin_l_bfgs_b<F>(func: F, x0: &[f64]) -> Result<Vec<f64>, OptError>
+where
+    F: Fn(&[f64]) -> f64,
+{
+    fmin_with_method(func, x0, OptimizeMethod::LBfgsB)
+}
+
+/// Minimize a function using the truncated-Newton (TNC) method.
+///
+/// Matches `scipy.optimize.fmin_tnc(func, x0)`: returns the minimiser `xopt`
+/// (the first element of scipy's output tuple). Use [`minimize`] with
+/// [`OptimizeMethod::Tnc`] for the full result.
+pub fn fmin_tnc<F>(func: F, x0: &[f64]) -> Result<Vec<f64>, OptError>
+where
+    F: Fn(&[f64]) -> f64,
+{
+    fmin_with_method(func, x0, OptimizeMethod::Tnc)
+}
+
+/// Minimize a function using Sequential Least-Squares Programming (SLSQP).
+///
+/// Matches `scipy.optimize.fmin_slsqp(func, x0)`: returns the minimiser `xopt`.
+/// Use [`minimize`] with [`OptimizeMethod::Slsqp`] for the full result.
+pub fn fmin_slsqp<F>(func: F, x0: &[f64]) -> Result<Vec<f64>, OptError>
+where
+    F: Fn(&[f64]) -> f64,
+{
+    fmin_with_method(func, x0, OptimizeMethod::Slsqp)
+}
+
+/// Minimize a function using the Newton-CG (truncated Newton, line-search)
+/// method with a finite-difference gradient.
+///
+/// Matches `scipy.optimize.fmin_ncg(f, x0, fprime)`: returns the minimiser
+/// `xopt`. Use [`minimize`] with [`OptimizeMethod::NewtonCg`] for the full result.
+pub fn fmin_ncg<F>(func: F, x0: &[f64]) -> Result<Vec<f64>, OptError>
+where
+    F: Fn(&[f64]) -> f64,
+{
+    fmin_with_method(func, x0, OptimizeMethod::NewtonCg)
+}
+
 /// Squared Euclidean norm of a residual vector.
 fn nonlin_dot(a: &[f64], b: &[f64]) -> f64 {
     a.iter().zip(b).map(|(&x, &y)| x * y).sum()
@@ -5135,9 +5182,12 @@ mod tests {
 
     #[test]
     fn fmin_legacy_wrappers_reach_quadratic_minimum() {
-        use crate::{fmin, fmin_bfgs, fmin_cg, fmin_powell};
+        use crate::{
+            fmin, fmin_bfgs, fmin_cg, fmin_l_bfgs_b, fmin_ncg, fmin_powell, fmin_slsqp, fmin_tnc,
+        };
         // Quadratic bowl with minimiser at (1, -2); scipy's fmin/fmin_powell/
-        // fmin_cg/fmin_bfgs all return this point from x0 = (0, 0).
+        // fmin_cg/fmin_bfgs/fmin_l_bfgs_b/fmin_tnc/fmin_slsqp/fmin_ncg all return
+        // this point from x0 = (0, 0).
         let f = |x: &[f64]| (x[0] - 1.0).powi(2) + (x[1] + 2.0).powi(2);
         let x0 = [0.0, 0.0];
         for xopt in [
@@ -5145,6 +5195,10 @@ mod tests {
             fmin_powell(f, &x0).expect("fmin_powell"),
             fmin_cg(f, &x0).expect("fmin_cg"),
             fmin_bfgs(f, &x0).expect("fmin_bfgs"),
+            fmin_l_bfgs_b(f, &x0).expect("fmin_l_bfgs_b"),
+            fmin_tnc(f, &x0).expect("fmin_tnc"),
+            fmin_slsqp(f, &x0).expect("fmin_slsqp"),
+            fmin_ncg(f, &x0).expect("fmin_ncg"),
         ] {
             assert!((xopt[0] - 1.0).abs() < 1e-3, "x0 = {}", xopt[0]);
             assert!((xopt[1] + 2.0).abs() < 1e-3, "x1 = {}", xopt[1]);
