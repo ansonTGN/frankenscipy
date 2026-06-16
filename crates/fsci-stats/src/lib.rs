@@ -7349,6 +7349,71 @@ impl VonMisesFisher {
     }
 }
 
+/// Fisher's noncentral hypergeometric distribution, matching
+/// `scipy.stats.nchypergeom_fisher(M, n, N, odds)`.
+pub struct NoncentralHypergeomFisher {
+    lo: usize,
+    /// pmf over the support, indexed from `lo`.
+    pmf: Vec<f64>,
+}
+
+impl NoncentralHypergeomFisher {
+    /// Create the distribution: `m_total` items, `n_type1` of type 1, `n_draw`
+    /// drawn, with odds ratio `odds`.
+    pub fn new(m_total: usize, n_type1: usize, n_draw: usize, odds: f64) -> Self {
+        let lo = n_draw.saturating_sub(m_total - n_type1);
+        let hi = n_type1.min(n_draw);
+        let ln_c = |a: usize, b: usize| -> f64 {
+            ln_gamma(a as f64 + 1.0) - ln_gamma(b as f64 + 1.0) - ln_gamma((a - b) as f64 + 1.0)
+        };
+        // Unnormalized log-weights w_k = lnC(n,k)+lnC(M-n,N-k)+k·ln(odds).
+        let logw: Vec<f64> = (lo..=hi)
+            .map(|k| ln_c(n_type1, k) + ln_c(m_total - n_type1, n_draw - k) + k as f64 * odds.ln())
+            .collect();
+        let max = logw.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let denom: f64 = logw.iter().map(|&w| (w - max).exp()).sum();
+        let pmf: Vec<f64> = logw.iter().map(|&w| (w - max).exp() / denom).collect();
+        Self { lo, pmf }
+    }
+
+    /// Probability mass function `P(X = k)`.
+    pub fn pmf(&self, k: usize) -> f64 {
+        if k < self.lo {
+            return 0.0;
+        }
+        self.pmf.get(k - self.lo).copied().unwrap_or(0.0)
+    }
+
+    /// Cumulative distribution function `P(X ≤ k)`.
+    pub fn cdf(&self, k: usize) -> f64 {
+        if k < self.lo {
+            return 0.0;
+        }
+        self.pmf.iter().take(k - self.lo + 1).sum()
+    }
+
+    /// Mean `Σ k·P(X=k)`.
+    pub fn mean(&self) -> f64 {
+        self.pmf
+            .iter()
+            .enumerate()
+            .map(|(i, &p)| (self.lo + i) as f64 * p)
+            .sum()
+    }
+
+    /// Variance `Σ k²·P(X=k) − mean²`.
+    pub fn var(&self) -> f64 {
+        let m = self.mean();
+        let e2: f64 = self
+            .pmf
+            .iter()
+            .enumerate()
+            .map(|(i, &p)| ((self.lo + i) as f64).powi(2) * p)
+            .sum();
+        e2 - m * m
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Von Mises Distribution
 // ══════════════════════════════════════════════════════════════════════
@@ -42500,6 +42565,21 @@ mod tests {
         let best = ppcc_max(&x, (0.0, 1.0));
         assert!((best - 0.35779018).abs() < 1e-4, "ppcc_max {best}");
         assert!(ppcc_plot(&x, 2.0, -2.0, 5).is_err());
+    }
+
+    #[test]
+    fn nchypergeom_fisher_matches_scipy() {
+        let d = NoncentralHypergeomFisher::new(20, 7, 8, 2.5);
+        let pmf_exp = [
+            0.0004828058, 0.011265469, 0.0844910176, 0.2640344301, 0.3667144862,
+            0.2200286917, 0.0500065209, 0.0029765786,
+        ];
+        for (k, &e) in pmf_exp.iter().enumerate() {
+            assert!((d.pmf(k) - e).abs() < 1e-9, "pmf {k}");
+        }
+        assert!((d.cdf(3) - 0.3602737225505634).abs() < 1e-10);
+        assert!((d.mean() - 3.860227373649524).abs() < 1e-9);
+        assert!((d.var() - 1.1384202104634096).abs() < 1e-9);
     }
 
     #[test]
