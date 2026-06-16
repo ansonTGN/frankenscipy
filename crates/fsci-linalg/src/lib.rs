@@ -499,6 +499,15 @@ pub struct QrResult {
     pub r: Vec<Vec<f64>>,
 }
 
+/// Result of RQ decomposition (`A = R·Q`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct RqResult {
+    /// Upper-trapezoidal factor R (m×n).
+    pub r: Vec<Vec<f64>>,
+    /// Orthogonal factor Q (n×n).
+    pub q: Vec<Vec<f64>>,
+}
+
 /// Result of SVD decomposition.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SvdResult {
@@ -3322,6 +3331,99 @@ pub fn qr(a: &[Vec<f64>], options: DecompOptions) -> Result<QrResult, LinalgErro
         q: rows_from_dmatrix(&q_mat),
         r: rows_from_dmatrix(&r_mat),
     })
+}
+
+/// RQ decomposition: factor `A = R·Q` with `R` upper-trapezoidal (m×n) and `Q`
+/// orthogonal (n×n).
+///
+/// Matches `scipy.linalg.rq(a, mode='full')`. Implemented with right-applied
+/// Householder reflections processed from the bottom row upward, using LAPACK's
+/// `?gerqf` sign convention (`β = -sign(α)·‖x‖`) so the result is sign-for-sign
+/// identical to SciPy (not merely a valid `A = R·Q`).
+pub fn rq(a: &[Vec<f64>], options: DecompOptions) -> Result<RqResult, LinalgError> {
+    let (m, n) = matrix_shape(a)?;
+    hardened_dimension_check(options.mode, m, n)?;
+    validate_finite_matrix(a, options.mode, options.check_finite)?;
+    if m == 0 || n == 0 {
+        return Ok(RqResult {
+            r: a.to_vec(),
+            q: Vec::new(),
+        });
+    }
+
+    let mut r: Vec<Vec<f64>> = a.to_vec();
+    // Q = I_n.
+    let mut q: Vec<Vec<f64>> = (0..n)
+        .map(|i| (0..n).map(|j| if i == j { 1.0 } else { 0.0 }).collect())
+        .collect();
+
+    for i in (0..m).rev() {
+        // Diagonal column for row i; nothing to eliminate once it reaches col 0.
+        let jd_signed = n as isize - m as isize + i as isize;
+        if jd_signed <= 0 {
+            break;
+        }
+        let jd = jd_signed as usize;
+        let nrm = (0..=jd).map(|j| r[i][j] * r[i][j]).sum::<f64>().sqrt();
+        if nrm == 0.0 {
+            continue;
+        }
+        let alpha = r[i][jd];
+        let sgn = if alpha < 0.0 { -1.0 } else { 1.0 };
+        let beta = -sgn * nrm;
+        let mut v: Vec<f64> = (0..=jd).map(|j| r[i][j]).collect();
+        v[jd] -= beta;
+        let vn = v.iter().map(|x| x * x).sum::<f64>().sqrt();
+        if vn == 0.0 {
+            continue;
+        }
+        for x in &mut v {
+            *x /= vn;
+        }
+        // Apply H = I - 2vvᵀ to columns 0..=jd of rows 0..=i (R·H from the right).
+        for row in r.iter_mut().take(i + 1) {
+            let dot: f64 = (0..=jd).map(|j| row[j] * v[j]).sum();
+            let c = 2.0 * dot;
+            for j in 0..=jd {
+                row[j] -= c * v[j];
+            }
+        }
+        // Accumulate Q ← H·Q over rows 0..=jd of Q.
+        let mut vtq = vec![0.0_f64; n];
+        for j in 0..=jd {
+            let vj = v[j];
+            for (col, qv) in q[j].iter().enumerate() {
+                vtq[col] += vj * qv;
+            }
+        }
+        for j in 0..=jd {
+            let vj = 2.0 * v[j];
+            for col in 0..n {
+                q[j][col] -= vj * vtq[col];
+            }
+        }
+    }
+
+    // Zero the strictly-sub-trapezoidal part so R is exactly upper-trapezoidal.
+    for (i, row) in r.iter_mut().enumerate() {
+        let lim = n as isize - m as isize + i as isize;
+        for (j, val) in row.iter_mut().enumerate() {
+            if (j as isize) < lim {
+                *val = 0.0;
+            }
+        }
+    }
+
+    emit_trace(LinalgTrace {
+        operation: "rq",
+        matrix_size: (m, n),
+        mode: options.mode,
+        rcond: None,
+        warning: None,
+        error: None,
+    });
+
+    Ok(RqResult { r, q })
 }
 
 fn reconstruct_qr_matrix(
@@ -26699,6 +26801,51 @@ mod proptest_tests {
                 (got - want).abs() < 1e-10,
                 "eigvals[{i}] got {got}, expected {want}"
             );
+        }
+    }
+
+    #[test]
+    fn rq_matches_scipy_reference_values() {
+        // scipy.linalg.rq([[1,2,3],[4,5,6],[7,8,10]]) — sign-for-sign parity.
+        let a = vec![
+            vec![1.0, 2.0, 3.0],
+            vec![4.0, 5.0, 6.0],
+            vec![7.0, 8.0, 10.0],
+        ];
+        let res = rq(&a, DecompOptions::default()).expect("rq");
+        let r_exp = [
+            [-0.7276068751, -0.5317845504, -3.6315001621],
+            [0.0, -0.2825105424, -8.7704154858],
+            [0.0, 0.0, -14.5945195193],
+        ];
+        let q_exp = [
+            [0.4850712501, 0.4850712501, -0.7276068751],
+            [0.7312037568, -0.6813489552, 0.0332365344],
+            [-0.4796320969, -0.5481509679, -0.6851887098],
+        ];
+        for i in 0..3 {
+            for j in 0..3 {
+                assert!((res.r[i][j] - r_exp[i][j]).abs() < 1e-9, "R[{i}][{j}]");
+                assert!((res.q[i][j] - q_exp[i][j]).abs() < 1e-9, "Q[{i}][{j}]");
+            }
+        }
+        // A = R·Q reconstruction (also for a wide and a tall matrix).
+        for a in [
+            vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0], vec![7.0, 8.0, 10.0]],
+            vec![vec![2.0, -1.0, 0.0, 1.0], vec![1.0, 3.0, -2.0, 0.0]],
+            vec![vec![1.0, 2.0], vec![3.0, 4.0], vec![5.0, 7.0]],
+        ] {
+            let m = a.len();
+            let n = a[0].len();
+            let res = rq(&a, DecompOptions::default()).expect("rq");
+            assert_eq!(res.q.len(), n);
+            assert_eq!(res.r.len(), m);
+            for i in 0..m {
+                for j in 0..n {
+                    let recon: f64 = (0..n).map(|l| res.r[i][l] * res.q[l][j]).sum();
+                    assert!((recon - a[i][j]).abs() < 1e-9, "A=RQ [{i}][{j}]");
+                }
+            }
         }
     }
 
