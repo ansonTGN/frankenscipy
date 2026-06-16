@@ -7314,6 +7314,41 @@ impl NormalInverseGamma {
     }
 }
 
+/// The von Mises-Fisher distribution on the unit `(p−1)`-sphere, matching
+/// `scipy.stats.vonmises_fisher(mu, kappa)`.
+pub struct VonMisesFisher {
+    mu: Vec<f64>,
+    kappa: f64,
+}
+
+impl VonMisesFisher {
+    /// Create the distribution with mean direction `mu` (a unit vector) and
+    /// concentration `kappa`.
+    pub fn new(mu: &[f64], kappa: f64) -> Self {
+        Self { mu: mu.to_vec(), kappa }
+    }
+
+    /// Log probability density at a unit vector `x`:
+    /// `(p/2−1)ln κ − (p/2)ln 2π − ln I_{p/2−1}(κ) + κ·μᵀx`.
+    pub fn logpdf(&self, x: &[f64]) -> f64 {
+        if x.len() != self.mu.len() {
+            return f64::NEG_INFINITY;
+        }
+        let p = self.mu.len() as f64;
+        let v = p / 2.0 - 1.0;
+        let dot: f64 = self.mu.iter().zip(x).map(|(&mi, &xi)| mi * xi).sum();
+        // ln I_v(κ) = ln(I_v(κ)·e^{−κ}) + κ, stable for large κ.
+        let ln_iv = fsci_special::ive_scalar(v, self.kappa).ln() + self.kappa;
+        v * self.kappa.ln() - (p / 2.0) * (2.0 * std::f64::consts::PI).ln() - ln_iv
+            + self.kappa * dot
+    }
+
+    /// Probability density at a unit vector `x`.
+    pub fn pdf(&self, x: &[f64]) -> f64 {
+        self.logpdf(x).exp()
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Von Mises Distribution
 // ══════════════════════════════════════════════════════════════════════
@@ -42465,6 +42500,13 @@ mod tests {
         let best = ppcc_max(&x, (0.0, 1.0));
         assert!((best - 0.35779018).abs() < 1e-4, "ppcc_max {best}");
         assert!(ppcc_plot(&x, 2.0, -2.0, 5).is_err());
+    }
+
+    #[test]
+    fn vonmises_fisher_matches_scipy() {
+        let d = VonMisesFisher::new(&[0.0, 0.0, 1.0], 5.0);
+        assert!((d.logpdf(&[0.0, 0.6, 0.8]) - (-1.228393753014882)).abs() < 1e-10);
+        assert!((d.pdf(&[0.0, 0.6, 0.8]) - 0.29276244901621606).abs() < 1e-12);
     }
 
     #[test]
