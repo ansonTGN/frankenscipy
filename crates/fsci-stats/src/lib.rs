@@ -7615,6 +7615,56 @@ impl JfSkewT {
     }
 }
 
+/// Scalar Gauss hypergeometric `₂F₁(a, b; c; z)` via fsci-special's tensor API.
+fn hyp2f1_scalar(a: f64, b: f64, c: f64, z: f64) -> f64 {
+    match fsci_special::hyp2f1(
+        &fsci_special::SpecialTensor::RealScalar(a),
+        &fsci_special::SpecialTensor::RealScalar(b),
+        &fsci_special::SpecialTensor::RealScalar(c),
+        &fsci_special::SpecialTensor::RealScalar(z),
+        RuntimeMode::Strict,
+    ) {
+        Ok(fsci_special::SpecialTensor::RealScalar(v)) => v,
+        _ => f64::NAN,
+    }
+}
+
+/// The Gauss hypergeometric distribution, matching
+/// `scipy.stats.gausshyper(a, b, c, z)` (support `x ∈ (0, 1)`).
+pub struct GaussHyper {
+    a: f64,
+    b: f64,
+    c: f64,
+    z: f64,
+    log_norm: f64,
+}
+
+impl GaussHyper {
+    /// Create the distribution with parameters `a, b > 0`, `c`, `z > -1`.
+    pub fn new(a: f64, b: f64, c: f64, z: f64) -> Self {
+        // Normalizing constant 1 / (B(a,b)·₂F₁(c, a; a+b; −z)).
+        let ln_beta = ln_gamma(a) + ln_gamma(b) - ln_gamma(a + b);
+        let log_norm = ln_beta + hyp2f1_scalar(c, a, a + b, -z).ln();
+        Self { a, b, c, z, log_norm }
+    }
+
+    /// Log probability density at `x` (`-inf` outside `(0, 1)`):
+    /// `(a−1)ln x + (b−1)ln(1−x) − c·ln(1+zx) − ln[B(a,b)·₂F₁(c,a;a+b;−z)]`.
+    pub fn logpdf(&self, x: f64) -> f64 {
+        if x <= 0.0 || x >= 1.0 {
+            return f64::NEG_INFINITY;
+        }
+        (self.a - 1.0) * x.ln() + (self.b - 1.0) * (1.0 - x).ln()
+            - self.c * (1.0 + self.z * x).ln()
+            - self.log_norm
+    }
+
+    /// Probability density at `x`.
+    pub fn pdf(&self, x: f64) -> f64 {
+        self.logpdf(x).exp()
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Von Mises Distribution
 // ══════════════════════════════════════════════════════════════════════
@@ -42766,6 +42816,14 @@ mod tests {
         let best = ppcc_max(&x, (0.0, 1.0));
         assert!((best - 0.35779018).abs() < 1e-4, "ppcc_max {best}");
         assert!(ppcc_plot(&x, 2.0, -2.0, 5).is_err());
+    }
+
+    #[test]
+    fn gausshyper_matches_scipy() {
+        let d = GaussHyper::new(1.5, 2.0, 1.0, 2.0);
+        assert!((d.pdf(0.3) - 1.5621123065996334).abs() < 1e-9, "pdf {}", d.pdf(0.3));
+        assert_eq!(d.logpdf(1.5), f64::NEG_INFINITY);
+        assert_eq!(d.logpdf(0.0), f64::NEG_INFINITY);
     }
 
     #[test]
