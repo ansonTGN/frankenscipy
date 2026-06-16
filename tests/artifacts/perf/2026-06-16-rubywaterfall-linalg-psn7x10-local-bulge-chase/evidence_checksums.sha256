@@ -1,0 +1,6 @@
+d50a7cdfeed7b86654638134e72aaad0ea6002cb3a51983430ae0b09cf383d6b  tests/artifacts/perf/2026-06-16-rubywaterfall-linalg-psn7x10-local-bulge-chase/EVIDENCE.md
+9e0a3d69f8d7b93006a7c12b79fec9ca7e6948be49b7333c28ae41c9d2e4b5ff  tests/artifacts/perf/2026-06-16-rubywaterfall-linalg-psn7x10-local-bulge-chase/after_band_givens_eigenvectors_local.txt
+4bef469ebd63404c12ce6291225d460d94daaccc909671e288d33cc46357c9d2  tests/artifacts/perf/2026-06-16-rubywaterfall-linalg-psn7x10-local-bulge-chase/baseline_eig_banded_eigenvectors_hyperfine.json
+da95577bca6df9cf689122ab0321f06b91267fd2a59923004163b942606ca833  tests/artifacts/perf/2026-06-16-rubywaterfall-linalg-psn7x10-local-bulge-chase/baseline_eig_banded_eigenvectors_local.txt
+4cd73ea1de6d3a8b4e51f8f11d642c1d14cdb81a96c3da6e0517a4e2f23f197d  tests/artifacts/perf/2026-06-16-rubywaterfall-linalg-psn7x10-local-bulge-chase/baseline_stage_breakdown_local.txt
+5296233f8ba343e48470c5ec9d2e35f840788f36a65131f3ec751de2dbefdbc0  tests/artifacts/perf/2026-06-16-rubywaterfall-linalg-psn7x10-local-bulge-chase/post_restore_eig_banded_eigenvectors_local.txt

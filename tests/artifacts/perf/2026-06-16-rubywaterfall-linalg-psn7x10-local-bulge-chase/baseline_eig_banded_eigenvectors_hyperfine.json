@@ -1,0 +1,28 @@
+{
+  "results": [
+    {
+      "command": "cargo test -j 1 -p fsci-linalg --lib eig_banded_eigenvectors_perf_probe --release --locked -- --ignored --nocapture --test-threads=1",
+      "mean": 0.20284371048,
+      "stddev": 0.010976979402846997,
+      "median": 0.20724164068,
+      "user": 0.15011314,
+      "system": 0.06748024,
+      "min": 0.18958380668000002,
+      "max": 0.21514887668000002,
+      "times": [
+        0.21514887668000002,
+        0.20916775168,
+        0.19307647668,
+        0.18958380668000002,
+        0.20724164068
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}
