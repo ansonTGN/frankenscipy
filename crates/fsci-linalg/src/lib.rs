@@ -5169,6 +5169,105 @@ fn solve_quasi_triangular_complex(
     Some(y)
 }
 
+/// Solve `(s·T[0:n,0:n] − I) y = rhs` for real scalar `s` and `T` real quasi-
+/// upper-triangular (Schur form). `O(n²)` block back-substitution — the Stein /
+/// discrete-Lyapunov analogue of [`solve_quasi_triangular_real`], where the
+/// per-column operator is a scaled `T` minus identity rather than `T − λI`.
+fn solve_scaled_quasi_triangular_minus_id_real(
+    t: &DMatrix<f64>,
+    s: f64,
+    n: usize,
+    rhs: &[f64],
+) -> Option<Vec<f64>> {
+    let thresh = f64::EPSILON * 100.0;
+    let mut y = vec![0.0_f64; n];
+    let mut r = n;
+    while r > 0 {
+        if r >= 2 && t[(r - 1, r - 2)].abs() > thresh {
+            let (i0, i1) = (r - 2, r - 1);
+            let mut b0 = rhs[i0];
+            let mut b1 = rhs[i1];
+            for c in r..n {
+                b0 -= s * t[(i0, c)] * y[c];
+                b1 -= s * t[(i1, c)] * y[c];
+            }
+            let m00 = s * t[(i0, i0)] - 1.0;
+            let m01 = s * t[(i0, i1)];
+            let m10 = s * t[(i1, i0)];
+            let m11 = s * t[(i1, i1)] - 1.0;
+            let det = m00 * m11 - m01 * m10;
+            if det == 0.0 || !det.is_finite() {
+                return None;
+            }
+            y[i0] = (b0 * m11 - m01 * b1) / det;
+            y[i1] = (m00 * b1 - m10 * b0) / det;
+            r -= 2;
+        } else {
+            let i = r - 1;
+            let mut bi = rhs[i];
+            for c in r..n {
+                bi -= s * t[(i, c)] * y[c];
+            }
+            let mii = s * t[(i, i)] - 1.0;
+            if mii == 0.0 || !mii.is_finite() {
+                return None;
+            }
+            y[i] = bi / mii;
+            r -= 1;
+        }
+    }
+    Some(y)
+}
+
+/// Complex analogue of [`solve_scaled_quasi_triangular_minus_id_real`]: solve
+/// `(s·T − I) z = rhs` for complex scalar `s`, real quasi-triangular `T`.
+fn solve_scaled_quasi_triangular_minus_id_complex(
+    t: &DMatrix<f64>,
+    s: Complex<f64>,
+    n: usize,
+    rhs: &[Complex<f64>],
+) -> Option<Vec<Complex<f64>>> {
+    let thresh = f64::EPSILON * 100.0;
+    let one = Complex::new(1.0, 0.0);
+    let mut y = vec![Complex::new(0.0, 0.0); n];
+    let mut r = n;
+    while r > 0 {
+        if r >= 2 && t[(r - 1, r - 2)].abs() > thresh {
+            let (i0, i1) = (r - 2, r - 1);
+            let mut b0 = rhs[i0];
+            let mut b1 = rhs[i1];
+            for c in r..n {
+                b0 -= s * t[(i0, c)] * y[c];
+                b1 -= s * t[(i1, c)] * y[c];
+            }
+            let m00 = s * t[(i0, i0)] - one;
+            let m01 = s * t[(i0, i1)];
+            let m10 = s * t[(i1, i0)];
+            let m11 = s * t[(i1, i1)] - one;
+            let det = m00 * m11 - m01 * m10;
+            if det.norm() == 0.0 || !det.re.is_finite() || !det.im.is_finite() {
+                return None;
+            }
+            y[i0] = (b0 * m11 - m01 * b1) / det;
+            y[i1] = (m00 * b1 - m10 * b0) / det;
+            r -= 2;
+        } else {
+            let i = r - 1;
+            let mut bi = rhs[i];
+            for c in r..n {
+                bi -= s * t[(i, c)] * y[c];
+            }
+            let mii = s * t[(i, i)] - one;
+            if mii.norm() == 0.0 || !mii.re.is_finite() || !mii.im.is_finite() {
+                return None;
+            }
+            y[i] = bi / mii;
+            r -= 1;
+        }
+    }
+    Some(y)
+}
+
 pub fn eig(a: &[Vec<f64>], options: DecompOptions) -> Result<EigResult, LinalgError> {
     let (rows, cols) = matrix_shape(a)?;
     if rows != cols {
@@ -12110,14 +12209,11 @@ pub fn solve_discrete_lyapunov(
             let yj = if t_upper_triangular {
                 solve_scaled_upper_triangular_minus_id(&t, tjj, &rhs)?
             } else {
-                let mut sys = DMatrix::<f64>::zeros(n, n);
-                for r in 0..n {
-                    for col in 0..n {
-                        sys[(r, col)] = tjj * t[(r, col)];
-                    }
-                    sys[(r, r)] -= 1.0;
-                }
-                sys.lu().solve(&rhs).ok_or(LinalgError::SingularMatrix)?
+                // T quasi-upper-triangular ⇒ (tjj·T − I) solved by O(n²) block
+                // back-substitution instead of a full O(n³) LU.
+                let sol = solve_scaled_quasi_triangular_minus_id_real(&t, tjj, n, rhs.as_slice())
+                    .ok_or(LinalgError::SingularMatrix)?;
+                DVector::from_vec(sol)
             };
             let tyj = &t * &yj;
             y.set_column(j, &yj);
@@ -12145,29 +12241,35 @@ pub fn solve_discrete_lyapunov(
             let t01 = t[(j0, j)];
             let t10 = t[(j, j0)];
             let t11 = t[(j, j)];
-            let mut bigm = DMatrix::<f64>::zeros(2 * n, 2 * n);
-            for r in 0..n {
-                for col in 0..n {
-                    let trc = t[(r, col)];
-                    bigm[(r, col)] = t00 * trc;
-                    bigm[(r, n + col)] = t01 * trc;
-                    bigm[(n + r, col)] = t10 * trc;
-                    bigm[(n + r, n + col)] = t11 * trc;
-                }
-                bigm[(r, r)] -= 1.0;
-                bigm[(n + r, n + r)] -= 1.0;
+            // The 2×2 block S=[[t00,t01],[t10,t11]] has complex eigenvalues μ, μ̄.
+            // The coupled system is T·Y2·Sᵀ − Y2 = RHS2; diagonalizing Sᵀ turns it
+            // into ONE complex solve (μ·T − I) z = RHS2·w (w = eigenvector of Sᵀ),
+            // by O(n²) complex back-substitution instead of a full O((2n)³) LU.
+            let p = 0.5 * (t00 + t11);
+            let half_diff = 0.5 * (t00 - t11);
+            let qv = (-(half_diff * half_diff + t01 * t10)).max(0.0).sqrt();
+            let mu = Complex::new(p, qv);
+            // Eigenvector w of Sᵀ=[[t00,t10],[t01,t11]] for μ: (t00−μ)w0 + t10·w1 = 0.
+            let (w0, w1) = if t10.abs() >= t01.abs() {
+                (Complex::new(t10, 0.0), mu - Complex::new(t00, 0.0))
+            } else {
+                (mu - Complex::new(t11, 0.0), Complex::new(t01, 0.0))
+            };
+            let mut g = vec![Complex::new(0.0, 0.0); n];
+            for (r, gr) in g.iter_mut().enumerate() {
+                *gr = Complex::new(rhs0[r], 0.0) * w0 + Complex::new(rhs1[r], 0.0) * w1;
             }
-            let mut bigr = DVector::<f64>::zeros(2 * n);
-            for r in 0..n {
-                bigr[r] = rhs0[r];
-                bigr[n + r] = rhs1[r];
+            let z = solve_scaled_quasi_triangular_minus_id_complex(&t, mu, n, &g)
+                .ok_or(LinalgError::SingularMatrix)?;
+            let denom = (w0 * w1.conj()).im;
+            if denom == 0.0 || !denom.is_finite() {
+                return Err(LinalgError::SingularMatrix);
             }
-            let sol = bigm.lu().solve(&bigr).ok_or(LinalgError::SingularMatrix)?;
             let mut y0 = DVector::<f64>::zeros(n);
             let mut y1 = DVector::<f64>::zeros(n);
             for r in 0..n {
-                y0[r] = sol[r];
-                y1[r] = sol[n + r];
+                y0[r] = (z[r] * w1.conj()).im / denom;
+                y1[r] = -(z[r] * w0.conj()).im / denom;
             }
             let ty0 = &t * &y0;
             let ty1 = &t * &y1;
