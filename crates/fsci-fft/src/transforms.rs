@@ -1657,6 +1657,81 @@ pub fn idst(input: &[f64], dst_type: u8, options: &FftOptions) -> Result<Vec<f64
     }
 }
 
+// Forward DCT of a given type (1..4): dct_i / dct (II) / dct_iii / dct_iv.
+fn dct_by_type(input: &[f64], dct_type: u8, options: &FftOptions) -> Result<Vec<f64>, FftError> {
+    match dct_type {
+        1 => dct_i(input, options),
+        2 => dct(input, options),
+        3 => dct_iii(input, options),
+        4 => dct_iv(input, options),
+        _ => Err(FftError::InvalidShape {
+            detail: "dct type must be 1, 2, 3, or 4",
+        }),
+    }
+}
+
+// Inverse DCT of a given type, mirroring the idst routing: the inverse of a
+// type-t DCT is the forward DCT of the inverse type ({1:1,2:3,3:2,4:4}) with
+// reciprocal normalization (Ortho→Ortho, Forward→Backward, Backward→Backward
+// then ÷ 2N, or ÷ 2(N-1) for type 1).
+fn idct_dispatch(input: &[f64], dct_type: u8, options: &FftOptions) -> Result<Vec<f64>, FftError> {
+    let inv_type: u8 = match dct_type {
+        1 => 1,
+        2 => 3,
+        3 => 2,
+        4 => 4,
+        _ => {
+            return Err(FftError::InvalidShape {
+                detail: "idct type must be 1, 2, 3, or 4",
+            });
+        }
+    };
+    let n = input.len();
+    match options.normalization {
+        Normalization::Ortho => dct_by_type(input, inv_type, options),
+        Normalization::Forward => {
+            let opts = options.clone().with_normalization(Normalization::Backward);
+            dct_by_type(input, inv_type, &opts)
+        }
+        Normalization::Backward => {
+            let opts = options.clone().with_normalization(Normalization::Backward);
+            let mut out = dct_by_type(input, inv_type, &opts)?;
+            let scale = if dct_type == 1 {
+                2.0 * (n as f64 - 1.0)
+            } else {
+                2.0 * n as f64
+            };
+            for v in out.iter_mut() {
+                *v /= scale;
+            }
+            Ok(out)
+        }
+    }
+}
+
+/// Inverse DCT-I (the inverse of [`dct_i`]). Matches `scipy.fft.idct(x, type=1)`.
+///
+/// DCT-I is its own inverse up to scaling; the backward norm divides by
+/// `2(N-1)`.
+pub fn idct_i(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError> {
+    idct_dispatch(input, 1, options)
+}
+
+/// Inverse DCT-III (the inverse of [`dct_iii`]). Matches `scipy.fft.idct(x, type=3)`.
+///
+/// The inverse of a type-III DCT is a type-II DCT; the backward norm divides by
+/// `2N`.
+pub fn idct_iii(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError> {
+    idct_dispatch(input, 3, options)
+}
+
+/// Inverse DCT-IV (the inverse of [`dct_iv`]). Matches `scipy.fft.idct(x, type=4)`.
+///
+/// DCT-IV is its own inverse up to scaling; the backward norm divides by `2N`.
+pub fn idct_iv(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError> {
+    idct_dispatch(input, 4, options)
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // N-Dimensional DCT/DST
 // ═══════════════════════════════════════════════════════════════════════════

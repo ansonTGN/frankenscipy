@@ -25,8 +25,8 @@ pub use transforms::{
     BackendKind, Complex64, FftError, FftOptions, SyncSharedAuditLedger, TransformTrace,
     WorkerPolicy, dct, dct_i, dct_iii, dct_iv, dctn, dst, dst_i, dst_ii, dst_iii, dst_iv, dstn, fft,
     fft_with_audit, fft2, fft2_with_audit, fftn, fftn_with_audit, fht, fhtoffset, fwht, hfft,
-    hfft_with_audit, hfft2, hfft2_with_audit, hfftn, hfftn_with_audit, hilbert, idct, idctn, idst,
-    idstn,
+    hfft_with_audit, hfft2, hfft2_with_audit, hfftn, hfftn_with_audit, hilbert, idct, idct_i,
+    idct_iii, idct_iv, idctn, idst, idstn,
     ifft, ifft_with_audit, ifft2, ifft2_with_audit, ifftn, ifftn_with_audit, ifht, ihfft,
     ihfft_with_audit, ihfft2, ihfft2_with_audit, ihfftn, ihfftn_with_audit, irfft,
     irfft_with_audit, irfft2, irfft2_with_audit, irfftn, irfftn_with_audit, next_fast_len,
@@ -72,8 +72,8 @@ mod tests {
         periodogram_simple, rfftfreq,
     };
     use super::transforms::{
-        Complex64, FftOptions, dct, dct_i, dct_iv, dst, dst_i, dst_ii, dst_iii, dst_iv, fft, fht,
-        fhtoffset, hilbert, idct, idst, ifft, ifht, irfft, rfft,
+        Complex64, FftOptions, dct, dct_i, dct_iii, dct_iv, dst, dst_i, dst_ii, dst_iii, dst_iv,
+        fft, fht, fhtoffset, hilbert, idct, idct_i, idct_iii, idct_iv, idst, ifft, ifht, irfft, rfft,
     };
     use super::{Normalization, TransformKind};
 
@@ -284,6 +284,35 @@ mod tests {
                 (val - expected).abs() < 1e-9,
                 "DCT-I[{k}] = {val}, expected {expected}"
             );
+        }
+    }
+
+    #[test]
+    fn idct_types_invert_and_roundtrip() {
+        let x = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let opts = FftOptions::default();
+        // idct_i/iii/iv invert the corresponding forward DCT (round-trip == x).
+        for norm in [
+            Normalization::Backward,
+            Normalization::Ortho,
+            Normalization::Forward,
+        ] {
+            let o = opts.clone().with_normalization(norm);
+            let rt1 = idct_i(&dct_i(&x, &o).unwrap(), &o).unwrap();
+            let rt3 = idct_iii(&dct_iii(&x, &o).unwrap(), &o).unwrap();
+            let rt4 = idct_iv(&dct_iv(&x, &o).unwrap(), &o).unwrap();
+            for i in 0..x.len() {
+                assert!((rt1[i] - x[i]).abs() < 1e-9, "idct_i rt {} vs {}", rt1[i], x[i]);
+                assert!((rt3[i] - x[i]).abs() < 1e-9, "idct_iii rt {} vs {}", rt3[i], x[i]);
+                assert!((rt4[i] - x[i]).abs() < 1e-9, "idct_iv rt {} vs {}", rt4[i], x[i]);
+            }
+        }
+        // Backward-norm scaling matches scipy.fft.idct(x, type=t).
+        let i3 = idct_iii(&x, &opts).unwrap();
+        let want_i3 = dct(&x, &opts).unwrap(); // dct = DCT-II (inverse type of III)
+        let n = x.len() as f64;
+        for (a, b) in i3.iter().zip(want_i3.iter()) {
+            assert!((a - b / (2.0 * n)).abs() < 1e-9, "idct_iii {a} vs {}", b / (2.0 * n));
         }
     }
 
