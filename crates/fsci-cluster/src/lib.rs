@@ -4091,6 +4091,98 @@ pub fn is_valid_im(r: &[[f64; 4]]) -> bool {
     })
 }
 
+/// A node in a hierarchical-clustering tree (`scipy.cluster.hierarchy.ClusterNode`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClusterNode {
+    /// Node id: `0..n` are original observations, `n..2n-1` are merges.
+    pub id: usize,
+    /// Left child (`None` for a leaf).
+    pub left: Option<Box<ClusterNode>>,
+    /// Right child (`None` for a leaf).
+    pub right: Option<Box<ClusterNode>>,
+    /// Merge distance (`0.0` for a leaf).
+    pub dist: f64,
+    /// Number of original observations under this node.
+    pub count: usize,
+}
+
+impl ClusterNode {
+    /// Whether this node is a leaf (original observation).
+    pub fn is_leaf(&self) -> bool {
+        self.left.is_none() && self.right.is_none()
+    }
+
+    /// Leaf ids in left-to-right traversal order (`ClusterNode.pre_order()`).
+    pub fn pre_order(&self) -> Vec<usize> {
+        let mut out = Vec::with_capacity(self.count);
+        let mut stack: Vec<&ClusterNode> = vec![self];
+        while let Some(node) = stack.pop() {
+            if node.is_leaf() {
+                out.push(node.id);
+            } else {
+                // Push right then left so left is visited first.
+                if let Some(r) = &node.right {
+                    stack.push(r);
+                }
+                if let Some(l) = &node.left {
+                    stack.push(l);
+                }
+            }
+        }
+        out
+    }
+}
+
+/// Convert a linkage matrix into a `ClusterNode` tree, returning the root.
+///
+/// Matches `scipy.cluster.hierarchy.to_tree(Z)`: leaf ids `0..n`, merge ids
+/// `n..2n-1`, `left = Z[i,0]`, `right = Z[i,1]`.
+pub fn to_tree(z: &[[f64; 4]]) -> Result<ClusterNode, ClusterError> {
+    let n = z.len() + 1;
+    if z.is_empty() {
+        return Ok(ClusterNode {
+            id: 0,
+            left: None,
+            right: None,
+            dist: 0.0,
+            count: 1,
+        });
+    }
+    let mut nodes: Vec<Option<ClusterNode>> = Vec::with_capacity(2 * n - 1);
+    for i in 0..n {
+        nodes.push(Some(ClusterNode {
+            id: i,
+            left: None,
+            right: None,
+            dist: 0.0,
+            count: 1,
+        }));
+    }
+    for (i, row) in z.iter().enumerate() {
+        let c1 = row[0] as usize;
+        let c2 = row[1] as usize;
+        let left = nodes
+            .get_mut(c1)
+            .and_then(Option::take)
+            .ok_or_else(|| ClusterError::InvalidArgument("invalid linkage child index".to_string()))?;
+        let right = nodes
+            .get_mut(c2)
+            .and_then(Option::take)
+            .ok_or_else(|| ClusterError::InvalidArgument("invalid linkage child index".to_string()))?;
+        let count = left.count + right.count;
+        nodes.push(Some(ClusterNode {
+            id: n + i,
+            left: Some(Box::new(left)),
+            right: Some(Box::new(right)),
+            dist: row[2],
+            count,
+        }));
+    }
+    nodes[2 * n - 2]
+        .take()
+        .ok_or_else(|| ClusterError::InvalidArgument("failed to build tree root".to_string()))
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // DBSCAN
 // ══════════════════════════════════════════════════════════════════════
@@ -7951,6 +8043,16 @@ mod tests {
         assert!(is_valid_im(&r));
         assert!(!is_valid_im(&[]));
         assert!(!is_valid_im(&[[1.0, -1.0, 2.0, 0.0]])); // negative std
+
+        // to_tree: scipy root id=8, count=5, dist=3, pre_order=[2,3,0,1,4].
+        let root = to_tree(&z).unwrap();
+        assert_eq!(root.id, 8);
+        assert_eq!(root.count, 5);
+        assert!((root.dist - 3.0).abs() < 1e-12);
+        assert!(!root.is_leaf());
+        assert_eq!(root.left.as_ref().unwrap().id, 6);
+        assert_eq!(root.right.as_ref().unwrap().id, 7);
+        assert_eq!(root.pre_order(), vec![2, 3, 0, 1, 4]);
     }
 
     #[test]
