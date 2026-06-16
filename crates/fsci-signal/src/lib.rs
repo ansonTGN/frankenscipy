@@ -10546,6 +10546,94 @@ pub fn qspline1d(signal: &[f64], lamb: f64) -> Result<Vec<f64>, SignalError> {
     Ok(spline1d_coeff(signal, -3.0 + 2.0 * 2.0_f64.sqrt(), 8.0))
 }
 
+/// Apply the 1-D mirror-symmetric spline coefficient filter separably across
+/// the rows then the columns of a row-major `rows×cols` image (SciPy's
+/// `symiirorder_nd` order: axis=-1 then axis=0).
+fn spline2d_separable(input: &[f64], rows: usize, cols: usize, zi: f64, gain: f64) -> Vec<f64> {
+    let mut data = input.to_vec();
+    // Along each row (length `cols`).
+    let mut row = vec![0.0_f64; cols];
+    for r in 0..rows {
+        row.copy_from_slice(&data[r * cols..(r + 1) * cols]);
+        let coeffs = spline1d_coeff(&row, zi, gain);
+        data[r * cols..(r + 1) * cols].copy_from_slice(&coeffs);
+    }
+    // Along each column (length `rows`).
+    let mut col = vec![0.0_f64; rows];
+    for c in 0..cols {
+        for r in 0..rows {
+            col[r] = data[r * cols + c];
+        }
+        let coeffs = spline1d_coeff(&col, zi, gain);
+        for r in 0..rows {
+            data[r * cols + c] = coeffs[r];
+        }
+    }
+    data
+}
+
+/// Coefficients for a 2-D cubic B-spline over a regularly spaced grid, matching
+/// `scipy.signal.cspline2d(signal, lamb=0.0)`. `input` is a row-major
+/// `rows×cols` image. Only the non-smoothing case `lamb == 0` is supported.
+pub fn cspline2d(
+    input: &[f64],
+    shape: (usize, usize),
+    lamb: f64,
+) -> Result<Vec<f64>, SignalError> {
+    let (rows, cols) = shape;
+    if input.len() != rows * cols {
+        return Err(SignalError::InvalidArgument(
+            "input length must match rows * cols".to_string(),
+        ));
+    }
+    if lamb != 0.0 {
+        return Err(SignalError::InvalidArgument(
+            "cspline2d smoothing (lamb != 0) is not supported".to_string(),
+        ));
+    }
+    if rows == 0 || cols == 0 {
+        return Ok(Vec::new());
+    }
+    Ok(spline2d_separable(
+        input,
+        rows,
+        cols,
+        -2.0 + 3.0_f64.sqrt(),
+        6.0,
+    ))
+}
+
+/// Coefficients for a 2-D quadratic B-spline over a regularly spaced grid,
+/// matching `scipy.signal.qspline2d(signal, lamb=0.0)`. Row-major `rows×cols`
+/// image; only the non-smoothing case `lamb == 0` is supported.
+pub fn qspline2d(
+    input: &[f64],
+    shape: (usize, usize),
+    lamb: f64,
+) -> Result<Vec<f64>, SignalError> {
+    let (rows, cols) = shape;
+    if input.len() != rows * cols {
+        return Err(SignalError::InvalidArgument(
+            "input length must match rows * cols".to_string(),
+        ));
+    }
+    if lamb != 0.0 {
+        return Err(SignalError::InvalidArgument(
+            "qspline2d smoothing (lamb != 0) is not supported".to_string(),
+        ));
+    }
+    if rows == 0 || cols == 0 {
+        return Ok(Vec::new());
+    }
+    Ok(spline2d_separable(
+        input,
+        rows,
+        cols,
+        -3.0 + 2.0 * 2.0_f64.sqrt(),
+        8.0,
+    ))
+}
+
 /// Centered cardinal cubic B-spline kernel `B3(x)` (support `|x| < 2`).
 fn cubic_bspline_kernel(x: f64) -> f64 {
     let a = x.abs();
@@ -24079,6 +24167,39 @@ mod tests {
             "bohman center should be 1.0"
         );
         assert!((result[1] - result[3]).abs() < 1e-10, "bohman symmetric");
+    }
+
+    #[test]
+    fn cspline2d_qspline2d_match_scipy() {
+        let (rows, cols) = (14usize, 12usize);
+        let mut img = vec![0.0_f64; rows * cols];
+        for i in 0..rows {
+            for j in 0..cols {
+                img[i * cols + j] = (0.3 * i as f64).sin() * (0.2 * j as f64).cos() + 0.1 * i as f64;
+            }
+        }
+        let c = cspline2d(&img, (rows, cols), 0.0).unwrap();
+        let q = qspline2d(&img, (rows, cols), 0.0).unwrap();
+        let idx = [(0, 0), (3, 5), (7, 11), (13, 0), (10, 6)];
+        // scipy.signal.cspline2d / qspline2d oracles.
+        let cwant = [
+            -0.08468245922396142,
+            0.7335685724249896,
+            0.15313326338372446,
+            0.581735465951029,
+            1.0521321060671909,
+        ];
+        let qwant = [
+            -0.05850184972179989,
+            0.730349989292487,
+            0.16456181333560088,
+            0.5903908587459001,
+            1.0519489101199944,
+        ];
+        for (k, &(i, j)) in idx.iter().enumerate() {
+            assert!((c[i * cols + j] - cwant[k]).abs() <= 1e-5, "c {} vs {}", c[i * cols + j], cwant[k]);
+            assert!((q[i * cols + j] - qwant[k]).abs() <= 1e-5, "q {} vs {}", q[i * cols + j], qwant[k]);
+        }
     }
 
     #[test]
