@@ -3186,6 +3186,25 @@ where
     fmin_with_method(func, x0, OptimizeMethod::NewtonCg)
 }
 
+/// Minimize a function subject to inequality constraints using COBYLA.
+///
+/// Matches `scipy.optimize.fmin_cobyla(func, x0, cons, rhobeg, maxfun)`: each
+/// constraint `c(x) >= 0` must hold at the solution. Returns the minimiser
+/// `xopt` (scipy's output). Use [`cobyla`] for the full result.
+pub fn fmin_cobyla<F, G>(
+    func: F,
+    x0: &[f64],
+    constraints: &[G],
+    rhobeg: f64,
+    maxfun: usize,
+) -> Result<Vec<f64>, OptError>
+where
+    F: Fn(&[f64]) -> f64,
+    G: Fn(&[f64]) -> f64,
+{
+    cobyla(func, x0, constraints, maxfun, rhobeg).map(|result| result.x)
+}
+
 /// Squared Euclidean norm of a residual vector.
 fn nonlin_dot(a: &[f64], b: &[f64]) -> f64 {
     a.iter().zip(b).map(|(&x, &y)| x * y).sum()
@@ -5181,6 +5200,17 @@ mod tests {
         let r = excitingmixing(f, &[0.0, 0.0], Some(0.1), 1.0, 500).expect("converges");
         assert!((r[0] - 1.5945621166).abs() < 1e-5, "x0 {}", r[0]);
         assert!((r[1] - 2.0887301451).abs() < 1e-5, "x1 {}", r[1]);
+    }
+
+    #[test]
+    fn fmin_cobyla_reaches_constrained_minimum() {
+        use crate::fmin_cobyla;
+        // min x0^2 + x1^2 s.t. x0 >= 1; scipy fmin_cobyla -> ~(1, 0).
+        let f = |x: &[f64]| x[0] * x[0] + x[1] * x[1];
+        let cons: Vec<fn(&[f64]) -> f64> = vec![|x: &[f64]| x[0] - 1.0];
+        let xopt = fmin_cobyla(f, &[3.0, 2.0], &cons, 1.0, 2000).expect("fmin_cobyla");
+        assert!((xopt[0] - 1.0).abs() < 1e-3, "x0 = {}", xopt[0]);
+        assert!(xopt[1].abs() < 1e-3, "x1 = {}", xopt[1]);
     }
 
     #[test]
