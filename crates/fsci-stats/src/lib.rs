@@ -25702,6 +25702,76 @@ pub fn mannwhitneyu_alternative(x: &[f64], y: &[f64], alternative: &str) -> Ttes
     }
 }
 
+/// Result of [`logrank`]: the (square-root form) log-rank test statistic and its
+/// p-value, mirroring `scipy.stats.LogRankResult`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LogRankResult {
+    /// Standardized log-rank statistic (a z-score; its square is the usual
+    /// chi-squared statistic with 1 degree of freedom).
+    pub statistic: f64,
+    /// p-value for the requested alternative.
+    pub pvalue: f64,
+}
+
+/// Log-rank (Mantel–Cox) test comparing the survival distributions of two
+/// independent samples of (fully observed) event times.
+///
+/// Matches `scipy.stats.logrank(x, y, alternative)` for uncensored input
+/// (arrays of event times, all events observed); right-censored input via a
+/// `CensoredData` object is not supported.
+///
+/// `alternative` is one of `"two-sided"` (default), `"less"`, or `"greater"`.
+/// The statistic is `(O_x − E_x) / sqrt(V)` where `O_x`/`E_x` are the observed
+/// and expected numbers of events in `x` and `V` is the hypergeometric variance
+/// summed over the distinct event times of the pooled sample.
+#[must_use]
+pub fn logrank(x: &[f64], y: &[f64], alternative: &str) -> LogRankResult {
+    if x.is_empty()
+        || y.is_empty()
+        || x.iter().chain(y.iter()).any(|v| v.is_nan())
+    {
+        return LogRankResult {
+            statistic: f64::NAN,
+            pvalue: f64::NAN,
+        };
+    }
+
+    // Distinct event times of the pooled sample.
+    let mut times: Vec<f64> = x.iter().chain(y.iter()).copied().collect();
+    times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    times.dedup();
+
+    let count_ge = |s: &[f64], t: f64| s.iter().filter(|&&v| v >= t).count() as f64;
+    let count_eq = |s: &[f64], t: f64| s.iter().filter(|&&v| v == t).count() as f64;
+
+    let mut sum_var = 0.0_f64;
+    let mut sum_exp_x = 0.0_f64;
+    for &t in &times {
+        let at_risk_x = count_ge(x, t);
+        let at_risk_xy = at_risk_x + count_ge(y, t);
+        let deaths_xy = count_eq(x, t) + count_eq(y, t);
+        let at_risk_y = at_risk_xy - at_risk_x;
+        // Variance term is identically zero when only one subject is at risk.
+        if at_risk_xy > 1.0 {
+            sum_var += at_risk_x * at_risk_y * deaths_xy * (at_risk_xy - deaths_xy)
+                / (at_risk_xy * at_risk_xy * (at_risk_xy - 1.0));
+        }
+        sum_exp_x += at_risk_x * (deaths_xy / at_risk_xy);
+    }
+
+    let observed_x = x.len() as f64;
+    let statistic = (observed_x - sum_exp_x) / sum_var.sqrt();
+
+    let normal = Normal::standard();
+    let pvalue = match alternative {
+        "less" => normal.cdf(statistic),
+        "greater" => normal.sf(statistic),
+        _ => (2.0 * normal.sf(statistic.abs())).clamp(0.0, 1.0),
+    };
+
+    LogRankResult { statistic, pvalue }
+}
+
 /// Wilcoxon signed-rank test for paired samples.
 ///
 /// Matches `scipy.stats.wilcoxon(x, y)`.
@@ -43476,6 +43546,20 @@ mod tests {
         let n = Normal::standard();
         let expected = 1.0 / (2.0 * PI).sqrt();
         assert_close(n.pdf(0.0), expected, 1e-12, "N(0,1) pdf(0)");
+    }
+
+    #[test]
+    fn logrank_matches_scipy() {
+        let x = [4.0, 3.0, 1.0, 2.0, 2.0, 5.0, 8.0, 6.0];
+        let y = [5.0, 7.0, 9.0, 3.0, 6.0, 8.0, 11.0, 4.0, 10.0];
+        let two = logrank(&x, &y, "two-sided");
+        assert!((two.statistic - 2.232521701142412).abs() < 1e-12);
+        assert!((two.pvalue - 0.025580502584608776).abs() < 1e-12);
+        let less = logrank(&x, &y, "less");
+        assert!((less.pvalue - 0.9872097487076956).abs() < 1e-12);
+        let greater = logrank(&x, &y, "greater");
+        assert!((greater.pvalue - 0.012790251292304388).abs() < 1e-12);
+        assert!(logrank(&[], &y, "two-sided").statistic.is_nan());
     }
 
     #[test]
