@@ -27991,6 +27991,79 @@ pub fn idealfourths(data: &[f64]) -> (f64, f64) {
     (qlo, qup)
 }
 
+/// McKean-Schrader estimate of the standard error of the sample median.
+///
+/// Matches `scipy.stats.mstats.stde_median(data)` (1-D). With the sorted data,
+/// `z = Φ⁻¹(0.995) ≈ 2.5758293035489004`, `k = round((n+1)/2 − z·√(n/4))`, the
+/// SE is `(x_(n-k) − x_(k-1)) / (2z)` (0-based order statistics). NaNs ignored.
+#[must_use]
+pub fn stde_median(data: &[f64]) -> f64 {
+    let mut sorted: Vec<f64> = data.iter().copied().filter(|v| !v.is_nan()).collect();
+    sorted.sort_by(|a, b| a.total_cmp(b));
+    let n = sorted.len();
+    let z = 2.5758293035489004_f64;
+    let nf = n as f64;
+    // numpy round() is banker's rounding; values here are non-half in practice,
+    // but match it exactly via round-half-to-even.
+    let kf = (nf + 1.0) / 2.0 - z * (nf / 4.0).sqrt();
+    let k = round_half_even(kf) as usize;
+    (sorted[n - k] - sorted[k - 1]) / (2.0 * z)
+}
+
+/// Round half to even (banker's rounding), matching numpy's `round`.
+fn round_half_even(x: f64) -> i64 {
+    let r = x.round();
+    if (x - x.floor() - 0.5).abs() < 1e-12 {
+        // exactly halfway: round to even
+        let f = x.floor() as i64;
+        if f % 2 == 0 { f } else { f + 1 }
+    } else {
+        r as i64
+    }
+}
+
+/// Compares the medians of two independent groups using the McKean-Schrader
+/// estimate of the standard error of the medians.
+///
+/// Matches `scipy.stats.mstats.compare_medians_ms(group_1, group_2)` (1-D):
+/// `W = |m₁ − m₂| / √(s₁² + s₂²)` with `sᵢ = stde_median(groupᵢ)`, returning
+/// `1 − Φ(W)`. Each group should have size ≥ 7.
+#[must_use]
+pub fn compare_medians_ms(group_1: &[f64], group_2: &[f64]) -> f64 {
+    let med_1 = median(group_1);
+    let med_2 = median(group_2);
+    let std_1 = stde_median(group_1);
+    let std_2 = stde_median(group_2);
+    let w = (med_1 - med_2).abs() / (std_1 * std_1 + std_2 * std_2).sqrt();
+    1.0 - Normal::standard().cdf(w)
+}
+
+/// Evaluates Rosenblatt's shifted histogram density estimator at each point.
+///
+/// Matches `scipy.stats.mstats.rsh(data, points)` (1-D). With the ideal-fourths
+/// IQR `r` and bandwidth `h = 1.2·(r₁ − r₀)/n^(1/5)`, returns
+/// `(#{xᵢ ≤ p + h} − #{xᵢ < p − h}) / (2nh)` for each point `p`. If `points` is
+/// empty, the data itself is used. NaNs ignored.
+#[must_use]
+pub fn rsh(data: &[f64], points: Option<&[f64]>) -> Vec<f64> {
+    let clean: Vec<f64> = data.iter().copied().filter(|v| !v.is_nan()).collect();
+    let n = clean.len();
+    let nf = n as f64;
+    let (r0, r1) = idealfourths(&clean);
+    let h = 1.2 * (r1 - r0) / nf.powf(0.2);
+    let pts: &[f64] = match points {
+        Some(p) if !p.is_empty() => p,
+        _ => &clean,
+    };
+    pts.iter()
+        .map(|&p| {
+            let nhi = clean.iter().filter(|&&x| x <= p + h).count() as f64;
+            let nlo = clean.iter().filter(|&&x| x < p - h).count() as f64;
+            (nhi - nlo) / (2.0 * nf * h)
+        })
+        .collect()
+}
+
 /// Computes alpha-level confidence interval for the median.
 ///
 /// Matches `scipy.stats.mstats.median_cihs(data, alpha)`.
@@ -45783,6 +45856,52 @@ mod tests {
         }
         for (a, b) in hi.iter().zip(want_hi.iter()) {
             assert!((a - b).abs() <= 1e-9, "hi {a} vs {b}");
+        }
+    }
+
+    #[test]
+    fn stde_compare_medians_rsh_match_scipy() {
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+        let b = [8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0];
+        assert!((compare_medians_ms(&a, &b) - 1.0693225866553746e-05).abs() <= 1e-12);
+
+        let g1 = [
+            2.0, 4.0, 1.0, 7.0, 3.0, 9.0, 5.0, 6.0, 8.0, 2.5, 4.5, 6.5, 0.3, 11.0,
+        ];
+        let g2 = [3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0, 5.0, 3.5, 8.0, 7.0, 0.1];
+        assert!((stde_median(&g1) - 1.164673449388393).abs() <= 1e-12);
+        assert!((stde_median(&g2) - 1.3587856909531253).abs() <= 1e-12);
+        assert!((compare_medians_ms(&g1, &g2) - 0.33757814915077244).abs() <= 1e-12);
+
+        // rsh at the data points and at explicit points.
+        let rd = rsh(&g1, None);
+        let want_rd = [
+            0.08726992036408934,
+            0.10908740045511167,
+            0.065452440273067,
+            0.08726992036408934,
+            0.09817866040960051,
+            0.065452440273067,
+            0.10908740045511167,
+            0.09817866040960051,
+            0.07636118031857816,
+            0.08726992036408934,
+            0.09817866040960051,
+            0.08726992036408934,
+            0.054543700227555836,
+            0.0327262201365335,
+        ];
+        for (x, y) in rd.iter().zip(want_rd.iter()) {
+            assert!((x - y).abs() <= 1e-12, "rsh {x} vs {y}");
+        }
+        let rp = rsh(&g1, Some(&[2.0, 5.0, 8.0]));
+        let want_rp = [
+            0.08726992036408934,
+            0.10908740045511167,
+            0.07636118031857816,
+        ];
+        for (x, y) in rp.iter().zip(want_rp.iter()) {
+            assert!((x - y).abs() <= 1e-12, "rsh_pt {x} vs {y}");
         }
     }
 
