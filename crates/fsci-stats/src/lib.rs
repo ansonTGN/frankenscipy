@@ -9745,6 +9745,97 @@ impl DiscreteDistribution for Hypergeometric {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// Wallenius' Noncentral Hypergeometric Distribution
+// ══════════════════════════════════════════════════════════════════════
+
+/// Wallenius' noncentral hypergeometric distribution.
+///
+/// Matches `scipy.stats.nchypergeom_wallenius(M, n, N, odds)`: a population of
+/// `M` objects, `n` of Type I, from which `N` are drawn one at a time with the
+/// Type-I items weighted by the `odds` ratio (biased urn). Support is
+/// `max(0, N-(M-n)) ..= min(n, N)`.
+///
+/// PMF (Fog 2008), after the regularizing substitution `u = t^{1/D}`:
+/// `P(x) = C(n,x) C(M-n,N-x) · D ∫_0^1 (1-u^ω)^x (1-u)^{N-x} u^{D-1} du`,
+/// with `D = ω(n-x) + (M-n-N+x)`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NchypergeomWallenius {
+    /// Total population size `M`.
+    pub big_m: u64,
+    /// Number of Type I objects `n`.
+    pub n: u64,
+    /// Number of objects drawn `N`.
+    pub big_n: u64,
+    /// Odds ratio `ω > 0` for drawing a Type I object.
+    pub odds: f64,
+}
+
+impl NchypergeomWallenius {
+    #[must_use]
+    pub fn new(big_m: u64, n: u64, big_n: u64, odds: f64) -> Self {
+        assert!(n <= big_m, "n must be <= M, got n={n}, M={big_m}");
+        assert!(big_n <= big_m, "N must be <= M, got N={big_n}, M={big_m}");
+        assert!(odds > 0.0, "odds must be > 0, got {odds}");
+        Self {
+            big_m,
+            n,
+            big_n,
+            odds,
+        }
+    }
+
+    fn support(&self) -> (u64, u64) {
+        let lo = self.big_n.saturating_sub(self.big_m - self.n);
+        let hi = self.n.min(self.big_n);
+        (lo, hi)
+    }
+}
+
+impl DiscreteDistribution for NchypergeomWallenius {
+    fn pmf(&self, k: u64) -> f64 {
+        let (lo, hi) = self.support();
+        if k < lo || k > hi {
+            return 0.0;
+        }
+        let m = self.big_m as f64;
+        let n = self.n as f64;
+        let bn = self.big_n as f64;
+        let w = self.odds;
+        let x = k as f64;
+        let d = w * (n - x) + (m - n - bn + x);
+        // Regularized Wallenius integrand on [0, 1].
+        let integ = simpson_integrate_adaptive(
+            |u| {
+                if u <= 0.0 || u >= 1.0 {
+                    return 0.0;
+                }
+                let v = (1.0 - u.powf(w)).powf(x) * (1.0 - u).powf(bn - x) * u.powf(d - 1.0);
+                if v.is_finite() { v } else { 0.0 }
+            },
+            0.0,
+            1.0,
+            128,
+            1e-13,
+            1e-15,
+            40,
+        );
+        comb(n, x) * comb(m - n, bn - x) * d * integ
+    }
+
+    fn mean(&self) -> f64 {
+        let (lo, hi) = self.support();
+        (lo..=hi).map(|x| x as f64 * self.pmf(x)).sum()
+    }
+
+    fn var(&self) -> f64 {
+        let (lo, hi) = self.support();
+        let mean = self.mean();
+        let e2: f64 = (lo..=hi).map(|x| (x as f64).powi(2) * self.pmf(x)).sum();
+        e2 - mean * mean
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // Negative Hypergeometric Distribution
 // ══════════════════════════════════════════════════════════════════════
 
@@ -45628,6 +45719,20 @@ mod tests {
         // Signed-support distributions are unsupported via the u64 ppf/isf.
         assert!(Skellam::new(2.0, 1.0).ppf(0.5).is_nan());
         assert!(DiscreteLaplace::new(0.5).isf(0.5).is_nan());
+    }
+
+    #[test]
+    fn nchypergeom_wallenius_matches_scipy() {
+        let d = NchypergeomWallenius::new(20, 7, 12, 2.5);
+        assert!((d.pmf(5) - 0.2932288455394483).abs() < 1e-9);
+        assert!((d.pmf(6) - 0.41148224288251595).abs() < 1e-9);
+        assert!((d.cdf(6) - 0.8077560802922379).abs() < 1e-9);
+        assert!((d.mean() - 5.678797132638472).abs() < 1e-7);
+        assert!((d.var() - 0.8667793150115476).abs() < 1e-7);
+        assert_eq!(d.pmf(13), 0.0); // outside support
+        let d2 = NchypergeomWallenius::new(30, 10, 15, 0.4);
+        assert!((d2.pmf(4) - 0.2255962692352197).abs() < 1e-9);
+        assert!((d2.mean() - 3.0304551804210305).abs() < 1e-7);
     }
 
     #[test]
