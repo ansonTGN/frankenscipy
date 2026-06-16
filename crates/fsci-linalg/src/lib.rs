@@ -11925,11 +11925,12 @@ pub fn solve_sylvester(
             let yj = if ta_upper_triangular {
                 solve_shifted_upper_triangular(&ta, shift, &rhs)?
             } else {
-                let mut sys = ta.clone();
-                for d in 0..m {
-                    sys[(d, d)] += shift;
-                }
-                sys.lu().solve(&rhs).ok_or(LinalgError::SingularMatrix)?
+                // T_A is the real Schur form ⇒ quasi-upper-triangular. Solving
+                // (T_A + shift·I) y = rhs is an O(m²) block back-substitution,
+                // not a full O(m³) LU. (shift·I added ⇒ λ = −shift.)
+                let sol = solve_quasi_triangular_real(&ta, -shift, m, rhs.as_slice())
+                    .ok_or(LinalgError::SingularMatrix)?;
+                DVector::from_vec(sol)
             };
             y.set_column(j, &yj);
             j += 1;
@@ -11951,26 +11952,39 @@ pub fn solve_sylvester(
                     rhs_j1.axpy(-t_kj1, &y.column(k), 1.0);
                 }
             }
-            let mut bigm = DMatrix::<f64>::zeros(2 * m, 2 * m);
-            for r in 0..m {
-                for c in 0..m {
-                    bigm[(r, c)] = ta[(r, c)];
-                    bigm[(m + r, m + c)] = ta[(r, c)];
-                }
-                bigm[(r, r)] += tb[(j, j)];
-                bigm[(m + r, m + r)] += tb[(j + 1, j + 1)];
-                bigm[(r, m + r)] = tb[(j + 1, j)];
-                bigm[(m + r, r)] = tb[(j, j + 1)];
+            // The 2×2 T_B block has a complex-conjugate eigenvalue pair λ, λ̄.
+            // Diagonalizing B2 = [[b00,b01],[b10,b11]] = W·diag(λ,λ̄)·W⁻¹ turns the
+            // coupled 2m×2m real system into ONE complex solve:
+            //   (T_A + λI) z = R2·v        (v = eigenvector of B2 for λ)
+            // done by O(m²) complex quasi-triangular back-substitution (was a full
+            // O((2m)³) LU). The two real columns are recovered from z and v.
+            let b00 = tb[(j, j)];
+            let b01 = tb[(j, j + 1)];
+            let b10 = tb[(j + 1, j)];
+            let b11 = tb[(j + 1, j + 1)];
+            let p = 0.5 * (b00 + b11);
+            let half_diff = 0.5 * (b00 - b11);
+            let qv = (-(half_diff * half_diff + b01 * b10)).max(0.0).sqrt();
+            let lambda = Complex::new(p, qv);
+            // Eigenvector v of B2 for λ; pick the better-conditioned form.
+            let (v0, v1) = if b01.abs() >= b10.abs() {
+                (Complex::new(b01, 0.0), lambda - Complex::new(b00, 0.0))
+            } else {
+                (lambda - Complex::new(b11, 0.0), Complex::new(b10, 0.0))
+            };
+            let mut g = vec![Complex::new(0.0, 0.0); m];
+            for (r, gr) in g.iter_mut().enumerate() {
+                *gr = Complex::new(rhs_j[r], 0.0) * v0 + Complex::new(rhs_j1[r], 0.0) * v1;
             }
-            let mut bigr = DVector::<f64>::zeros(2 * m);
-            for r in 0..m {
-                bigr[r] = rhs_j[r];
-                bigr[m + r] = rhs_j1[r];
+            let z = solve_quasi_triangular_complex(&ta, -lambda, m, &g)
+                .ok_or(LinalgError::SingularMatrix)?;
+            let denom = (v0 * v1.conj()).im;
+            if denom == 0.0 || !denom.is_finite() {
+                return Err(LinalgError::SingularMatrix);
             }
-            let sol = bigm.lu().solve(&bigr).ok_or(LinalgError::SingularMatrix)?;
             for r in 0..m {
-                y[(r, j)] = sol[r];
-                y[(r, j + 1)] = sol[m + r];
+                y[(r, j)] = (z[r] * v1.conj()).im / denom;
+                y[(r, j + 1)] = -(z[r] * v0.conj()).im / denom;
             }
             j += 2;
         }
