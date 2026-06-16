@@ -78,8 +78,9 @@ pub(crate) fn fpcyt2(a: &[Vec<f64>], n: usize, b: &[f64], c: &mut [f64]) {
 /// the right-hand side; the solution is written to `c[1..=n]`.
 #[allow(dead_code)]
 pub(crate) fn fpbacp(a: &[Vec<f64>], b: &[Vec<f64>], z: &[f64], n: usize, k: usize, c: &mut [f64]) {
-    let n2 = n - k;
     // Solve the trailing k unknowns (the periodic block, upper-triangular in b).
+    // (`n2 = n - k` is computed only after this loop, which returns early when
+    // `n <= k`, matching the Fortran where n2 would otherwise be non-positive.)
     let mut l = n;
     for i in 1..=k {
         let mut store = z[l];
@@ -97,6 +98,7 @@ pub(crate) fn fpbacp(a: &[Vec<f64>], b: &[Vec<f64>], z: &[f64], n: usize, k: usi
         }
         l -= 1;
     }
+    let n2 = n - k;
     // Fold the trailing unknowns into the body right-hand side.
     for i in 1..=n2 {
         let mut store = z[i];
