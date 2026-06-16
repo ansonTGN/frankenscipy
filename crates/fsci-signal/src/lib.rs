@@ -10698,6 +10698,99 @@ pub fn symiirorder1(
     Ok(symiirorder1_1d(signal, c0, z1, precision))
 }
 
+/// Row/column dimensions of a matrix (`(0, 0)` if empty), erroring if ragged.
+fn abcd_shape(m: &[Vec<f64>], name: &str) -> Result<(usize, usize), SignalError> {
+    if m.is_empty() {
+        return Ok((0, 0));
+    }
+    let cols = m[0].len();
+    if m.iter().any(|row| row.len() != cols) {
+        return Err(SignalError::InvalidArgument(format!(
+            "parameter {name} is not rectangular"
+        )));
+    }
+    Ok((m.len(), cols))
+}
+
+/// Check state-space matrix compatibility and fill missing matrices with
+/// zero-arrays of compatible shape, matching `scipy.signal.abcd_normalize`.
+///
+/// Each matrix is `None` if absent (a scalar `D` should be passed as a `1×1`
+/// matrix). Dimensions `n, p, q` are inferred from the non-zero shapes; absent
+/// matrices become zero-arrays of shape `(n,n)`, `(n,p)`, `(q,n)`, `(q,p)`.
+#[allow(clippy::type_complexity)]
+pub fn abcd_normalize(
+    a: Option<Vec<Vec<f64>>>,
+    b: Option<Vec<Vec<f64>>>,
+    c: Option<Vec<Vec<f64>>>,
+    d: Option<Vec<Vec<f64>>>,
+) -> Result<
+    (
+        Vec<Vec<f64>>,
+        Vec<Vec<f64>>,
+        Vec<Vec<f64>>,
+        Vec<Vec<f64>>,
+    ),
+    SignalError,
+> {
+    if a.is_none() && b.is_none() && c.is_none() {
+        return Err(SignalError::InvalidArgument(
+            "Dimension n is undefined for parameters A = B = C = None!".to_string(),
+        ));
+    }
+    if b.is_none() && d.is_none() {
+        return Err(SignalError::InvalidArgument(
+            "Dimension p is undefined for parameters B = D = None!".to_string(),
+        ));
+    }
+    if c.is_none() && d.is_none() {
+        return Err(SignalError::InvalidArgument(
+            "Dimension q is undefined for parameters C = D = None!".to_string(),
+        ));
+    }
+    let av = a.unwrap_or_default();
+    let bv = b.unwrap_or_default();
+    let cv = c.unwrap_or_default();
+    let dv = d.unwrap_or_default();
+    let (ar, ac) = abcd_shape(&av, "A")?;
+    let (br, bc) = abcd_shape(&bv, "B")?;
+    let (cr, cc) = abcd_shape(&cv, "C")?;
+    let (dr, dc) = abcd_shape(&dv, "D")?;
+    // First non-zero dimension (Python's `x or y or 0`).
+    let nz = |a: usize, b: usize, c: usize| {
+        if a != 0 {
+            a
+        } else if b != 0 {
+            b
+        } else {
+            c
+        }
+    };
+    let n = nz(ar, br, cc);
+    let p = nz(bc, dc, 0);
+    let q = nz(cr, dr, 0);
+    let zeros = |r: usize, c: usize| vec![vec![0.0_f64; c]; r];
+    let a_out = if ar * ac == 0 { zeros(n, n) } else { av };
+    let b_out = if br * bc == 0 { zeros(n, p) } else { bv };
+    let c_out = if cr * cc == 0 { zeros(q, n) } else { cv };
+    let d_out = if dr * dc == 0 { zeros(q, p) } else { dv };
+    let check = |m: &[Vec<f64>], want_r: usize, want_c: usize, name: &str| {
+        let (r, c) = (m.len(), if m.is_empty() { 0 } else { m[0].len() });
+        if r != want_r || c != want_c {
+            Err(SignalError::InvalidArgument(format!(
+                "Parameter {name} has shape ({r}, {c}) but should be ({want_r}, {want_c})!"
+            )))
+        } else {
+            Ok(())
+        }
+    };
+    check(&a_out, n, n, "A")?;
+    check(&b_out, n, p, "B")?;
+    check(&c_out, q, n, "C")?;
+    check(&d_out, q, p, "D")?;
+    Ok((a_out, b_out, c_out, d_out))
+}
+
 /// Smoothing IIR filter with mirror-symmetric boundary conditions using a
 /// cascade of second-order sections, matching
 /// `scipy.signal.symiirorder2(signal, r, omega, precision)`.
@@ -24430,6 +24523,39 @@ mod tests {
             assert!((c[i * cols + j] - cwant[k]).abs() <= 1e-5, "c {} vs {}", c[i * cols + j], cwant[k]);
             assert!((q[i * cols + j] - qwant[k]).abs() <= 1e-5, "q {} vs {}", q[i * cols + j], qwant[k]);
         }
+    }
+
+    #[test]
+    fn abcd_normalize_matches_scipy() {
+        // scipy example: A 2x2, B 2x1, C 1x2, D 1x1 -> all returned 2D.
+        let (a, b, c, d) = abcd_normalize(
+            Some(vec![vec![1.0, 2.0], vec![3.0, 4.0]]),
+            Some(vec![vec![-1.0], vec![5.0]]),
+            Some(vec![vec![4.0, 5.0]]),
+            Some(vec![vec![2.5]]),
+        )
+        .unwrap();
+        assert_eq!((a.len(), a[0].len()), (2, 2));
+        assert_eq!((b.len(), b[0].len()), (2, 1));
+        assert_eq!((c.len(), c[0].len()), (1, 2));
+        assert_eq!((d.len(), d[0].len()), (1, 1));
+        // Missing C -> zeros of shape (q=1, n=2).
+        let (_, _, c2, _) = abcd_normalize(
+            Some(vec![vec![1.0, 2.0], vec![3.0, 4.0]]),
+            Some(vec![vec![-1.0], vec![5.0]]),
+            None,
+            Some(vec![vec![2.5]]),
+        )
+        .unwrap();
+        assert_eq!(c2, vec![vec![0.0, 0.0]]);
+        // Incompatible shape errors.
+        assert!(abcd_normalize(
+            Some(vec![vec![1.0, 2.0, 3.0], vec![3.0, 4.0, 5.0]]),
+            Some(vec![vec![-1.0], vec![5.0]]),
+            None,
+            Some(vec![vec![2.5]]),
+        )
+        .is_err());
     }
 
     #[test]
