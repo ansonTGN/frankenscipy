@@ -150,7 +150,7 @@ pub use linalg::{
 pub use ops::{
     ConversionLogEntry, FormatConvertible, add_coo, add_csc, add_csr, coo_to_csr_with_mode,
     csc_to_csr_with_mode, csr_to_csc_with_mode, find, scale_coo, scale_csc, scale_csr, spmv_coo,
-    spmv_csc, spmv_csr, sub_coo, sub_csc, sub_csr, tril, triu,
+    spmv_csc, spmv_csr, sub_coo, sub_csc, sub_csr, tril, tril_array, triu, triu_array,
 };
 pub use scipy_aliases::*;
 
@@ -1438,6 +1438,20 @@ mod tests {
         let offsets = vec![0];
         let dia = DiaMatrix::new(shape, data, offsets).expect("dia");
         assert_eq!(dia.nnz(), 2); // only nonzero entries count
+    }
+
+    #[test]
+    fn tril_triu_array_equal_base() {
+        let m = eye_array(3, 3, 0).expect("eye");
+        let dense = |c: &CooMatrix| dense_from_coo(c);
+        assert_eq!(
+            dense(&tril_array(&m, 0).expect("tril_array")),
+            dense(&tril(&m, 0).expect("tril"))
+        );
+        assert_eq!(
+            dense(&triu_array(&m, 0).expect("triu_array")),
+            dense(&triu(&m, 0).expect("triu"))
+        );
     }
 
     #[test]

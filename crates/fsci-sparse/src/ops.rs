@@ -338,6 +338,18 @@ pub fn triu<T: FormatConvertible>(matrix: &T, k: isize) -> SparseResult<CooMatri
     triangular_filter(matrix, k, TriangleHalf::Upper)
 }
 
+/// Lower-triangular portion of a sparse array, matching `scipy.sparse.tril_array`
+/// (the array-API spelling of [`tril`]).
+pub fn tril_array<T: FormatConvertible>(matrix: &T, k: isize) -> SparseResult<CooMatrix> {
+    tril(matrix, k)
+}
+
+/// Upper-triangular portion of a sparse array, matching `scipy.sparse.triu_array`
+/// (the array-API spelling of [`triu`]).
+pub fn triu_array<T: FormatConvertible>(matrix: &T, k: isize) -> SparseResult<CooMatrix> {
+    triu(matrix, k)
+}
+
 pub fn spmv_csr(matrix: &CsrMatrix, vector: &[f64]) -> SparseResult<Vec<f64>> {
     if vector.len() != matrix.shape().cols {
         return Err(SparseError::IncompatibleShape {
