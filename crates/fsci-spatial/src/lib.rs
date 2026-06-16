@@ -4934,9 +4934,225 @@ impl Default for Rotation {
     }
 }
 
+/// A proper rigid transform in 3-D (rotation + translation), matching
+/// `scipy.spatial.transform.RigidTransform`.
+///
+/// A transform `T` maps a point `x` to `R·x + t`, where `R` is the rotation and
+/// `t` the translation. Composition `a * b` (via [`RigidTransform::compose`])
+/// applies `b` first then `a`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RigidTransform {
+    rotation: Rotation,
+    translation: [f64; 3],
+}
+
+impl RigidTransform {
+    /// The identity transform (no rotation, no translation).
+    #[must_use]
+    pub fn identity() -> Self {
+        Self {
+            rotation: Rotation::identity(),
+            translation: [0.0, 0.0, 0.0],
+        }
+    }
+
+    /// Build from a translation vector and a rotation (`scipy from_components`).
+    #[must_use]
+    pub fn from_components(translation: [f64; 3], rotation: Rotation) -> Self {
+        Self {
+            rotation,
+            translation,
+        }
+    }
+
+    /// Build a pure rotation (zero translation).
+    #[must_use]
+    pub fn from_rotation(rotation: Rotation) -> Self {
+        Self {
+            rotation,
+            translation: [0.0, 0.0, 0.0],
+        }
+    }
+
+    /// Build a pure translation (identity rotation).
+    #[must_use]
+    pub fn from_translation(translation: [f64; 3]) -> Self {
+        Self {
+            rotation: Rotation::identity(),
+            translation,
+        }
+    }
+
+    /// Build from a 4×4 homogeneous transform matrix `[[R | t], [0 0 0 1]]`.
+    #[must_use]
+    pub fn from_matrix(matrix: [[f64; 4]; 4]) -> Self {
+        let r = [
+            [matrix[0][0], matrix[0][1], matrix[0][2]],
+            [matrix[1][0], matrix[1][1], matrix[1][2]],
+            [matrix[2][0], matrix[2][1], matrix[2][2]],
+        ];
+        Self {
+            rotation: Rotation::from_matrix(r),
+            translation: [matrix[0][3], matrix[1][3], matrix[2][3]],
+        }
+    }
+
+    /// The 4×4 homogeneous transform matrix.
+    #[must_use]
+    pub fn as_matrix(&self) -> [[f64; 4]; 4] {
+        let r = self.rotation.as_matrix();
+        let t = self.translation;
+        [
+            [r[0][0], r[0][1], r[0][2], t[0]],
+            [r[1][0], r[1][1], r[1][2], t[1]],
+            [r[2][0], r[2][1], r[2][2], t[2]],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+    }
+
+    /// The `(translation, rotation)` components.
+    #[must_use]
+    pub fn as_components(&self) -> ([f64; 3], Rotation) {
+        (self.translation, self.rotation)
+    }
+
+    /// The rotation component.
+    #[must_use]
+    pub fn rotation(&self) -> Rotation {
+        self.rotation
+    }
+
+    /// The translation component.
+    #[must_use]
+    pub fn translation(&self) -> [f64; 3] {
+        self.translation
+    }
+
+    /// Apply the transform to a point. With `inverse = true`, applies the
+    /// inverse transform `Rᵀ·(x − t)`.
+    #[must_use]
+    pub fn apply(&self, point: [f64; 3], inverse: bool) -> [f64; 3] {
+        if inverse {
+            let shifted = [
+                point[0] - self.translation[0],
+                point[1] - self.translation[1],
+                point[2] - self.translation[2],
+            ];
+            self.rotation.inv().apply(shifted)
+        } else {
+            let r = self.rotation.apply(point);
+            [
+                r[0] + self.translation[0],
+                r[1] + self.translation[1],
+                r[2] + self.translation[2],
+            ]
+        }
+    }
+
+    /// Compose two transforms: `self.compose(other)` applies `other` first,
+    /// then `self` (equivalent to scipy's `self * other`).
+    #[must_use]
+    pub fn compose(&self, other: &Self) -> Self {
+        let rotation = self.rotation.multiply(&other.rotation);
+        // t = R_self · t_other + t_self.
+        let rt = self.rotation.apply(other.translation);
+        Self {
+            rotation,
+            translation: [
+                rt[0] + self.translation[0],
+                rt[1] + self.translation[1],
+                rt[2] + self.translation[2],
+            ],
+        }
+    }
+
+    /// The inverse transform: `R⁻¹` with translation `−R⁻¹·t`.
+    #[must_use]
+    pub fn inv(&self) -> Self {
+        let rotation = self.rotation.inv();
+        let rt = rotation.apply(self.translation);
+        Self {
+            rotation,
+            translation: [-rt[0], -rt[1], -rt[2]],
+        }
+    }
+}
+
+impl Default for RigidTransform {
+    fn default() -> Self {
+        Self::identity()
+    }
+}
+
+impl std::ops::Mul for RigidTransform {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        self.compose(&rhs)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rigid_transform_matches_scipy() {
+        let close = |a: [f64; 3], b: [f64; 3], msg: &str| {
+            for k in 0..3 {
+                assert!((a[k] - b[k]).abs() < 1e-9, "{msg}[{k}]: {} vs {}", a[k], b[k]);
+            }
+        };
+        let r = Rotation::from_quat([
+            0.022260026714733816,
+            0.43967973954090955,
+            0.3604234056503559,
+            0.8223631719059994,
+        ]);
+        let tf = RigidTransform::from_components([1.0, 2.0, 3.0], r);
+        let pt = [0.5, -1.0, 2.0];
+        close(
+            tf.apply(pt, false),
+            [3.2283978394802326, 2.1276474698876013, 3.5176380902050415],
+            "apply",
+        );
+        close(
+            tf.apply(pt, true),
+            [-1.3067872211974727, -2.284538497461942, -1.8229621532355842],
+            "apply_inv",
+        );
+        close(
+            tf.inv().translation(),
+            [0.5430220815747795, -1.965834706556691, -3.1369763986073207],
+            "inv_t",
+        );
+
+        // 4x4 matrix round-trip.
+        let m = tf.as_matrix();
+        let tf_rt = RigidTransform::from_matrix(m);
+        close(tf_rt.translation(), tf.translation(), "matrix_rt_t");
+        close(tf_rt.apply(pt, false), tf.apply(pt, false), "matrix_rt_apply");
+        assert_eq!(m[3], [0.0, 0.0, 0.0, 1.0]);
+
+        // Composition: tf * tf2.
+        let r2 = Rotation::from_quat([0.0, 0.0, 0.7071067811865475, 0.7071067811865476]);
+        let tf2 = RigidTransform::from_components([0.0, 0.0, 1.0], r2);
+        let comp = tf * tf2;
+        close(
+            comp.apply(pt, false),
+            [3.2845384974619423, 3.822962153235584, 4.306787221197473],
+            "compose_apply",
+        );
+        close(
+            comp.translation(),
+            [1.7391989197401165, 2.2803300858899105, 3.6123724356957942],
+            "compose_t",
+        );
+
+        // inv composed with self is identity (apply ~ identity).
+        let back = tf.inv() * tf;
+        close(back.apply(pt, false), pt, "inv_roundtrip");
+    }
 
     #[test]
     fn dice_sokalsneath_all_false_match_scipy_nan() {
