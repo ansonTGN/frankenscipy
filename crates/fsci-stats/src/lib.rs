@@ -7065,6 +7065,88 @@ impl MultivariateT {
     }
 }
 
+/// The matrix normal distribution, matching
+/// `scipy.stats.matrix_normal(mean, rowcov, colcov)`.
+pub struct MatrixNormal {
+    mean: Vec<Vec<f64>>,
+    chol_u: Vec<Vec<f64>>,
+    chol_v: Vec<Vec<f64>>,
+    log_det_u: f64,
+    log_det_v: f64,
+}
+
+impl MatrixNormal {
+    /// Create the distribution: `mean` is `n×p`, `rowcov` is the `n×n`
+    /// among-row covariance `U`, `colcov` the `p×p` among-column covariance `V`.
+    pub fn new(
+        mean: &[Vec<f64>],
+        rowcov: &[Vec<f64>],
+        colcov: &[Vec<f64>],
+    ) -> Result<Self, StatsError> {
+        if mean.is_empty() || mean[0].is_empty() {
+            return Err(StatsError::InvalidArgument("mean must be non-empty".to_string()));
+        }
+        let (nrow, ncol) = (mean.len(), mean[0].len());
+        if rowcov.len() != nrow || colcov.len() != ncol {
+            return Err(StatsError::InvalidArgument(
+                "rowcov/colcov dimensions must match mean".to_string(),
+            ));
+        }
+        let chol_u = cholesky_decompose(rowcov)?;
+        let chol_v = cholesky_decompose(colcov)?;
+        let log_det_u = 2.0 * (0..nrow).map(|i| chol_u[i][i].ln()).sum::<f64>();
+        let log_det_v = 2.0 * (0..ncol).map(|i| chol_v[i][i].ln()).sum::<f64>();
+        Ok(Self {
+            mean: mean.to_vec(),
+            chol_u,
+            chol_v,
+            log_det_u,
+            log_det_v,
+        })
+    }
+
+    /// Log probability density function.
+    pub fn logpdf(&self, x: &[Vec<f64>]) -> Result<f64, StatsError> {
+        let (n, p) = (self.mean.len(), self.mean[0].len());
+        if x.len() != n || x.iter().any(|r| r.len() != p) {
+            return Err(StatsError::InvalidArgument(
+                "x dimensions must match mean".to_string(),
+            ));
+        }
+        // A = X - M.
+        let a: Vec<Vec<f64>> = (0..n)
+            .map(|i| (0..p).map(|j| x[i][j] - self.mean[i][j]).collect())
+            .collect();
+        // Y = L_U⁻¹ A (solve each column against the row-Cholesky).
+        let mut y = vec![vec![0.0_f64; p]; n];
+        for j in 0..p {
+            let col: Vec<f64> = (0..n).map(|i| a[i][j]).collect();
+            let yc = solve_lower_triangular(&self.chol_u, &col)?;
+            for i in 0..n {
+                y[i][j] = yc[i];
+            }
+        }
+        // W = Y L_V⁻ᵀ (solve each row against the col-Cholesky); maha = ‖W‖_F².
+        let mut maha = 0.0_f64;
+        for yi in &y {
+            let wi = solve_lower_triangular(&self.chol_v, yi)?;
+            maha += wi.iter().map(|&v| v * v).sum::<f64>();
+        }
+        let (nf, pf) = (n as f64, p as f64);
+        let two_pi = 2.0 * std::f64::consts::PI;
+        Ok(-0.5
+            * (nf * pf * two_pi.ln()
+                + pf * self.log_det_u
+                + nf * self.log_det_v
+                + maha))
+    }
+
+    /// Probability density function.
+    pub fn pdf(&self, x: &[Vec<f64>]) -> Result<f64, StatsError> {
+        Ok(self.logpdf(x)?.exp())
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Von Mises Distribution
 // ══════════════════════════════════════════════════════════════════════
@@ -42216,6 +42298,17 @@ mod tests {
         let best = ppcc_max(&x, (0.0, 1.0));
         assert!((best - 0.35779018).abs() < 1e-4, "ppcc_max {best}");
         assert!(ppcc_plot(&x, 2.0, -2.0, 5).is_err());
+    }
+
+    #[test]
+    fn matrix_normal_matches_scipy() {
+        let m = vec![vec![1.0, 2.0], vec![3.0, 4.0], vec![5.0, 6.0]];
+        let u = vec![vec![2.0, 0.1, 0.0], vec![0.1, 1.0, 0.2], vec![0.0, 0.2, 1.5]];
+        let v = vec![vec![1.0, 0.3], vec![0.3, 2.0]];
+        let d = MatrixNormal::new(&m, &u, &v).unwrap();
+        let x = vec![vec![1.5, 2.5], vec![2.5, 3.5], vec![4.5, 7.0]];
+        assert!((d.logpdf(&x).unwrap() - (-8.125193864853545)).abs() < 1e-10);
+        assert!((d.pdf(&x).unwrap() - 0.00029598734295147136).abs() < 1e-14);
     }
 
     #[test]
