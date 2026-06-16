@@ -28218,6 +28218,25 @@ pub fn mjci(data: &[f64], prob: &[f64]) -> Vec<f64> {
         .collect()
 }
 
+/// Matches `scipy.stats.mstats.mquantiles_cimj(data, prob, alpha)`.
+///
+/// Computes the `1 - alpha` confidence interval for the selected quantiles,
+/// using the Maritz-Jarrett estimators of the quantile standard errors
+/// ([`mjci`]). The point estimates use `mquantiles` with `alphap = betap = 0`
+/// (R type 6). Returns `(ci_lower, ci_upper)`, each of length `prob.len()`:
+/// `xq ∓ z · smj` with `z = Φ⁻¹(1 − alpha/2)`. `alpha` is folded to
+/// `min(alpha, 1 − alpha)` as in scipy.
+#[must_use]
+pub fn mquantiles_cimj(data: &[f64], prob: &[f64], alpha: f64) -> (Vec<f64>, Vec<f64>) {
+    let alpha = alpha.min(1.0 - alpha);
+    let z = Normal::standard().ppf(1.0 - alpha / 2.0);
+    let xq = mquantiles(data, prob, 0.0, 0.0);
+    let smj = mjci(data, prob);
+    let lo = xq.iter().zip(&smj).map(|(&q, &s)| q - z * s).collect();
+    let hi = xq.iter().zip(&smj).map(|(&q, &s)| q + z * s).collect();
+    (lo, hi)
+}
+
 /// Matches `scipy.stats.mstats.mquantiles(a, prob, alphap, betap)`.
 /// Returns quantiles at the specified probabilities using the formula:
 /// `Q(p) = (1-g)*x[j] + g*x[j+1]`, where `j = floor(n*p + m)`, `m = alphap + p*(1 - alphap - betap)`.
@@ -45750,6 +45769,21 @@ mod tests {
         let mj2 = mjci(&d, &[0.1, 0.9]);
         assert!(mj2[0].is_nan());
         assert!((mj2[1] - 0.8529247612753136).abs() <= 1e-9);
+    }
+
+    #[test]
+    fn mquantiles_cimj_matches_scipy() {
+        let d = [2.0, 4.0, 1.0, 7.0, 3.0, 9.0, 5.0, 6.0, 8.0, 2.5, 4.5, 6.5];
+        let (lo, hi) = mquantiles_cimj(&d, &[0.25, 0.5, 0.75], 0.05);
+        // scipy.stats.mstats.mquantiles_cimj oracle.
+        let want_lo = [0.8061812331632188, 2.445950361741002, 4.7029698085224165];
+        let want_hi = [4.443818766836781, 7.0540496382589986, 9.047030191477583];
+        for (a, b) in lo.iter().zip(want_lo.iter()) {
+            assert!((a - b).abs() <= 1e-9, "lo {a} vs {b}");
+        }
+        for (a, b) in hi.iter().zip(want_hi.iter()) {
+            assert!((a - b).abs() <= 1e-9, "hi {a} vs {b}");
+        }
     }
 
     #[test]
