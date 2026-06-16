@@ -1,0 +1,8 @@
+1064978e8a3350a964981938ce0a994702bcc6bc1e9eb0a15ab60487a7957c9c  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-8ty4p-two-stage-band/EVIDENCE.md
+3d4b24d720808836bc133d717b0c0ee38704a4e5542d2298814eb24bbb6cb031  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-8ty4p-two-stage-band/aligned_lower_storage_stage_profile_rch.txt
+fe2f050235895c67a22108a32b953187e231f24be7b02509d5c00f278920f2fd  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-8ty4p-two-stage-band/baseline_public_native_route_rch.txt
+3e5f27daae4c4a47b8b9646adfa2c9d993dc741785bf47fd50133e5eec13e142  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-8ty4p-two-stage-band/baseline_stage_profile_rch.txt
+f9e7ee01c6f9264e0f35b4d32b30764d0e77334488ccdad7558c1c0685a9eef8  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-8ty4p-two-stage-band/check_fsci_linalg_lib_rch.txt
+a6e99c57ff802fd86015f4d44c44be4b65e99807b3a7ddf2eac33d75e2a98b4b  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-8ty4p-two-stage-band/clippy_fsci_linalg_lib_rch.txt
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-8ty4p-two-stage-band/fmt_fsci_linalg_check.txt
+acf21e6352322857a9f2fb4e0a59a14e7e732b1a478f5045ca36cb666ab45ef3  tests/artifacts/perf/2026-06-15-rubywaterfall-linalg-8ty4p-two-stage-band/ubs_fsci_linalg_lib.txt

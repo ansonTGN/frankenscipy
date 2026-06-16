@@ -22069,7 +22069,7 @@ mod tests {
                 let refl = make_householder_reflector(k + 1, col);
                 let beta = first - refl.values[0];
                 if refl.tau != 0.0 {
-                    apply_symmetric_householder_trailing_rank2(
+                    apply_symmetric_householder_trailing_rank2_lower_storage(
                         &mut m,
                         &refl,
                         &mut rank2_p,
@@ -22129,6 +22129,7 @@ mod tests {
 
             println!("SYMMETRIC_EIGH_NATIVE_STAGE_PROFILE_BEGIN");
             println!("shape={n}x{n}");
+            println!("reduction_storage=lower");
             println!("reduction_ms={reduction_ms:.6}");
             println!("tridiagonal_eigen_ms={tridiagonal_eigen_ms:.6}");
             println!("backtransform_ms={backtransform_ms:.6}");
