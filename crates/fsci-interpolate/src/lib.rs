@@ -1874,6 +1874,40 @@ pub fn make_lsq_spline(x: &[f64], y: &[f64], t: &[f64], k: usize) -> Result<BSpl
     BSpline::new(t.to_vec(), c, k)
 }
 
+/// Weighted least-squares univariate spline of degree `k` with user-given
+/// interior knots, matching `scipy.interpolate.LSQUnivariateSpline(x, y, t, k)`.
+///
+/// `t_interior` are the interior knots only (strictly inside `(x[0], x[-1])`);
+/// the `k+1` boundary knots at the data extents are added internally. Returns
+/// the tck tuple `(t, c, k)` consumable by [`splev`]/[`BSpline`].
+#[allow(clippy::type_complexity)]
+pub fn lsq_univariate_spline(
+    x: &[f64],
+    y: &[f64],
+    t_interior: &[f64],
+    k: usize,
+) -> Result<(Vec<f64>, Vec<f64>, usize), InterpError> {
+    if x.len() != y.len() || x.len() < k + 1 {
+        return Err(InterpError::InvalidArgument {
+            detail: "need len(x)==len(y) >= k+1".to_string(),
+        });
+    }
+    let xb = x[0];
+    let xe = x[x.len() - 1];
+    for &t in t_interior {
+        if t <= xb || t >= xe {
+            return Err(InterpError::InvalidArgument {
+                detail: "interior knots must lie strictly inside (x[0], x[-1])".to_string(),
+            });
+        }
+    }
+    let mut t = vec![xb; k + 1];
+    t.extend_from_slice(t_interior);
+    t.extend(std::iter::repeat(xe).take(k + 1));
+    let bs = make_lsq_spline(x, y, &t, k)?;
+    Ok((bs.t.clone(), bs.c.clone(), k))
+}
+
 fn interpolation_knots(x: &[f64], k: usize) -> Vec<f64> {
     let n = x.len();
     let num_knots = n + k + 1;
@@ -7804,6 +7838,23 @@ fn smooth_bivariate_solve_coefficients(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lsq_univariate_spline_matches_scipy() {
+        let x: Vec<f64> = (0..50).map(|i| i as f64 * 10.0 / 49.0).collect();
+        let y: Vec<f64> = x.iter().map(|v| v.sin()).collect();
+        let (t, c, k) = lsq_univariate_spline(&x, &y, &[2.0, 4.0, 6.0, 8.0], 3).unwrap();
+        let bs = BSpline::new(t, c, k).unwrap();
+        // scipy.interpolate.LSQUnivariateSpline oracle.
+        let want = [
+            (1.5, 1.003723229363428),
+            (5.5, -0.6683729233728315),
+            (9.0, 0.395544191785225),
+        ];
+        for (xe, w) in want {
+            assert!((bs.eval(xe) - w).abs() <= 1e-9, "{}: {} vs {w}", xe, bs.eval(xe));
+        }
+    }
 
     #[test]
     fn bpoly_matches_scipy() {
