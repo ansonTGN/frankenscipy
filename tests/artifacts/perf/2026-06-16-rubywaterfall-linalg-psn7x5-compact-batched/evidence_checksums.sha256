@@ -1,0 +1,4 @@
+9e81bc3f4811b418048eeba1a0687df1394ea6e741bdc0c39b36f013df141b61  tests/artifacts/perf/2026-06-16-rubywaterfall-linalg-psn7x5-compact-batched/EVIDENCE.md
+3931ad3556bdf7bb92d67e92e104af74b6114c6e8204f3c9ac2649775abaebd2  tests/artifacts/perf/2026-06-16-rubywaterfall-linalg-psn7x5-compact-batched/baseline_stage_profile_rch.txt
+33d80f0b85763d22a990eafd566ac2b3b9622a35f07697450d0d9789c25c8e18  tests/artifacts/perf/2026-06-16-rubywaterfall-linalg-psn7x5-compact-batched/proof_column_pair_replay_bits_rch.txt
+6864a0d350590faae5e273927eac94d3f15cac52173dd7a2a2c47779c5d16462  tests/artifacts/perf/2026-06-16-rubywaterfall-linalg-psn7x5-compact-batched/after_column_pair_stage_profile_rch.txt
