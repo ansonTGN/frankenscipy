@@ -10641,10 +10641,83 @@ fn symiirorder2_1d(x: &[f64], r: f64, omega: f64, precision: f64) -> Vec<f64> {
     let mut out = vec![0.0_f64; n];
     out[n - 1] = yp1;
     out[n - 2] = yp2;
-    for i in (0..=n - 3).rev() {
-        out[i] = cs * yf[i] + a2 * out[i + 1] + a3 * out[i + 2];
+    if n >= 3 {
+        for i in (0..=n - 3).rev() {
+            out[i] = cs * yf[i] + a2 * out[i + 1] + a3 * out[i + 2];
+        }
     }
     out
+}
+
+/// First-order mirror-symmetric IIR smoothing filter `H(z) = c0 / ((1 - z1/z)
+/// (1 - z1 z))` (SciPy `symiirorder1`).
+fn symiirorder1_1d(x: &[f64], c0: f64, z1: f64, precision: f64) -> Vec<f64> {
+    let n = x.len();
+    let p2 = precision * precision;
+    let mut y0 = x[0];
+    let mut powz1 = 1.0_f64;
+    let mut k = 0usize;
+    loop {
+        powz1 *= z1;
+        y0 += powz1 * x[k];
+        k += 1;
+        if powz1 * powz1 <= p2 || k >= n {
+            break;
+        }
+    }
+    let mut y = vec![0.0_f64; n];
+    y[0] = y0;
+    for i in 1..n {
+        y[i] = x[i] + z1 * y[i - 1];
+    }
+    let mut out = vec![0.0_f64; n];
+    out[n - 1] = c0 / (1.0 - z1) * y[n - 1];
+    for i in (0..n - 1).rev() {
+        out[i] = c0 * y[i] + z1 * out[i + 1];
+    }
+    out
+}
+
+/// Smoothing IIR filter with mirror-symmetric boundary conditions using a
+/// cascade of first-order sections, matching
+/// `scipy.signal.symiirorder1(signal, c0, z1, precision)`.
+pub fn symiirorder1(
+    signal: &[f64],
+    c0: f64,
+    z1: f64,
+    precision: f64,
+) -> Result<Vec<f64>, SignalError> {
+    if signal.is_empty() {
+        return Ok(Vec::new());
+    }
+    if z1.abs() >= 1.0 {
+        return Err(SignalError::InvalidArgument(
+            "|z1| must be less than 1.0".to_string(),
+        ));
+    }
+    Ok(symiirorder1_1d(signal, c0, z1, precision))
+}
+
+/// Smoothing IIR filter with mirror-symmetric boundary conditions using a
+/// cascade of second-order sections, matching
+/// `scipy.signal.symiirorder2(signal, r, omega, precision)`.
+pub fn symiirorder2(
+    signal: &[f64],
+    r: f64,
+    omega: f64,
+    precision: f64,
+) -> Result<Vec<f64>, SignalError> {
+    if signal.len() < 2 {
+        return Err(SignalError::InvalidArgument(
+            "symiirorder2 requires at least 2 samples".to_string(),
+        ));
+    }
+    if r >= 1.0 {
+        return Err(SignalError::InvalidArgument(
+            "r must be less than 1.0".to_string(),
+        ));
+    }
+    Ok(symiirorder2_1d(signal, r, omega, precision))
 }
 
 /// Compute the `(r, omega)` parameters of the second-order spline-smoothing
@@ -24356,6 +24429,28 @@ mod tests {
         for (k, &(i, j)) in idx.iter().enumerate() {
             assert!((c[i * cols + j] - cwant[k]).abs() <= 1e-5, "c {} vs {}", c[i * cols + j], cwant[k]);
             assert!((q[i * cols + j] - qwant[k]).abs() <= 1e-5, "q {} vs {}", q[i * cols + j], qwant[k]);
+        }
+    }
+
+    #[test]
+    fn symiirorder1_2_match_scipy() {
+        let x1: Vec<f64> = (0..40).map(|i| (0.5 * i as f64).sin() + 0.05 * i as f64).collect();
+        let o1 = symiirorder1(&x1, 0.5, 0.3, 1e-3).unwrap();
+        let w1 = [0.20414912042349523, 0.5377023124184466, 0.8671267170231889];
+        for (k, &w) in w1.iter().enumerate() {
+            assert!((o1[k] - w).abs() <= 1e-6, "o1[{k}] {} vs {w}", o1[k]);
+        }
+        let (r, omega) = (0.5518471742230422, 0.5945187551997648);
+        let x2: Vec<f64> = (0..40).map(|i| (0.4 * i as f64).sin() + 0.1 * i as f64).collect();
+        let o2 = symiirorder2(&x2, r, omega, 1e-3).unwrap();
+        let w2 = [
+            0.23252954034932616,
+            0.4758036705838371,
+            0.825785711096734,
+            1.143382932528667,
+        ];
+        for (k, &w) in w2.iter().enumerate() {
+            assert!((o2[k] - w).abs() <= 1e-6, "o2[{k}] {} vs {w}", o2[k]);
         }
     }
 
