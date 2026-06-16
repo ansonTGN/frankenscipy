@@ -1405,6 +1405,8 @@ pub enum MultivariateRootMethod {
     Lm,
     /// Jacobian-free Newton-Krylov method (Newton + finite-difference GMRES).
     NewtonKrylov,
+    /// Derivative-free spectral residual method (DF-SANE).
+    DfSane,
 }
 
 /// Options for multivariate root finding.
@@ -1456,6 +1458,7 @@ where
         MultivariateRootMethod::NewtonKrylov => {
             newton_krylov(func, x0, options.tol, options.max_iter)
         }
+        MultivariateRootMethod::DfSane => df_sane(func, x0, options.tol, options.max_iter),
     }
 }
 
@@ -2016,6 +2019,126 @@ where
     })
 }
 
+/// Solve `F(x) = 0` with the derivative-free spectral residual method (DF-SANE),
+/// matching `scipy.optimize.root(method='df-sane')`.
+///
+/// Uses spectral (Barzilai-Borwein) steps `d = -σ_k F(x_k)` with the Cruz-
+/// Martinez-Raydan nonmonotone backtracking line search (window `M = 10`,
+/// `η_k = ‖F₀‖²/(1+k)²`). Converges when `‖F(x_k)‖ < ftol·‖F(x₀)‖ + 1e-300`.
+pub fn df_sane<F>(
+    func: F,
+    x0: &[f64],
+    ftol: f64,
+    maxiter: usize,
+) -> Result<MultivariateRootResult, OptError>
+where
+    F: Fn(&[f64]) -> Vec<f64>,
+{
+    validate_multivariate_root_params(x0, ftol, maxiter)?;
+    let n = x0.len();
+    const M: usize = 10;
+    const SIGMA_EPS: f64 = 1e-10;
+    const GAMMA: f64 = 1e-4;
+    const TAU_MIN: f64 = 0.1;
+    const TAU_MAX: f64 = 0.5;
+    let fatol = 1e-300;
+
+    let merit = |fv: &[f64]| -> f64 { fv.iter().map(|v| v * v).sum::<f64>() };
+
+    let mut x_k = x0.to_vec();
+    let mut f_k_res = evaluate_multivariate_root(&func, &x_k, n, "df_sane")?;
+    let mut nfev = 1usize;
+    let mut f_k = merit(&f_k_res); // ‖F‖²
+    let f_0 = f_k;
+    let f0_norm = f_0.sqrt();
+    let mut sigma_k = 1.0_f64;
+    let mut prev_fs: std::collections::VecDeque<f64> = std::collections::VecDeque::new();
+    prev_fs.push_back(f_k);
+
+    for k in 0..maxiter {
+        let fk_norm = f_k.sqrt();
+        if fk_norm < ftol * f0_norm + fatol {
+            return Ok(MultivariateRootResult {
+                x: x_k,
+                fun: f_k_res,
+                converged: true,
+                message: "df_sane converged".to_string(),
+                iterations: k,
+                function_calls: nfev,
+            });
+        }
+        // Clamp the spectral parameter magnitude.
+        if sigma_k.abs() > 1.0 / SIGMA_EPS {
+            sigma_k = sigma_k.signum() / SIGMA_EPS;
+        } else if sigma_k.abs() < SIGMA_EPS {
+            sigma_k = SIGMA_EPS;
+        }
+        let d: Vec<f64> = f_k_res.iter().map(|v| -sigma_k * v).collect();
+        let eta = f_0 / ((1 + k) as f64).powi(2);
+        let f_bar = prev_fs.iter().cloned().fold(f64::MIN, f64::max);
+        let fk_cur = f_k; // prev_fs[-1]
+
+        // Cruz nonmonotone line search.
+        let mut alpha_p = 1.0_f64;
+        let mut alpha_m = 1.0_f64;
+        let (xp, fp, fp_res) = loop {
+            let xp: Vec<f64> = x_k.iter().zip(&d).map(|(xi, di)| xi + alpha_p * di).collect();
+            let fp_res = func(&xp);
+            nfev += 1;
+            let fp = merit(&fp_res);
+            if fp <= f_bar + eta - GAMMA * alpha_p * alpha_p * fk_cur {
+                break (xp, fp, fp_res);
+            }
+            let alpha_tp = alpha_p * alpha_p * fk_cur / (fp + (2.0 * alpha_p - 1.0) * fk_cur);
+
+            let xm: Vec<f64> = x_k.iter().zip(&d).map(|(xi, di)| xi - alpha_m * di).collect();
+            let fm_res = func(&xm);
+            nfev += 1;
+            let fm = merit(&fm_res);
+            if fm <= f_bar + eta - GAMMA * alpha_m * alpha_m * fk_cur {
+                break (xm, fm, fm_res);
+            }
+            let alpha_tm = alpha_m * alpha_m * fk_cur / (fm + (2.0 * alpha_m - 1.0) * fk_cur);
+
+            alpha_p = alpha_tp.clamp(TAU_MIN * alpha_p, TAU_MAX * alpha_p);
+            alpha_m = alpha_tm.clamp(TAU_MIN * alpha_m, TAU_MAX * alpha_m);
+            if nfev > maxiter.saturating_mul(2 * n + 4) + 1000 {
+                // Safety: abandon a stalled line search.
+                break (xp, fp, fp_res);
+            }
+        };
+
+        // Spectral parameter update: σ = <s,s>/<s,y>.
+        let s_k: Vec<f64> = xp.iter().zip(&x_k).map(|(a, b)| a - b).collect();
+        let y_k: Vec<f64> = fp_res.iter().zip(&f_k_res).map(|(a, b)| a - b).collect();
+        let ss = nk_dot(&s_k, &s_k);
+        let sy = nk_dot(&s_k, &y_k);
+        sigma_k = if sy != 0.0 { ss / sy } else { 1.0 };
+
+        x_k = xp;
+        f_k_res = fp_res;
+        f_k = fp;
+        prev_fs.push_back(fp);
+        if prev_fs.len() > M {
+            prev_fs.pop_front();
+        }
+    }
+
+    let converged = f_k.sqrt() < ftol * f0_norm + fatol;
+    Ok(MultivariateRootResult {
+        x: x_k,
+        fun: f_k_res,
+        converged,
+        message: if converged {
+            "df_sane converged".to_string()
+        } else {
+            "df_sane reached maxiter without converging".to_string()
+        },
+        iterations: maxiter,
+        function_calls: nfev,
+    })
+}
+
 /// the Gauss-Newton method; when λ is large, it approaches gradient descent.
 ///
 /// # Arguments
@@ -2270,8 +2393,8 @@ mod tests {
         lm_root, root,
     };
     use crate::{
-        ConvergenceStatus, RootMethod, RootOptions, bisect, brenth, brentq, halley, newton,
-        newton_krylov, newton_scalar, ridder, root_scalar, secant, toms748,
+        ConvergenceStatus, RootMethod, RootOptions, bisect, brenth, brentq, df_sane, halley,
+        newton, newton_krylov, newton_scalar, ridder, root_scalar, secant, toms748,
     };
 
     #[derive(Debug, Serialize)]
@@ -2377,6 +2500,23 @@ mod tests {
             Some(cubic(result.root)),
             301,
         );
+    }
+
+    #[test]
+    fn df_sane_finds_roots() {
+        // F(x) = [x0+x1-3, x0^2+x1^2-5]; root (2,1).
+        let f1 = |x: &[f64]| vec![x[0] + x[1] - 3.0, x[0] * x[0] + x[1] * x[1] - 5.0];
+        let r = df_sane(f1, &[2.0, 0.5], 1e-8, 1000).unwrap();
+        assert!(r.converged, "{}", r.message);
+        let fr: f64 = r.fun.iter().map(|v| v * v).sum::<f64>().sqrt();
+        assert!(fr < 1e-6, "||F|| = {fr}");
+
+        // Powell singular-ish smooth system with root at origin-shifted point.
+        let f2 = |x: &[f64]| vec![(x[0] - 1.0).powi(3) - x[1] + 1.0, x[1] - 2.0];
+        let r2 = df_sane(f2, &[2.0, 3.0], 1e-8, 2000).unwrap();
+        assert!(r2.converged, "{}", r2.message);
+        // root: x1=2, (x0-1)^3 = x1-1 = 1 -> x0 = 2.
+        assert!((r2.x[0] - 2.0).abs() < 1e-4 && (r2.x[1] - 2.0).abs() < 1e-4, "x = {:?}", r2.x);
     }
 
     #[test]
