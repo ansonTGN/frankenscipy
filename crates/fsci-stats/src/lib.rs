@@ -7278,6 +7278,42 @@ impl InvWishart {
     }
 }
 
+/// The normal-inverse-gamma distribution over `(x, σ²)`, matching
+/// `scipy.stats.normal_inverse_gamma(mu, lmbda, a, b)`: `x | σ² ~
+/// Normal(μ, σ²/λ)`, `σ² ~ InvGamma(a, b)`.
+pub struct NormalInverseGamma {
+    mu: f64,
+    lmbda: f64,
+    a: f64,
+    b: f64,
+}
+
+impl NormalInverseGamma {
+    /// Create the distribution with location `mu`, precision-scale `lmbda`, and
+    /// inverse-gamma shape/scale `a`/`b` (all of `lmbda`, `a`, `b` positive).
+    pub fn new(mu: f64, lmbda: f64, a: f64, b: f64) -> Self {
+        Self { mu, lmbda, a, b }
+    }
+
+    /// Joint log probability density at `(x, s2)`; `-inf` for `s2 ≤ 0`.
+    pub fn logpdf(&self, x: f64, s2: f64) -> f64 {
+        if s2 <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        let two_pi = 2.0 * std::f64::consts::PI;
+        0.5 * self.lmbda.ln() - 0.5 * two_pi.ln()
+            + self.a * self.b.ln()
+            - ln_gamma(self.a)
+            - (self.a + 1.5) * s2.ln()
+            - (self.lmbda * (x - self.mu).powi(2) + 2.0 * self.b) / (2.0 * s2)
+    }
+
+    /// Joint probability density at `(x, s2)`.
+    pub fn pdf(&self, x: f64, s2: f64) -> f64 {
+        self.logpdf(x, s2).exp()
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Von Mises Distribution
 // ══════════════════════════════════════════════════════════════════════
@@ -42429,6 +42465,14 @@ mod tests {
         let best = ppcc_max(&x, (0.0, 1.0));
         assert!((best - 0.35779018).abs() < 1e-4, "ppcc_max {best}");
         assert!(ppcc_plot(&x, 2.0, -2.0, 5).is_err());
+    }
+
+    #[test]
+    fn normal_inverse_gamma_matches_scipy() {
+        let d = NormalInverseGamma::new(1.0, 2.0, 3.0, 4.0);
+        assert!((d.pdf(1.5, 2.0) - 0.09529372143087414).abs() < 1e-14);
+        assert!((d.logpdf(1.5, 2.0) - (-2.3507913526447277)).abs() < 1e-12);
+        assert_eq!(d.logpdf(1.5, -1.0), f64::NEG_INFINITY);
     }
 
     #[test]
