@@ -1315,6 +1315,111 @@ impl BarycentricInterpolator {
     }
 }
 
+/// Floater-Hormann barycentric *rational* interpolator with no poles on the
+/// real axis (C∞ smooth). Matches `scipy.interpolate.FloaterHormannInterpolator`.
+///
+/// Blends `n - d` polynomials of degree `d` (`0 ≤ d < n`) into a rational
+/// interpolant of approximation order `O(h^{d+1})`. `d = n - 1` reduces to
+/// polynomial interpolation. The barycentric weights follow Floater & Hormann
+/// (2007), Eq. (18): `w_k = (−1)^{k−d} Σ_i Π_{j≠k} 1/|x_k − x_j|`.
+pub struct FloaterHormannInterpolator {
+    xi: Vec<f64>,
+    yi: Vec<f64>,
+    wi: Vec<f64>,
+}
+
+impl FloaterHormannInterpolator {
+    pub fn new(xi: &[f64], yi: &[f64], d: usize) -> Result<Self, InterpError> {
+        if xi.len() != yi.len() {
+            return Err(InterpError::LengthMismatch {
+                x_len: xi.len(),
+                y_len: yi.len(),
+            });
+        }
+        let n = xi.len();
+        if n == 0 {
+            return Err(InterpError::TooFewPoints {
+                minimum: 1,
+                actual: 0,
+            });
+        }
+        if d >= n {
+            return Err(InterpError::InvalidArgument {
+                detail: format!("d must satisfy 0 <= d < n (got d={d}, n={n})"),
+            });
+        }
+        for i in 0..n {
+            for j in i + 1..n {
+                if (xi[i] - xi[j]).abs() <= 1e-15 {
+                    return Err(InterpError::InvalidArgument {
+                        detail: format!("duplicate interpolation nodes at indices {i} and {j}"),
+                    });
+                }
+            }
+        }
+
+        let mut wi = vec![0.0_f64; n];
+        for k in 0..n {
+            let lo = k.saturating_sub(d);
+            let hi = (k + 1).min(n - d); // exclusive
+            let mut wk = 0.0_f64;
+            for i in lo..hi {
+                // Π_{j=i..=i+d, j≠k} 1/|x_k − x_j|.
+                let mut prod = 1.0_f64;
+                for j in i..=i + d {
+                    if j != k {
+                        prod *= (xi[k] - xi[j]).abs();
+                    }
+                }
+                wk += 1.0 / prod;
+            }
+            let sign = if (k as i64 - d as i64).rem_euclid(2) == 0 {
+                1.0
+            } else {
+                -1.0
+            };
+            wi[k] = sign * wk;
+        }
+
+        Ok(Self {
+            xi: xi.to_vec(),
+            yi: yi.to_vec(),
+            wi,
+        })
+    }
+
+    /// The barycentric weights of the rational interpolant.
+    pub fn weights(&self) -> &[f64] {
+        &self.wi
+    }
+
+    pub fn eval(&self, x: f64) -> f64 {
+        if !x.is_finite() {
+            return f64::NAN;
+        }
+        for (&xi, &yi) in self.xi.iter().zip(self.yi.iter()) {
+            if (x - xi).abs() <= 1e-15 {
+                return yi;
+            }
+        }
+        let mut numerator = 0.0;
+        let mut denominator = 0.0;
+        for ((&xi, &yi), &wi) in self.xi.iter().zip(self.yi.iter()).zip(self.wi.iter()) {
+            let term = wi / (x - xi);
+            numerator += term * yi;
+            denominator += term;
+        }
+        if denominator == 0.0 {
+            return f64::NAN;
+        }
+        numerator / denominator
+    }
+
+    pub fn eval_many(&self, xs: &[f64]) -> Vec<f64> {
+        par_query_map(xs, self.xi.len(), |&x| self.eval(x))
+    }
+}
+
 /// One-shot barycentric interpolation: build a `BarycentricInterpolator`
 /// from `(xi, yi)` and evaluate it at every point in `x_new`.
 ///
@@ -7508,6 +7613,43 @@ mod tests {
             err,
             InterpError::InvalidArgument { detail } if detail == "0<=der=3<=k=2 must hold"
         ));
+    }
+
+    #[test]
+    fn floater_hormann_matches_scipy() {
+        let x = [0.0_f64, 1.0, 2.0, 3.0, 4.0, 5.0];
+        let y: Vec<f64> = x.iter().map(|&v| v.sin()).collect();
+
+        // scipy.interpolate.FloaterHormannInterpolator(x, sin(x), d=3)
+        let fh = FloaterHormannInterpolator::new(&x, &y, 3).unwrap();
+        let exp_w = [
+            -0.16666667, 0.66666667, -1.16666667, 1.16666667, -0.66666667, 0.16666667,
+        ];
+        for (g, e) in fh.weights().iter().zip(exp_w.iter()) {
+            assert!((g - e).abs() < 1e-7, "w {g} vs {e}");
+        }
+        let xs = [0.5, 2.5, 4.2];
+        let exp = [0.4901548, 0.60070277, -0.87092117];
+        for (g, e) in fh.eval_many(&xs).iter().zip(exp.iter()) {
+            assert!((g - e).abs() < 1e-6, "eval {g} vs {e}");
+        }
+        // interpolation property: exact at the nodes.
+        for (&xi, &yi) in x.iter().zip(y.iter()) {
+            assert!((fh.eval(xi) - yi).abs() < 1e-12);
+        }
+
+        // d = 1
+        let fh1 = FloaterHormannInterpolator::new(&x, &y, 1).unwrap();
+        let exp_w1 = [-1.0, 2.0, -2.0, 2.0, -2.0, 1.0];
+        for (g, e) in fh1.weights().iter().zip(exp_w1.iter()) {
+            assert!((g - e).abs() < 1e-7, "w1 {g} vs {e}");
+        }
+        let exp1 = [0.48573853, 0.60411012, -0.86103101];
+        for (g, e) in fh1.eval_many(&xs).iter().zip(exp1.iter()) {
+            assert!((g - e).abs() < 1e-6, "eval1 {g} vs {e}");
+        }
+        // d >= n rejected.
+        assert!(FloaterHormannInterpolator::new(&x, &y, 6).is_err());
     }
 
     #[test]
