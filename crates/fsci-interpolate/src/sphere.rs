@@ -27,7 +27,9 @@ struct SphereResult {
 
 /// FITPACK `fpsphe` for `iopt >= 0` (automatic knots).
 #[allow(clippy::needless_range_loop, clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn fpsphe(
+    iopt: i32,
     m: usize,
     teta: &[f64], // 1-based, len m+1
     phi: &[f64],
@@ -39,6 +41,8 @@ fn fpsphe(
     eta: f64,
     tol: f64,
     maxit: usize,
+    // For iopt < 0: user-supplied full knot vectors (1-based, len nt0+1 / np0+1).
+    provided: Option<(usize, Vec<f64>, usize, Vec<f64>)>,
 ) -> SphereResult {
     let con1 = 0.1f64;
     let con9 = 0.9f64;
@@ -96,8 +100,21 @@ fn fpsphe(
     let mut sup;
     let mut fpms;
 
-    // ── least-squares constant approximation (the s=inf / p=0 limit) ──
-    {
+    if iopt < 0 {
+        // Least-squares spline for a user-given set of knots.
+        let (pnt, ptt, pnp, ptp) = provided.expect("iopt<0 requires provided knots");
+        nt = pnt;
+        np = pnp;
+        for i in 1..=nt {
+            tt[i] = ptt[i];
+        }
+        for i in 1..=np {
+            tp[i] = ptp[i];
+        }
+        sup = 0.0; // unused for iopt<0
+        fpms = 0.0;
+    } else {
+        // ── least-squares constant approximation (the s=inf / p=0 limit) ──
         sup = 0.0;
         let mut d1 = 0.0f64;
         let mut d2 = 0.0f64;
@@ -408,6 +425,14 @@ fn fpsphe(
         // repack spherical coeffs -> standard bicubic.
         let mut ftmp = ff.clone();
         fprpsp(nt, np, &coco, &cosi, &mut c, &mut ftmp, ncoff);
+        if iopt < 0 {
+            do_finish = true;
+            if fp <= 0.0 {
+                ier = -1;
+                fp = 0.0;
+            }
+            break;
+        }
         fpms = fp - s;
         if fpms.abs() <= acc {
             do_finish = true;
@@ -938,10 +963,98 @@ pub fn smooth_sphere_bivariate_spline(
         rv[i] = r[i - 1];
         wv[i] = w.map_or(1.0, |ww| ww[i - 1]);
     }
-    let res = fpsphe(m, &tv, &pv, &rv, &wv, s, ntest, npest, eps, 1e-3, 20);
+    let res = fpsphe(0, m, &tv, &pv, &rv, &wv, s, ntest, npest, eps, 1e-3, 20, None);
     if res.ier > 0 {
         return Err(InterpError::InvalidArgument {
             detail: format!("sphere fit failed (ier={})", res.ier),
+        });
+    }
+    Ok((res.tt, res.tp, res.c))
+}
+
+/// Weighted least-squares bicubic spherical spline with user-given interior
+/// knots, matching `scipy.interpolate.LSQSphereBivariateSpline(theta, phi, r,
+/// tt, tp, w, eps)` (FITPACK `sphere` with `iopt=-1`). `tt_interior` are the
+/// interior theta knots in `(0, pi)`; `tp_interior` the interior phi knots in
+/// `(0, 2pi)`. Returns the tck tuple `(tt, tp, c)` for [`crate::bisplev`].
+#[allow(clippy::type_complexity)]
+pub fn lsq_sphere_bivariate_spline(
+    theta: &[f64],
+    phi: &[f64],
+    r: &[f64],
+    tt_interior: &[f64],
+    tp_interior: &[f64],
+    w: Option<&[f64]>,
+    eps: f64,
+) -> Result<(Vec<f64>, Vec<f64>, Vec<f64>), InterpError> {
+    let m = theta.len();
+    if phi.len() != m || r.len() != m {
+        return Err(InterpError::InvalidArgument {
+            detail: "theta, phi, r must have equal length".to_string(),
+        });
+    }
+    for &t in tt_interior {
+        if !(0.0..PI).contains(&t) {
+            return Err(InterpError::InvalidArgument {
+                detail: "interior theta knots must be in (0, pi)".to_string(),
+            });
+        }
+    }
+    for &p in tp_interior {
+        if !(0.0..(2.0 * PI)).contains(&p) {
+            return Err(InterpError::InvalidArgument {
+                detail: "interior phi knots must be in (0, 2pi)".to_string(),
+            });
+        }
+    }
+    // Full knot vectors: 4 boundary copies at 0/pi (theta) and 0/2pi (phi).
+    let nt = 8 + tt_interior.len();
+    let np = 8 + tp_interior.len();
+    let ntest = nt.max(8);
+    let npest = np.max(8);
+    let mut ptt = vec![0.0f64; ntest + 2];
+    let mut ptp = vec![0.0f64; npest + 2];
+    for i in 1..=4 {
+        ptt[i] = 0.0;
+        ptt[nt - 4 + i] = PI;
+        ptp[i] = 0.0;
+        ptp[np - 4 + i] = 2.0 * PI;
+    }
+    for (j, &t) in tt_interior.iter().enumerate() {
+        ptt[4 + 1 + j] = t;
+    }
+    for (j, &p) in tp_interior.iter().enumerate() {
+        ptp[4 + 1 + j] = p;
+    }
+
+    let mut tv = vec![0.0f64; m + 2];
+    let mut pv = vec![0.0f64; m + 2];
+    let mut rv = vec![0.0f64; m + 2];
+    let mut wv = vec![0.0f64; m + 2];
+    for i in 1..=m {
+        tv[i] = theta[i - 1];
+        pv[i] = phi[i - 1];
+        rv[i] = r[i - 1];
+        wv[i] = w.map_or(1.0, |ww| ww[i - 1]);
+    }
+    let res = fpsphe(
+        -1,
+        m,
+        &tv,
+        &pv,
+        &rv,
+        &wv,
+        0.0,
+        ntest,
+        npest,
+        eps,
+        1e-3,
+        20,
+        Some((nt, ptt, np, ptp)),
+    );
+    if res.ier > 0 {
+        return Err(InterpError::InvalidArgument {
+            detail: format!("sphere LSQ fit failed (ier={})", res.ier),
         });
     }
     Ok((res.tt, res.tp, res.c))
@@ -988,6 +1101,44 @@ mod tests {
             0.7803966668337577,
             0.766976490927095,
             0.7222708478490245,
+        ];
+        for (a, b) in flat.iter().zip(want.iter()) {
+            assert!((a - b).abs() <= 1e-6, "{a} vs {b}");
+        }
+    }
+
+    #[test]
+    fn lsq_sphere_bivariate_spline_matches_scipy() {
+        let (nt, nph) = (11usize, 14usize);
+        let (mut th, mut ph, mut r) = (vec![], vec![], vec![]);
+        for i in 0..nt {
+            for j in 0..nph {
+                let t = PI * (i as f64 + 0.5) / nt as f64;
+                let p = 2.0 * PI * j as f64 / nph as f64;
+                th.push(t);
+                ph.push(p);
+                r.push(1.0 + 0.3 * t.cos() + 0.2 * p.sin() * t.sin());
+            }
+        }
+        let tt = [PI / 2.0];
+        let tp = [PI / 2.0, PI, 3.0 * PI / 2.0];
+        let (ttf, tpf, c) =
+            super::lsq_sphere_bivariate_spline(&th, &ph, &r, &tt, &tp, None, 1e-16).unwrap();
+        assert_eq!(ttf.len(), 9);
+        assert_eq!(tpf.len(), 11);
+        let ev = bisplev(&[0.5, 1.5, 2.5], &[0.5, 3.0, 5.0], &(ttf, tpf, c, 3, 3)).unwrap();
+        let flat: Vec<f64> = ev.into_iter().flatten().collect();
+        // scipy.interpolate.LSQSphereBivariateSpline oracle.
+        let want = [
+            1.3079668420357589,
+            1.2761503091421216,
+            1.1701622376431176,
+            1.114257725617918,
+            1.0479486099139708,
+            0.8270579390240861,
+            0.8173569197622835,
+            0.7777814343618882,
+            0.6459465361268361,
         ];
         for (a, b) in flat.iter().zip(want.iter()) {
             assert!((a - b).abs() <= 1e-6, "{a} vs {b}");
