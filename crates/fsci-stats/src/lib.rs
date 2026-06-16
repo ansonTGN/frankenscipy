@@ -3775,6 +3775,75 @@ impl StudentizedRange {
         let upper = (df + 10.0 * (2.0 * df).sqrt()).max(50.0);
         simpson_integrate_adaptive(integrand, 1e-10, upper, 128, 1e-9, 1e-12, 14).clamp(0.0, 1.0)
     }
+
+    /// Density of the range of `k` standard normals at `w`: `d/dw F_R(w)`.
+    /// `F_R'(w) = k(k-1) ∫ φ(x)·φ(x+w)·[Φ(x+w) − Φ(x)]^{k-2} dx`.
+    fn range_pdf(k: usize, w: f64) -> f64 {
+        if w <= 0.0 || !w.is_finite() {
+            return 0.0;
+        }
+        let k_f = k as f64;
+        let integrand = |x: f64| {
+            let inv = 1.0 / (2.0 * PI).sqrt();
+            let phi_x = (-0.5 * x * x).exp() * inv;
+            let xw = x + w;
+            let phi_xw = (-0.5 * xw * xw).exp() * inv;
+            let diff = (standard_normal_cdf(xw) - standard_normal_cdf(x)).max(0.0);
+            k_f * (k_f - 1.0) * phi_x * phi_xw * diff.powf(k_f - 2.0)
+        };
+        simpson_integrate_adaptive(integrand, -12.0, 12.0, 64, 1e-10, 1e-14, 12).max(0.0)
+    }
+
+    /// Probability density function `f_Q(q)`.
+    ///
+    /// `f_Q(q) = ∫_0^∞ f_chi2(v; df) · F_R'(q·s) · s dv`, `s = sqrt(v/df)`.
+    pub fn pdf(&self, q: f64) -> f64 {
+        if q <= 0.0 || !q.is_finite() {
+            return 0.0;
+        }
+        let df = self.df;
+        let k = self.k;
+        let half_df = df / 2.0;
+        let log_norm = half_df * 2.0_f64.ln() + ln_gamma(half_df);
+        let integrand = |v: f64| {
+            if v <= 0.0 {
+                return 0.0;
+            }
+            let log_chi2_pdf = (half_df - 1.0) * v.ln() - v / 2.0 - log_norm;
+            let chi2_pdf = log_chi2_pdf.exp();
+            let s = (v / df).sqrt();
+            chi2_pdf * Self::range_pdf(k, q * s) * s
+        };
+        let upper = (df + 10.0 * (2.0 * df).sqrt()).max(50.0);
+        simpson_integrate_adaptive(integrand, 1e-10, upper, 128, 1e-9, 1e-12, 14).max(0.0)
+    }
+
+    /// Percent-point (inverse CDF) function via bisection on the monotone CDF.
+    pub fn ppf(&self, p: f64) -> f64 {
+        if p <= 0.0 {
+            return 0.0;
+        }
+        if p >= 1.0 {
+            return f64::INFINITY;
+        }
+        let mut lo = 0.0_f64;
+        let mut hi = 1.0_f64;
+        while self.cdf(hi) < p && hi < 1e6 {
+            hi *= 2.0;
+        }
+        for _ in 0..100 {
+            let mid = 0.5 * (lo + hi);
+            if self.cdf(mid) < p {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+            if hi - lo < 1e-10 * (1.0 + hi) {
+                break;
+            }
+        }
+        0.5 * (lo + hi)
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -42892,6 +42961,27 @@ pub fn kendall_distance(rank1: &[usize], rank2: &[usize]) -> usize {
 )]
 mod tests {
     use super::*;
+
+    #[test]
+    fn studentized_range_pdf_ppf_match_scipy() {
+        // scipy.stats.studentized_range pdf/ppf references (1.17.1).
+        let cases = [
+            (3.0_f64, 3usize, 10.0_f64, 0.1478075591_f64),
+            (2.5, 4, 20.0, 0.3287897779),
+        ];
+        for &(q, k, df, pdf_exp) in &cases {
+            let d = StudentizedRange::new(k, df);
+            let pdf = d.pdf(q);
+            assert!((pdf - pdf_exp).abs() < 1e-6, "pdf({q},{k},{df})={pdf} vs {pdf_exp}");
+        }
+        // ppf(0.95, k=3, df=10) ≈ 3.876776750
+        let d = StudentizedRange::new(3, 10.0);
+        let q95 = d.ppf(0.95);
+        assert!((q95 - 3.876776750013158).abs() < 1e-4, "ppf {q95}");
+        assert!((d.cdf(q95) - 0.95).abs() < 1e-6, "ppf round-trip");
+        // pdf integrates toward 1 via cdf consistency: cdf large q ≈ 1.
+        assert!(d.cdf(20.0) > 0.999999, "cdf tail");
+    }
 
     #[test]
     fn ppcc_plot_max_match_scipy() {
