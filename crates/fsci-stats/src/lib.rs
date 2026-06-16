@@ -7665,6 +7665,50 @@ impl GaussHyper {
     }
 }
 
+/// The double Pareto-lognormal distribution, matching
+/// `scipy.stats.dpareto_lognorm(u, s, a, b)` (support `x > 0`).
+pub struct DparetoLognorm {
+    u: f64,
+    s: f64,
+    a: f64,
+    b: f64,
+}
+
+impl DparetoLognorm {
+    /// Create the distribution with lognormal location `u`, scale `s > 0`, and
+    /// Pareto tail indices `a, b > 0`.
+    pub fn new(u: f64, s: f64, a: f64, b: f64) -> Self {
+        Self { u, s, a, b }
+    }
+
+    /// Log probability density at `x` (`-inf` for `x ≤ 0`).
+    pub fn logpdf(&self, x: f64) -> f64 {
+        if x <= 0.0 || !x.is_finite() {
+            return f64::NEG_INFINITY;
+        }
+        let half_ln_2pi = 0.5 * (2.0 * std::f64::consts::PI).ln();
+        // log standard-normal pdf.
+        let log_phi = |t: f64| -0.5 * t * t - half_ln_2pi;
+        // log Mills ratio: log Φ(−t) − log φ(t).
+        let log_r = |t: f64| fsci_special::log_ndtr_scalar(-t) - log_phi(t);
+
+        let log_y = x.ln();
+        let z = (log_y - self.u) / self.s;
+        let x1 = self.a * self.s - z;
+        let x2 = self.b * self.s + z;
+        let (r1, r2) = (log_r(x1), log_r(x2));
+        let m = r1.max(r2);
+        let logaddexp = m + ((r1 - m).exp() + (r2 - m).exp()).ln();
+
+        self.a.ln() + self.b.ln() - (self.a + self.b).ln() - log_y + log_phi(z) + logaddexp
+    }
+
+    /// Probability density at `x`.
+    pub fn pdf(&self, x: f64) -> f64 {
+        self.logpdf(x).exp()
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Von Mises Distribution
 // ══════════════════════════════════════════════════════════════════════
@@ -42816,6 +42860,14 @@ mod tests {
         let best = ppcc_max(&x, (0.0, 1.0));
         assert!((best - 0.35779018).abs() < 1e-4, "ppcc_max {best}");
         assert!(ppcc_plot(&x, 2.0, -2.0, 5).is_err());
+    }
+
+    #[test]
+    fn dpareto_lognorm_matches_scipy() {
+        let d = DparetoLognorm::new(0.0, 0.5, 2.0, 1.5);
+        assert!((d.pdf(1.5) - 0.2603941703642507).abs() < 1e-12, "pdf {}", d.pdf(1.5));
+        assert!((d.logpdf(1.5) - (-1.345558756132381)).abs() < 1e-10);
+        assert_eq!(d.logpdf(0.0), f64::NEG_INFINITY);
     }
 
     #[test]
