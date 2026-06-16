@@ -5850,6 +5850,52 @@ pub fn iircomb(
     Ok(BaCoeffs { b, a })
 }
 
+/// Complete IIR digital filter design from passband/stopband specifications.
+///
+/// Matches `scipy.signal.iirdesign(wp, ws, gpass, gstop, ftype=family)` for the
+/// scalar (low-pass / high-pass) case: selects the minimum order and the natural
+/// frequency via the family's order estimator (`buttord`/`cheb1ord`/`cheb2ord`/
+/// `ellipord`), then realizes the filter with [`iirfilter`]. The band type is
+/// low-pass when `wp < ws` and high-pass when `wp > ws`. `gpass`/`gstop` are the
+/// maximum passband loss and minimum stopband attenuation in dB.
+///
+/// Band-pass / band-stop designs (vector `wp`/`ws`) are not supported because the
+/// order estimators are scalar; `IirFamily::Bessel` is rejected (SciPy has no
+/// Bessel order estimator — use [`iirfilter`] with an explicit order instead).
+pub fn iirdesign(
+    wp: f64,
+    ws: f64,
+    gpass: f64,
+    gstop: f64,
+    family: IirFamily,
+) -> Result<BaCoeffs, SignalError> {
+    let (order, wn) = match family {
+        IirFamily::Butterworth => buttord(wp, ws, gpass, gstop)?,
+        IirFamily::Chebyshev1 => cheb1ord(wp, ws, gpass, gstop)?,
+        IirFamily::Chebyshev2 => cheb2ord(wp, ws, gpass, gstop)?,
+        IirFamily::Elliptic => ellipord(wp, ws, gpass, gstop)?,
+        IirFamily::Bessel => {
+            return Err(SignalError::InvalidArgument(
+                "iirdesign has no Bessel order estimator; use iirfilter with an explicit order"
+                    .to_string(),
+            ));
+        }
+    };
+    let btype = if wp < ws {
+        FilterType::Lowpass
+    } else {
+        FilterType::Highpass
+    };
+    iirfilter(
+        order as usize,
+        &[wn],
+        btype,
+        family,
+        Some(gpass),
+        Some(gstop),
+    )
+}
+
 /// General IIR filter design dispatcher.
 pub fn iirfilter(
     order: usize,
@@ -16185,6 +16231,54 @@ mod tests {
         )
         .expect("iirfilter butter");
         assert_ba_close(&direct, &dispatch, 1e-10, "butter");
+    }
+
+    #[test]
+    fn iirdesign_matches_scipy() {
+        let chk = |got: &BaCoeffs, eb: &[f64], ea: &[f64], msg: &str| {
+            assert_eq!(got.b.len(), eb.len(), "{msg} b len");
+            assert_eq!(got.a.len(), ea.len(), "{msg} a len");
+            for (g, e) in got.b.iter().zip(eb) {
+                assert!((g - e).abs() < 1e-6, "{msg} b {g} vs {e}");
+            }
+            for (g, e) in got.a.iter().zip(ea) {
+                assert!((g - e).abs() < 1e-6, "{msg} a {g} vs {e}");
+            }
+        };
+        // scipy.signal.iirdesign(0.2, 0.3, 1, 40, ftype=...) lowpass.
+        let bw = iirdesign(0.2, 0.3, 1.0, 40.0, IirFamily::Butterworth).unwrap();
+        chk(
+            &bw,
+            &[
+                2e-07, 2.43e-06, 1.334e-05, 4.448e-05, 0.00010008, 0.00016013, 0.00018682,
+                0.00016013, 0.00010008, 4.448e-05, 1.334e-05, 2.43e-06, 2e-07,
+            ],
+            &[
+                1.0, -6.93084173, 22.71842591, -46.3296186, 65.23096894, -66.62309861, 50.50574554,
+                -28.58484825, 11.97050478, -3.61292733, 0.7452383, -0.094242, 0.00552119,
+            ],
+            "butter LP",
+        );
+        let c1 = iirdesign(0.2, 0.3, 1.0, 40.0, IirFamily::Chebyshev1).unwrap();
+        chk(
+            &c1,
+            &[4.637e-05, 0.00027823, 0.00069558, 0.00092744, 0.00069558, 0.00027823, 4.637e-05],
+            &[1.0, -4.86940942, 10.38072307, -12.3367013, 8.59693071, -3.32677707, 0.55856393],
+            "cheby1 LP",
+        );
+        let el = iirdesign(0.2, 0.3, 1.0, 40.0, IirFamily::Elliptic).unwrap();
+        chk(
+            &el,
+            &[0.01967436, -0.01713698, 0.0332899, -0.01713698, 0.01967436],
+            &[1.0, -3.03300954, 3.81179517, -2.29109673, 0.55535694],
+            "ellip LP",
+        );
+        // Highpass: wp > ws.
+        let hp = iirdesign(0.3, 0.2, 1.0, 40.0, IirFamily::Butterworth).unwrap();
+        assert!((hp.b[0] - 0.02731879).abs() < 1e-6, "butter HP b0 {}", hp.b[0]);
+        assert!((hp.a[1] + 5.13157448).abs() < 1e-6, "butter HP a1 {}", hp.a[1]);
+        // Bessel has no order estimator -> error.
+        assert!(iirdesign(0.2, 0.3, 1.0, 40.0, IirFamily::Bessel).is_err());
     }
 
     #[test]
