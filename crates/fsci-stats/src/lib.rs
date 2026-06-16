@@ -7514,6 +7514,36 @@ impl MatrixT {
     }
 }
 
+/// The generalized inverse Gaussian distribution, matching
+/// `scipy.stats.geninvgauss(p, b)` (support `x > 0`).
+pub struct GenInvGauss {
+    p: f64,
+    b: f64,
+}
+
+impl GenInvGauss {
+    /// Create the distribution with shape parameters `p` and `b > 0`.
+    pub fn new(p: f64, b: f64) -> Self {
+        Self { p, b }
+    }
+
+    /// Log probability density at `x` (`-inf` for `x ≤ 0`):
+    /// `(p−1)ln x − b(x+1/x)/2 − ln 2 − ln K_p(b)`.
+    pub fn logpdf(&self, x: f64) -> f64 {
+        if x <= 0.0 {
+            return f64::NEG_INFINITY;
+        }
+        // ln K_p(b) = ln(K_p(b)·e^b) − b, K_{-p}=K_p so use |p|.
+        let ln_kp = fsci_special::bessel::kve_scalar(self.p.abs(), self.b).ln() - self.b;
+        (self.p - 1.0) * x.ln() - self.b * (x + 1.0 / x) / 2.0 - 2.0_f64.ln() - ln_kp
+    }
+
+    /// Probability density at `x`.
+    pub fn pdf(&self, x: f64) -> f64 {
+        self.logpdf(x).exp()
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Von Mises Distribution
 // ══════════════════════════════════════════════════════════════════════
@@ -42665,6 +42695,17 @@ mod tests {
         let best = ppcc_max(&x, (0.0, 1.0));
         assert!((best - 0.35779018).abs() < 1e-4, "ppcc_max {best}");
         assert!(ppcc_plot(&x, 2.0, -2.0, 5).is_err());
+    }
+
+    #[test]
+    fn geninvgauss_matches_scipy() {
+        let d = GenInvGauss::new(0.5, 2.0);
+        assert!((d.pdf(1.5) - 0.38993931144548233).abs() < 1e-12);
+        assert!((d.logpdf(1.5) - (-0.9417641636454488)).abs() < 1e-10);
+        // negative p uses K_{|p|}.
+        let d2 = GenInvGauss::new(-1.0, 3.0);
+        assert!((d2.pdf(0.8) - 0.8986268490341897).abs() < 1e-12);
+        assert_eq!(d.logpdf(-1.0), f64::NEG_INFINITY);
     }
 
     #[test]
