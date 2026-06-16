@@ -1,6 +1,10 @@
 #![feature(portable_simd)]
 #![forbid(unsafe_code)]
 
+// Cosine-sine decomposition building blocks (LAPACK dorcsd/dorbdb/dbbcsd port,
+// in progress — see bead frankenscipy-5tmu1).
+mod cossin;
+
 pub use fsci_runtime::SyncSharedAuditLedger;
 use fsci_runtime::{
     AuditAction, AuditEvent, AuditLedger, DecisionSignals, PolicyAction, PolicyController,
