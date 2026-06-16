@@ -741,6 +741,78 @@ pub fn centered_discrepancy(sample: &[f64], dimension: usize) -> Result<f64, Sta
     Ok(leading - 2.0 / n_f * single + double / (n_f * n_f))
 }
 
+/// Centered discrepancy in the *iterative* form, matching
+/// `scipy.stats.qmc.discrepancy(sample, iterative=True, method='CD')`.
+///
+/// Identical to [`centered_discrepancy`] except the sums are normalized by
+/// `n + 1` instead of `n` (anticipating one more point will be added). The
+/// result is the value to pass as `initial_disc` to [`update_discrepancy`].
+pub fn centered_discrepancy_iterative(
+    sample: &[f64],
+    dimension: usize,
+) -> Result<f64, StatsError> {
+    if dimension == 0 {
+        return Err(StatsError::InvalidArgument(
+            "centered_discrepancy_iterative: dimension must be ≥ 1".to_string(),
+        ));
+    }
+    if !sample.len().is_multiple_of(dimension) {
+        return Err(StatsError::InvalidArgument(format!(
+            "centered_discrepancy_iterative: sample.len() {} not a multiple of dimension {dimension}",
+            sample.len()
+        )));
+    }
+    for (idx, &v) in sample.iter().enumerate() {
+        if !v.is_finite() || !(0.0..=1.0).contains(&v) {
+            return Err(StatsError::InvalidArgument(format!(
+                "centered_discrepancy_iterative: sample[{idx}] = {v} outside [0, 1]"
+            )));
+        }
+    }
+    let n = sample.len() / dimension;
+    let leading = (13.0_f64 / 12.0).powi(dimension as i32);
+    let mut single = 0.0_f64;
+    for i in 0..n {
+        let mut prod = 1.0_f64;
+        for k in 0..dimension {
+            let centered = sample[i * dimension + k] - 0.5;
+            prod *= 1.0 + 0.5 * centered.abs() - 0.5 * centered * centered;
+        }
+        single += prod;
+    }
+    let mut double = 0.0_f64;
+    for i in 0..n {
+        for j in 0..n {
+            let mut prod = 1.0_f64;
+            for k in 0..dimension {
+                let xi = sample[i * dimension + k];
+                let xj = sample[j * dimension + k];
+                prod *=
+                    1.0 + 0.5 * (xi - 0.5).abs() + 0.5 * (xj - 0.5).abs() - 0.5 * (xi - xj).abs();
+            }
+            double += prod;
+        }
+    }
+    let m = (n + 1) as f64;
+    Ok(leading - 2.0 / m * single + double / (m * m))
+}
+
+/// Incrementally update the centered discrepancy when appending `x_new`,
+/// matching `scipy.stats.qmc.update_discrepancy(x_new, sample, initial_disc)`.
+///
+/// scipy's argument order (`x_new`, `sample`, `initial_disc`); a thin wrapper
+/// over [`update_centered_discrepancy`]. When `initial_disc` is the iterative
+/// form ([`centered_discrepancy_iterative`]) the result is the *standard*
+/// centered discrepancy of the augmented `(n+1)`-point sample.
+pub fn update_discrepancy(
+    x_new: &[f64],
+    sample: &[f64],
+    dimension: usize,
+    initial_disc: f64,
+) -> Result<f64, StatsError> {
+    update_centered_discrepancy(sample, dimension, initial_disc, x_new)
+}
+
 /// Compute the mixture L2 discrepancy MD²(P) of an `n × d` point set in
 /// `[0, 1)^d`, with `sample` row-major.
 ///
@@ -1946,6 +2018,33 @@ mod tests {
         for v in &out {
             assert_eq!(*v, 2.0);
         }
+    }
+
+    #[test]
+    fn iterative_discrepancy_and_update_match_scipy() {
+        // discrepancy(sample, iterative=True) uses (n+1) normalization, and
+        // update_discrepancy(x_new, sample, disc_iter) yields the STANDARD
+        // centered discrepancy of the augmented (n+1)-point design.
+        let s = [0.1, 0.3, 0.6, 0.2, 0.4, 0.8, 0.55, 0.45];
+        let di = centered_discrepancy_iterative(&s, 2).unwrap();
+        assert!((di - 0.088_665_486_111_111).abs() < 1e-12, "disc_iter = {di}");
+        let updated = update_discrepancy(&[0.7, 0.15], &s, 2, di).unwrap();
+        assert!(
+            (updated - 0.050_925_486_111_111).abs() < 1e-12,
+            "update = {updated}"
+        );
+        // The update equals a full standard recompute of the augmented design.
+        let mut full = s.to_vec();
+        full.extend_from_slice(&[0.7, 0.15]);
+        let recompute = centered_discrepancy(&full, 2).unwrap();
+        assert!((updated - recompute).abs() < 1e-12, "{updated} vs {recompute}");
+
+        // 3-D oracle.
+        let s3 = [0.1, 0.3, 0.5, 0.6, 0.2, 0.9, 0.4, 0.8, 0.1];
+        let di3 = centered_discrepancy_iterative(&s3, 3).unwrap();
+        assert!((di3 - 0.141_070_037_037_037).abs() < 1e-12, "3d disc_iter = {di3}");
+        let up3 = update_discrepancy(&[0.7, 0.15, 0.6], &s3, 3, di3).unwrap();
+        assert!((up3 - 0.095_580_912_037_037).abs() < 1e-12, "3d update = {up3}");
     }
 
     #[test]
