@@ -26934,6 +26934,306 @@ mod proptest_tests {
         digest
     }
 
+    #[derive(Clone, Debug)]
+    struct LowerBandEnvelopeProbe {
+        n: usize,
+        width: usize,
+        data: Vec<f64>,
+    }
+
+    impl LowerBandEnvelopeProbe {
+        fn from_lower_band(ab: &[Vec<f64>], width: usize) -> Self {
+            let n = ab[0].len();
+            let mut envelope = Self {
+                n,
+                width,
+                data: vec![0.0; (width + 1) * n],
+            };
+            for col in 0..n {
+                for offset in 0..=width {
+                    let row = col + offset;
+                    if row >= n {
+                        break;
+                    }
+                    let value = if offset < ab.len() {
+                        ab[offset][col]
+                    } else {
+                        0.0
+                    };
+                    envelope.set(row, col, value);
+                }
+            }
+            envelope
+        }
+
+        fn index(&self, row: usize, col: usize) -> Option<usize> {
+            let lower_row = row.max(col);
+            let lower_col = row.min(col);
+            let offset = lower_row - lower_col;
+            (offset <= self.width).then_some(offset * self.n + lower_col)
+        }
+
+        fn get(&self, row: usize, col: usize) -> f64 {
+            self.index(row, col).map_or(0.0, |idx| self.data[idx])
+        }
+
+        fn set(&mut self, row: usize, col: usize, value: f64) {
+            let idx = self
+                .index(row, col)
+                .expect("envelope update must stay inside explicit frontier");
+            self.data[idx] = value;
+        }
+
+        fn to_dense(&self) -> DMatrix<f64> {
+            DMatrix::<f64>::from_fn(self.n, self.n, |row, col| self.get(row, col))
+        }
+    }
+
+    fn lower_band_envelope_digest(envelope: &LowerBandEnvelopeProbe) -> u64 {
+        const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+        const FNV_PRIME: u64 = 0x100000001b3;
+
+        let mut digest = FNV_OFFSET;
+        for value in &envelope.data {
+            digest ^= value.to_bits();
+            digest = digest.wrapping_mul(FNV_PRIME);
+        }
+        digest
+    }
+
+    fn lower_band_probe_dmatrix_digest(matrix: &DMatrix<f64>) -> u64 {
+        const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+        const FNV_PRIME: u64 = 0x100000001b3;
+
+        let mut digest = FNV_OFFSET;
+        for value in matrix.iter() {
+            digest ^= value.to_bits();
+            digest = digest.wrapping_mul(FNV_PRIME);
+        }
+        digest
+    }
+
+    fn lower_band_frontier_rotations(n: usize, bandwidth: usize) -> Vec<(usize, f64, f64)> {
+        let stride = bandwidth + 2;
+        let mut rotations = Vec::new();
+        let mut p = 0usize;
+        while p + 1 < n {
+            let seed = (p + 3) as f64 * 0.037;
+            let tangent = seed.sin() * 0.125;
+            let c = 1.0 / (1.0 + tangent * tangent).sqrt();
+            let s = tangent * c;
+            rotations.push((p, c, s));
+            p += stride;
+        }
+        rotations
+    }
+
+    fn apply_adjacent_rotation_dense(matrix: &mut DMatrix<f64>, p: usize, c: f64, s: f64) {
+        let n = matrix.nrows();
+        let q = p + 1;
+        for row in 0..n {
+            let left = matrix[(row, p)];
+            let right = matrix[(row, q)];
+            matrix[(row, p)] = c * left - s * right;
+            matrix[(row, q)] = s * left + c * right;
+        }
+        for col in 0..n {
+            let top = matrix[(p, col)];
+            let bottom = matrix[(q, col)];
+            matrix[(p, col)] = c * top - s * bottom;
+            matrix[(q, col)] = s * top + c * bottom;
+        }
+    }
+
+    fn apply_adjacent_rotation_columns(matrix: &mut DMatrix<f64>, p: usize, c: f64, s: f64) {
+        let n = matrix.nrows();
+        let q = p + 1;
+        for row in 0..n {
+            let left = matrix[(row, p)];
+            let right = matrix[(row, q)];
+            matrix[(row, p)] = c * left - s * right;
+            matrix[(row, q)] = s * left + c * right;
+        }
+    }
+
+    fn apply_adjacent_rotation_envelope(
+        envelope: &mut LowerBandEnvelopeProbe,
+        p: usize,
+        c: f64,
+        s: f64,
+    ) {
+        let n = envelope.n;
+        let q = p + 1;
+        let app = envelope.get(p, p);
+        let apq = envelope.get(q, p);
+        let aqq = envelope.get(q, q);
+        let min_row = p.saturating_sub(envelope.width);
+        let max_row = (q + envelope.width).min(n - 1);
+
+        for k in min_row..=max_row {
+            if k == p || k == q {
+                continue;
+            }
+            let akp = envelope.get(k, p);
+            let akq = envelope.get(k, q);
+            let new_kp = c * akp - s * akq;
+            let new_kq = s * akp + c * akq;
+            if envelope.index(k, p).is_some() {
+                envelope.set(k, p, new_kp);
+            } else {
+                assert!(
+                    new_kp.abs() <= 1e-14,
+                    "rotation ({p},{q}) moved {new_kp:.17e} outside envelope at ({k},{p})"
+                );
+            }
+            if envelope.index(k, q).is_some() {
+                envelope.set(k, q, new_kq);
+            } else {
+                assert!(
+                    new_kq.abs() <= 1e-14,
+                    "rotation ({p},{q}) moved {new_kq:.17e} outside envelope at ({k},{q})"
+                );
+            }
+        }
+
+        let c2 = c * c;
+        let s2 = s * s;
+        let cs = c * s;
+        envelope.set(p, p, c2 * app - 2.0 * cs * apq + s2 * aqq);
+        envelope.set(q, q, s2 * app + 2.0 * cs * apq + c2 * aqq);
+        envelope.set(p, q, cs * (app - aqq) + (c2 - s2) * apq);
+    }
+
+    fn apply_frontier_rotations_envelope(
+        envelope: &mut LowerBandEnvelopeProbe,
+        rotations: &[(usize, f64, f64)],
+    ) {
+        for &(p, c, s) in rotations {
+            apply_adjacent_rotation_envelope(envelope, p, c, s);
+        }
+    }
+
+    fn apply_frontier_rotations_dense(matrix: &mut DMatrix<f64>, rotations: &[(usize, f64, f64)]) {
+        for &(p, c, s) in rotations {
+            apply_adjacent_rotation_dense(matrix, p, c, s);
+        }
+    }
+
+    fn lower_band_envelope_outside_width_max(matrix: &DMatrix<f64>, width: usize) -> f64 {
+        let mut max_abs = 0.0_f64;
+        for row in 0..matrix.nrows() {
+            for col in 0..matrix.ncols() {
+                if row.abs_diff(col) > width {
+                    max_abs = max_abs.max(matrix[(row, col)].abs());
+                }
+            }
+        }
+        max_abs
+    }
+
+    #[test]
+    fn lower_band_envelope_frontier_rotations_match_dense_oracle() {
+        for (n, bandwidth) in [(18usize, 4usize), (37, 8), (64, 12)] {
+            let envelope_width = bandwidth + 1;
+            let ab = make_lower_band_eig_probe(n, bandwidth);
+            let original = dmatrix_from_lower_band_eig_probe(&ab);
+            let rotations = lower_band_frontier_rotations(n, bandwidth);
+            let mut dense = original.clone();
+            apply_frontier_rotations_dense(&mut dense, &rotations);
+
+            let mut envelope = LowerBandEnvelopeProbe::from_lower_band(&ab, envelope_width);
+            apply_frontier_rotations_envelope(&mut envelope, &rotations);
+            let compact_dense = envelope.to_dense();
+            let max_abs = lower_band_probe_max_abs_dmatrix_diff(&compact_dense, &dense);
+            let outside_width = lower_band_envelope_outside_width_max(&dense, envelope_width);
+
+            let mut q = DMatrix::<f64>::identity(n, n);
+            for &(p, c, s) in &rotations {
+                apply_adjacent_rotation_columns(&mut q, p, c, s);
+            }
+            let projected = (q.transpose() * &original) * &q;
+            let projection_residual = lower_band_probe_max_abs_dmatrix_diff(&projected, &dense);
+            let q_orthogonality = lower_band_probe_orthogonality_error(&q);
+            let tolerance = 1e-10 * dmatrix_max_abs_value(&original).max(1.0) * n as f64;
+
+            assert!(
+                max_abs <= tolerance,
+                "compact envelope drift {max_abs:.17e} for n={n}, bandwidth={bandwidth}"
+            );
+            assert!(
+                outside_width <= tolerance,
+                "dense oracle escaped envelope by {outside_width:.17e}"
+            );
+            assert!(
+                projection_residual <= tolerance,
+                "frontier Q projection residual {projection_residual:.17e}"
+            );
+            assert!(
+                q_orthogonality <= tolerance,
+                "frontier Q orthogonality {q_orthogonality:.17e}"
+            );
+            println!(
+                "lower_band_envelope_frontier n={n} bandwidth={bandwidth} rotations={} max_abs={max_abs:.17e} q_residual={projection_residual:.17e} envelope_digest={:#018x}",
+                rotations.len(),
+                lower_band_envelope_digest(&envelope)
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "perf probe: run locally with --release for compact-envelope frontier rotations"]
+    fn lower_band_envelope_frontier_rotation_perf_probe() {
+        for (n, bandwidth, repeats) in [(128usize, 32usize, 64usize), (256, 32, 64), (512, 32, 64)]
+        {
+            let envelope_width = bandwidth + 1;
+            let ab = make_lower_band_eig_probe(n, bandwidth);
+            let original = dmatrix_from_lower_band_eig_probe(&ab);
+            let rotations = lower_band_frontier_rotations(n, bandwidth);
+
+            let started_at = std::time::Instant::now();
+            let mut dense = original.clone();
+            for _ in 0..repeats {
+                apply_frontier_rotations_dense(std::hint::black_box(&mut dense), &rotations);
+            }
+            let dense_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
+
+            let started_at = std::time::Instant::now();
+            let mut envelope = LowerBandEnvelopeProbe::from_lower_band(&ab, envelope_width);
+            for _ in 0..repeats {
+                apply_frontier_rotations_envelope(std::hint::black_box(&mut envelope), &rotations);
+            }
+            let envelope_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
+
+            let compact_dense = envelope.to_dense();
+            let max_abs = lower_band_probe_max_abs_dmatrix_diff(&compact_dense, &dense);
+            let tolerance = 1e-9 * dmatrix_max_abs_value(&dense).max(1.0) * n as f64;
+            assert!(
+                max_abs <= tolerance,
+                "compact envelope perf drift {max_abs:.17e} for n={n}, bandwidth={bandwidth}"
+            );
+
+            println!("LOWER_BAND_ENVELOPE_FRONTIER_PERF_BEGIN");
+            println!("shape={n}x{n}");
+            println!("bandwidth={bandwidth}");
+            println!("envelope_width={envelope_width}");
+            println!("rotation_count={}", rotations.len());
+            println!("repeats={repeats}");
+            println!("dense_ms={dense_ms:.6}");
+            println!("envelope_ms={envelope_ms:.6}");
+            println!("speedup={:.6}", dense_ms / envelope_ms);
+            println!("max_abs_diff={max_abs:.17e}");
+            println!(
+                "dense_digest={:#018x}",
+                lower_band_probe_dmatrix_digest(&dense)
+            );
+            println!(
+                "envelope_digest={:#018x}",
+                lower_band_envelope_digest(&envelope)
+            );
+            println!("LOWER_BAND_ENVELOPE_FRONTIER_PERF_END");
+        }
+    }
+
     #[test]
     fn lower_band_tridiagonal_rank2_matches_scalar_oracle() {
         for (n, bandwidth) in [(18usize, 4usize), (37, 8), (64, 12)] {

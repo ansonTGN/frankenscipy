@@ -1,0 +1,3 @@
+lower_band_envelope_frontier n=18 bandwidth=4 rotations=3 max_abs=7.10542735760100186e-15 q_residual=7.10542735760100186e-15 envelope_digest=0x11992ad9528bab17
+lower_band_envelope_frontier n=37 bandwidth=8 rotations=4 max_abs=2.84217094304040074e-14 q_residual=1.42108547152020037e-14 envelope_digest=0xd37e608b43f6f070
+lower_band_envelope_frontier n=64 bandwidth=12 rotations=5 max_abs=5.68434188608080149e-14 q_residual=2.84217094304040074e-14 envelope_digest=0x4a42d14f0fdd8bd0
