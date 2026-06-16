@@ -7414,6 +7414,106 @@ impl NoncentralHypergeomFisher {
     }
 }
 
+/// The matrix t-distribution, matching `scipy.stats.matrix_t(mean, row_spread,
+/// col_spread, df)`.
+pub struct MatrixT {
+    mean: Vec<Vec<f64>>,
+    df: f64,
+    chol_u: Vec<Vec<f64>>,
+    chol_v: Vec<Vec<f64>>,
+    ln_det_u: f64,
+    ln_det_v: f64,
+}
+
+impl MatrixT {
+    /// Create the distribution: `mean` is `m×n`, `row_spread` the `m×m` matrix
+    /// `U`, `col_spread` the `n×n` matrix `V`, with `df` degrees of freedom.
+    pub fn new(
+        mean: &[Vec<f64>],
+        row_spread: &[Vec<f64>],
+        col_spread: &[Vec<f64>],
+        df: f64,
+    ) -> Result<Self, StatsError> {
+        if mean.is_empty() || mean[0].is_empty() {
+            return Err(StatsError::InvalidArgument("mean must be non-empty".to_string()));
+        }
+        let (m, n) = (mean.len(), mean[0].len());
+        if row_spread.len() != m || col_spread.len() != n {
+            return Err(StatsError::InvalidArgument(
+                "spread dimensions must match mean".to_string(),
+            ));
+        }
+        let chol_u = cholesky_decompose(row_spread)?;
+        let chol_v = cholesky_decompose(col_spread)?;
+        let ln_det_u = 2.0 * (0..m).map(|i| chol_u[i][i].ln()).sum::<f64>();
+        let ln_det_v = 2.0 * (0..n).map(|i| chol_v[i][i].ln()).sum::<f64>();
+        Ok(Self {
+            mean: mean.to_vec(),
+            df,
+            chol_u,
+            chol_v,
+            ln_det_u,
+            ln_det_v,
+        })
+    }
+
+    /// Log probability density function at an `m×n` matrix `x`.
+    pub fn logpdf(&self, x: &[Vec<f64>]) -> Result<f64, StatsError> {
+        let (m, n) = (self.mean.len(), self.mean[0].len());
+        if x.len() != m || x.iter().any(|r| r.len() != n) {
+            return Err(StatsError::InvalidArgument("x dimension must match mean".to_string()));
+        }
+        // C = X - M.
+        let c: Vec<Vec<f64>> = (0..m)
+            .map(|i| (0..n).map(|j| x[i][j] - self.mean[i][j]).collect())
+            .collect();
+        // W = L_U⁻¹ C (m×n); A = WᵀW = Cᵀ U⁻¹ C (n×n).
+        let mut w = vec![vec![0.0_f64; n]; m];
+        for j in 0..n {
+            let col: Vec<f64> = (0..m).map(|i| c[i][j]).collect();
+            let wc = solve_lower_triangular(&self.chol_u, &col)?;
+            for i in 0..m {
+                w[i][j] = wc[i];
+            }
+        }
+        // V + A (n×n), then ln det via Cholesky; ln|I + CᵀU⁻¹C·V⁻¹| = ln|V+A| - ln|V|.
+        let mut va = vec![vec![0.0_f64; n]; n];
+        for i in 0..n {
+            for j in 0..n {
+                let a_ij: f64 = (0..m).map(|r| w[r][i] * w[r][j]).sum();
+                va[i][j] = a_ij;
+            }
+            for j in 0..n {
+                va[i][j] += self.col_spread_entry(i, j);
+            }
+        }
+        let chol_va = cholesky_decompose(&va)?;
+        let ln_det_va = 2.0 * (0..n).map(|i| chol_va[i][i].ln()).sum::<f64>();
+        let logdet = ln_det_va - self.ln_det_v;
+
+        let (mf, nf) = (m as f64, n as f64);
+        let df = self.df;
+        let pi = std::f64::consts::PI;
+        Ok(-(df + mf + nf - 1.0) / 2.0 * logdet
+            + ln_multivariate_gamma(n, (df + mf + nf - 1.0) / 2.0)
+            - ln_multivariate_gamma(n, (df + nf - 1.0) / 2.0)
+            - mf * nf / 2.0 * pi.ln()
+            - nf / 2.0 * self.ln_det_u
+            - mf / 2.0 * self.ln_det_v)
+    }
+
+    /// Reconstruct the `(i, j)` entry of the column-spread matrix `V` from its
+    /// Cholesky factor: `V = L_V·L_Vᵀ`, so `V[i][j] = Σ_k L[i][k]·L[j][k]`.
+    fn col_spread_entry(&self, i: usize, j: usize) -> f64 {
+        (0..=i.min(j)).map(|k| self.chol_v[i][k] * self.chol_v[j][k]).sum()
+    }
+
+    /// Probability density function.
+    pub fn pdf(&self, x: &[Vec<f64>]) -> Result<f64, StatsError> {
+        Ok(self.logpdf(x)?.exp())
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Von Mises Distribution
 // ══════════════════════════════════════════════════════════════════════
@@ -42565,6 +42665,20 @@ mod tests {
         let best = ppcc_max(&x, (0.0, 1.0));
         assert!((best - 0.35779018).abs() < 1e-4, "ppcc_max {best}");
         assert!(ppcc_plot(&x, 2.0, -2.0, 5).is_err());
+    }
+
+    #[test]
+    fn matrix_t_matches_scipy() {
+        let d = MatrixT::new(
+            &[vec![1.0, 2.0], vec![3.0, 4.0]],
+            &[vec![2.0, 0.3], vec![0.3, 1.0]],
+            &[vec![1.0, 0.2], vec![0.2, 1.5]],
+            5.0,
+        )
+        .unwrap();
+        let x = vec![vec![1.5, 2.5], vec![2.5, 3.5]];
+        assert!((d.logpdf(&x).unwrap() - (-3.369933397330304)).abs() < 1e-10);
+        assert!((d.pdf(&x).unwrap() - 0.03439192786140613).abs() < 1e-12);
     }
 
     #[test]
