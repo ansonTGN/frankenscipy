@@ -12,7 +12,7 @@ use crate::InterpError;
 
 /// Evaluate the `k+1` non-zero B-splines of degree `k` at `t(l) <= x < t(l+1)`
 /// (de Boor–Cox). `t` and `h` are 1-based; `h[1..=k+1]` is written.
-fn fpbspl(t: &[f64], k: usize, x: f64, l: usize, h: &mut [f64]) {
+pub(crate) fn fpbspl(t: &[f64], k: usize, x: f64, l: usize, h: &mut [f64]) {
     let mut hh = [0.0f64; 20];
     h[1] = 1.0;
     for j in 1..=k {
@@ -35,7 +35,7 @@ fn fpbspl(t: &[f64], k: usize, x: f64, l: usize, h: &mut [f64]) {
 }
 
 /// Givens transformation parameters; updates `ww` in place, returns `(cos, sin)`.
-fn fpgivs(piv: f64, ww: &mut f64) -> (f64, f64) {
+pub(crate) fn fpgivs(piv: f64, ww: &mut f64) -> (f64, f64) {
     let store = piv.abs();
     let dd = if store >= *ww {
         store * (1.0 + (*ww / piv).powi(2)).sqrt()
@@ -50,7 +50,7 @@ fn fpgivs(piv: f64, ww: &mut f64) -> (f64, f64) {
 
 /// Apply a Givens rotation to `a` and `b` in place.
 #[inline]
-fn fprota(cos: f64, sin: f64, a: &mut f64, b: &mut f64) {
+pub(crate) fn fprota(cos: f64, sin: f64, a: &mut f64, b: &mut f64) {
     let stor1 = *a;
     let stor2 = *b;
     *b = cos * stor2 + sin * stor1;
@@ -59,7 +59,7 @@ fn fprota(cos: f64, sin: f64, a: &mut f64, b: &mut f64) {
 
 /// Back-substitution for `a*c = z`, `a` an `n×n` upper-triangular band matrix of
 /// bandwidth `k` (band storage, 1-based `a[i][1..=k]`). Writes `c[1..=n]`.
-fn fpback(a: &[Vec<f64>], z: &[f64], n: usize, k: usize, c: &mut [f64]) {
+pub(crate) fn fpback(a: &[Vec<f64>], z: &[f64], n: usize, k: usize, c: &mut [f64]) {
     let k1 = k - 1;
     c[n] = z[n] / a[n][1];
     if n == 1 {
@@ -84,7 +84,7 @@ fn fpback(a: &[Vec<f64>], z: &[f64], n: usize, k: usize, c: &mut [f64]) {
 
 /// Discontinuity jumps of the `k`-th derivative of the degree-`k` B-splines at
 /// the interior knots. `t` 1-based; writes `b[1..=nk1-k1][1..=k2]`.
-fn fpdisc(t: &[f64], n: usize, k2: usize, b: &mut [Vec<f64>]) {
+pub(crate) fn fpdisc(t: &[f64], n: usize, k2: usize, b: &mut [Vec<f64>]) {
     let k1 = k2 - 1;
     let k = k1 - 1;
     let nk1 = n - k1;
@@ -118,7 +118,7 @@ fn fpdisc(t: &[f64], n: usize, k2: usize, b: &mut [Vec<f64>]) {
 
 /// Sort data points into the panels they belong to. `nummer`/`index` 1-based.
 #[allow(clippy::too_many_arguments)]
-fn fporde(
+pub(crate) fn fporde(
     x: &[f64],
     y: &[f64],
     m: usize,
@@ -162,7 +162,7 @@ fn fporde(
 }
 
 /// Rational interpolation root of `r(p)=(u p+v)/(p+w)=0`; updates `p1,f1,p3,f3`.
-fn fprati(p1: &mut f64, f1: &mut f64, p2: f64, f2: f64, p3: &mut f64, f3: &mut f64) -> f64 {
+pub(crate) fn fprati(p1: &mut f64, f1: &mut f64, p2: f64, f2: f64, p3: &mut f64, f3: &mut f64) -> f64 {
     let p = if *p3 <= 0.0 {
         (*p1 * (*f1 - *f3) * f2 - p2 * (f2 - *f3) * *f1) / ((*f1 - f2) * *f3)
     } else {
@@ -184,7 +184,7 @@ fn fprati(p1: &mut f64, f1: &mut f64, p2: f64, f2: f64, p3: &mut f64, f3: &mut f
 /// Minimum-norm least-squares solution of a rank-deficient banded triangular
 /// system (FITPACK `fprank`). `a` is band storage `a[i][1..=m]` (1-based),
 /// `f[1..=n]` the rhs; writes `c[1..=n]`, returns `(sq, rank)`.
-fn fprank(
+pub(crate) fn fprank(
     a: &mut [Vec<f64>],
     f: &mut [f64],
     n: usize,
