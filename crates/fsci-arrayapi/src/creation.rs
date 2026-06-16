@@ -333,7 +333,11 @@ mod tests {
                 dtype: Some(DType::Float64),
             };
             let arr = linspace(&backend, &request).expect("linspace num=1");
-            assert_eq!(arr.values(), &[ScalarValue::F64(2.0)], "endpoint={endpoint}");
+            assert_eq!(
+                arr.values(),
+                &[ScalarValue::F64(2.0)],
+                "endpoint={endpoint}"
+            );
         }
         // num=2 with endpoint still spans the full [start, stop] interval.
         let request = LinspaceRequest {

@@ -1537,8 +1537,7 @@ pub fn dst_iii(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError
         bo.normalization = Normalization::Backward;
         let y = idct(&rev, &bo)?;
         let two_n = 2.0 * nf;
-        Ok(y
-            .iter()
+        Ok(y.iter()
             .enumerate()
             .map(|(idx, &val)| if idx % 2 == 0 { two_n } else { -two_n } * val)
             .collect())
@@ -3697,12 +3696,10 @@ mod tests {
     use fsci_runtime::{AuditAction, RuntimeMode};
 
     use super::{
-        Complex64, FftError, FftOptions, TransformKind, WorkerPolicy, dct, dct_iv,
-        dctn,
-        dst_ii, dst_iii, dstn, estimate_fft_flops, fft, fft_with_audit, fft2, fftn, fwht, hfft,
-        hfft2,
-        hfftn, idct, idctn, idstn, ifft, ifft2, ifftn, ihfft, ihfft2, ihfftn, irfft, irfft2, irfftn,
-        is_fast_len, next_fast_len, prev_fast_len, rfft, rfft_with_audit, rfft2, rfftn,
+        Complex64, FftError, FftOptions, TransformKind, WorkerPolicy, dct, dct_iv, dctn, dst_ii,
+        dst_iii, dstn, estimate_fft_flops, fft, fft_with_audit, fft2, fftn, fwht, hfft, hfft2,
+        hfftn, idct, idctn, idstn, ifft, ifft2, ifftn, ihfft, ihfft2, ihfftn, irfft, irfft2,
+        irfftn, is_fast_len, next_fast_len, prev_fast_len, rfft, rfft_with_audit, rfft2, rfftn,
         sync_audit_ledger, take_transform_traces,
     };
 
@@ -3733,9 +3730,18 @@ mod tests {
         // ihfft of a 4-point real signal → 3-point Hermitian half-spectrum.
         let sig = [1.0, 2.0, 3.0, 4.0];
         let ihfft_expected = [
-            (Normalization::Backward, [(2.5, 0.0), (-0.5, -0.5), (-0.5, 0.0)]),
-            (Normalization::Ortho, [(5.0, 0.0), (-1.0, -1.0), (-1.0, 0.0)]),
-            (Normalization::Forward, [(10.0, 0.0), (-2.0, -2.0), (-2.0, 0.0)]),
+            (
+                Normalization::Backward,
+                [(2.5, 0.0), (-0.5, -0.5), (-0.5, 0.0)],
+            ),
+            (
+                Normalization::Ortho,
+                [(5.0, 0.0), (-1.0, -1.0), (-1.0, 0.0)],
+            ),
+            (
+                Normalization::Forward,
+                [(10.0, 0.0), (-2.0, -2.0), (-2.0, 0.0)],
+            ),
         ];
         for (norm, expected) in ihfft_expected {
             let got = ihfft(&sig, None, &opt(norm)).expect("ihfft");
@@ -4936,22 +4942,37 @@ mod tests {
         let n = 64usize;
         let mut s: u64 = 0xdead_beef_1234_5678;
         let mut rng = || {
-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            s = s
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             ((s >> 11) as f64) / (1u64 << 53) as f64 - 0.5
         };
         let x: Vec<f64> = (0..n).map(|_| rng()).collect();
         let fast = fwht(&x, &opts).expect("fwht");
         for (k, &fk) in fast.iter().enumerate() {
             let naive: f64 = (0..n)
-                .map(|j| if (k & j).count_ones() & 1 == 0 { x[j] } else { -x[j] })
+                .map(|j| {
+                    if (k & j).count_ones() & 1 == 0 {
+                        x[j]
+                    } else {
+                        -x[j]
+                    }
+                })
                 .sum();
-            assert!((fk - naive).abs() < 1e-12, "fwht[{k}] {fk} vs naive {naive}");
+            assert!(
+                (fk - naive).abs() < 1e-12,
+                "fwht[{k}] {fk} vs naive {naive}"
+            );
         }
 
         // Involution up to scale: fwht(fwht(x)) == n·x.
         let twice = fwht(&fast, &opts).expect("fwht");
         for (&t, &xi) in twice.iter().zip(&x) {
-            assert!((t - n as f64 * xi).abs() < 1e-10, "involution: {t} vs {}", n as f64 * xi);
+            assert!(
+                (t - n as f64 * xi).abs() < 1e-10,
+                "involution: {t} vs {}",
+                n as f64 * xi
+            );
         }
 
         // Non-power-of-two length is rejected.

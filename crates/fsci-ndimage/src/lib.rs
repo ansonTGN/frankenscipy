@@ -135,7 +135,9 @@ fn gaussian_filter1d_axis(
     let outer: usize = input.shape[..axis].iter().product();
     let nthreads = ndimage_filter_thread_count(input.size(), kernel_1d.len());
     if outer >= nthreads {
-        return Ok(convolve1d_along_axis(input, &kernel_1d, axis, 0, mode, cval));
+        return Ok(convolve1d_along_axis(
+            input, &kernel_1d, axis, 0, mode, cval,
+        ));
     }
     let mut kernel_shape = vec![1usize; input.ndim()];
     kernel_shape[axis] = kernel_1d.len();
@@ -1215,7 +1217,13 @@ pub fn nd_filter_perpixel_ref(
     let offsets: Vec<i64> = weights
         .shape
         .iter()
-        .map(|&s| if flip { (s as i64 - 1) / 2 } else { s as i64 / 2 })
+        .map(|&s| {
+            if flip {
+                (s as i64 - 1) / 2
+            } else {
+                s as i64 / 2
+            }
+        })
         .collect();
     let mut output = NdArray::zeros(input.shape.clone());
     fill_pixels_parallel(&mut output, weights.size().max(1), |flat_out, _s| {
@@ -1226,8 +1234,7 @@ pub fn nd_filter_perpixel_ref(
             let k_idx = weights.unravel(flat_k);
             for d in 0..ndim {
                 in_idx[d] = if flip {
-                    out_idx[d] as i64 + (weights.shape[d] as i64 - 1 - k_idx[d] as i64)
-                        - offsets[d]
+                    out_idx[d] as i64 + (weights.shape[d] as i64 - 1 - k_idx[d] as i64) - offsets[d]
                         + origins[d]
                 } else {
                     out_idx[d] as i64 + k_idx[d] as i64 - offsets[d] - origins[d]
@@ -1264,13 +1271,17 @@ pub fn convolve_with_origins(
         .map(|flat_k| {
             let k_idx = weights.unravel(flat_k);
             (0..ndim)
-                .map(|d| {
-                    (weights.shape[d] as i64 - 1 - k_idx[d] as i64) - offsets[d] + origins[d]
-                })
+                .map(|d| (weights.shape[d] as i64 - 1 - k_idx[d] as i64) - offsets[d] + origins[d])
                 .collect()
         })
         .collect();
-    Ok(nd_filter_apply(input, &weights.data, &tap_delta, mode, cval))
+    Ok(nd_filter_apply(
+        input,
+        &weights.data,
+        &tap_delta,
+        mode,
+        cval,
+    ))
 }
 
 /// One-dimensional convolution along a selected axis.
@@ -1435,7 +1446,13 @@ pub fn correlate_with_origins(
                 .collect()
         })
         .collect();
-    Ok(nd_filter_apply(input, &weights.data, &tap_delta, mode, cval))
+    Ok(nd_filter_apply(
+        input,
+        &weights.data,
+        &tap_delta,
+        mode,
+        cval,
+    ))
 }
 
 /// One-dimensional correlation along a selected axis.
@@ -1507,7 +1524,9 @@ pub fn correlate1d_with_origin(
     let outer: usize = input.shape[..axis].iter().product();
     let nthreads = ndimage_filter_thread_count(input.size(), weights.len());
     if outer >= nthreads {
-        return Ok(correlate1d_along_axis(input, weights, axis, origin, mode, cval));
+        return Ok(correlate1d_along_axis(
+            input, weights, axis, origin, mode, cval,
+        ));
     }
     let offset = weights.len() as i64 / 2;
     let mut output = NdArray::zeros(input.shape.clone());
@@ -6543,7 +6562,9 @@ pub fn uniform_filter1d_with_origin(
         return Err(NdimageError::EmptyInput);
     }
     validate_filter_origin(size, origin)?;
-    Ok(uniform_filter_along_axis(input, axis, size, origin, mode, cval))
+    Ok(uniform_filter_along_axis(
+        input, axis, size, origin, mode, cval,
+    ))
 }
 
 /// Reference per-window uniform-filter path (pre running-sum), retained for the
@@ -6558,7 +6579,9 @@ pub fn uniform_filter1d_perwindow_ref(
     origin: i64,
 ) -> Result<NdArray, NdimageError> {
     if axis >= input.ndim() {
-        return Err(NdimageError::InvalidArgument("axis out of range".to_string()));
+        return Err(NdimageError::InvalidArgument(
+            "axis out of range".to_string(),
+        ));
     }
     if size == 0 || input.size() == 0 {
         return Err(NdimageError::InvalidArgument("bad size/empty".to_string()));
@@ -8459,7 +8482,9 @@ mod tests {
         // get_boundary reference bit-for-bit across modes, kernel sizes (incl. asymmetric
         // and kernels wider than the array), and origins.
         let arr = NdArray::new(
-            (0..23 * 19).map(|i| ((i * 7919) % 877) as f64 / 80.0 - 5.0).collect(),
+            (0..23 * 19)
+                .map(|i| ((i * 7919) % 877) as f64 / 80.0 - 5.0)
+                .collect(),
             vec![23, 19],
         )
         .unwrap();
@@ -8472,14 +8497,18 @@ mod tests {
         ] {
             for ks in [[3usize, 3], [1, 5], [4, 2], [25, 3]] {
                 let w = NdArray::new(
-                    (0..ks[0] * ks[1]).map(|k| (k as f64 * 0.3 - 1.0).cos()).collect(),
+                    (0..ks[0] * ks[1])
+                        .map(|k| (k as f64 * 0.3 - 1.0).cos())
+                        .collect(),
                     ks.to_vec(),
                 )
                 .unwrap();
                 for origin in [&[0i64, 0][..], &[1, -1][..]] {
-                    if origin.iter().enumerate().any(|(d, &o)| {
-                        o < -(ks[d] as i64 / 2) || o > (ks[d] as i64 - 1) / 2
-                    }) {
+                    if origin
+                        .iter()
+                        .enumerate()
+                        .any(|(d, &o)| o < -(ks[d] as i64 / 2) || o > (ks[d] as i64 - 1) / 2)
+                    {
                         continue;
                     }
                     for flip in [false, true] {

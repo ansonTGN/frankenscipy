@@ -581,8 +581,8 @@ pub fn spsolve(a: &CsrMatrix, b: &[f64], options: SolveOptions) -> SparseResult<
     // Sparse by row density, OR narrowly banded (bw·32 ≤ n ⇒ fill ≤ O(n·bw), factor
     // O(n·bw²) ≪ O(n³)) — banded systems with >16 nnz/row would otherwise densify to
     // an O(n³) dense LU even though their sparse factor is tiny and fill-bounded.
-    let genuinely_sparse = n >= 256
-        && (a.nnz() <= n.saturating_mul(16) || csr_bandwidth(a).saturating_mul(32) <= n);
+    let genuinely_sparse =
+        n >= 256 && (a.nnz() <= n.saturating_mul(16) || csr_bandwidth(a).saturating_mul(32) <= n);
     if over_dense_guard || genuinely_sparse {
         let lu = NativeSparseLu::factorize_csr(a, 1.0, options.ordering)?;
         let solution = lu.solve(b)?;
@@ -634,8 +634,8 @@ pub fn splu(a: &CscMatrix, options: LuOptions) -> SparseResult<SparseLuFactoriza
     // densifying to an n×n dense matrix for O(n³) dense LU — see `spsolve` for the
     // same routing. scipy's splu is always sparse; small/dense-pattern A keeps dense.
     // Narrowly-banded A (bw·32 ≤ n) also routes sparse: fill is bounded by the band.
-    let genuinely_sparse = n >= 256
-        && (a.nnz() <= n.saturating_mul(16) || csc_bandwidth(a).saturating_mul(32) <= n);
+    let genuinely_sparse =
+        n >= 256 && (a.nnz() <= n.saturating_mul(16) || csc_bandwidth(a).saturating_mul(32) <= n);
     let (backend_used, lu_internal) = if n > SPSOLVE_DENSE_MAX_N || genuinely_sparse {
         let csr = a.to_csr()?;
         (
@@ -5490,14 +5490,20 @@ mod tests {
         let x_nat = spsolve(
             &a,
             &b,
-            SolveOptions { ordering: PermutationOrdering::Natural, ..SolveOptions::default() },
+            SolveOptions {
+                ordering: PermutationOrdering::Natural,
+                ..SolveOptions::default()
+            },
         )
         .expect("natural")
         .solution;
         let x_mmd = spsolve(
             &a,
             &b,
-            SolveOptions { ordering: PermutationOrdering::MmdAtPlusA, ..SolveOptions::default() },
+            SolveOptions {
+                ordering: PermutationOrdering::MmdAtPlusA,
+                ..SolveOptions::default()
+            },
         )
         .expect("min-degree")
         .solution;
@@ -5646,7 +5652,10 @@ mod tests {
         let x = spsolve(
             &a,
             &b,
-            SolveOptions { ordering: PermutationOrdering::MmdAtPlusA, ..SolveOptions::default() },
+            SolveOptions {
+                ordering: PermutationOrdering::MmdAtPlusA,
+                ..SolveOptions::default()
+            },
         )
         .expect("mmd solve")
         .solution;
@@ -6701,7 +6710,11 @@ mod tests {
             .enumerate()
         {
             assert!((re - 3.0).abs() < 1e-6, "re[{i}]={re} expected 3");
-            assert!((im.abs() - 4.0).abs() < 1e-6, "|im[{i}]|={} expected 4", im.abs());
+            assert!(
+                (im.abs() - 4.0).abs() < 1e-6,
+                "|im[{i}]|={} expected 4",
+                im.abs()
+            );
         }
         // The pair is conjugate: imaginary parts have opposite signs.
         assert!(
@@ -6715,7 +6728,12 @@ mod tests {
             .eigenvalues
             .iter()
             .zip(result.eigenvalues_im.iter())
-            .zip(result.eigenvectors.iter().zip(result.eigenvectors_im.iter()))
+            .zip(
+                result
+                    .eigenvectors
+                    .iter()
+                    .zip(result.eigenvectors_im.iter()),
+            )
         {
             let axr = csr_matvec(&a, xr);
             let axi = csr_matvec(&a, xi);
@@ -6726,7 +6744,10 @@ mod tests {
                 let lhs_i = axi[j] - (re * xi[j] + im * xr[j]);
                 resid += lhs_r * lhs_r + lhs_i * lhs_i;
             }
-            assert!(resid.sqrt() < 1e-6, "complex eigenpair residual {resid:.3e}");
+            assert!(
+                resid.sqrt() < 1e-6,
+                "complex eigenpair residual {resid:.3e}"
+            );
         }
     }
 
@@ -8665,11 +8686,7 @@ fn krylov_extract_general(
             if yr == 0.0 && yi == 0.0 {
                 continue;
             }
-            for ((xr, xi), &vji) in evec_re
-                .iter_mut()
-                .zip(evec_im.iter_mut())
-                .zip(v[j].iter())
-            {
+            for ((xr, xi), &vji) in evec_re.iter_mut().zip(evec_im.iter_mut()).zip(v[j].iter()) {
                 *xr += yr * vji;
                 *xi += yi * vji;
             }
@@ -8973,8 +8990,7 @@ fn hessenberg_eigenvalues_complex(
                     break;
                 }
                 let u = a[mu][mu - 1].abs() * (q.abs() + r.abs());
-                let vv =
-                    p.abs() * (a[mu - 1][mu - 1].abs() + z.abs() + a[mu + 1][mu + 1].abs());
+                let vv = p.abs() * (a[mu - 1][mu - 1].abs() + z.abs() + a[mu + 1][mu + 1].abs());
                 if u + vv == vv {
                     break;
                 }

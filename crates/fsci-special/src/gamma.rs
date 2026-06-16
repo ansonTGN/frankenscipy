@@ -4387,7 +4387,10 @@ mod tests {
         ];
         for &(a, x, want) in &cases {
             let p = gammainc_scalar(a, x, RuntimeMode::Strict).unwrap();
-            assert!((p - want).abs() < 1e-10, "gammainc({a},{x}) = {p} vs {want}");
+            assert!(
+                (p - want).abs() < 1e-10,
+                "gammainc({a},{x}) = {p} vs {want}"
+            );
         }
     }
 

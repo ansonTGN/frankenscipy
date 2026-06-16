@@ -3548,14 +3548,20 @@ mod tests {
         // Golden from scipy.special.ncfdtrinc/nctdtrinc 1.17.1. ncfdtrinc agrees
         // only to scipy's DINVR tolerance (~1e-5); nctdtrinc to ~1e-8.
         let nc = ncfdtrinc(5.0, 10.0, 0.7, 2.0);
-        assert!((nc - 2.062_739_479_639_603).abs() < 1e-4, "ncfdtrinc = {nc}");
+        assert!(
+            (nc - 2.062_739_479_639_603).abs() < 1e-4,
+            "ncfdtrinc = {nc}"
+        );
         // Round-trip is tight regardless of scipy's tolerance.
         assert!((ncfdtr(5.0, 10.0, nc, 2.0) - 0.7).abs() < 1e-9);
         // Target above the central CDF has no nc >= 0 solution → 0.
         assert_eq!(ncfdtrinc(2.0, 5.0, 0.9, 0.8), 0.0);
 
         let nct = nctdtrinc(10.0, 0.7, 1.5);
-        assert!((nct - 0.909_707_486_336_509_2).abs() < 1e-7, "nctdtrinc = {nct}");
+        assert!(
+            (nct - 0.909_707_486_336_509_2).abs() < 1e-7,
+            "nctdtrinc = {nct}"
+        );
         assert!((nctdtr(10.0, nct, 1.5) - 0.7).abs() < 1e-9);
     }
 
@@ -3579,7 +3585,12 @@ mod tests {
             );
             assert!((ncfdtr(dfn, solved, nc, f) - p).abs() < 1e-9);
         }
-        for &(df, nc, t) in &[(10.0, 0.7, 1.5), (5.0, 0.0, 1.2), (20.0, 2.0, 2.5), (8.0, 1.5, 0.8)] {
+        for &(df, nc, t) in &[
+            (10.0, 0.7, 1.5),
+            (5.0, 0.0, 1.2),
+            (20.0, 2.0, 2.5),
+            (8.0, 1.5, 0.8),
+        ] {
             let p = nctdtr(df, nc, t);
             let solved = nctdtridf(p, nc, t);
             assert!(
@@ -3593,7 +3604,10 @@ mod tests {
         for &(dfn, dfd, nc, f) in &[(5.0, 10.0, 1.0, 2.0), (8.0, 6.0, 3.0, 1.2)] {
             let p = ncfdtr(dfn, dfd, nc, f);
             let solved = ncfdtridfn(p, dfd, nc, f);
-            assert!((ncfdtr(solved, dfd, nc, f) - p).abs() < 1e-9, "ncfdtridfn root invalid");
+            assert!(
+                (ncfdtr(solved, dfd, nc, f) - p).abs() < 1e-9,
+                "ncfdtridfn root invalid"
+            );
         }
         // Boundary / invalid argument handling.
         assert!(ncfdtridfd(5.0, f64::NAN, 1.0, 2.0).is_nan());
