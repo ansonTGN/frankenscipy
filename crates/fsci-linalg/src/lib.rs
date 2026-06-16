@@ -27131,6 +27131,123 @@ mod proptest_tests {
         max_abs
     }
 
+    fn lower_band_frontier_eigenvector_block(rows: usize, cols: usize) -> DMatrix<f64> {
+        DMatrix::<f64>::from_fn(rows, cols, |row, col| {
+            let diagonal_bias = if row == col { 1.0 } else { 0.0 };
+            let seed = (row + 1) as f64 * 0.019 + (col + 3) as f64 * 0.031;
+            diagonal_bias + seed.sin() * 0.03125 + seed.cos() * 0.015625
+        })
+    }
+
+    fn dense_q_from_frontier_rotations(n: usize, rotations: &[(usize, f64, f64)]) -> DMatrix<f64> {
+        let mut q = DMatrix::<f64>::identity(n, n);
+        for &(p, c, s) in rotations {
+            apply_adjacent_rotation_columns(&mut q, p, c, s);
+        }
+        q
+    }
+
+    fn apply_adjacent_rotation_rows(matrix: &mut DMatrix<f64>, p: usize, c: f64, s: f64) {
+        let cols = matrix.ncols();
+        let q = p + 1;
+        for col in 0..cols {
+            let top = matrix[(p, col)];
+            let bottom = matrix[(q, col)];
+            matrix[(p, col)] = c * top + s * bottom;
+            matrix[(q, col)] = -s * top + c * bottom;
+        }
+    }
+
+    fn replay_frontier_rotations_to_rows(
+        matrix: &mut DMatrix<f64>,
+        rotations: &[(usize, f64, f64)],
+    ) {
+        for &(p, c, s) in rotations.iter().rev() {
+            apply_adjacent_rotation_rows(matrix, p, c, s);
+        }
+    }
+
+    #[test]
+    fn lower_band_frontier_q_metadata_replay_matches_dense_q() {
+        for (n, bandwidth, cols) in [(18usize, 4usize, 7usize), (37, 8, 13), (64, 12, 17)] {
+            let rotations = lower_band_frontier_rotations(n, bandwidth);
+            let source = lower_band_frontier_eigenvector_block(n, cols);
+            let q = dense_q_from_frontier_rotations(n, &rotations);
+            let dense = &q * &source;
+            let mut replay = source;
+            replay_frontier_rotations_to_rows(&mut replay, &rotations);
+
+            let max_abs = lower_band_probe_max_abs_dmatrix_diff(&replay, &dense);
+            let q_orthogonality = lower_band_probe_orthogonality_error(&q);
+            let tolerance = 1e-12 * n as f64;
+            assert!(
+                max_abs <= tolerance,
+                "Q metadata replay drift {max_abs:.17e} for n={n}, bandwidth={bandwidth}, cols={cols}"
+            );
+            assert!(
+                q_orthogonality <= tolerance,
+                "frontier Q metadata orthogonality {q_orthogonality:.17e}"
+            );
+            println!(
+                "lower_band_q_replay n={n} bandwidth={bandwidth} cols={cols} rotations={} max_abs={max_abs:.17e} replay_digest={:#018x}",
+                rotations.len(),
+                lower_band_probe_dmatrix_digest(&replay)
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "perf probe: run locally with --release for compact-band Q metadata replay"]
+    fn lower_band_frontier_q_metadata_replay_perf_probe() {
+        for (n, bandwidth, repeats) in [(128usize, 32usize, 32usize), (256, 32, 16), (512, 32, 8)] {
+            let rotations = lower_band_frontier_rotations(n, bandwidth);
+            let source = lower_band_frontier_eigenvector_block(n, n);
+
+            let started_at = std::time::Instant::now();
+            let mut dense_digest = 0_u64;
+            for _ in 0..repeats {
+                let q = dense_q_from_frontier_rotations(n, &rotations);
+                let dense = std::hint::black_box(&q) * std::hint::black_box(&source);
+                dense_digest =
+                    dense_digest.rotate_left(1) ^ lower_band_probe_dmatrix_digest(&dense);
+            }
+            let dense_q_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
+
+            let started_at = std::time::Instant::now();
+            let mut replay_digest = 0_u64;
+            for _ in 0..repeats {
+                let mut replay = source.clone();
+                replay_frontier_rotations_to_rows(std::hint::black_box(&mut replay), &rotations);
+                replay_digest =
+                    replay_digest.rotate_left(1) ^ lower_band_probe_dmatrix_digest(&replay);
+            }
+            let replay_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
+
+            let q = dense_q_from_frontier_rotations(n, &rotations);
+            let dense = &q * &source;
+            let mut replay = source.clone();
+            replay_frontier_rotations_to_rows(&mut replay, &rotations);
+            let max_abs = lower_band_probe_max_abs_dmatrix_diff(&replay, &dense);
+            assert!(
+                max_abs <= 1e-10 * n as f64,
+                "Q metadata replay perf drift {max_abs:.17e} for n={n}, bandwidth={bandwidth}"
+            );
+
+            println!("LOWER_BAND_Q_METADATA_REPLAY_PERF_BEGIN");
+            println!("shape={n}x{n}");
+            println!("bandwidth={bandwidth}");
+            println!("rotation_count={}", rotations.len());
+            println!("repeats={repeats}");
+            println!("dense_q_ms={dense_q_ms:.6}");
+            println!("replay_ms={replay_ms:.6}");
+            println!("speedup={:.6}", dense_q_ms / replay_ms);
+            println!("max_abs_diff={max_abs:.17e}");
+            println!("dense_digest={dense_digest:#018x}");
+            println!("replay_digest={replay_digest:#018x}");
+            println!("LOWER_BAND_Q_METADATA_REPLAY_PERF_END");
+        }
+    }
+
     #[test]
     fn lower_band_envelope_frontier_rotations_match_dense_oracle() {
         for (n, bandwidth) in [(18usize, 4usize), (37, 8), (64, 12)] {
