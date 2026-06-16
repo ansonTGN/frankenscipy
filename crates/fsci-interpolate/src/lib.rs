@@ -21,6 +21,7 @@ mod surfit;
 pub use surfit::{bisplev_derivative, bisplrep, lsq_bivariate_spline};
 mod sphere;
 pub use sphere::{lsq_sphere_bivariate_spline, smooth_sphere_bivariate_spline};
+mod fitpack_cyclic;
 
 /// Interpolation method for `interp1d`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
