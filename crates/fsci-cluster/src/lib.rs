@@ -2931,6 +2931,69 @@ pub fn vq(
     Ok((labels, dists))
 }
 
+/// K-means clustering from explicit initial centroids (Lloyd iteration).
+///
+/// Matches `scipy.cluster.vq.kmeans2(data, k, iter, minit='matrix')`, the
+/// deterministic path where `init_centroids` are the starting cluster centers.
+/// Runs exactly `iter` Lloyd updates (assign via [`vq`], then recompute each
+/// centroid as the mean of its members) with no early stopping; empty clusters
+/// keep their previous centroid (scipy's `missing='warn'` default). Returns
+/// `(centroids, labels)`, where — as in scipy — `labels` is the assignment from
+/// the start of the final iteration (before the last centroid update). The
+/// random initialization modes (`'random'`, `'points'`, `'++'`) are not
+/// supported because they cannot reproduce scipy's RNG stream.
+pub fn kmeans2(
+    data: &[Vec<f64>],
+    init_centroids: &[Vec<f64>],
+    iter: usize,
+) -> Result<(Vec<Vec<f64>>, Vec<usize>), ClusterError> {
+    if data.is_empty() {
+        return Err(ClusterError::EmptyData);
+    }
+    if iter == 0 {
+        return Err(ClusterError::InvalidArgument(
+            "iter must be at least 1".to_string(),
+        ));
+    }
+    let d = validate_feature_dimensions(data, "kmeans2")?;
+    let cd = validate_feature_dimensions(init_centroids, "kmeans2 centroids")?;
+    if d != cd {
+        return Err(ClusterError::InvalidArgument(format!(
+            "data dimension {d} must match centroid dimension {cd}"
+        )));
+    }
+    let nc = init_centroids.len();
+    let mut code_book = init_centroids.to_vec();
+    let mut label = vec![0usize; data.len()];
+    for _ in 0..iter {
+        // Assign each observation to its nearest current centroid.
+        label = vq(data, &code_book)?.0;
+        // Recompute centroids as the mean of assigned observations.
+        let mut sums = vec![vec![0.0_f64; d]; nc];
+        let mut counts = vec![0usize; nc];
+        for (i, &lab) in label.iter().enumerate() {
+            counts[lab] += 1;
+            for c in 0..d {
+                sums[lab][c] += data[i][c];
+            }
+        }
+        let mut new_cb = vec![vec![0.0_f64; d]; nc];
+        for j in 0..nc {
+            if counts[j] > 0 {
+                let inv = 1.0 / counts[j] as f64;
+                for c in 0..d {
+                    new_cb[j][c] = sums[j][c] * inv;
+                }
+            } else {
+                // Empty cluster keeps its previous position.
+                new_cb[j].clone_from(&code_book[j]);
+            }
+        }
+        code_book = new_cb;
+    }
+    Ok((code_book, label))
+}
+
 /// Whiten observations by dividing by per-feature standard deviation.
 ///
 /// Matches `scipy.cluster.vq.whiten`.
@@ -7630,6 +7693,39 @@ mod tests {
         );
         // Third row has multiple elements so std > 0
         assert!(incon[2][1] > 0.0, "std of row 2 should be > 0");
+    }
+
+    #[test]
+    fn kmeans2_matrix_init_matches_scipy() {
+        let data = vec![
+            vec![1.0, 1.0],
+            vec![1.5, 2.0],
+            vec![3.0, 4.0],
+            vec![5.0, 7.0],
+            vec![3.5, 5.0],
+            vec![4.5, 5.0],
+            vec![3.5, 4.5],
+        ];
+        let init = vec![vec![1.0, 1.0], vec![5.0, 7.0]];
+        // scipy.cluster.vq.kmeans2(data, init, minit='matrix', iter=10)
+        let (cb, lab) = kmeans2(&data, &init, 10).unwrap();
+        assert_eq!(lab, vec![0, 0, 1, 1, 1, 1, 1]);
+        let exp_cb = [[1.25, 1.5], [3.9, 5.1]];
+        for j in 0..2 {
+            for c in 0..2 {
+                assert!((cb[j][c] - exp_cb[j][c]).abs() < 1e-8, "cb[{j}][{c}]");
+            }
+        }
+        // iter=1: labels from the single (initial) assignment; [3,4] ties to index 0.
+        let (cb1, lab1) = kmeans2(&data, &init, 1).unwrap();
+        assert_eq!(lab1, vec![0, 0, 0, 1, 1, 1, 1]);
+        let exp_cb1 = [[1.83333333, 2.33333333], [4.125, 5.375]];
+        for j in 0..2 {
+            for c in 0..2 {
+                assert!((cb1[j][c] - exp_cb1[j][c]).abs() < 1e-7, "cb1[{j}][{c}]");
+            }
+        }
+        assert!(kmeans2(&data, &init, 0).is_err());
     }
 
     #[test]
