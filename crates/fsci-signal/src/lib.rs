@@ -10546,6 +10546,141 @@ pub fn qspline1d(signal: &[f64], lamb: f64) -> Result<Vec<f64>, SignalError> {
     Ok(spline1d_coeff(signal, -3.0 + 2.0 * 2.0_f64.sqrt(), 8.0))
 }
 
+/// Steady-state of a two-pole filter in polar form (FITPACK `_hs`), backward.
+fn iir2_hs(k: i64, cs: f64, rsq: f64, omega: f64) -> f64 {
+    let cssq = cs * cs;
+    let ka = k.unsigned_abs() as f64;
+    let rsupk = rsq.powf(ka / 2.0);
+    if omega == 0.0 {
+        let c0 = (1.0 + rsq) / ((1.0 - rsq).powi(3)) * cssq;
+        let gamma = (1.0 - rsq) / (1.0 + rsq);
+        return c0 * rsupk * (1.0 + gamma * ka);
+    }
+    if omega == std::f64::consts::PI {
+        let c0 = (1.0 + rsq) / ((1.0 - rsq).powi(3)) * cssq;
+        let gamma = (1.0 - rsq) / (1.0 + rsq) * (1.0 - 2.0 * (k.unsigned_abs() % 2) as f64);
+        return c0 * rsupk * (1.0 + gamma * ka);
+    }
+    let c0 = cssq * (1.0 + rsq) / (1.0 - rsq) / (1.0 - 2.0 * rsq * (2.0 * omega).cos() + rsq * rsq);
+    let gamma = (1.0 - rsq) / (1.0 + rsq) / omega.tan();
+    c0 * rsupk * ((omega * ka).cos() + gamma * (omega * ka).sin())
+}
+
+/// Steady-state of a two-pole filter in polar form (FITPACK `_hc`), forward.
+fn iir2_hc(k: i64, cs: f64, r: f64, omega: f64) -> f64 {
+    if k < 0 {
+        return 0.0;
+    }
+    let kf = k as f64;
+    if omega == 0.0 {
+        return cs * r.powi(k as i32) * (kf + 1.0);
+    }
+    if omega == std::f64::consts::PI {
+        return cs * r.powi(k as i32) * (kf + 1.0) * (1.0 - 2.0 * (k % 2) as f64);
+    }
+    cs * r.powi(k as i32) * (omega * (kf + 1.0)).sin() / omega.sin()
+}
+
+/// Second-order mirror-symmetric IIR smoothing filter, matching
+/// `scipy.signal.symiirorder2` (cascade of two reversed second-order sections).
+fn symiirorder2_1d(x: &[f64], r: f64, omega: f64, precision: f64) -> Vec<f64> {
+    let n = x.len();
+    let rsq = r * r;
+    let cs = 1.0 - 2.0 * r * omega.cos() + rsq;
+    let a2 = 2.0 * r * omega.cos();
+    let a3 = -rsq;
+    let p2 = precision * precision;
+    // Forward starting outputs y[0], y[1].
+    let mut y0 = iir2_hc(0, cs, r, omega) * x[0];
+    let mut k = 0i64;
+    loop {
+        let d = iir2_hc(k + 1, cs, r, omega);
+        y0 += d * x[k as usize];
+        k += 1;
+        if d * d <= p2 || k >= n as i64 {
+            break;
+        }
+    }
+    let mut y1 = iir2_hc(0, cs, r, omega) * x[1] + iir2_hc(1, cs, r, omega) * x[0];
+    k = 0;
+    loop {
+        let d = iir2_hc(k + 2, cs, r, omega);
+        y1 += d * x[k as usize];
+        k += 1;
+        if d * d <= p2 || k >= n as i64 {
+            break;
+        }
+    }
+    let mut yf = vec![0.0_f64; n];
+    yf[0] = y0;
+    yf[1] = y1;
+    for i in 2..n {
+        yf[i] = cs * x[i] + a2 * yf[i - 1] + a3 * yf[i - 2];
+    }
+    // Backward starting outputs out[n-1], out[n-2] (from the original signal).
+    let mut yp1 = 0.0_f64;
+    k = 0;
+    loop {
+        let d = iir2_hs(k, cs, rsq, omega) + iir2_hs(k + 1, cs, rsq, omega);
+        yp1 += d * x[n - 1 - k as usize];
+        k += 1;
+        if d * d <= precision || k >= n as i64 {
+            break;
+        }
+    }
+    let mut yp2 = 0.0_f64;
+    k = 0;
+    loop {
+        let d = iir2_hs(k - 1, cs, rsq, omega) + iir2_hs(k + 2, cs, rsq, omega);
+        yp2 += d * x[n - 1 - k as usize];
+        k += 1;
+        if d * d <= precision || k >= n as i64 {
+            break;
+        }
+    }
+    let mut out = vec![0.0_f64; n];
+    out[n - 1] = yp1;
+    out[n - 2] = yp2;
+    for i in (0..=n - 3).rev() {
+        out[i] = cs * yf[i] + a2 * out[i + 1] + a3 * out[i + 2];
+    }
+    out
+}
+
+/// Compute the `(r, omega)` parameters of the second-order spline-smoothing
+/// filter from the smoothing factor `lambda` (FITPACK `compute_root_from_lambda`).
+fn compute_root_from_lambda(lamb: f64) -> (f64, f64) {
+    let tmp = (3.0 + 144.0 * lamb).sqrt();
+    let xi = 1.0 - 96.0 * lamb + 24.0 * lamb * tmp;
+    let omega = (((144.0 * lamb - 1.0) / xi).sqrt()).atan();
+    let tmp2 = xi.sqrt();
+    let r = (24.0 * lamb - 1.0 - tmp2) / (24.0 * lamb) * ((48.0 * lamb + 24.0 * lamb * tmp).sqrt() / tmp2);
+    (r, omega)
+}
+
+/// Apply [`symiirorder2_1d`] separably across rows then columns (SciPy order).
+fn symiir2_separable(input: &[f64], rows: usize, cols: usize, r: f64, omega: f64) -> Vec<f64> {
+    let prec = 1e-6;
+    let mut data = input.to_vec();
+    let mut row = vec![0.0_f64; cols];
+    for rr in 0..rows {
+        row.copy_from_slice(&data[rr * cols..(rr + 1) * cols]);
+        let c = symiirorder2_1d(&row, r, omega, prec);
+        data[rr * cols..(rr + 1) * cols].copy_from_slice(&c);
+    }
+    let mut col = vec![0.0_f64; rows];
+    for cc in 0..cols {
+        for rr in 0..rows {
+            col[rr] = data[rr * cols + cc];
+        }
+        let c = symiirorder2_1d(&col, r, omega, prec);
+        for rr in 0..rows {
+            data[rr * cols + cc] = c[rr];
+        }
+    }
+    data
+}
+
 /// Apply the 1-D mirror-symmetric spline coefficient filter separably across
 /// the rows then the columns of a row-major `rows×cols` image (SciPy's
 /// `symiirorder_nd` order: axis=-1 then axis=0).
@@ -10586,21 +10721,43 @@ pub fn cspline2d(
             "input length must match rows * cols".to_string(),
         ));
     }
-    if lamb != 0.0 {
-        return Err(SignalError::InvalidArgument(
-            "cspline2d smoothing (lamb != 0) is not supported".to_string(),
-        ));
-    }
     if rows == 0 || cols == 0 {
         return Ok(Vec::new());
     }
-    Ok(spline2d_separable(
-        input,
-        rows,
-        cols,
-        -2.0 + 3.0_f64.sqrt(),
-        6.0,
-    ))
+    // scipy: lamb <= 1/144 -> plain cubic (symiirorder1); else smoothing (symiirorder2).
+    if lamb <= 1.0 / 144.0 {
+        return Ok(spline2d_separable(
+            input,
+            rows,
+            cols,
+            -2.0 + 3.0_f64.sqrt(),
+            6.0,
+        ));
+    }
+    if rows < 3 || cols < 3 {
+        return Err(SignalError::InvalidArgument(
+            "cspline2d smoothing requires both dimensions >= 3".to_string(),
+        ));
+    }
+    let (r, omega) = compute_root_from_lambda(lamb);
+    Ok(symiir2_separable(input, rows, cols, r, omega))
+}
+
+/// Smoothing-spline (cubic) filtering of a 2-D image, matching
+/// `scipy.signal.spline_filter(Iin, lmbda=5.0)`: compute the smoothing
+/// B-spline coefficients ([`cspline2d`] with the given `lmbda`) then convolve
+/// with the separable mirror-symmetric window `[1, 4, 1] / 6` in each axis.
+pub fn spline_filter(
+    input: &[f64],
+    shape: (usize, usize),
+    lmbda: f64,
+) -> Result<Vec<f64>, SignalError> {
+    let ck = cspline2d(input, shape, lmbda)?;
+    if ck.is_empty() {
+        return Ok(Vec::new());
+    }
+    let h = [1.0 / 6.0, 4.0 / 6.0, 1.0 / 6.0];
+    sepfir2d(&ck, shape, &h, &h)
 }
 
 /// Coefficients for a 2-D quadratic B-spline over a regularly spaced grid,
@@ -24199,6 +24356,39 @@ mod tests {
         for (k, &(i, j)) in idx.iter().enumerate() {
             assert!((c[i * cols + j] - cwant[k]).abs() <= 1e-5, "c {} vs {}", c[i * cols + j], cwant[k]);
             assert!((q[i * cols + j] - qwant[k]).abs() <= 1e-5, "q {} vs {}", q[i * cols + j], qwant[k]);
+        }
+    }
+
+    #[test]
+    fn spline_filter_smoothing_matches_scipy() {
+        let n = 60usize;
+        let mut img = vec![0.0_f64; n * n];
+        for i in 0..n {
+            for j in 0..n {
+                img[i * n + j] = (0.3 * i as f64).sin() * (0.2 * j as f64).cos() + 0.05 * i as f64;
+            }
+        }
+        let ck = cspline2d(&img, (n, n), 5.0).unwrap();
+        let sf = spline_filter(&img, (n, n), 5.0).unwrap();
+        let idx = [(0usize, 0usize), (15, 20), (30, 30), (59, 59), (40, 10)];
+        // scipy.signal.cspline2d(.,5.0) and spline_filter(.,5.0) oracles.
+        let ckw = [
+            0.2504043546077599,
+            1.3725635732065158,
+            1.8855471229151775,
+            2.2564378243050993,
+            2.217467400724846,
+        ];
+        let sfw = [
+            0.2723532803179828,
+            1.3592098268054398,
+            1.877283641812306,
+            2.2692596062629518,
+            2.2128103967030706,
+        ];
+        for (k, &(i, j)) in idx.iter().enumerate() {
+            assert!((ck[i * n + j] - ckw[k]).abs() <= 1e-9, "ck {} vs {}", ck[i * n + j], ckw[k]);
+            assert!((sf[i * n + j] - sfw[k]).abs() <= 1e-5, "sf {} vs {}", sf[i * n + j], sfw[k]);
         }
     }
 
