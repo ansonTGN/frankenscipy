@@ -1,0 +1,39 @@
+RCH worker: vmi1152480
+Bead: frankenscipy-psn7x.7
+Command: rch exec -- cargo test -p fsci-linalg compact_wy_full_to_band_generation_matches_scalar_reduction -- --nocapture
+
+Attempt 1:
+- Temporary source lever: generate full-to-band reflectors panel-by-panel, apply cross-block prefix updates, then apply one compact-WY active-suffix update.
+- Fixture: n=18, bandwidth=1, panel_width=3.
+- Result: FAILED.
+- Failure:
+  compact-WY generated full-to-band drift 6.89925071389281275e-1 for n=18, bandwidth=1, panel_width=3.
+- Interpretation:
+  The generator must reject panel_width > bandwidth; otherwise later panel columns are not in the prefix region updated by the cross-block replay.
+
+Attempt 2:
+- Temporary source change: added a panel_width <= bandwidth precondition.
+- Fixture patch missed the generation test and left n=18, bandwidth=1, panel_width=3.
+- Result: FAILED.
+- Failure:
+  InvalidArgument { detail: "compact-WY full-to-band generation requires panel_width <= bandwidth" }.
+- Interpretation:
+  The precondition worked, but the proof fixture was still invalid.
+
+Attempt 3:
+- Temporary source change: production-shaped generator fixtures:
+  - n=18, bandwidth=4, panel_width=3
+  - n=37, bandwidth=8, panel_width=4
+  - n=64, bandwidth=8, panel_width=6
+- Result: FAILED.
+- Passing prefix:
+  full_to_band_generation_digest n=18 bandwidth=4 panel_width=3 scalar=0x75dfccbb72f486ff compact=0x7f5bb780f9fcc3cc q_orthogonality=6.66133814775093924e-16
+- Failure:
+  compact-WY generated full-to-band drift 6.72055843216352450e-2 for n=37, bandwidth=8, panel_width=4.
+- Interpretation:
+  Even with panel_width <= bandwidth, the naive generated panel goes stale for later reflectors. Known-reflector compact-WY replay remains a valid fast sub-kernel, but production generation needs a proper transformed-panel compact-WY formulation rather than raw reflectors plus prefix cross-block updates.
+
+Verdict:
+- Reject the source lever before release benchmarking.
+- Source restored: git diff -- crates/fsci-linalg/src/lib.rs is empty.
+- Score: Impact 0.0 x Confidence 4.0 / Effort 2.0 = 0.0.
