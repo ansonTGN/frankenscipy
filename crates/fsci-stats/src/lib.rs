@@ -28113,6 +28113,143 @@ pub fn sen_seasonal_slopes(data: &[Vec<f64>]) -> (Vec<f64>, f64) {
     (intra, inter)
 }
 
+/// Sign function matching numpy's `sign` (zero maps to zero), used by the
+/// seasonal Kendall statistics.
+fn kt_sign(x: f64) -> f64 {
+    if x > 0.0 {
+        1.0
+    } else if x < 0.0 {
+        -1.0
+    } else {
+        0.0
+    }
+}
+
+/// Kendall ties correction `Σ v·k·(k-1)` over tie groups of size `k` (count `v`).
+fn ties_correction(data: &[f64]) -> f64 {
+    count_tied_groups(data)
+        .iter()
+        .map(|(&k, &v)| v as f64 * k as f64 * (k as f64 - 1.0))
+        .sum()
+}
+
+/// Result of [`kendalltau_seasonal`], mirroring scipy's output dictionary.
+#[derive(Debug, Clone)]
+pub struct KendallSeasonalResult {
+    /// `S_szn / denom_szn` per season ("seasonal tau").
+    pub seasonal_tau: Vec<f64>,
+    /// `S_tot / denom_tot` ("global tau").
+    pub global_tau: f64,
+    /// `S_tot / sum(denom_szn)` ("global tau (alt)").
+    pub global_tau_alt: f64,
+    /// Per-season p-values ("seasonal p-value").
+    pub seasonal_p_value: Vec<f64>,
+    /// Global p-value assuming season independence ("global p-value (indep)").
+    pub global_p_value_indep: f64,
+    /// Global p-value accounting for season dependence ("global p-value (dep)").
+    pub global_p_value_dep: f64,
+    /// `Σ z_szn²` ("chi2 total").
+    pub chi2_total: f64,
+    /// `m · mean(z_szn)²` ("chi2 trend").
+    pub chi2_trend: f64,
+}
+
+/// Multivariate (seasonal) Kendall rank correlation tau.
+///
+/// Matches `scipy.stats.mstats.kendalltau_seasonal(x)` for fully-observed
+/// (no missing) row-major data: `data[t][s]` is the observation at time `t` for
+/// season (column) `s`. Computes per-season Kendall S statistics, their
+/// covariance structure, and the associated taus, p-values, and chi-square
+/// trend/total statistics. See [`KendallSeasonalResult`] for the fields.
+#[must_use]
+pub fn kendalltau_seasonal(data: &[Vec<f64>]) -> KendallSeasonalResult {
+    let n = data.len();
+    let m = if n == 0 { 0 } else { data[0].len() };
+    let nf = n as f64;
+
+    // Per-season Kendall S: sum over i<r of sign(x[r,j] - x[i,j]).
+    let mut s_szn = vec![0.0_f64; m];
+    for j in 0..m {
+        let mut s = 0.0;
+        for i in 0..n {
+            for r in (i + 1)..n {
+                s += kt_sign(data[r][j] - data[i][j]);
+            }
+        }
+        s_szn[j] = s;
+    }
+    let s_tot: f64 = s_szn.iter().sum();
+
+    // Total ties correction over all values.
+    let all: Vec<f64> = data.iter().flat_map(|row| row.iter().copied()).collect();
+    let corr_ties = ties_correction(&all);
+    let n_tot = (n * m) as f64;
+    let denom_tot = (n_tot * (n_tot - 1.0) * (n_tot * (n_tot - 1.0) - corr_ties)).sqrt() / 2.0;
+
+    // Column-wise average ranks (rankdata axis=0).
+    let mut ranks: Vec<Vec<f64>> = vec![vec![0.0; m]; n];
+    for j in 0..m {
+        let col: Vec<f64> = (0..n).map(|i| data[i][j]).collect();
+        let r = rankdata(&col, Some("average")).unwrap_or_default();
+        for i in 0..n {
+            ranks[i][j] = r[i];
+        }
+    }
+
+    // Covariance matrix and per-season denominators.
+    let cmb = nf * (nf - 1.0);
+    let mut covmat = vec![vec![0.0_f64; m]; m];
+    let mut denom_szn = vec![0.0_f64; m];
+    for j in 0..m {
+        let col_j: Vec<f64> = (0..n).map(|i| data[i][j]).collect();
+        let corr_j = ties_correction(&col_j);
+        for k in j..m {
+            let mut kk = 0.0_f64;
+            for i in 0..n {
+                for r in (i + 1)..n {
+                    kk += kt_sign((data[r][j] - data[i][j]) * (data[r][k] - data[i][k]));
+                }
+            }
+            let rr: f64 = (0..n).map(|i| ranks[i][j] * ranks[i][k]).sum();
+            let cov = (kk + 4.0 * rr - nf * (nf + 1.0) * (nf + 1.0)) / 3.0;
+            covmat[j][k] = cov;
+            covmat[k][j] = cov;
+        }
+        denom_szn[j] = (cmb * (cmb - corr_j)).sqrt() / 2.0;
+    }
+
+    let var_szn: Vec<f64> = (0..m).map(|j| covmat[j][j]).collect();
+    let var_sum: f64 = var_szn.iter().sum();
+    let cov_sum: f64 = covmat.iter().flat_map(|row| row.iter().copied()).sum();
+
+    let z_szn: Vec<f64> = (0..m)
+        .map(|j| kt_sign(s_szn[j]) * (s_szn[j].abs() - 1.0) / var_szn[j].sqrt())
+        .collect();
+    let z_tot_ind = kt_sign(s_tot) * (s_tot.abs() - 1.0) / var_sum.sqrt();
+    let z_tot_dep = kt_sign(s_tot) * (s_tot.abs() - 1.0) / cov_sum.sqrt();
+
+    let erfc_half = |z: f64| fsci_special::erfc_scalar(z.abs() / std::f64::consts::SQRT_2);
+    let seasonal_p_value: Vec<f64> = z_szn.iter().map(|&z| erfc_half(z)).collect();
+    let global_p_value_indep = erfc_half(z_tot_ind);
+    let global_p_value_dep = erfc_half(z_tot_dep);
+
+    let chi2_total: f64 = z_szn.iter().map(|&z| z * z).sum();
+    let z_mean = if m > 0 { z_szn.iter().sum::<f64>() / m as f64 } else { 0.0 };
+    let chi2_trend = m as f64 * z_mean * z_mean;
+
+    let denom_szn_sum: f64 = denom_szn.iter().sum();
+    KendallSeasonalResult {
+        seasonal_tau: (0..m).map(|j| s_szn[j] / denom_szn[j]).collect(),
+        global_tau: s_tot / denom_tot,
+        global_tau_alt: s_tot / denom_szn_sum,
+        seasonal_p_value,
+        global_p_value_indep,
+        global_p_value_dep,
+        chi2_total,
+        chi2_trend,
+    }
+}
+
 /// Computes alpha-level confidence interval for the median.
 ///
 /// Matches `scipy.stats.mstats.median_cihs(data, alpha)`.
@@ -46106,6 +46243,35 @@ mod tests {
             assert!((a - b).abs() <= 1e-12, "intra {a} vs {b}");
         }
         assert!((inter - 0.625).abs() <= 1e-12, "inter {inter}");
+    }
+
+    #[test]
+    fn kendalltau_seasonal_matches_scipy() {
+        let x = vec![
+            vec![1.0, 5.0, 2.0],
+            vec![3.0, 4.0, 8.0],
+            vec![2.0, 9.0, 1.0],
+            vec![7.0, 6.0, 5.0],
+            vec![4.0, 2.0, 9.0],
+            vec![6.0, 8.0, 3.0],
+            vec![5.0, 1.0, 7.0],
+            vec![8.0, 3.0, 4.0],
+        ];
+        let r = kendalltau_seasonal(&x);
+        let want_st = [0.6428571428571429, -0.2857142857142857, 0.14285714285714285];
+        for (a, b) in r.seasonal_tau.iter().zip(want_st.iter()) {
+            assert!((a - b).abs() <= 1e-12, "seasonal tau {a} vs {b}");
+        }
+        let want_sp = [0.035447892552460766, 0.3864762307712327, 0.7105230229164896];
+        for (a, b) in r.seasonal_p_value.iter().zip(want_sp.iter()) {
+            assert!((a - b).abs() <= 1e-12, "seasonal p {a} vs {b}");
+        }
+        assert!((r.global_tau - 0.05277198185372174).abs() <= 1e-12);
+        assert!((r.global_tau_alt - 0.16666666666666666).abs() <= 1e-12);
+        assert!((r.global_p_value_indep - 0.3531112345060057).abs() <= 1e-12);
+        assert!((r.global_p_value_dep - 0.20527648966735135).abs() <= 1e-12);
+        assert!((r.chi2_total - 5.311224489795918).abs() <= 1e-12);
+        assert!((r.chi2_trend - 0.8622448979591835).abs() <= 1e-12);
     }
 
     #[test]
