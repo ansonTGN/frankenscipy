@@ -29091,6 +29091,104 @@ pub fn trimmed_stde(data: &[f64], limits: (f64, f64)) -> f64 {
     winvar.sqrt() / ((1.0 - lo - up) * nf.sqrt())
 }
 
+/// Trims an array by masking values outside given absolute limits.
+///
+/// Matches `scipy.stats.mstats.trima(a, limits, inclusive)`. `limits =
+/// (lower, upper)` are absolute value thresholds (`None` = open end); with
+/// `inclusive = (lo_in, up_in)`, a value is masked when `x < lower` (or `<=` if
+/// `lo_in` is false) or `x > upper` (or `>=` if `up_in` is false). Returns a
+/// same-length, same-order `Vec<f64>` with masked entries set to NaN.
+#[must_use]
+pub fn trima(data: &[f64], limits: (Option<f64>, Option<f64>), inclusive: (bool, bool)) -> Vec<f64> {
+    let (lo, up) = limits;
+    let (loin, upin) = inclusive;
+    data.iter()
+        .map(|&x| {
+            if x.is_nan() {
+                return f64::NAN;
+            }
+            let mut masked = false;
+            if let Some(l) = lo {
+                masked |= if loin { x < l } else { x <= l };
+            }
+            if let Some(u) = up {
+                masked |= if upin { x > u } else { x >= u };
+            }
+            if masked { f64::NAN } else { x }
+        })
+        .collect()
+}
+
+/// Trims an array by masking a proportion of the lowest/highest *ranked* values.
+///
+/// Matches `scipy.stats.mstats.trimr(a, limits, inclusive)`. `limits =
+/// (lower, upper)` are proportions of `n` (the non-NaN count) to mask from each
+/// rank end. When the corresponding `inclusive` flag is true the tail count is
+/// `int(limit·n)` (truncated), otherwise `round(limit·n)` (round-half-even). A
+/// lower limit of `0`/`None` masks nothing on that side. Returns a same-length,
+/// same-order `Vec<f64>` with masked entries set to NaN.
+#[must_use]
+pub fn trimr(data: &[f64], limits: (Option<f64>, Option<f64>), inclusive: (bool, bool)) -> Vec<f64> {
+    let (lo, up) = limits;
+    let (loin, upin) = inclusive;
+    let mut idx: Vec<usize> = (0..data.len()).filter(|&i| !data[i].is_nan()).collect();
+    let n = idx.len();
+    idx.sort_by(|&a, &b| data[a].total_cmp(&data[b]));
+    let nf = n as f64;
+    let mut out = data.to_vec();
+    if let Some(l) = lo {
+        if l != 0.0 {
+            let lowidx = if loin {
+                (l * nf) as usize
+            } else {
+                round_half_even(l * nf) as usize
+            }
+            .min(n);
+            for &i in &idx[..lowidx] {
+                out[i] = f64::NAN;
+            }
+        }
+    }
+    if let Some(u) = up {
+        let cut = if upin {
+            (nf * u) as usize
+        } else {
+            round_half_even(nf * u) as usize
+        };
+        let upidx = n.saturating_sub(cut);
+        for &i in &idx[upidx..] {
+            out[i] = f64::NAN;
+        }
+    }
+    out
+}
+
+/// Trims a proportion of values from one tail of an array.
+///
+/// Matches `scipy.stats.mstats.trimtail(data, proportiontocut, tail, inclusive)`.
+/// `tail` selects the side: `"left"`/`"l"` masks the lowest `proportiontocut`
+/// fraction by rank, `"right"`/`"r"` masks the highest. Returns a same-length,
+/// same-order `Vec<f64>` with masked entries set to NaN.
+#[must_use]
+pub fn trimtail(
+    data: &[f64],
+    proportiontocut: f64,
+    tail: &str,
+    inclusive: (bool, bool),
+) -> Vec<f64> {
+    let right = tail
+        .chars()
+        .next()
+        .map(|c| c.to_ascii_lowercase())
+        == Some('r');
+    let limits = if right {
+        (None, Some(proportiontocut))
+    } else {
+        (Some(proportiontocut), None)
+    };
+    trimr(data, limits, inclusive)
+}
+
 /// Trim a proportion of elements from both ends of a sorted array.
 ///
 /// Slices off the given proportion from **each** end of the sorted input array,
@@ -46028,6 +46126,47 @@ mod tests {
         // trimmed_stde default limits (0.1, 0.1) and (0.2, 0.2).
         assert!((trimmed_stde(&d, (0.1, 0.1)) - 0.8076576349315084).abs() <= 1e-12);
         assert!((trimmed_stde(&d, (0.2, 0.2)) - 0.8972912453308391).abs() <= 1e-12);
+    }
+
+    #[test]
+    fn trim_family_matches_scipy() {
+        let d = [2.0, 4.0, 1.0, 7.0, 3.0, 9.0, 5.0, 6.0, 8.0, 10.0, 2.5, 0.3];
+        let nan = f64::NAN;
+        let eq = |got: &[f64], want: &[f64], msg: &str| {
+            assert_eq!(got.len(), want.len(), "{msg} len");
+            for (i, (g, w)) in got.iter().zip(want.iter()).enumerate() {
+                if w.is_nan() {
+                    assert!(g.is_nan(), "{msg}[{i}]: {g} expected NaN");
+                } else {
+                    assert!((g - w).abs() <= 1e-12, "{msg}[{i}]: {g} vs {w}");
+                }
+            }
+        };
+        eq(
+            &trima(&d, (Some(3.0), Some(8.0)), (true, true)),
+            &[nan, 4.0, nan, 7.0, 3.0, nan, 5.0, 6.0, 8.0, nan, nan, nan],
+            "trima",
+        );
+        eq(
+            &trima(&d, (Some(3.0), Some(8.0)), (false, false)),
+            &[nan, 4.0, nan, 7.0, nan, nan, 5.0, 6.0, nan, nan, nan, nan],
+            "trima_excl",
+        );
+        eq(
+            &trimr(&d, (Some(0.2), Some(0.2)), (true, true)),
+            &[2.0, 4.0, nan, 7.0, 3.0, nan, 5.0, 6.0, 8.0, nan, 2.5, nan],
+            "trimr",
+        );
+        eq(
+            &trimtail(&d, 0.25, "left", (true, true)),
+            &[nan, 4.0, nan, 7.0, 3.0, 9.0, 5.0, 6.0, 8.0, 10.0, 2.5, nan],
+            "trimtail_l",
+        );
+        eq(
+            &trimtail(&d, 0.25, "right", (true, true)),
+            &[2.0, 4.0, 1.0, 7.0, 3.0, nan, 5.0, 6.0, nan, nan, 2.5, 0.3],
+            "trimtail_r",
+        );
     }
 
     #[test]
