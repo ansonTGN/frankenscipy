@@ -717,6 +717,74 @@ fn fft_conv_is_faster(na: usize, nb: usize) -> bool {
     direct_ops > 20 * fft_ops
 }
 
+/// Convolution method chosen by [`choose_conv_method`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConvMethod {
+    /// Direct time-domain convolution.
+    Direct,
+    /// FFT-based convolution.
+    Fft,
+}
+
+/// Operation-count cost model from scipy's `_conv_ops` (1-D case): returns
+/// `(fft_ops, direct_ops)` for the given input lengths and mode.
+fn conv_ops_1d(s1: usize, s2: usize, mode: ConvolveMode) -> (f64, f64) {
+    let (s1f, s2f) = (s1 as f64, s2 as f64);
+    let direct_ops = match mode {
+        ConvolveMode::Full => s1f * s2f,
+        ConvolveMode::Valid => {
+            if s2 >= s1 {
+                (s2f - s1f + 1.0) * s1f
+            } else {
+                (s1f - s2f + 1.0) * s2f
+            }
+        }
+        ConvolveMode::Same => {
+            if s1 < s2 {
+                s1f * s2f
+            } else {
+                s1f * s2f - (s2 / 2) as f64 * ((s2 + 1) / 2) as f64
+            }
+        }
+    };
+    let n = (s1 + s2 - 1) as f64;
+    let fft_ops = 3.0 * n * n.ln();
+    (fft_ops, direct_ops)
+}
+
+/// Predicts the fastest method for convolving two 1-D real signals, matching
+/// `scipy.signal.choose_conv_method(in1, in2, mode, measure=False)`.
+///
+/// Uses scipy's precomputed cost-model constants (the tuned coefficients from
+/// scipy PR 11031) over the FFT/direct operation counts. `measure=True` timing
+/// is not supported. Note this is scipy's published heuristic and is distinct
+/// from fsci's internal `convolve(method=auto)` crossover.
+#[must_use]
+pub fn choose_conv_method(in1: &[f64], in2: &[f64], mode: ConvolveMode) -> ConvMethod {
+    let (s1, s2) = (in1.len(), in2.len());
+    if s1 == 0 || s2 == 0 {
+        return ConvMethod::Direct;
+    }
+    let (fft_ops, direct_ops) = conv_ops_1d(s1, s2, mode);
+    let offset = -1e-3_f64; // x.ndim == 1
+    let (o_fft, o_direct, o_offset) = match mode {
+        ConvolveMode::Valid => (1.89095737e-9, 2.1364985e-10, offset),
+        ConvolveMode::Full => (1.7649070e-9, 2.1414831e-10, offset),
+        ConvolveMode::Same => {
+            if s2 <= s1 {
+                (3.2646654e-9, 2.8478277e-10, offset)
+            } else {
+                (3.21635404e-9, 1.1773253e-8, -1e-5)
+            }
+        }
+    };
+    if o_fft * fft_ops < o_direct * direct_ops + o_offset {
+        ConvMethod::Fft
+    } else {
+        ConvMethod::Direct
+    }
+}
+
 /// Direct (time-domain) convolution.
 ///
 /// Matches `scipy.signal.convolve(a, b, mode)`.
@@ -15855,6 +15923,39 @@ mod tests {
         for (i, (&r, &e)) in result.iter().zip(expected.iter()).enumerate() {
             assert!((r - e).abs() < 1e-12, "conv[{i}] = {r}, expected {e}");
         }
+    }
+
+    #[test]
+    fn choose_conv_method_matches_scipy() {
+        // Result depends only on shapes, so dummy data of the right length works.
+        let mk = |n: usize| vec![0.0_f64; n];
+        // scipy.signal.choose_conv_method oracle (full): direct up to ~2000, fft from ~3000.
+        assert_eq!(
+            choose_conv_method(&mk(2000), &mk(2000), ConvolveMode::Full),
+            ConvMethod::Direct
+        );
+        assert_eq!(
+            choose_conv_method(&mk(3000), &mk(3000), ConvolveMode::Full),
+            ConvMethod::Fft
+        );
+        assert_eq!(
+            choose_conv_method(&mk(50), &mk(5), ConvolveMode::Full),
+            ConvMethod::Direct
+        );
+        // valid mode
+        assert_eq!(
+            choose_conv_method(&mk(100000), &mk(5), ConvolveMode::Valid),
+            ConvMethod::Direct
+        );
+        assert_eq!(
+            choose_conv_method(&mk(100000), &mk(50000), ConvolveMode::Valid),
+            ConvMethod::Fft
+        );
+        // same mode
+        assert_eq!(
+            choose_conv_method(&mk(100), &mk(100), ConvolveMode::Same),
+            ConvMethod::Direct
+        );
     }
 
     #[test]
