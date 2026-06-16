@@ -3,7 +3,7 @@
 
 // Cosine-sine decomposition building blocks (LAPACK dorcsd/dorbdb/dbbcsd port,
 // in progress — see bead frankenscipy-5tmu1).
-mod cossin;
+pub mod cossin;
 
 pub use fsci_runtime::SyncSharedAuditLedger;
 use fsci_runtime::{

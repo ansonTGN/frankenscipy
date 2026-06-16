@@ -163,6 +163,30 @@ pub(crate) fn cs_angles(
     Ok(theta)
 }
 
+/// Cosine-sine decomposition angles and middle factor of an `m × m` orthogonal
+/// matrix `x` partitioned with a `p × q` upper-left block, matching the
+/// `compute_u=False, compute_vh=False` mode of `scipy.linalg.cossin`.
+///
+/// Returns `(theta, cs)`: `theta` is the vector of CS angles (radians), and `cs`
+/// is the `m × m` cosine-sine middle factor (default `swap_sign=False`
+/// convention). The orthogonal factors `u`/`vh` are not yet produced (their
+/// LAPACK-identical signs require the `dorbdb`/`dbbcsd` port — see bead
+/// frankenscipy-5tmu1); this function provides the angle/structure side, which
+/// is independent of that sign convention.
+///
+/// `x` must be `m × m` orthogonal with `0 < p < m`, `0 < q < m`.
+pub fn cossin_angles(
+    x: &[Vec<f64>],
+    p: usize,
+    q: usize,
+) -> Result<(Vec<f64>, Vec<Vec<f64>>), crate::LinalgError> {
+    let m = x.len();
+    let x11: Vec<Vec<f64>> = x[..p].iter().map(|row| row[..q].to_vec()).collect();
+    let theta = cs_angles(&x11, p, q, m)?;
+    let cs = build_cs_matrix(&theta, p, q, m);
+    Ok((theta, cs))
+}
+
 /// Assemble the `m × m` cosine-sine middle factor `CS` from the angle vector
 /// `theta`, matching the construction in scipy's `_cossin` (default
 /// `swap_sign=False`: the `-S`/`-I` blocks sit in the upper-right).
@@ -263,6 +287,40 @@ mod tests {
                     (cs[i][j] - w).abs() < 1e-6,
                     "CS[{i}][{j}] = {} vs {w}",
                     cs[i][j]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cossin_angles_matches_scipy_full() {
+        // Full 6x6 orthogonal X, p=q=3; scipy.linalg.cossin oracle.
+        let x = vec![
+            vec![-0.87391881375, 0.167562492975, -0.235103506178, 0.350213063322, -0.006202049134, 0.173860300728],
+            vec![0.000460285786, -0.628191216821, -0.001453845601, 0.54997211923, -0.208189382876, -0.509471607163],
+            vec![-0.261214975137, 0.006389522704, -0.246757897299, -0.471708053971, 0.418748888032, -0.687733474157],
+            vec![-0.141882309423, -0.492064853719, 0.399089339788, 0.00027656113, 0.687774023242, 0.324709262791],
+            vec![0.023462349781, -0.528172950388, -0.67836107675, -0.326551827636, -0.150226127071, 0.362084405606],
+            vec![0.383863726197, 0.236987962287, -0.514187432999, 0.495718486188, 0.534478332503, 0.026319645199],
+        ];
+        let (theta, cs) = cossin_angles(&x, 3, 3).unwrap();
+        let want_theta = [0.186263718828, 0.906992013555, 1.410204824056];
+        for (g, w) in theta.iter().zip(want_theta.iter()) {
+            assert!((g - w).abs() < 1e-9, "theta {g} vs {w}");
+        }
+        let want_cs = [
+            0.982703009127, 0.0, 0.0, -0.185188541364, 0.0, 0.0, 0.0, 0.616117785876, 0.0, 0.0,
+            -0.787654031874, 0.0, 0.0, 0.0, 0.159902126352, 0.0, 0.0, -0.987132873522,
+            0.185188541364, 0.0, 0.0, 0.982703009127, 0.0, 0.0, 0.0, 0.787654031874, 0.0, 0.0,
+            0.616117785876, 0.0, 0.0, 0.0, 0.987132873522, 0.0, 0.0, 0.159902126352,
+        ];
+        for r in 0..6 {
+            for c in 0..6 {
+                assert!(
+                    (cs[r][c] - want_cs[r * 6 + c]).abs() < 1e-9,
+                    "cs[{r}][{c}] = {} vs {}",
+                    cs[r][c],
+                    want_cs[r * 6 + c]
                 );
             }
         }
