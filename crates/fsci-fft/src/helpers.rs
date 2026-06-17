@@ -55,7 +55,6 @@ fn roll_axis<T: Clone>(input: &[T], shape: &[usize], axis: usize, k_right: usize
     if k == 0 {
         return input.to_vec();
     }
-    let total: usize = input.len();
     // Stride of `axis` in the row-major layout (product of trailing dims).
     let stride: usize = shape[axis + 1..].iter().product();
     let mut out = input.to_vec();

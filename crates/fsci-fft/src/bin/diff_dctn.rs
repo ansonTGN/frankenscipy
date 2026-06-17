@@ -1,8 +1,9 @@
 use fsci_fft::{FftOptions, Normalization, dctn, dstn, idctn, idstn};
 fn opts(n: Normalization) -> FftOptions {
-    let mut o = FftOptions::default();
-    o.normalization = n;
-    o
+    FftOptions {
+        normalization: n,
+        ..Default::default()
+    }
 }
 fn dump(name: &str, nl: &str, v: &[f64]) {
     for (i, &x) in v.iter().enumerate() {

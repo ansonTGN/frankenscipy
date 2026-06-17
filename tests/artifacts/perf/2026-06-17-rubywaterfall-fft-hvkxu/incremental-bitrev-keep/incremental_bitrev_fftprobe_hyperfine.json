@@ -1,0 +1,52 @@
+{
+  "results": [
+    {
+      "command": "/data/projects/.scratch/frankenscipy-rubywaterfall-fft-baseline-527ff87f-20260617/target-fft-hvkxu-baseline/release-perf/perf_fft fftprobe 4194304 5",
+      "mean": 2.97081556656,
+      "stddev": 0.058907161179864845,
+      "median": 3.00217977856,
+      "user": 2.39289036,
+      "system": 0.5753237999999999,
+      "min": 2.89014200956,
+      "max": 3.0191908605599997,
+      "times": [
+        3.00217977856,
+        3.0191908605599997,
+        2.89014200956,
+        2.92629552356,
+        3.01626966056
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "command": "./target-fft-hvkxu-incremental/release-perf/perf_fft fftprobe 4194304 5",
+      "mean": 2.59832545316,
+      "stddev": 0.051174836992751487,
+      "median": 2.5686319105599997,
+      "user": 2.0548921599999996,
+      "system": 0.5413588,
+      "min": 2.55432662656,
+      "max": 2.67207566456,
+      "times": [
+        2.67207566456,
+        2.63160386756,
+        2.55432662656,
+        2.56498919656,
+        2.5686319105599997
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

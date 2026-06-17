@@ -1,4 +1,4 @@
-use fsci_fft::{Complex64, FftOptions, fft, ifft, rfft};
+use fsci_fft::{Complex64, FftOptions, fft, rfft};
 fn main() {
     let o = FftOptions::default();
     for &n in &[

@@ -255,13 +255,7 @@ fn cooley_tukey_radix4_inplace_with_twiddles(data: &mut [Complex64], twiddles: &
     debug_assert!(twiddles.len() >= n);
     let log_n = n.trailing_zeros() as usize;
 
-    // Shared bit-reversal permutation (identical to the radix-2 path).
-    for i in 0..n {
-        let j = bit_reverse(i, log_n);
-        if i < j {
-            data.swap(i, j);
-        }
-    }
+    apply_bit_reverse_permutation_incremental(data);
 
     // `l` = size of already-combined sub-transforms.
     let mut l = 1usize;
@@ -349,6 +343,23 @@ fn cooley_tukey_radix2_inplace_with_plan(
             base += stage_len;
         }
         stage_len *= 2;
+    }
+}
+
+fn apply_bit_reverse_permutation_incremental(data: &mut [Complex64]) {
+    let n = data.len();
+    debug_assert!(n.is_power_of_two());
+    let mut j = 0usize;
+    for i in 1..n {
+        let mut bit = n >> 1;
+        while j & bit != 0 {
+            j ^= bit;
+            bit >>= 1;
+        }
+        j ^= bit;
+        if i < j {
+            data.swap(i, j);
+        }
     }
 }
 
@@ -3947,7 +3958,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn hfft_ihfft_match_scipy_all_norms() {
         // Regression: hfft/ihfft passed the user's `norm` to the inner irfft/rfft
@@ -4042,8 +4052,8 @@ mod tests {
             0.462_071_204_481_245_2,
             -0.232_222_197_841_266_9,
             -0.018_774_427_774_383_7,
-            0.151_765_591_068_411_0,
-            0.438_760_353_356_441_0,
+            0.151_765_591_068_411,
+            0.438_760_353_356_441,
             0.075_733_138_080_953_6,
             -0.018_241_964_713_169_3,
             -0.067_413_042_970_040_0,
@@ -4097,8 +4107,10 @@ mod tests {
             Normalization::Ortho,
             Normalization::Forward,
         ] {
-            let mut o = FftOptions::default();
-            o.normalization = norm;
+            let o = FftOptions {
+                normalization: norm,
+                ..Default::default()
+            };
             let fwd = dstn(&x, &shape, &o).expect("dstn");
             let back = idstn(&fwd, &shape, &o).expect("idstn");
             for (a, b) in x.iter().zip(&back) {
