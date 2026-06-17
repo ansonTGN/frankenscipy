@@ -156,6 +156,14 @@ impl SignalError {
     }
 }
 
+type ComplexSample = (f64, f64);
+type ComplexPolynomial = Vec<ComplexSample>;
+type ComplexFactors = Vec<ComplexPolynomial>;
+type ComplexPolyPair = (ComplexPolynomial, ComplexPolynomial);
+type BodeTriplet = (Vec<f64>, Vec<f64>, Vec<f64>);
+type DfreqResponse = (Vec<f64>, Vec<ComplexSample>);
+type LfilterAxisBlock = Result<(usize, Vec<Vec<f64>>), SignalError>;
+
 impl std::fmt::Display for SignalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -743,7 +751,7 @@ fn conv_ops_1d(s1: usize, s2: usize, mode: ConvolveMode) -> (f64, f64) {
             if s1 < s2 {
                 s1f * s2f
             } else {
-                s1f * s2f - (s2 / 2) as f64 * ((s2 + 1) / 2) as f64
+                s1f * s2f - (s2 / 2) as f64 * s2.div_ceil(2) as f64
             }
         }
     };
@@ -1400,13 +1408,12 @@ fn crop2d(
     vr: usize,
     vc: usize,
     mode: ConvolveMode,
-    sr_same: usize,
-    sc_same: usize,
+    same_start: (usize, usize),
 ) -> Vec<f64> {
     let full_c = ac + vc - 1;
     let (out_r, out_c, sr, sc) = match mode {
         ConvolveMode::Full => (ar + vr - 1, ac + vc - 1, 0, 0),
-        ConvolveMode::Same => (ar, ac, sr_same, sc_same),
+        ConvolveMode::Same => (ar, ac, same_start.0, same_start.1),
         ConvolveMode::Valid => (ar - vr + 1, ac - vc + 1, vr - 1, vc - 1),
     };
     let mut out = vec![0.0; out_r * out_c];
@@ -1451,7 +1458,7 @@ pub fn correlate2d_with_boundary(
     }
     let (apad, pr, pc) = pad2d_boundary(a, ar, ac, vr - 1, vc - 1, boundary, cval);
     let full_bnd = correlate2d(&apad, (pr, pc), v, v_shape, ConvolveMode::Valid)?;
-    Ok(crop2d(&full_bnd, ar, ac, vr, vc, mode, vr / 2, vc / 2))
+    Ok(crop2d(&full_bnd, ar, ac, vr, vc, mode, (vr / 2, vc / 2)))
 }
 
 /// 2-D convolution with an explicit `boundary` and `fillvalue`.
@@ -1500,8 +1507,7 @@ pub fn convolve2d_with_boundary(
         vr,
         vc,
         mode,
-        (vr - 1) / 2,
-        (vc - 1) / 2,
+        ((vr - 1) / 2, (vc - 1) / 2),
     ))
 }
 
@@ -1625,7 +1631,7 @@ fn hilbert2_multiplier(n: usize) -> Vec<f64> {
     if n == 0 {
         return h;
     }
-    let k_half = (n + 1) / 2;
+    let k_half = n.div_ceil(2);
     h[0] = 1.0;
     for item in h.iter_mut().take(k_half).skip(1) {
         *item = 2.0;
@@ -2179,8 +2185,8 @@ impl CZT {
         for k in (1..n).rev() {
             filt.push(czt_recip(wk2[k]));
         }
-        for k in 0..m {
-            filt.push(czt_recip(wk2[k]));
+        for &wk in wk2.iter().take(m) {
+            filt.push(czt_recip(wk));
         }
         filt.resize(nfft, (0.0, 0.0));
         let opts = fsci_fft::FftOptions::default();
@@ -2222,8 +2228,8 @@ impl CZT {
         }
         let opts = fsci_fft::FftOptions::default();
         let mut xa: Vec<(f64, f64)> = Vec::with_capacity(self.nfft);
-        for k in 0..self.n {
-            xa.push(czt_cmul(x[k], self.awk2[k]));
+        for (&xk, &awk2k) in x.iter().zip(self.awk2.iter()).take(self.n) {
+            xa.push(czt_cmul(xk, awk2k));
         }
         xa.resize(self.nfft, (0.0, 0.0));
         let fx = fsci_fft::fft(&xa, &opts).map_err(|e| SignalError::InvalidArgument(format!("{e}")))?;
@@ -2334,8 +2340,8 @@ impl ZoomFFT {
         for k in (1..n).rev() {
             filt.push(czt_recip(wk2[k]));
         }
-        for k in 0..m {
-            filt.push(czt_recip(wk2[k]));
+        for &wk in wk2.iter().take(m) {
+            filt.push(czt_recip(wk));
         }
         filt.resize(nfft, (0.0, 0.0));
         let opts = fsci_fft::FftOptions::default();
@@ -4314,7 +4320,7 @@ fn ord_digital_prewarp(
     } else {
         passb / stopb
     };
-    if !(nat > 1.0) {
+    if nat.partial_cmp(&1.0) != Some(std::cmp::Ordering::Greater) {
         return Err(SignalError::InvalidArgument(format!(
             "{name}: wp and ws must differ (passband and stopband edges coincide)"
         )));
@@ -7403,8 +7409,7 @@ pub fn lfilter_axis_2d(
             }
             let chunk = cols.div_ceil(nthreads);
             // Each worker returns (col_start, filtered-columns) for its block.
-            let chunk_results: Vec<Result<(usize, Vec<Vec<f64>>), SignalError>> =
-                std::thread::scope(|scope| {
+            let chunk_results: Vec<LfilterAxisBlock> = std::thread::scope(|scope| {
                     (0..cols)
                         .step_by(chunk)
                         .map(|col0| {
@@ -7422,7 +7427,7 @@ pub fn lfilter_axis_2d(
                         .into_iter()
                         .map(|h| h.join().expect("lfilter col chunk panicked"))
                         .collect()
-                });
+            });
             let mut y = vec![vec![0.0; cols]; nrows];
             for chunk_result in chunk_results {
                 let (col0, block) = chunk_result?;
@@ -8764,7 +8769,7 @@ fn bode_from_complex(h: &[(f64, f64)], w: &[f64]) -> (Vec<f64>, Vec<f64>, Vec<f6
 /// frequencies (rad/s) at which to evaluate `H(jω) = num(jω)/den(jω)`. Returns
 /// `(w, mag_dB, phase_deg)` with `mag = 20·log10|H|` and the phase unwrapped
 /// like numpy. (The auto-frequency `w=None` path needs `findfreqs`, deferred.)
-pub fn bode(num: &[f64], den: &[f64], w: &[f64]) -> Result<(Vec<f64>, Vec<f64>, Vec<f64>), SignalError> {
+pub fn bode(num: &[f64], den: &[f64], w: &[f64]) -> Result<BodeTriplet, SignalError> {
     if num.is_empty() || den.is_empty() {
         return Err(SignalError::InvalidArgument(
             "num and den must be non-empty".to_string(),
@@ -8795,7 +8800,7 @@ pub fn dbode(
     den: &[f64],
     dt: f64,
     w: &[f64],
-) -> Result<(Vec<f64>, Vec<f64>, Vec<f64>), SignalError> {
+) -> Result<BodeTriplet, SignalError> {
     let _ = dt; // unused for explicit-frequency response (matches scipy)
     if num.is_empty() || den.is_empty() {
         return Err(SignalError::InvalidArgument(
@@ -8817,7 +8822,7 @@ pub fn dfreqresp(
     den: &[f64],
     dt: f64,
     w: &[f64],
-) -> Result<(Vec<f64>, Vec<(f64, f64)>), SignalError> {
+) -> Result<DfreqResponse, SignalError> {
     let _ = dt; // unused for explicit-frequency response (matches scipy)
     if num.is_empty() || den.is_empty() {
         return Err(SignalError::InvalidArgument(
@@ -9143,14 +9148,13 @@ pub fn welch(
     // Each segment's periodogram (constant-detrend + window + rfft) is independent and
     // expensive; for many segments the work is split across threads. The per-segment
     // computation is deterministic and the averaging fold below runs in segment order,
-    // so the result is bit-identical to the sequential loop. scipy.signal.welch defaults
-    // to detrend='constant' (remove each segment's mean) — kept verbatim.
+    // so the result is bit-identical to the sequential loop. `periodogram` applies
+    // scipy.signal's default `detrend='constant'`, so pass the raw segment here instead
+    // of subtracting the mean twice.
     let compute_segment = |s: usize| -> Result<Vec<f64>, SignalError> {
         let start = s * step;
         let segment = &x[start..start + nperseg];
-        let mean = segment.iter().sum::<f64>() / nperseg as f64;
-        let detrended: Vec<f64> = segment.iter().map(|&v| v - mean).collect();
-        Ok(periodogram(&detrended, fs, Some(&win_coeffs))?.psd)
+        Ok(periodogram(segment, fs, Some(&win_coeffs))?.psd)
     };
 
     let seg_psds: Vec<Vec<f64>> = {
@@ -9763,7 +9767,6 @@ fn remez_type1_pm(
     // Initial extremal set: evenly spaced grid indices.
     let mut iext: Vec<usize> = (0..nz).map(|k| k * (ngrid - 1) / (nz - 1)).collect();
 
-    let mut dev = 0.0_f64;
     let mut y = vec![0.0_f64; nfcns];
     let mut adp = vec![0.0_f64; nfcns];
     let mut xe = vec![0.0_f64; nz];
@@ -9791,7 +9794,7 @@ fn remez_type1_pm(
             let s = if k % 2 == 0 { 1.0 } else { -1.0 };
             dden += s * ad[k] / gwt[iext[k]];
         }
-        dev = dnum / dden;
+        let dev = dnum / dden;
         for k in 0..nfcns {
             let s = if k % 2 == 0 { 1.0 } else { -1.0 };
             y[k] = gdes[iext[k]] - s * dev / gwt[iext[k]];
@@ -9841,13 +9844,13 @@ fn remez_type1_pm(
         // Collapse same-sign consecutive candidates, keeping the larger |err|.
         let mut alt: Vec<usize> = Vec::new();
         for &ci in &cand {
-            if let Some(&last) = alt.last() {
-                if (err[ci] >= 0.0) == (err[last] >= 0.0) {
-                    if err[ci].abs() > err[last].abs() {
-                        *alt.last_mut().unwrap() = ci;
-                    }
-                    continue;
+            if let Some(&last) = alt.last()
+                && (err[ci] >= 0.0) == (err[last] >= 0.0)
+            {
+                if err[ci].abs() > err[last].abs() {
+                    *alt.last_mut().unwrap() = ci;
                 }
+                continue;
             }
             alt.push(ci);
         }
@@ -9891,7 +9894,7 @@ fn remez_type1_pm(
         let s = if k % 2 == 0 { 1.0 } else { -1.0 };
         dden += s * ad[k] / gwt[iext[k]];
     }
-    dev = dnum / dden;
+    let dev = dnum / dden;
     for k in 0..nfcns {
         let s = if k % 2 == 0 { 1.0 } else { -1.0 };
         y[k] = gdes[iext[k]] - s * dev / gwt[iext[k]];
@@ -10016,7 +10019,6 @@ fn remez_type2_pm(
     let x: Vec<f64> = gridf.iter().map(|&f| (2.0 * PI * f).cos()).collect();
 
     let mut iext: Vec<usize> = (0..nz).map(|k| k * (ngrid - 1) / (nz - 1)).collect();
-    let mut dev = 0.0_f64;
     let mut y = vec![0.0_f64; nfcns];
     let mut adp = vec![0.0_f64; nfcns];
     let mut xe = vec![0.0_f64; nz];
@@ -10042,7 +10044,7 @@ fn remez_type2_pm(
             let s = if k % 2 == 0 { 1.0 } else { -1.0 };
             dden += s * ad[k] / gwt[iext[k]];
         }
-        dev = dnum / dden;
+        let dev = dnum / dden;
         for k in 0..nfcns {
             let s = if k % 2 == 0 { 1.0 } else { -1.0 };
             y[k] = gdes[iext[k]] - s * dev / gwt[iext[k]];
@@ -10090,13 +10092,13 @@ fn remez_type2_pm(
         }
         let mut alt: Vec<usize> = Vec::new();
         for &ci in &cand {
-            if let Some(&last) = alt.last() {
-                if (err[ci] >= 0.0) == (err[last] >= 0.0) {
-                    if err[ci].abs() > err[last].abs() {
-                        *alt.last_mut().unwrap() = ci;
-                    }
-                    continue;
+            if let Some(&last) = alt.last()
+                && (err[ci] >= 0.0) == (err[last] >= 0.0)
+            {
+                if err[ci].abs() > err[last].abs() {
+                    *alt.last_mut().unwrap() = ci;
                 }
+                continue;
             }
             alt.push(ci);
         }
@@ -10141,7 +10143,7 @@ fn remez_type2_pm(
             dden += s * ad[k] / gwt[iext[k]];
         }
     }
-    dev = dnum / dden;
+    let dev = dnum / dden;
     for k in 0..nfcns {
         let s = if k % 2 == 0 { 1.0 } else { -1.0 };
         y[k] = gdes[iext[k]] - s * dev / gwt[iext[k]];
@@ -10300,7 +10302,6 @@ fn remez_hilbert_pm(
     let x: Vec<f64> = gridf.iter().map(|&f| (2.0 * PI * f).cos()).collect();
 
     let mut iext: Vec<usize> = (0..nz).map(|k| k * (ngrid - 1) / (nz - 1)).collect();
-    let mut dev = 0.0_f64;
     let mut y = vec![0.0_f64; nfcns];
     let mut adp = vec![0.0_f64; nfcns];
     let mut xe = vec![0.0_f64; nz];
@@ -10326,7 +10327,7 @@ fn remez_hilbert_pm(
             let s = if k % 2 == 0 { 1.0 } else { -1.0 };
             dden += s * ad[k] / gwt[iext[k]];
         }
-        dev = dnum / dden;
+        let dev = dnum / dden;
         for k in 0..nfcns {
             let s = if k % 2 == 0 { 1.0 } else { -1.0 };
             y[k] = gdes[iext[k]] - s * dev / gwt[iext[k]];
@@ -10374,13 +10375,13 @@ fn remez_hilbert_pm(
         }
         let mut alt: Vec<usize> = Vec::new();
         for &ci in &cand {
-            if let Some(&last) = alt.last() {
-                if (err[ci] >= 0.0) == (err[last] >= 0.0) {
-                    if err[ci].abs() > err[last].abs() {
-                        *alt.last_mut().unwrap() = ci;
-                    }
-                    continue;
+            if let Some(&last) = alt.last()
+                && (err[ci] >= 0.0) == (err[last] >= 0.0)
+            {
+                if err[ci].abs() > err[last].abs() {
+                    *alt.last_mut().unwrap() = ci;
                 }
+                continue;
             }
             alt.push(ci);
         }
@@ -10424,7 +10425,7 @@ fn remez_hilbert_pm(
             dden += s * ad[k] / gwt[iext[k]];
         }
     }
-    dev = dnum / dden;
+    let dev = dnum / dden;
     for k in 0..nfcns {
         let s = if k % 2 == 0 { 1.0 } else { -1.0 };
         y[k] = gdes[iext[k]] - s * dev / gwt[iext[k]];
@@ -10459,12 +10460,12 @@ fn remez_hilbert_pm(
         .map(|j| eval_p((PI * (j as f64 + 0.5) / nn as f64).cos()))
         .collect();
     let mut bt = vec![0.0_f64; nfcns + 2]; // zero-padded so b_m = b_{m+1} = 0
-    for k in 0..nfcns {
+    for (k, btk) in bt.iter_mut().enumerate().take(nfcns) {
         let mut s = 0.0;
         for (j, &sj) in samp.iter().enumerate() {
             s += sj * (PI * k as f64 * (j as f64 + 0.5) / nn as f64).cos();
         }
-        bt[k] = 2.0 / nn as f64 * s;
+        *btk = 2.0 / nn as f64 * s;
     }
     bt[0] *= 0.5;
 
@@ -10703,8 +10704,9 @@ fn firls_type2(
     }
     // Mirror the upper triangle.
     for i in 0..m {
-        for j in 0..i {
-            q[i][j] = q[j][i];
+        let mirrored: Vec<f64> = q.iter().take(i).map(|row| row[i]).collect();
+        for (slot, value) in q[i].iter_mut().take(i).zip(mirrored) {
+            *slot = value;
         }
     }
 
@@ -11348,11 +11350,11 @@ pub fn firwin_2d_circular(
     };
     // Output is (h1, h0) per the meshgrid('xy') convention.
     let mut out = vec![vec![0.0_f64; h0]; h1];
-    for i in 0..h1 {
+    for (i, row) in out.iter_mut().enumerate().take(h1) {
         let f2 = lin(h1, i);
-        for j in 0..h0 {
+        for (j, cell) in row.iter_mut().enumerate().take(h0) {
             let f1 = lin(h0, j);
-            out[i][j] = interp((f1 * f1 + f2 * f2).sqrt());
+            *cell = interp((f1 * f1 + f2 * f2).sqrt());
         }
     }
     Ok(out)
@@ -11431,8 +11433,8 @@ pub fn place_poles(
     let mut ctrl = vec![vec![0.0; n]; n]; // ctrl[i][k]
     let mut col = bvec.clone();
     for k in 0..n {
-        for i in 0..n {
-            ctrl[i][k] = col[i];
+        for (row, &value) in ctrl.iter_mut().zip(&col) {
+            row[k] = value;
         }
         // col <- A·col
         let mut next = vec![0.0; n];
@@ -11480,8 +11482,8 @@ pub fn place_poles(
                 }
             }
         }
-        for i in 0..n {
-            prod[i][i] += ck;
+        for (i, row) in prod.iter_mut().enumerate().take(n) {
+            row[i] += ck;
         }
         pa = prod;
     }
@@ -13310,14 +13312,6 @@ pub fn stft(
     })
 }
 
-/// Compute the inverse Short-Time Fourier Transform (overlap-add reconstruction).
-///
-/// Matches `scipy.signal.istft(Zxx, fs, nperseg, noverlap)`.
-///
-/// # Arguments
-/// * `stft_result` — STFT result from `stft()`.
-/// * `nperseg` — Segment length used in the forward STFT.
-/// * `noverlap` — Overlap used in the forward STFT (default: nperseg/2).
 /// Canonical dual window for a real STFT window `win` shifted by `hop` samples.
 ///
 /// `d[n] = win[n] / Σ_m win[n − m·hop]²` (the diagonal of the painless STFT
@@ -13600,7 +13594,7 @@ impl ShortTimeFft {
                 i += hop;
             }
             let a = a.sqrt();
-            if !(a > relative_resolution) {
+            if a.partial_cmp(&relative_resolution) != Some(std::cmp::Ordering::Greater) {
                 return Err(SignalError::InvalidArgument(format!(
                     "from_win_equals_dual: desired_win has no valid STFT dual window for hop={hop}"
                 )));
@@ -13852,7 +13846,7 @@ impl ShortTimeFft {
                 let fac = self.onesided2x_fac()?;
                 // double bins 1..(len-1) for even mfft, 1..len for odd (the last
                 // bin is unpaired only when mfft is even = a real Nyquist bin).
-                let last = if self.mfft % 2 == 0 { x.len().saturating_sub(1) } else { x.len() };
+                let last = if self.mfft.is_multiple_of(2) { x.len().saturating_sub(1) } else { x.len() };
                 for c in x.iter_mut().take(last).skip(1) {
                     c.0 *= fac;
                     c.1 *= fac;
@@ -13983,7 +13977,7 @@ impl ShortTimeFft {
         let col_owned: Vec<(f64, f64)>;
         let col = if self.fft_mode == StftFftMode::Onesided2X {
             let fac = self.onesided2x_fac()?;
-            let last = if self.mfft % 2 == 0 {
+            let last = if self.mfft.is_multiple_of(2) {
                 col.len().saturating_sub(1)
             } else {
                 col.len()
@@ -15584,8 +15578,8 @@ fn char_poly(a: &[Vec<f64>]) -> Vec<f64> {
         coeffs.push(c);
         if k < n {
             // M_{k+1} = A·M_k + c·I
-            for i in 0..n {
-                am[i][i] += c;
+            for (i, row) in am.iter_mut().enumerate().take(n) {
+                row[i] += c;
             }
             m = am;
         }
@@ -15889,7 +15883,7 @@ fn group_poles(p: &[(f64, f64)], tol: f64) -> (Vec<(f64, f64)>, Vec<usize>) {
 fn compute_factors(
     roots: &[(f64, f64)],
     mult: &[usize],
-) -> (Vec<Vec<(f64, f64)>>, Vec<(f64, f64)>) {
+) -> (ComplexFactors, ComplexPolynomial) {
     let one = vec![(1.0, 0.0)];
     let mut current = one.clone();
     let mut suffixes = vec![current.clone()];
@@ -15903,7 +15897,7 @@ fn compute_factors(
     }
     suffixes.reverse();
 
-    let mut factors: Vec<Vec<(f64, f64)>> = Vec::new();
+    let mut factors: ComplexFactors = Vec::new();
     let mut current = one;
     for (i, &pole) in roots.iter().enumerate() {
         let monomial = vec![(1.0, 0.0), (-pole.0, -pole.1)];
@@ -16010,7 +16004,7 @@ fn c_polyval(p: &[(f64, f64)], x: (f64, f64)) -> (f64, f64) {
 }
 
 /// Complex polynomial division (numpy `polydiv`): returns `(quotient, remainder)`.
-fn c_polydiv(num: &[(f64, f64)], den: &[(f64, f64)]) -> (Vec<(f64, f64)>, Vec<(f64, f64)>) {
+fn c_polydiv(num: &[(f64, f64)], den: &[(f64, f64)]) -> ComplexPolyPair {
     let dn = den.len();
     if num.len() < dn || dn == 0 {
         return (vec![(0.0, 0.0)], num.to_vec());
@@ -16098,7 +16092,7 @@ fn compute_residues(
             let monomial = vec![(1.0, 0.0), (-pole.0, -pole.1)];
             let (factor_q, d) = c_polydiv(factor, &monomial);
             let mut block = Vec::new();
-            let mut fac = factor_q;
+            let fac = factor_q;
             for _ in 0..mult[i] {
                 let (q, n) = c_polydiv(&numer, &monomial);
                 let r = c_div(n[0], d[0]);
@@ -18245,7 +18239,7 @@ mod tests {
         };
         let res = freqs_zpk(&zpk, &[0.0, 1.0, 2.0]).unwrap();
         let mag = [3.0, 1.6970562748477143, 1.1504474832710556];
-        let phase = [0.0, -0.7853981633974483, -1.0040671092713902];
+        let phase = [0.0, -std::f64::consts::FRAC_PI_4, -1.0040671092713902];
         for i in 0..3 {
             assert!((res.h_mag[i] - mag[i]).abs() < 1e-12, "mag[{i}] = {}", res.h_mag[i]);
             assert!((res.h_phase[i] - phase[i]).abs() < 1e-12, "phase[{i}] = {}", res.h_phase[i]);
@@ -18278,7 +18272,7 @@ mod tests {
         // N=2, rs=40
         let (z, p, k) = cheb2ap(2, 40.0).unwrap();
         assert!((k - 9.99999999999999e-03).abs() <= 1e-14);
-        assert!(close(z[0], (0.0, -1.414213562373)) && close(z[1], (0.0, 1.414213562373)));
+        assert!(close(z[0], (0.0, -std::f64::consts::SQRT_2)) && close(z[1], (0.0, std::f64::consts::SQRT_2)));
         assert!(close(p[0], (-0.09949874371066, -0.1004987562112)));
         assert!(close(p[1], (-0.09949874371066, 0.1004987562112)));
         // N=3, rs=30 (odd: 2 zeros, real middle pole)

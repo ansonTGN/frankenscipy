@@ -1,8 +1,10 @@
 // Probe: print fsci gammatone (b,a) for cases matched against scipy.signal.gammatone.
 use fsci_signal::{GammatoneType, gammatone};
 
+type GammatoneProbeCase = (f64, GammatoneType, Option<usize>, Option<usize>, f64);
+
 fn main() {
-    let cases: &[(f64, GammatoneType, Option<usize>, Option<usize>, f64)] = &[
+    let cases: &[GammatoneProbeCase] = &[
         (440.0, GammatoneType::Fir, Some(4), None, 16000.0),
         (1000.0, GammatoneType::Fir, Some(4), None, 16000.0),
         (100.0, GammatoneType::Fir, Some(2), None, 8000.0),
@@ -11,7 +13,10 @@ fn main() {
         (250.0, GammatoneType::Iir, None, None, 8000.0),
     ];
     for &(freq, ft, order, numtaps, fs) in cases {
-        let c = gammatone(freq, ft, order, numtaps, Some(fs)).unwrap();
+        let Ok(c) = gammatone(freq, ft, order, numtaps, Some(fs)) else {
+            eprintln!("failed gammatone probe for {freq} {ft:?} order={order:?} fs={fs}");
+            continue;
+        };
         println!("=== {freq} {ft:?} order={order:?} fs={fs}");
         let bs: Vec<String> = c.b.iter().map(|x| format!("{x:.14e}")).collect();
         let as_: Vec<String> = c.a.iter().map(|x| format!("{x:.14e}")).collect();

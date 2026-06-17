@@ -35,14 +35,16 @@ fn main() {
         if let Ok(w) = sig::exponential(n, None, 3.0, true) {
             dump("expo_tau3", &format!("{n}"), &w);
         }
-        if n % 2 == 0 {
-            if let Ok(w) = sig::kaiser_bessel_derived(n, 8.0, true) {
-                dump("kbd_8", &format!("{n}"), &w);
-            }
+        if n % 2 == 0
+            && let Ok(w) = sig::kaiser_bessel_derived(n, 8.0, true)
+        {
+            dump("kbd_8", &format!("{n}"), &w);
         }
         for &nw in &[2.5_f64, 4.0] {
-            if let Ok(r) = sig::dpss(n, nw, None, true, None, false) {
-                dump(&format!("dpss_{nw}"), &format!("{n}"), &r.windows[0]);
+            if let Ok(r) = sig::dpss(n, nw, None, true, None, false)
+                && let Some(window) = r.windows.first()
+            {
+                dump(&format!("dpss_{nw}"), &format!("{n}"), window);
             }
         }
     }
