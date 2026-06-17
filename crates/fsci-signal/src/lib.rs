@@ -13283,11 +13283,15 @@ pub fn closest_stft_dual_window(
 
 /// FFT mode for [`ShortTimeFft`], mirroring `scipy.signal.ShortTimeFFT`'s
 /// `fft_mode`. (`Onesided2X` — the doubled one-sided mode — needs window
-/// scaling and is not yet supported by this core.)
+/// scaling.)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StftFftMode {
     /// Real-input one-sided FFT (`mfft/2 + 1` bins). The scipy default.
     Onesided,
+    /// One-sided FFT with the non-DC/non-Nyquist bins doubled (`×2` magnitude or
+    /// `×√2` psd) so the one-sided spectrum carries the full two-sided energy.
+    /// Requires a window scaling (`with_scale_to`).
+    Onesided2X,
     /// Full complex two-sided FFT (`mfft` bins, `fftfreq`-ordered).
     Twosided,
     /// Two-sided FFT with the zero frequency shifted to the center.
@@ -13463,19 +13467,31 @@ impl ShortTimeFft {
     /// Number of frequency bins.
     pub fn f_pts(&self) -> usize {
         match self.fft_mode {
-            StftFftMode::Onesided => self.mfft / 2 + 1,
+            StftFftMode::Onesided | StftFftMode::Onesided2X => self.mfft / 2 + 1,
             StftFftMode::Twosided | StftFftMode::Centered => self.mfft,
         }
     }
     /// Frequencies of the STFT bins.
     pub fn f(&self) -> Vec<f64> {
         match self.fft_mode {
-            StftFftMode::Onesided => {
+            StftFftMode::Onesided | StftFftMode::Onesided2X => {
                 let df = self.delta_f();
                 (0..self.f_pts()).map(|k| k as f64 * df).collect()
             }
             StftFftMode::Twosided => stft_fftfreq(self.mfft, self.t_sample()),
             StftFftMode::Centered => stft_fftshift(&stft_fftfreq(self.mfft, self.t_sample())),
+        }
+    }
+
+    // Doubling factor for Onesided2X non-DC/non-Nyquist bins.
+    fn onesided2x_fac(&self) -> Result<f64, SignalError> {
+        match self.scaling {
+            Some(StftScaling::Psd) => Ok(std::f64::consts::SQRT_2),
+            Some(StftScaling::Magnitude) => Ok(2.0),
+            None => Err(SignalError::InvalidArgument(
+                "Onesided2X fft_mode requires a window scaling (call with_scale_to first)"
+                    .to_string(),
+            )),
         }
     }
 
@@ -13573,6 +13589,19 @@ impl ShortTimeFft {
             StftFftMode::Onesided => {
                 fsci_fft::rfft(&buf, &opts).map_err(|e| SignalError::InvalidArgument(format!("{e}")))
             }
+            StftFftMode::Onesided2X => {
+                let mut x = fsci_fft::rfft(&buf, &opts)
+                    .map_err(|e| SignalError::InvalidArgument(format!("{e}")))?;
+                let fac = self.onesided2x_fac()?;
+                // double bins 1..(len-1) for even mfft, 1..len for odd (the last
+                // bin is unpaired only when mfft is even = a real Nyquist bin).
+                let last = if self.mfft % 2 == 0 { x.len().saturating_sub(1) } else { x.len() };
+                for c in x.iter_mut().take(last).skip(1) {
+                    c.0 *= fac;
+                    c.1 *= fac;
+                }
+                Ok(x)
+            }
             StftFftMode::Twosided => {
                 let cx: Vec<fsci_fft::Complex64> = buf.iter().map(|&v| (v, 0.0)).collect();
                 fsci_fft::fft(&cx, &opts).map_err(|e| SignalError::InvalidArgument(format!("{e}")))
@@ -13645,14 +13674,14 @@ impl ShortTimeFft {
     /// only (scipy raises for twosided).
     pub fn extent(&self, n: usize) -> Result<(f64, f64, f64, f64), SignalError> {
         let (q0, q1): (i64, i64) = match self.fft_mode {
-            StftFftMode::Onesided => (0, self.f_pts() as i64),
+            StftFftMode::Onesided | StftFftMode::Onesided2X => (0, self.f_pts() as i64),
             StftFftMode::Centered => {
                 let m = self.mfft as i64;
                 (-(m / 2), if m % 2 == 0 { m / 2 } else { m / 2 + 1 })
             }
             StftFftMode::Twosided => {
                 return Err(SignalError::InvalidArgument(
-                    "extent: fft_mode must be Onesided or Centered".to_string(),
+                    "extent: fft_mode must be Onesided, Onesided2X or Centered".to_string(),
                 ));
             }
         };
@@ -13685,6 +13714,25 @@ impl ShortTimeFft {
     // undo the phase_shift roll, take the first m_num samples.
     fn ifft_func_onesided(&self, col: &[(f64, f64)]) -> Result<Vec<f64>, SignalError> {
         let opts = fsci_fft::FftOptions::default();
+        // For Onesided2X, undo the bin doubling before irfft.
+        let col_owned: Vec<(f64, f64)>;
+        let col = if self.fft_mode == StftFftMode::Onesided2X {
+            let fac = self.onesided2x_fac()?;
+            let last = if self.mfft % 2 == 0 {
+                col.len().saturating_sub(1)
+            } else {
+                col.len()
+            };
+            let mut c = col.to_vec();
+            for v in c.iter_mut().take(last).skip(1) {
+                v.0 /= fac;
+                v.1 /= fac;
+            }
+            col_owned = c;
+            &col_owned[..]
+        } else {
+            col
+        };
         let mut x = fsci_fft::irfft(col, Some(self.mfft), &opts)
             .map_err(|e| SignalError::InvalidArgument(format!("{e}")))?;
         if let Some(ps) = self.phase_shift {
@@ -13711,9 +13759,12 @@ impl ShortTimeFft {
         k0: i64,
         k1: Option<i64>,
     ) -> Result<Vec<f64>, SignalError> {
-        if self.fft_mode != StftFftMode::Onesided {
+        if !matches!(
+            self.fft_mode,
+            StftFftMode::Onesided | StftFftMode::Onesided2X
+        ) {
             return Err(SignalError::InvalidArgument(
-                "istft: only Onesided fft_mode is supported (real output)".to_string(),
+                "istft: only Onesided/Onesided2X fft_mode is supported (real output)".to_string(),
             ));
         }
         let f_pts = self.f_pts();
@@ -16214,6 +16265,37 @@ mod tests {
         let (t0, t1, f0, f1) = su.extent(n).unwrap();
         assert!((t0 - (-0.03)).abs() < 1e-12 && (t1 - 0.24).abs() < 1e-12);
         assert!(f0.abs() < 1e-12 && (f1 - 62.5).abs() < 1e-9);
+
+        // Onesided2X (psd scaling): non-DC/non-Nyquist bins doubled; stft matches
+        // scipy and istft still round-trips. Requires a scaling.
+        let s2x = ShortTimeFft::new(hann(8), 3, 100.0)
+            .unwrap()
+            .with_scale_to(StftScaling::Psd)
+            .with_fft_mode(StftFftMode::Onesided2X);
+        let s2 = s2x.stft(&x).unwrap();
+        // bin 0 (DC) is NOT doubled, bin 1 IS — relative to a plain psd-scaled
+        // onesided transform.
+        let sp = ShortTimeFft::new(hann(8), 3, 100.0)
+            .unwrap()
+            .with_scale_to(StftScaling::Psd);
+        let sps = sp.stft(&x).unwrap();
+        assert!((s2[0][0].0 - sps[0][0].0).abs() < 1e-12); // DC unchanged
+        assert!((s2[1][0].0 - sps[1][0].0 * std::f64::consts::SQRT_2).abs() < 1e-9);
+        let xr2 = s2x.istft(&s2, 0, None).unwrap();
+        let mm = xr2.len().min(n);
+        let mut e2 = 0.0_f64;
+        for i in 0..mm {
+            e2 = e2.max((xr2[i] - x[i]).abs());
+        }
+        assert!(e2 < 1e-9, "onesided2X round-trip maxerr {e2}");
+        // Onesided2X without scaling errors.
+        assert!(
+            ShortTimeFft::new(hann(8), 3, 100.0)
+                .unwrap()
+                .with_fft_mode(StftFftMode::Onesided2X)
+                .stft(&x)
+                .is_err()
+        );
     }
 
     #[test]
