@@ -13594,6 +13594,126 @@ impl ShortTimeFft {
             .map(|row| row.into_iter().map(|(re, im)| re * re + im * im).collect())
             .collect())
     }
+
+    /// Canonical dual window (the default dual used by [`Self::istft`]).
+    pub fn dual_win(&self) -> Result<Vec<f64>, SignalError> {
+        calc_dual_canonical_window(&self.win, self.hop)
+    }
+
+    // scipy ShortTimeFFT.nearest_k_p: nearest multiple of hop (left or right).
+    fn nearest_k_p(&self, k: i64, left: bool) -> i64 {
+        let hop = self.hop as i64;
+        let p_q = k.div_euclid(hop);
+        if k.rem_euclid(hop) == 0 {
+            k
+        } else if left {
+            p_q * hop
+        } else {
+            (p_q + 1) * hop
+        }
+    }
+
+    // Inverse of fft_func for a single onesided slice: irfft to mfft samples,
+    // undo the phase_shift roll, take the first m_num samples.
+    fn ifft_func_onesided(&self, col: &[(f64, f64)]) -> Result<Vec<f64>, SignalError> {
+        let opts = fsci_fft::FftOptions::default();
+        let mut x = fsci_fft::irfft(col, Some(self.mfft), &opts)
+            .map_err(|e| SignalError::InvalidArgument(format!("{e}")))?;
+        if let Some(ps) = self.phase_shift {
+            let m_num = self.win.len() as i64;
+            let mid = self.m_num_mid() as i64;
+            let p_s = (ps + mid).rem_euclid(m_num);
+            let len = self.mfft as i64;
+            x = (0..self.mfft)
+                .map(|j| x[((j as i64 - p_s).rem_euclid(len)) as usize])
+                .collect();
+        }
+        x.truncate(self.win.len());
+        Ok(x)
+    }
+
+    /// Inverse short-time Fourier transform: overlap-add reconstruction of the
+    /// real signal from `s` (shape `f_pts × p_num`, as returned by [`Self::stft`])
+    /// using the canonical dual window. `k0`/`k1` select the output sample range
+    /// (`k0=0`, `k1=None` ⇒ the full reconstructible range). Onesided fft_mode
+    /// only. Matches `scipy.signal.ShortTimeFFT.istft`.
+    pub fn istft(
+        &self,
+        s: &[Vec<(f64, f64)>],
+        k0: i64,
+        k1: Option<i64>,
+    ) -> Result<Vec<f64>, SignalError> {
+        if self.fft_mode != StftFftMode::Onesided {
+            return Err(SignalError::InvalidArgument(
+                "istft: only Onesided fft_mode is supported (real output)".to_string(),
+            ));
+        }
+        let f_pts = self.f_pts();
+        if s.len() != f_pts {
+            return Err(SignalError::InvalidArgument(format!(
+                "istft: S must have {f_pts} frequency rows, got {}",
+                s.len()
+            )));
+        }
+        let p_num_in = s.first().map_or(0, |r| r.len()) as i64;
+        let m_num = self.win.len() as i64;
+        let mid = self.m_num_mid() as i64;
+        let hop = self.hop as i64;
+        let n_min = m_num - mid;
+        let q_num = self.p_num(n_min as usize) as i64;
+        if p_num_in < q_num {
+            return Err(SignalError::InvalidArgument(format!(
+                "istft: S needs at least {q_num} slices, got {p_num_in}"
+            )));
+        }
+        let p_min = self.p_min();
+        let q_max = p_num_in + p_min;
+        let k_max = (q_max - 1) * hop + m_num - mid;
+        let k1 = k1.unwrap_or(k_max);
+        let k_min = self.k_min();
+        if !(k_min <= k0 && k0 < k1 && k1 <= k_max) {
+            return Err(SignalError::InvalidArgument(format!(
+                "istft: require k_min({k_min}) <= k0({k0}) < k1({k1}) <= k_max({k_max})"
+            )));
+        }
+        if k1 - k0 < n_min {
+            return Err(SignalError::InvalidArgument(format!(
+                "istft: k1-k0={} must be >= ceil(m_num/2)={n_min}",
+                k1 - k0
+            )));
+        }
+        let q0 = if k0 >= 0 {
+            k0.div_euclid(hop) + p_min
+        } else {
+            k0.div_euclid(hop)
+        };
+        let q1 = self.p_max(k1 as usize).min(q_max);
+        let k_q0 = self.nearest_k_p(k0, true);
+        let k_q1 = self.nearest_k_p(k1, false);
+        let n_pts = k_q1 - k_q0 + m_num - mid;
+        let dual = calc_dual_canonical_window(&self.win, self.hop)?;
+        let mut x = vec![0.0_f64; n_pts.max(0) as usize];
+        for q_ in q0..q1 {
+            // gather column (all f_pts frequency bins) for slice index q_-p_min
+            let pi = (q_ - p_min) as usize;
+            let col: Vec<(f64, f64)> = (0..f_pts).map(|f| s[f][pi]).collect();
+            let xs_full = self.ifft_func_onesided(&col)?;
+            let mut i0 = q_ * hop - mid;
+            let i1 = (i0 + m_num).min(n_pts + k0);
+            let mut j0 = 0i64;
+            let j1 = i1 - i0;
+            if i0 < k0 {
+                j0 += k0 - i0;
+                i0 = k0;
+            }
+            for (off, j) in (j0..j1).enumerate() {
+                let xi = (i0 - k0) as usize + off;
+                x[xi] += xs_full[j as usize] * dual[j as usize];
+            }
+        }
+        x.truncate((k1 - k0).max(0) as usize);
+        Ok(x)
+    }
 }
 
 pub fn istft(
@@ -16048,6 +16168,20 @@ mod tests {
         assert!(ShortTimeFft::new(vec![], 1, 1.0).is_err());
         assert!(ShortTimeFft::new(hann(8), 0, 1.0).is_err());
         assert!(sft.stft(&[1.0, 2.0]).is_err()); // n < ceil(m_num/2)
+
+        // istft round-trip recovers the original signal (machine precision),
+        // and matches scipy.signal.ShortTimeFFT.istft.
+        let xr = sft.istft(&s, 0, None).unwrap();
+        let m = xr.len().min(n);
+        let mut maxe = 0.0_f64;
+        for i in 0..m {
+            maxe = maxe.max((xr[i] - x[i]).abs());
+        }
+        assert!(maxe < 1e-9, "istft round-trip maxerr {maxe}");
+        // scipy istft first samples (full reconstructible range, len 25):
+        assert!((xr[0] - 0.5).abs() < 1e-9);
+        assert!((xr[1] - 0.794_295_71).abs() < 1e-7);
+        assert!((xr[2] - 1.059_750_47).abs() < 1e-7);
     }
 
     #[test]
