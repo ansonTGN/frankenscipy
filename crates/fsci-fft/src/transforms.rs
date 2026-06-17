@@ -1858,18 +1858,7 @@ pub fn idct_iv(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError
 /// # Returns
 /// DCT coefficients (flattened, same shape as input)
 pub fn dctn(input: &[f64], shape: &[usize], options: &FftOptions) -> Result<Vec<f64>, FftError> {
-    if shape.is_empty() {
-        return Err(FftError::InvalidShape {
-            detail: "shape cannot be empty",
-        });
-    }
-    let total: usize = shape.iter().product();
-    if total != input.len() {
-        return Err(FftError::LengthMismatch {
-            expected: total,
-            actual: input.len(),
-        });
-    }
+    let total = validate_real_nd_transform_len(input.len(), shape)?;
     if total == 0 {
         return Ok(Vec::new());
     }
@@ -1891,18 +1880,7 @@ pub fn dctn(input: &[f64], shape: &[usize], options: &FftOptions) -> Result<Vec<
 ///
 /// Matches `scipy.fft.idctn`. Applies the inverse DCT-II (DCT-III) along each axis.
 pub fn idctn(input: &[f64], shape: &[usize], options: &FftOptions) -> Result<Vec<f64>, FftError> {
-    if shape.is_empty() {
-        return Err(FftError::InvalidShape {
-            detail: "shape cannot be empty",
-        });
-    }
-    let total: usize = shape.iter().product();
-    if total != input.len() {
-        return Err(FftError::LengthMismatch {
-            expected: total,
-            actual: input.len(),
-        });
-    }
+    let total = validate_real_nd_transform_len(input.len(), shape)?;
     if total == 0 {
         return Ok(Vec::new());
     }
@@ -1924,18 +1902,7 @@ pub fn idctn(input: &[f64], shape: &[usize], options: &FftOptions) -> Result<Vec
 ///
 /// Matches `scipy.fft.dstn`. Applies the DST-II transform along each axis.
 pub fn dstn(input: &[f64], shape: &[usize], options: &FftOptions) -> Result<Vec<f64>, FftError> {
-    if shape.is_empty() {
-        return Err(FftError::InvalidShape {
-            detail: "shape cannot be empty",
-        });
-    }
-    let total: usize = shape.iter().product();
-    if total != input.len() {
-        return Err(FftError::LengthMismatch {
-            expected: total,
-            actual: input.len(),
-        });
-    }
+    let total = validate_real_nd_transform_len(input.len(), shape)?;
     if total == 0 {
         return Ok(Vec::new());
     }
@@ -1957,18 +1924,7 @@ pub fn dstn(input: &[f64], shape: &[usize], options: &FftOptions) -> Result<Vec<
 ///
 /// Matches `scipy.fft.idstn`. Applies the inverse DST-II (DST-III) along each axis.
 pub fn idstn(input: &[f64], shape: &[usize], options: &FftOptions) -> Result<Vec<f64>, FftError> {
-    if shape.is_empty() {
-        return Err(FftError::InvalidShape {
-            detail: "shape cannot be empty",
-        });
-    }
-    let total: usize = shape.iter().product();
-    if total != input.len() {
-        return Err(FftError::LengthMismatch {
-            expected: total,
-            actual: input.len(),
-        });
-    }
+    let total = validate_real_nd_transform_len(input.len(), shape)?;
     if total == 0 {
         return Ok(Vec::new());
     }
@@ -1984,6 +1940,24 @@ pub fn idstn(input: &[f64], shape: &[usize], options: &FftOptions) -> Result<Vec
     }
 
     Ok(data)
+}
+
+fn validate_real_nd_transform_len(input_len: usize, shape: &[usize]) -> Result<usize, FftError> {
+    if shape.is_empty() {
+        return Err(FftError::InvalidShape {
+            detail: "shape cannot be empty",
+        });
+    }
+    let total = checked_product(shape).ok_or(FftError::InvalidShape {
+        detail: "nd shape product overflow",
+    })?;
+    if total != input_len {
+        return Err(FftError::LengthMismatch {
+            expected: total,
+            actual: input_len,
+        });
+    }
+    Ok(total)
 }
 
 /// Apply 1-D DCT along a specific axis of an N-D array.
@@ -5014,6 +4988,27 @@ mod tests {
 
         // empty shape → error.
         assert!(dctn(&x, &[], &opts).is_err());
+    }
+
+    #[test]
+    fn real_nd_transforms_reject_shape_product_overflow() {
+        fn assert_overflow_error(result: Result<Vec<f64>, FftError>) {
+            assert_eq!(
+                result,
+                Err(FftError::InvalidShape {
+                    detail: "nd shape product overflow",
+                })
+            );
+        }
+
+        let x = [1.0_f64];
+        let shape = [usize::MAX, 2usize];
+        let opts = FftOptions::default();
+
+        assert_overflow_error(dctn(&x, &shape, &opts));
+        assert_overflow_error(idctn(&x, &shape, &opts));
+        assert_overflow_error(dstn(&x, &shape, &opts));
+        assert_overflow_error(idstn(&x, &shape, &opts));
     }
 
     // ── prev_fast_len tests ────────────────────────────────────────
