@@ -151,9 +151,9 @@ pub fn spectral_clustering(
             "n_clusters={n_clusters} must be in [1, n={n}]"
         )));
     }
-    if affinity.iter().flatten().any(|v| !v.is_finite()) {
+    if affinity.iter().flatten().any(|v| !v.is_finite() || *v < 0.0) {
         return Err(ClusterError::InvalidArgument(
-            "affinity must be finite".to_string(),
+            "affinity must be finite and non-negative".to_string(),
         ));
     }
 
@@ -6333,6 +6333,10 @@ mod tests {
 
         assert!(spectral_clustering(&[], 2, 10, 1).is_err());
         assert!(spectral_clustering(&aff, 0, 10, 1).is_err());
+        assert!(matches!(
+            spectral_clustering(&[vec![1.0, -0.1], vec![-0.1, 1.0]], 2, 10, 1),
+            Err(ClusterError::InvalidArgument(_))
+        ));
     }
 
     #[test]
