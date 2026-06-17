@@ -28256,6 +28256,84 @@ pub fn mvsdist(data: &[f64]) -> MvsDist {
     }
 }
 
+/// First- and total-order Sobol' sensitivity indices from precomputed model
+/// evaluations (returned by [`sobol_indices`]). Both are `s × d` (outputs ×
+/// parameters).
+pub struct SobolIndicesResult {
+    /// First-order indices `S_i` (Saltelli 2010).
+    pub first_order: Vec<Vec<f64>>,
+    /// Total-order indices `S_Ti` (Jansen 1999).
+    pub total_order: Vec<Vec<f64>>,
+}
+
+/// Sobol' variance-based sensitivity indices from precomputed function
+/// evaluations, matching the dict-input estimator of `scipy.stats.sobol_indices`
+/// (`func={'f_A','f_B','f_AB'}`).
+///
+/// `f_a`, `f_b` are `s × n` (model outputs at the two `n`-point sample matrices
+/// A and B for each of `s` outputs); `f_ab` is `d × s × n` (output at the matrix
+/// where parameter `i`'s column comes from B and the rest from A). The data is
+/// centered by the combined mean of A and B (as SciPy does) before applying the
+/// Saltelli-2010 first-order and Jansen-1999 total-order estimators.
+///
+/// (Generating A/B/AB via a Sobol' QMC sequence — SciPy's callable-`func` mode —
+/// is a separate concern; this is the deterministic estimator.)
+pub fn sobol_indices(
+    f_a: &[Vec<f64>],
+    f_b: &[Vec<f64>],
+    f_ab: &[Vec<Vec<f64>>],
+) -> Result<SobolIndicesResult, StatsError> {
+    let s = f_a.len();
+    if s == 0 || f_b.len() != s {
+        return Err(StatsError::InvalidArgument(
+            "sobol_indices: f_a and f_b must be non-empty s×n with equal s".to_string(),
+        ));
+    }
+    let n = f_a[0].len();
+    if n == 0
+        || f_a.iter().any(|r| r.len() != n)
+        || f_b.iter().any(|r| r.len() != n)
+    {
+        return Err(StatsError::InvalidArgument(
+            "sobol_indices: f_a/f_b rows must all have length n > 0".to_string(),
+        ));
+    }
+    let d = f_ab.len();
+    if d == 0 || f_ab.iter().any(|m| m.len() != s || m.iter().any(|r| r.len() != n)) {
+        return Err(StatsError::InvalidArgument(
+            "sobol_indices: f_ab must be d×s×n matching f_a".to_string(),
+        ));
+    }
+    let nf = n as f64;
+    let mut first = vec![vec![0.0; d]; s];
+    let mut total = vec![vec![0.0; d]; s];
+    for si in 0..s {
+        // Combined mean of A and B for this output, then center.
+        let mean = (f_a[si].iter().sum::<f64>() + f_b[si].iter().sum::<f64>()) / (2.0 * nf);
+        let a: Vec<f64> = f_a[si].iter().map(|v| v - mean).collect();
+        let b: Vec<f64> = f_b[si].iter().map(|v| v - mean).collect();
+        // Population variance of the combined centered A,B values.
+        let var = (a.iter().map(|v| v * v).sum::<f64>() + b.iter().map(|v| v * v).sum::<f64>())
+            / (2.0 * nf);
+        for i in 0..d {
+            let mut fo = 0.0;
+            let mut to = 0.0;
+            for j in 0..n {
+                let ab = f_ab[i][si][j] - mean;
+                fo += b[j] * (ab - a[j]);
+                let diff = a[j] - ab;
+                to += diff * diff;
+            }
+            first[si][i] = (fo / nf) / var;
+            total[si][i] = (0.5 * (to / nf)) / var;
+        }
+    }
+    Ok(SobolIndicesResult {
+        first_order: first,
+        total_order: total,
+    })
+}
+
 /// Interquartile range (IQR = Q3 - Q1).
 ///
 /// Matches `scipy.stats.iqr(a)`.
