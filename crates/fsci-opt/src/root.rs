@@ -2019,6 +2019,11 @@ where
     })
 }
 
+fn df_sane_line_search_budget(maxiter: usize, n: usize) -> usize {
+    let per_iteration = n.saturating_mul(2).saturating_add(4);
+    maxiter.saturating_mul(per_iteration).saturating_add(1000)
+}
+
 /// Solve `F(x) = 0` with the derivative-free spectral residual method (DF-SANE),
 /// matching `scipy.optimize.root(method='df-sane')`.
 ///
@@ -2102,7 +2107,7 @@ where
 
             alpha_p = alpha_tp.clamp(TAU_MIN * alpha_p, TAU_MAX * alpha_p);
             alpha_m = alpha_tm.clamp(TAU_MIN * alpha_m, TAU_MAX * alpha_m);
-            if nfev > maxiter.saturating_mul(2 * n + 4) + 1000 {
+            if nfev > df_sane_line_search_budget(maxiter, n) {
                 // Safety: abandon a stalled line search.
                 break (xp, fp, fp_res);
             }
@@ -2517,6 +2522,13 @@ mod tests {
         assert!(r2.converged, "{}", r2.message);
         // root: x1=2, (x0-1)^3 = x1-1 = 1 -> x0 = 2.
         assert!((r2.x[0] - 2.0).abs() < 1e-4 && (r2.x[1] - 2.0).abs() < 1e-4, "x = {:?}", r2.x);
+    }
+
+    #[test]
+    fn df_sane_line_search_budget_saturates_on_large_dimensions() {
+        assert_eq!(super::df_sane_line_search_budget(10, 3), 1100);
+        assert_eq!(super::df_sane_line_search_budget(usize::MAX, 1), usize::MAX);
+        assert_eq!(super::df_sane_line_search_budget(1, usize::MAX), usize::MAX);
     }
 
     #[test]
