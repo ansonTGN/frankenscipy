@@ -248,6 +248,11 @@ pub fn affinity_propagation(
             "damping must be in [0.5, 1.0)".to_string(),
         ));
     }
+    if max_iter == 0 || convergence_iter == 0 {
+        return Err(ClusterError::InvalidArgument(
+            "max_iter and convergence_iter must be positive".to_string(),
+        ));
+    }
     if !preference.is_finite() || similarity.iter().flatten().any(|v| !v.is_finite()) {
         return Err(ClusterError::InvalidArgument(
             "similarity and preference must be finite".to_string(),
@@ -281,7 +286,7 @@ pub fn affinity_propagation(
     let mut stable = 0usize;
     let mut iters = 0;
 
-    for it in 0..max_iter.max(1) {
+    for it in 0..max_iter {
         iters = it + 1;
         // Responsibilities: r(i,k) = s(i,k) − max_{k'≠k}(a(i,k')+s(i,k')).
         for i in 0..n {
@@ -6224,6 +6229,8 @@ mod tests {
         assert!(affinity_propagation(&[], -1.0, 0.5, 10, 5).is_err());
         assert!(affinity_propagation(&sim, preference, 0.4, 10, 5).is_err()); // damping < 0.5
         assert!(affinity_propagation(&sim, preference, 1.0, 10, 5).is_err()); // damping >= 1.0
+        assert!(affinity_propagation(&sim, preference, 0.9, 0, 5).is_err()); // max_iter == 0
+        assert!(affinity_propagation(&sim, preference, 0.9, 10, 0).is_err()); // convergence_iter == 0
         assert!(affinity_propagation(&[vec![0.0, 1.0]], -1.0, 0.5, 10, 5).is_err()); // non-square
     }
 
