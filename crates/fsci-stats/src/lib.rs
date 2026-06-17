@@ -27944,6 +27944,152 @@ pub fn bayes_mvs(data: &[f64], alpha: f64) -> BayesMvsResult {
     }
 }
 
+/// Posterior distribution of the population mean (Student-t), as returned by
+/// [`mvsdist`]. `mean()` is the point estimate; `interval(alpha)` is the central
+/// credible interval at level `alpha`.
+pub struct MeanPosterior {
+    /// Degrees of freedom (`n - 1`).
+    pub df: f64,
+    /// Location (sample mean).
+    pub loc: f64,
+    /// Scale (standard error of the mean).
+    pub scale: f64,
+}
+
+impl MeanPosterior {
+    /// Posterior point estimate (the location, == sample mean).
+    pub fn mean(&self) -> f64 {
+        self.loc
+    }
+    /// Central credible interval at confidence level `alpha` (e.g. 0.90).
+    pub fn interval(&self, alpha: f64) -> (f64, f64) {
+        let tc = StudentT::new(self.df).ppf(1.0 - (1.0 - alpha) / 2.0);
+        (self.loc - tc * self.scale, self.loc + tc * self.scale)
+    }
+}
+
+/// Posterior distribution of the population variance (scaled inverse-chi²), as
+/// returned by [`mvsdist`].
+pub struct VarPosterior {
+    /// Degrees of freedom (`n - 1`).
+    pub df: f64,
+    /// Residual sum of squares `Σ(x − x̄)²`.
+    pub ss: f64,
+    /// Posterior point estimate (mean of the posterior).
+    pub point: f64,
+}
+
+impl VarPosterior {
+    /// Posterior mean of the variance.
+    pub fn mean(&self) -> f64 {
+        self.point
+    }
+    /// Central credible interval at confidence level `alpha`.
+    pub fn interval(&self, alpha: f64) -> (f64, f64) {
+        let g = GammaDist::new(self.df / 2.0, 2.0);
+        let lo = g.ppf((1.0 - alpha) / 2.0);
+        let hi = g.ppf(1.0 - (1.0 - alpha) / 2.0);
+        (self.ss / hi, self.ss / lo)
+    }
+}
+
+/// Posterior distribution of the population standard deviation, as returned by
+/// [`mvsdist`].
+pub struct StdPosterior {
+    /// Degrees of freedom (`n - 1`).
+    pub df: f64,
+    /// Residual sum of squares `Σ(x − x̄)²`.
+    pub ss: f64,
+    /// Posterior point estimate (mean of the posterior).
+    pub point: f64,
+}
+
+impl StdPosterior {
+    /// Posterior mean of the standard deviation.
+    pub fn mean(&self) -> f64 {
+        self.point
+    }
+    /// Central credible interval at confidence level `alpha`.
+    pub fn interval(&self, alpha: f64) -> (f64, f64) {
+        let g = GammaDist::new(self.df / 2.0, 2.0);
+        let lo = g.ppf((1.0 - alpha) / 2.0);
+        let hi = g.ppf(1.0 - (1.0 - alpha) / 2.0);
+        ((self.ss / hi).sqrt(), (self.ss / lo).sqrt())
+    }
+}
+
+/// Posterior distributions for the mean, variance and standard deviation of a
+/// sample under Jeffreys' prior.
+pub struct MvsDist {
+    /// Posterior of the mean.
+    pub mean: MeanPosterior,
+    /// Posterior of the variance.
+    pub var: VarPosterior,
+    /// Posterior of the standard deviation.
+    pub std: StdPosterior,
+}
+
+/// Bayesian posterior distributions for the mean, variance and standard
+/// deviation of a sample (Jeffreys' prior), the engine underlying [`bayes_mvs`].
+///
+/// Matches `scipy.stats.mvsdist(data)`, returning the three distributions so the
+/// caller can query a point estimate (`.mean()`) or a credible `.interval(alpha)`
+/// at any level. Requires at least 2 data points.
+pub fn mvsdist(data: &[f64]) -> MvsDist {
+    let n = data.len();
+    if n < 2 {
+        let nan = MeanPosterior {
+            df: f64::NAN,
+            loc: f64::NAN,
+            scale: f64::NAN,
+        };
+        return MvsDist {
+            mean: nan,
+            var: VarPosterior {
+                df: f64::NAN,
+                ss: f64::NAN,
+                point: f64::NAN,
+            },
+            std: StdPosterior {
+                df: f64::NAN,
+                ss: f64::NAN,
+                point: f64::NAN,
+            },
+        };
+    }
+    let nf = n as f64;
+    let xbar = data.iter().sum::<f64>() / nf;
+    let ss: f64 = data.iter().map(|&x| (x - xbar).powi(2)).sum();
+    let df = nf - 1.0;
+    let se = (ss / df / nf).sqrt();
+
+    let var_point = if df > 2.0 { ss / (df - 2.0) } else { ss / df };
+    let std_point = if df > 1.0 {
+        let log_gamma_ratio = ln_gamma((df - 1.0) / 2.0) - ln_gamma(df / 2.0);
+        (ss / 2.0).sqrt() * log_gamma_ratio.exp()
+    } else {
+        var_point.sqrt()
+    };
+
+    MvsDist {
+        mean: MeanPosterior {
+            df,
+            loc: xbar,
+            scale: se,
+        },
+        var: VarPosterior {
+            df,
+            ss,
+            point: var_point,
+        },
+        std: StdPosterior {
+            df,
+            ss,
+            point: std_point,
+        },
+    }
+}
+
 /// Interquartile range (IQR = Q3 - Q1).
 ///
 /// Matches `scipy.stats.iqr(a)`.
