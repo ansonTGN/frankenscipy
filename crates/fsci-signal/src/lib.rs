@@ -13411,6 +13411,61 @@ impl ShortTimeFft {
         Ok(sft)
     }
 
+    /// Construct an instance whose window equals its own dual window, mirroring
+    /// `scipy.signal.ShortTimeFFT.from_win_equals_dual(desired_win, hop, fs)`.
+    /// `win` is the least-squares-closest window to `desired_win` for which
+    /// `win == dual_win`: each phase `desired_win[m::hop]` is normalised to unit
+    /// L2 norm. Chain `with_scale_to` for 'magnitude'/'psd' scaling. Errors if a
+    /// phase has (near-)zero norm (no valid dual exists for `hop`).
+    pub fn from_win_equals_dual(
+        desired_win: Vec<f64>,
+        hop: usize,
+        fs: f64,
+    ) -> Result<Self, SignalError> {
+        if desired_win.is_empty() {
+            return Err(SignalError::InvalidArgument(
+                "from_win_equals_dual: desired_win must be a non-empty 1-D window".to_string(),
+            ));
+        }
+        if !desired_win.iter().all(|v| v.is_finite()) {
+            return Err(SignalError::InvalidArgument(
+                "from_win_equals_dual: desired_win must have finite entries".to_string(),
+            ));
+        }
+        if hop < 1 || hop > desired_win.len() {
+            return Err(SignalError::InvalidArgument(format!(
+                "from_win_equals_dual: hop must be an integer between 1 and {}",
+                desired_win.len()
+            )));
+        }
+        // np.finfo(float64).resolution == 1e-15.
+        let max_w = desired_win.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let relative_resolution = 1e-15 * max_w;
+        let mut win = desired_win.clone();
+        for m in 0..hop {
+            let mut a = 0.0f64;
+            let mut i = m;
+            while i < desired_win.len() {
+                a += desired_win[i] * desired_win[i];
+                i += hop;
+            }
+            let a = a.sqrt();
+            if !(a > relative_resolution) {
+                return Err(SignalError::InvalidArgument(format!(
+                    "from_win_equals_dual: desired_win has no valid STFT dual window for hop={hop}"
+                )));
+            }
+            let mut i = m;
+            while i < win.len() {
+                win[i] /= a;
+                i += hop;
+            }
+        }
+        let mut sft = Self::new(win.clone(), hop, fs)?;
+        sft.explicit_dual = Some(win);
+        Ok(sft)
+    }
+
     /// Construct from a named window, mirroring
     /// `scipy.signal.ShortTimeFFT.from_window(window, fs, nperseg, noverlap)`:
     /// `win = get_window(window, nperseg, fftbins=!symmetric)`, `hop = nperseg −
