@@ -475,6 +475,95 @@ pub(crate) fn build_bigb(theta: &[f64], phi: &[f64], q: usize) -> Vec<Vec<f64>> 
     b
 }
 
+// Rotation primitives for the (pending) DBBCSD CS bidiagonal-SVD sweep.
+// Verified building blocks; will be consumed by the implicit-QR diagonalizer
+// that produces scipy-exact U/V signs (bead frankenscipy-5tmu1).
+
+/// Singular values of the 2×2 upper-triangular `[[f, g], [0, h]]`, matching
+/// LAPACK `DLAS2`. Returns `(ssmin, ssmax)`.
+#[allow(dead_code)]
+pub(crate) fn dlas2(f: f64, g: f64, h: f64) -> (f64, f64) {
+    let fa = f.abs();
+    let ga = g.abs();
+    let ha = h.abs();
+    let fhmn = fa.min(ha);
+    let fhmx = fa.max(ha);
+    if fhmn == 0.0 {
+        let ssmax = if fhmx == 0.0 {
+            ga
+        } else {
+            fhmx.max(ga) * (1.0 + (fhmx.min(ga) / fhmx.max(ga)).powi(2)).sqrt()
+        };
+        return (0.0, ssmax);
+    }
+    if ga < fhmx {
+        let as_ = 1.0 + fhmn / fhmx;
+        let at = (fhmx - fhmn) / fhmx;
+        let au = (ga / fhmx).powi(2);
+        let c = 2.0 / ((as_ * as_ + au).sqrt() + (at * at + au).sqrt());
+        (fhmn * c, fhmx / c)
+    } else {
+        let au = fhmx / ga;
+        if au == 0.0 {
+            ((fhmn * fhmx) / ga, ga)
+        } else {
+            let as_ = 1.0 + fhmn / fhmx;
+            let at = (fhmx - fhmn) / fhmx;
+            let c = 1.0
+                / ((1.0 + (as_ * au).powi(2)).sqrt() + (1.0 + (at * au).powi(2)).sqrt());
+            let mut ssmin = (fhmn * c) * au;
+            ssmin += ssmin;
+            (ssmin, ga / (c + c))
+        }
+    }
+}
+
+/// Plane rotation with non-negative `r`, matching LAPACK `DLARTGP`. Returns
+/// `(cs, sn, r)` with `cs·f + sn·g = r ≥ 0` and `-sn·f + cs·g = 0`. (The
+/// over/underflow scaling of the reference is unneeded for the O(1) CS values
+/// this is used on.)
+#[allow(dead_code)]
+pub(crate) fn dlartgp(f: f64, g: f64) -> (f64, f64, f64) {
+    if g == 0.0 {
+        (if f >= 0.0 { 1.0 } else { -1.0 }, 0.0, f.abs())
+    } else if f == 0.0 {
+        (0.0, if g >= 0.0 { 1.0 } else { -1.0 }, g.abs())
+    } else {
+        let r = f.hypot(g);
+        (f / r, g / r, r)
+    }
+}
+
+/// Generate the rotation `(cs, sn)` for a CS-decomposition implicit-QR shift,
+/// matching LAPACK `DLARTGS(x, y, sigma)`.
+#[allow(dead_code)]
+pub(crate) fn dlartgs(x: f64, y: f64, sigma: f64) -> (f64, f64) {
+    let thresh = f64::EPSILON;
+    let (z, w);
+    if (sigma == 0.0 && x.abs() < thresh) || (x.abs() == sigma && y == 0.0) {
+        z = 0.0;
+        w = 0.0;
+    } else if sigma == 0.0 {
+        if x >= 0.0 {
+            z = x;
+            w = y;
+        } else {
+            z = -x;
+            w = -y;
+        }
+    } else if x.abs() < thresh {
+        z = -sigma * sigma;
+        w = 0.0;
+    } else {
+        let s = if x >= 0.0 { 1.0 } else { -1.0 };
+        z = s * (x.abs() - sigma) * (s + sigma / x);
+        w = s * y;
+    }
+    // LAPACK: CALL DLARTGP(W, Z, SN, CS, R) — note the swapped outputs.
+    let (sn, cs, _r) = dlartgp(w, z);
+    (cs, sn)
+}
+
 fn mm(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
     let (n, k, p) = (a.len(), b.len(), b[0].len());
     let mut c = vec![vec![0.0; p]; n];
@@ -653,6 +742,57 @@ mod tests {
                     "q={q} seed={seed}: reconstruction error {maxerr:.3e}"
                 );
             }
+        }
+    }
+
+    // Independent 2×2 SVD singular values of [[f,g],[0,h]].
+    fn ref_sv2(f: f64, g: f64, h: f64) -> (f64, f64) {
+        // eigenvalues of MᵀM = [[f², fg], [fg, g²+h²]]
+        let a = f * f;
+        let b = f * g;
+        let d = g * g + h * h;
+        let tr = a + d;
+        let det = a * d - b * b;
+        let disc = ((tr * tr - 4.0 * det).max(0.0)).sqrt();
+        let l1 = (tr + disc) / 2.0;
+        let l2 = (tr - disc) / 2.0;
+        (l2.max(0.0).sqrt(), l1.max(0.0).sqrt())
+    }
+
+    #[test]
+    fn dlas2_matches_reference() {
+        let cases = [
+            (3.0, 1.0, 2.0),
+            (0.0, 5.0, 0.0),
+            (-2.0, 0.3, 4.0),
+            (1e-8, 2.0, 1e-9),
+            (7.0, -0.0, 0.5),
+            (0.1, 0.2, 0.3),
+        ];
+        for &(f, g, h) in &cases {
+            let (smn, smx) = dlas2(f, g, h);
+            let (rmn, rmx) = ref_sv2(f, g, h);
+            assert!((smn - rmn).abs() < 1e-12 * (1.0 + rmn), "ssmin {smn} vs {rmn}");
+            assert!((smx - rmx).abs() < 1e-12 * (1.0 + rmx), "ssmax {smx} vs {rmx}");
+        }
+    }
+
+    #[test]
+    fn dlartgp_rotation_property() {
+        for &(f, g) in &[(3.0, 4.0), (-1.0, 2.0), (5.0, 0.0), (0.0, -3.0), (-2.0, -2.0)] {
+            let (cs, sn, r) = dlartgp(f, g);
+            assert!(r >= 0.0, "r must be ≥ 0");
+            assert!((cs * cs + sn * sn - 1.0).abs() < 1e-14);
+            assert!((cs * f + sn * g - r).abs() < 1e-12);
+            assert!((-sn * f + cs * g).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn dlartgs_orthonormal() {
+        for &(x, y, sig) in &[(2.0, 1.0, 0.5), (-3.0, 2.0, 0.0), (1.0, 0.0, 1.0), (0.4, 0.7, 0.3)] {
+            let (cs, sn) = dlartgs(x, y, sig);
+            assert!((cs * cs + sn * sn - 1.0).abs() < 1e-13, "not orthonormal for ({x},{y},{sig})");
         }
     }
 
