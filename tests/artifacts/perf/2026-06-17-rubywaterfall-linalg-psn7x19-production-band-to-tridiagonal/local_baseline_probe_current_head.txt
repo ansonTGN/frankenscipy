@@ -1,0 +1,127 @@
+Script started on 2026-06-17 03:15:32-04:00 [COMMAND="env RCH_REQUIRE_REMOTE=0 CARGO_TARGET_DIR=/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x19-target cargo test -j 1 -p fsci-linalg --lib eig_banded_eigenvectors_perf_probe --release --locked -- --ignored --nocapture --test-threads=1" <not executed on terminal>]
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.45
+   Compiling syn v2.0.117
+   Compiling cfg-if v1.0.4
+   Compiling autocfg v1.5.0
+   Compiling libc v0.2.185
+   Compiling num-traits v0.2.19
+   Compiling find-msvc-tools v0.1.9
+   Compiling shlex v1.3.0
+   Compiling cc v1.2.60
+   Compiling getrandom v0.3.4
+   Compiling zerocopy v0.8.48
+   Compiling serde_core v1.0.228
+   Compiling zerocopy-derive v0.8.48
+   Compiling zmij v1.0.21
+   Compiling crossbeam-utils v0.8.21
+   Compiling serde v1.0.228
+   Compiling serde_derive v1.0.228
+   Compiling serde_json v1.0.149
+   Compiling equivalent v1.0.2
+   Compiling hashbrown v0.17.0
+   Compiling indexmap v2.14.0
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.0
+   Compiling rustix v1.1.4
+   Compiling crossbeam-epoch v0.9.18
+   Compiling rand_core v0.9.5
+   Compiling blake3 v1.8.4
+   Compiling paste v1.0.15
+   Compiling bytemuck v1.25.0
+   Compiling regex-syntax v0.8.10
+   Compiling rayon-core v1.13.0
+   Compiling linux-raw-sys v0.12.1
+   Compiling bitflags v2.11.1
+   Compiling either v1.15.0
+   Compiling safe_arch v0.7.4
+   Compiling crossbeam-deque v0.8.6
+   Compiling half v2.7.1
+   Compiling alloca v0.4.0
+   Compiling matrixmultiply v0.3.10
+   Compiling plotters-backend v0.3.7
+   Compiling once_cell v1.21.4
+   Compiling arrayvec v0.7.6
+   Compiling clap_lex v1.1.0
+   Compiling fastrand v2.4.1
+   Compiling anstyle v1.0.14
+   Compiling cpufeatures v0.3.0
+   Compiling arrayref v0.3.9
+   Compiling ciborium-io v0.2.2
+   Compiling constant_time_eq v0.4.2
+   Compiling ciborium-ll v0.2.2
+   Compiling clap_builder v4.6.0
+   Compiling tempfile v3.27.0
+   Compiling plotters-svg v0.3.7
+   Compiling wide v0.7.33
+   Compiling itertools v0.13.0
+   Compiling regex-automata v0.4.14
+   Compiling ppv-lite86 v0.2.21
+   Compiling num-complex v0.4.6
+   Compiling approx v0.5.1
+   Compiling num-integer v0.1.46
+   Compiling wait-timeout v0.2.1
+   Compiling rawpointer v0.2.1
+   Compiling bit-vec v0.8.0
+   Compiling same-file v1.0.6
+   Compiling quick-error v1.2.3
+   Compiling fnv v1.0.7
+   Compiling cast v0.3.0
+   Compiling criterion-plot v0.8.2
+   Compiling rusty-fork v0.3.1
+   Compiling walkdir v2.5.0
+   Compiling bit-set v0.8.0
+   Compiling num-rational v0.4.2
+   Compiling simba v0.9.1
+   Compiling rand_chacha v0.9.0
+   Compiling regex v1.12.3
+   Compiling rayon v1.12.0
+   Compiling plotters v0.3.7
+   Compiling clap v4.6.1
+   Compiling ciborium v0.2.2
+   Compiling fsci-runtime v0.1.0 (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x19-20260617T0730Z/crates/fsci-runtime)
+   Compiling rand_xorshift v0.4.0
+   Compiling rand v0.9.4
+   Compiling tinytemplate v1.2.1
+   Compiling page_size v0.6.0
+   Compiling nalgebra-macros v0.3.0
+   Compiling unarray v0.1.4
+   Compiling anes v0.1.6
+   Compiling typenum v1.20.0
+   Compiling oorandom v11.1.5
+   Compiling criterion v0.8.2
+   Compiling nalgebra v0.34.2
+   Compiling proptest v1.11.0
+   Compiling fsci-fft v0.1.0 (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x19-20260617T0730Z/crates/fsci-fft)
+   Compiling fsci-linalg v0.1.0 (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x19-20260617T0730Z/crates/fsci-linalg)
+    Finished `release` profile [optimized] target(s) in 2m 12s
+     Running unittests src/lib.rs (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x19-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+test proptest_tests::eig_banded_eigenvectors_perf_probe ... EIG_BANDED_EIGENVECTORS_PERF_BEGIN
+shape=128x128
+bandwidth=32
+candidate_ms=3.964138
+max_abs_diff=7.56017470848746598e-12
+residual=1.64845914696343243e-12
+candidate_values_digest=0xd6dbb9200f65bd92
+candidate_vectors_digest=0x6cf3573b5b50c275
+dense_values_digest=0x7bdbe4513b62a730
+EIG_BANDED_EIGENVECTORS_PERF_END
+EIG_BANDED_EIGENVECTORS_PERF_BEGIN
+shape=256x256
+bandwidth=32
+candidate_ms=19.750706
+max_abs_diff=4.16093826061114669e-11
+residual=7.73070496506989002e-12
+candidate_values_digest=0x09ed4d367faab431
+candidate_vectors_digest=0xc32797c0d224a75a
+dense_values_digest=0xbc00c62977653f28
+EIG_BANDED_EIGENVECTORS_PERF_END
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 479 filtered out; finished in 0.06s
+
+
+Script done on 2026-06-17 03:17:45-04:00 [COMMAND_EXIT_CODE="0"]

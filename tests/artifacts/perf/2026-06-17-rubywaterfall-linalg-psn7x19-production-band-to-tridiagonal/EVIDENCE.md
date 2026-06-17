@@ -69,3 +69,70 @@ Do not retry:
 - worker-count retuning
 - raw/stale compact-WY panels
 - scalar spelling or SIMD rank-2 vector spelling
+
+## Pass 2 Reject: Lower-Storage Native Entrypoint
+
+Candidate:
+
+- Split `symmetric_eigh_native` into an owned lower-storage entrypoint.
+- Changed public `eig_banded(lower=true, eigvals_only=false)` to materialize only the lower half of the banded matrix and pass that owned matrix directly.
+- Arithmetic inside Householder reduction, tridiagonal eigensolve, eigenvalue ordering, backtransform, tie behavior, and RNG behavior were unchanged.
+
+Proof:
+
+- `after_lower_storage_entrypoint_isomorphism_test.txt`: temporary bit-equivalence test passed, proving full symmetric storage and lower-only storage produced bit-identical sorted eigenvalues and eigenvectors for the native backend.
+- `after_lower_storage_entrypoint_probe.txt`: public `eig_banded_eigenvectors_perf_probe` passed with unchanged residuals and unchanged public digests:
+  - 128x128 values `0xd6dbb9200f65bd92`, vectors `0x6cf3573b5b50c275`, residual `1.64845914696343243e-12`
+  - 256x256 values `0x09ed4d367faab431`, vectors `0xc32797c0d224a75a`, residual `7.73070496506989002e-12`
+
+Rebench:
+
+- Current-head local baseline: `205.5 ms +/- 9.6 ms` (`local_baseline_hyperfine_current_head.txt`)
+- Candidate local rebench: `206.0 ms +/- 10.3 ms` (`after_lower_storage_entrypoint_hyperfine.txt`)
+- Wall ratio: `0.998x`; public per-shape timings were mixed/noisy (`128` often faster, `256` mixed), and the overall gate did not improve.
+
+Score:
+
+- `Impact 0.0 * Confidence 4.0 / Effort 1.0 = 0.0`
+- Source restored; `git diff -- crates/fsci-linalg/src/lib.rs` is empty after restore.
+
+Route:
+
+- Do not spend another pass on lower-storage/mirror/clone materialization cleanup.
+- Next primitive must be a true production DSBTRD-style diagonal-band bulge chase with accumulated Q metadata replay, or a different algorithmic primitive selected from the current perf tracker.
+
+## Pass 3 Reject: Dense Adjacent-Givens DSBTRD Route
+
+Candidate:
+
+- Added a production-facing moderate-bandwidth route for `eig_banded(lower=true, eigvals_only=false)`.
+- The route used adjacent Givens similarities to reduce the lower-band matrix to tridiagonal form, then replayed the accumulated rotations onto the tridiagonal eigenvectors.
+- This was an algorithmic DSBTRD-style route, not a materialization cleanup.
+
+Proof:
+
+- `after_givens_dsbtrd_probe.txt`: public `eig_banded_eigenvectors_perf_probe` passed.
+- Dense-oracle eigenvalue drift and eigenvector residuals improved versus the tolerance gate:
+  - 128x128 drift `2.67164068645797670e-12`, residual `9.66338120633736253e-13`
+  - 256x256 drift `7.95807864051312208e-12`, residual `2.38742359215393662e-12`
+- Output digests changed because the orthogonal reduction path changed:
+  - 128x128 values `0x76dffb7ede1ec53c`, vectors `0x735d7877d616df3a`
+  - 256x256 values `0xab524ebcc8117369`, vectors `0x09f006947d8f5a22`
+
+Rebench:
+
+- Current-head local baseline: `205.5 ms +/- 9.6 ms`
+- Candidate local rebench: `267.6 ms +/- 32.0 ms` (`after_givens_dsbtrd_hyperfine.txt`)
+- Candidate per-shape timings regressed badly:
+  - 128x128: about `5.1-6.3 ms`, versus baseline about `3.6-4.3 ms`
+  - 256x256: about `53.3-60.0 ms`, versus baseline about `13.3-15.8 ms`
+
+Score:
+
+- `Impact 0.0 * Confidence 5.0 / Effort 2.0 = 0.0`
+- Source restored; `git diff -- crates/fsci-linalg/src/lib.rs` is empty after restore.
+
+Route:
+
+- Do not retry dense adjacent-rotation tridiagonalization for this bead.
+- The next DSBTRD pass must keep the bulge chase in compact diagonal/band lanes and replay Q metadata directly; dense full-row/full-column Givens updates lose to the native Householder backend.
