@@ -1628,6 +1628,11 @@ pub fn lgmres(
             message: "tol must be finite and non-negative".to_string(),
         });
     }
+    if options.inner_m == 0 {
+        return Err(SparseError::InvalidArgument {
+            message: "inner_m must be positive".to_string(),
+        });
+    }
     let x0_has_non_finite = x0.is_some_and(|initial| initial.iter().any(|v| !v.is_finite()));
     if a.data().iter().any(|v| !v.is_finite()) || b.iter().any(|v| !v.is_finite()) || x0_has_non_finite {
         return Err(SparseError::NonFiniteInput {
@@ -7492,6 +7497,19 @@ mod tests {
             ..LgmresOptions::default()
         };
         let err = lgmres(&a, &b, None, negative_tol).expect_err("negative tolerance");
+        assert!(matches!(err, SparseError::InvalidArgument { .. }));
+    }
+
+    #[test]
+    fn lgmres_rejects_zero_inner_m() {
+        let a = diagonally_dominant_csr_3x3();
+        let b = vec![7.0, 7.0, 7.0];
+        let zero_inner = LgmresOptions {
+            inner_m: 0,
+            max_iter: Some(4),
+            ..LgmresOptions::default()
+        };
+        let err = lgmres(&a, &b, None, zero_inner).expect_err("zero inner_m");
         assert!(matches!(err, SparseError::InvalidArgument { .. }));
     }
 
