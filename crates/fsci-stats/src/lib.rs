@@ -34582,14 +34582,99 @@ fn somers_pqa_prefix(table: &[Vec<f64>]) -> (f64, f64, f64) {
 /// Somers' D ordinal association test.
 ///
 /// Matches the core behavior of `scipy.stats.somersd`.
+/// 0-based ranks (by `total_cmp` order, matching `somers_from_rankings`'s sort)
+/// of `v`, or `None` if any two elements are equal — i.e. only succeeds when all
+/// values are distinct.
+fn somers_distinct_ranks(v: &[f64]) -> Option<Vec<usize>> {
+    let n = v.len();
+    let mut idx: Vec<usize> = (0..n).collect();
+    idx.sort_by(|&a, b| v[a].total_cmp(&v[*b]));
+    for w in idx.windows(2) {
+        if v[w[0]].total_cmp(&v[w[1]]).is_eq() {
+            return None;
+        }
+    }
+    let mut rank = vec![0usize; n];
+    for (r, &i) in idx.iter().enumerate() {
+        rank[i] = r;
+    }
+    Some(rank)
+}
+
+#[inline]
+fn somers_fenwick_add(bit: &mut [i64], mut idx: usize) {
+    while idx < bit.len() {
+        bit[idx] += 1;
+        idx += idx & idx.wrapping_neg();
+    }
+}
+
+#[inline]
+fn somers_fenwick_prefix(bit: &[i64], mut idx: usize) -> i64 {
+    let mut s = 0;
+    while idx > 0 {
+        s += bit[idx];
+        idx -= idx & idx.wrapping_neg();
+    }
+    s
+}
+
+/// O(n log n) `(total, sri2, P, Q, a_term)` for the Rankings path when both `x`
+/// and `y` are all-distinct (the continuous case, where the contingency table is
+/// n×n and the O(R*C) prefix-sum pass costs O(n²)). With distinct values the
+/// table is a permutation pattern: each point sits in a unique (x-rank, y-rank)
+/// cell of count 1, so `total = sri2 = n` and the per-point concordant/discordant
+/// counts come from one Fenwick (BIT) sweep over y-ranks in x-rank order:
+///   left_below = #(earlier x, smaller y);
+///   A_p = 2·left_below + (n−1−i−j),  D_p = i+j − 2·left_below
+/// (exactly the `somers_aij`/`somers_dij` quadrant sums for a unit cell at
+/// (i,j)). Returns the SAME integers as `somers_pqa_prefix` ⇒ identical
+/// statistic/p-value. `None` (fall back to the table path) when any ties exist.
+fn somers_pqa_fenwick(x: &[f64], y: &[f64]) -> Option<(f64, f64, f64, f64, f64)> {
+    let n = x.len();
+    if n < 2 || y.len() != n {
+        return None;
+    }
+    let xr = somers_distinct_ranks(x)?;
+    let yr = somers_distinct_ranks(y)?;
+    let mut y_by_xrank = vec![0usize; n];
+    for k in 0..n {
+        y_by_xrank[xr[k]] = yr[k];
+    }
+    let mut bit = vec![0i64; n + 1];
+    let (mut p, mut q, mut a_term) = (0i64, 0i64, 0i64);
+    let nn = n as i64;
+    for i in 0..n {
+        let j = y_by_xrank[i];
+        let left_below = somers_fenwick_prefix(&bit, j); // y-ranks in [0, j)
+        let (ni, nj) = (i as i64, j as i64);
+        let ap = 2 * left_below + (nn - 1 - ni - nj);
+        let dp = ni + nj - 2 * left_below;
+        p += ap;
+        q += dp;
+        let d = ap - dp;
+        a_term += d * d;
+        somers_fenwick_add(&mut bit, j + 1);
+    }
+    let nf = n as f64;
+    Some((nf, nf, p as f64, q as f64, a_term as f64))
+}
+
 pub fn somersd(
     input: SomersDInput<'_>,
     alternative: Option<&str>,
 ) -> Result<SomersDResult, StatsError> {
     let alternative = validate_hypothesis_alternative(alternative)?;
-    let table = match input {
-        SomersDInput::Rankings(x, y) => somers_from_rankings(x, y)?,
-        SomersDInput::Table(table) => somers_validate_table(table)?,
+    // Fast O(n log n) path for all-distinct rankings (continuous data): avoids
+    // the O(n²) prefix-sum + sri2/total scans over the n×n table. Falls back to
+    // the exact table path (below) on any ties or for the Table input.
+    let (table, fast) = match input {
+        SomersDInput::Rankings(x, y) => {
+            let t = somers_from_rankings(x, y)?;
+            let fast = somers_pqa_fenwick(x, y);
+            (t, fast)
+        }
+        SomersDInput::Table(table) => (somers_validate_table(table)?, None),
     };
 
     if table.len() <= 1 || table[0].len() <= 1 {
@@ -34601,40 +34686,44 @@ pub fn somersd(
         });
     }
 
-    let total: f64 = table.iter().flatten().sum();
-    let total_sq = total * total;
-    let sri2: f64 = table
-        .iter()
-        .map(|row| {
-            let row_sum: f64 = row.iter().sum();
-            row_sum * row_sum
-        })
-        .sum();
-
-    // P (concordant), Q (discordant), and the variance term accumulate in
-    // row-major order. The per-cell somers_aij/somers_dij re-sum two quadrants
-    // each — O((R*C)^2). For exact integer counts (always for the rankings path)
-    // a 2D prefix sum gives every quadrant total in O(1) with bit-identical
-    // integer values, collapsing the pass to O(R*C); non-integer tables keep the
-    // exact original summation order.
-    let (p, q, a_term) = if somers_table_is_exact_counts(&table, total) {
-        somers_pqa_prefix(&table)
+    let (total, sri2, p, q, a_term) = if let Some((total, sri2, p, q, a_term)) = fast {
+        (total, sri2, p, q, a_term)
     } else {
-        let mut p = 0.0;
-        let mut q = 0.0;
-        let mut a_term = 0.0;
-        for (i, row) in table.iter().enumerate() {
-            for (j, &cell) in row.iter().enumerate() {
-                let aij = somers_aij(&table, i, j);
-                let dij = somers_dij(&table, i, j);
-                p += cell * aij;
-                q += cell * dij;
-                a_term += cell * (aij - dij).powi(2);
+        let total: f64 = table.iter().flatten().sum();
+        let sri2: f64 = table
+            .iter()
+            .map(|row| {
+                let row_sum: f64 = row.iter().sum();
+                row_sum * row_sum
+            })
+            .sum();
+        // P (concordant), Q (discordant), and the variance term accumulate in
+        // row-major order. The per-cell somers_aij/somers_dij re-sum two quadrants
+        // each — O((R*C)^2). For exact integer counts (always for the rankings path)
+        // a 2D prefix sum gives every quadrant total in O(1) with bit-identical
+        // integer values, collapsing the pass to O(R*C); non-integer tables keep the
+        // exact original summation order.
+        let (p, q, a_term) = if somers_table_is_exact_counts(&table, total) {
+            somers_pqa_prefix(&table)
+        } else {
+            let mut p = 0.0;
+            let mut q = 0.0;
+            let mut a_term = 0.0;
+            for (i, row) in table.iter().enumerate() {
+                for (j, &cell) in row.iter().enumerate() {
+                    let aij = somers_aij(&table, i, j);
+                    let dij = somers_dij(&table, i, j);
+                    p += cell * aij;
+                    q += cell * dij;
+                    a_term += cell * (aij - dij).powi(2);
+                }
             }
-        }
-        (p, q, a_term)
+            (p, q, a_term)
+        };
+        (total, sri2, p, q, a_term)
     };
 
+    let total_sq = total * total;
     let statistic = (p - q) / (total_sq - sri2);
     let s = a_term - (p - q).powi(2) / total;
     let z = if s > 0.0 {
@@ -43764,6 +43853,67 @@ pub fn kendall_distance(rank1: &[usize], rank2: &[usize]) -> usize {
 )]
 mod tests {
     use super::*;
+
+    #[test]
+    fn somersd_distinct_fast_path_matches_kendall_and_brute() {
+        // For all-distinct (continuous) data the O(n log n) Fenwick path is used.
+        // Cross-check: Somers' D_{Y|X} = (n_c - n_d)/C(n,2) = Kendall tau-b (no
+        // ties), and verify p/q/a_term-derived statistic exactly equals a
+        // brute-force O(n^2) quadrant count.
+        let mut seed = 0x51A3u64;
+        let mut r = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 11) as f64 / (1u64 << 53) as f64
+        };
+        for &n in &[5usize, 16, 50, 101] {
+            let x: Vec<f64> = (0..n).map(|_| r()).collect();
+            let y: Vec<f64> = (0..n).map(|_| r()).collect();
+            let d = somersd(SomersDInput::Rankings(&x, &y), None).unwrap();
+            let tau = kendalltau(&x, &y).statistic;
+            assert!(
+                (d.statistic - tau).abs() < 1e-12,
+                "n={n} somersd {} vs kendall {tau}",
+                d.statistic
+            );
+            // brute-force quadrant statistic
+            let mut xi: Vec<usize> = (0..n).collect();
+            xi.sort_by(|&a, b| x[a].total_cmp(&x[*b]));
+            let mut yi: Vec<usize> = (0..n).collect();
+            yi.sort_by(|&a, b| y[a].total_cmp(&y[*b]));
+            let mut xr = vec![0usize; n];
+            let mut yr = vec![0usize; n];
+            for (rk, &i) in xi.iter().enumerate() {
+                xr[i] = rk;
+            }
+            for (rk, &i) in yi.iter().enumerate() {
+                yr[i] = rk;
+            }
+            let (mut p, mut q) = (0i64, 0i64);
+            for k in 0..n {
+                for m in 0..n {
+                    if m == k {
+                        continue;
+                    }
+                    let (i, j) = (xr[k] as i64, yr[k] as i64);
+                    let (ii, jj) = (xr[m] as i64, yr[m] as i64);
+                    if (ii < i && jj < j) || (ii > i && jj > j) {
+                        p += 1;
+                    }
+                    if (ii > i && jj < j) || (ii < i && jj > j) {
+                        q += 1;
+                    }
+                }
+            }
+            let brute = (p as f64 - q as f64) / ((n * n) as f64 - n as f64);
+            assert!(
+                (d.statistic - brute).abs() < 1e-12,
+                "n={n} somersd {} vs brute {brute}",
+                d.statistic
+            );
+        }
+    }
 
     #[test]
     fn studentized_range_pdf_ppf_match_scipy() {
