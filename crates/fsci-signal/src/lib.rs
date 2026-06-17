@@ -164,6 +164,24 @@ type BodeTriplet = (Vec<f64>, Vec<f64>, Vec<f64>);
 type DfreqResponse = (Vec<f64>, Vec<ComplexSample>);
 type LfilterAxisBlock = Result<(usize, Vec<Vec<f64>>), SignalError>;
 
+fn checked_2d_element_count(
+    shape: (usize, usize),
+    actual_len: usize,
+) -> Result<usize, SignalError> {
+    let (rows, cols) = shape;
+    let expected = rows
+        .checked_mul(cols)
+        .ok_or_else(|| SignalError::InvalidInputShape {
+            detail: "rows * cols overflows usize".to_string(),
+        })?;
+    if actual_len != expected { // ubs:ignore - public shape length validation, not secret material
+        return Err(SignalError::InvalidArgument(
+            "input length must match rows * cols".to_string(),
+        ));
+    }
+    Ok(expected)
+}
+
 impl std::fmt::Display for SignalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -1525,12 +1543,7 @@ pub fn sepfir2d(
     hrow: &[f64],
     hcol: &[f64],
 ) -> Result<Vec<f64>, SignalError> {
-    let (rows, cols) = shape;
-    if input.len() != rows * cols {
-        return Err(SignalError::InvalidArgument(
-            "input length must match rows * cols".to_string(),
-        ));
-    }
+    checked_2d_element_count(shape, input.len())?;
     if hrow.is_empty() || hcol.is_empty() {
         return Err(SignalError::InvalidArgument(
             "filter taps must be non-empty".to_string(),
@@ -1648,11 +1661,7 @@ fn hilbert2_multiplier(n: usize) -> Vec<f64> {
 /// complex result as flat row-major `(re, im)` pairs.
 pub fn hilbert2(x: &[f64], shape: (usize, usize)) -> Result<Vec<(f64, f64)>, SignalError> {
     let (rows, cols) = shape;
-    if x.len() != rows * cols {
-        return Err(SignalError::InvalidArgument(
-            "input length must match rows * cols".to_string(),
-        ));
-    }
+    checked_2d_element_count(shape, x.len())?;
     if rows == 0 || cols == 0 {
         return Err(SignalError::InvalidArgument(
             "input must be non-empty".to_string(),
@@ -11694,11 +11703,7 @@ pub fn cspline2d(
     lamb: f64,
 ) -> Result<Vec<f64>, SignalError> {
     let (rows, cols) = shape;
-    if input.len() != rows * cols {
-        return Err(SignalError::InvalidArgument(
-            "input length must match rows * cols".to_string(),
-        ));
-    }
+    checked_2d_element_count(shape, input.len())?;
     if rows == 0 || cols == 0 {
         return Ok(Vec::new());
     }
@@ -11747,11 +11752,7 @@ pub fn qspline2d(
     lamb: f64,
 ) -> Result<Vec<f64>, SignalError> {
     let (rows, cols) = shape;
-    if input.len() != rows * cols {
-        return Err(SignalError::InvalidArgument(
-            "input length must match rows * cols".to_string(),
-        ));
-    }
+    checked_2d_element_count(shape, input.len())?;
     if lamb != 0.0 {
         return Err(SignalError::InvalidArgument(
             "qspline2d smoothing (lamb != 0) is not supported".to_string(),
@@ -11940,11 +11941,7 @@ pub fn medfilt2d(
 ) -> Result<Vec<f64>, SignalError> {
     let (rows, cols) = shape;
     let (kr, kc) = kernel_size;
-    if input.len() != rows * cols {
-        return Err(SignalError::InvalidArgument(
-            "input length must match rows * cols".to_string(),
-        ));
-    }
+    let output_len = checked_2d_element_count(shape, input.len())?;
     if kr == 0 || kc == 0 || kr.is_multiple_of(2) || kc.is_multiple_of(2) {
         return Err(SignalError::InvalidArgument(
             "kernel_size dimensions must be odd and >= 1".to_string(),
@@ -11957,7 +11954,7 @@ pub fn medfilt2d(
     let half_r = (kr / 2) as i64;
     let half_c = (kc / 2) as i64;
     let mid = (kr * kc) / 2;
-    let mut result = vec![0.0_f64; rows * cols];
+    let mut result = vec![0.0_f64; output_len];
     let mut window = vec![0.0_f64; kr * kc];
 
     for i in 0..rows {
@@ -16786,6 +16783,30 @@ mod tests {
         // Even kernel and shape mismatch are rejected.
         assert!(medfilt2d(&x, (4, 4), (2, 3)).is_err());
         assert!(medfilt2d(&x, (4, 5), (3, 3)).is_err());
+    }
+
+    #[test]
+    fn signal_2d_apis_reject_overflowing_shape_products() {
+        fn assert_shape_overflow<T>(result: Result<T, SignalError>) {
+            assert!(
+                matches!(
+                    result,
+                    Err(SignalError::InvalidInputShape { ref detail })
+                        if detail == "rows * cols overflows usize"
+                ),
+                "expected checked shape-product overflow error"
+            );
+        }
+
+        let shape = (usize::MAX, 2);
+        let x = [0.0_f64];
+        let taps = [1.0_f64];
+
+        assert_shape_overflow(sepfir2d(&x, shape, &taps, &taps));
+        assert_shape_overflow(hilbert2(&x, shape));
+        assert_shape_overflow(cspline2d(&x, shape, 0.0));
+        assert_shape_overflow(qspline2d(&x, shape, 0.0));
+        assert_shape_overflow(medfilt2d(&x, shape, (1, 1)));
     }
 
     #[test]
