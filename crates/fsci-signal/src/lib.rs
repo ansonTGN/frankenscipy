@@ -13168,6 +13168,119 @@ pub fn stft(
 /// * `stft_result` — STFT result from `stft()`.
 /// * `nperseg` — Segment length used in the forward STFT.
 /// * `noverlap` — Overlap used in the forward STFT (default: nperseg/2).
+/// Canonical dual window for a real STFT window `win` shifted by `hop` samples.
+///
+/// `d[n] = win[n] / Σ_m win[n − m·hop]²` (the diagonal of the painless STFT
+/// frame operator). Faithful port of `scipy.signal._short_time_fft.
+/// _calc_dual_canonical_window` for real windows; the overlap-add accumulates in
+/// the same order as scipy so the result is bit-identical. Errors if the STFT is
+/// not invertible (a near-zero frame diagonal).
+fn calc_dual_canonical_window(win: &[f64], hop: usize) -> Result<Vec<f64>, SignalError> {
+    let n = win.len();
+    if hop == 0 || hop > n {
+        return Err(SignalError::InvalidArgument(format!(
+            "hop={hop} must be between 1 and the window length {n} (STFT not invertible)"
+        )));
+    }
+    let w2: Vec<f64> = win.iter().map(|&w| w * w).collect();
+    let mut dd = w2.clone();
+    let mut k = hop;
+    while k < n {
+        for i in k..n {
+            dd[i] += w2[i - k];
+        }
+        for i in 0..(n - k) {
+            dd[i] += w2[i + k];
+        }
+        k += hop;
+    }
+    // f64 resolution (np.finfo(float64).resolution == 1e-15).
+    let max_dd = dd.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let rel = 1e-15 * max_dd;
+    if !dd.iter().all(|&v| v >= rel) {
+        return Err(SignalError::InvalidArgument(
+            "Short-time Fourier Transform not invertible (degenerate window/hop)".to_string(),
+        ));
+    }
+    Ok((0..n).map(|i| win[i] / dd[i]).collect())
+}
+
+/// STFT dual window of `win` (hop `hop`) closest to `desired_dual`, mirroring
+/// `scipy.signal.closest_STFT_dual_window` for real windows.
+///
+/// Returns `(dual_win, alpha)`. With `scaled=false` minimizes
+/// `‖dual − desired_dual‖²` (alpha = 1). With `scaled=true` minimizes
+/// `‖α·win-dual − desired_dual‖²` over the optimal scale `α`. `desired_dual =
+/// None` ⇒ the rectangular (all-ones) target. Errors if `win`/`desired_dual`
+/// disagree in length, are non-finite, or the scale factor is numerically
+/// unstable (then use `scaled=false`).
+pub fn closest_stft_dual_window(
+    win: &[f64],
+    hop: usize,
+    desired_dual: Option<&[f64]>,
+    scaled: bool,
+) -> Result<(Vec<f64>, f64), SignalError> {
+    let n = win.len();
+    let desired: Vec<f64> = match desired_dual {
+        Some(d) => {
+            if d.len() != n {
+                return Err(SignalError::InvalidArgument(format!(
+                    "win (len {n}) and desired_dual (len {}) must be 1-D arrays of equal length",
+                    d.len()
+                )));
+            }
+            d.to_vec()
+        }
+        None => vec![1.0; n],
+    };
+    if !win.iter().all(|v| v.is_finite()) {
+        return Err(SignalError::InvalidArgument(
+            "win must have finite entries".to_string(),
+        ));
+    }
+    if !desired.iter().all(|v| v.is_finite()) {
+        return Err(SignalError::InvalidArgument(
+            "desired_dual must have finite entries".to_string(),
+        ));
+    }
+
+    let w_d = calc_dual_canonical_window(win, hop)?;
+    // wdd = conj(win) * desired_dual (real ⇒ no conjugation).
+    let wdd: Vec<f64> = (0..n).map(|i| win[i] * desired[i]).collect();
+    // q_d = (overlap-add of wdd at ±m·hop) · w_d, same accumulation order as scipy.
+    let mut q_d = wdd.clone();
+    let mut k = hop;
+    while k < n {
+        for i in k..n {
+            q_d[i] += wdd[i - k];
+        }
+        for i in 0..(n - k) {
+            q_d[i] += wdd[i + k];
+        }
+        k += hop;
+    }
+    for i in 0..n {
+        q_d[i] *= w_d[i];
+    }
+
+    if !scaled {
+        let dual = (0..n).map(|i| w_d[i] + desired[i] - q_d[i]).collect();
+        return Ok((dual, 1.0));
+    }
+
+    let numerator: f64 = (0..n).map(|i| q_d[i] * w_d[i]).sum();
+    let denominator: f64 = (0..n).map(|i| q_d[i] * q_d[i]).sum();
+    if !(numerator.abs() > 0.0 && denominator > 1e-15) {
+        return Err(SignalError::InvalidArgument(
+            "scaled closest dual window has a numerically unstable scale factor; try scaled=false"
+                .to_string(),
+        ));
+    }
+    let alpha = numerator / denominator;
+    let dual = (0..n).map(|i| w_d[i] + alpha * (desired[i] - q_d[i])).collect();
+    Ok((dual, alpha))
+}
+
 pub fn istft(
     stft_result: &StftResult,
     nperseg: usize,
@@ -15572,6 +15685,36 @@ pub fn daub(p: usize) -> Result<Vec<f64>, SignalError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn closest_stft_dual_window_matches_scipy() {
+        let hann = |n: usize| -> Vec<f64> {
+            (0..n)
+                .map(|i| 0.5 - 0.5 * (2.0 * std::f64::consts::PI * i as f64 / n as f64).cos())
+                .collect()
+        };
+        // scipy.signal.closest_STFT_dual_window references (1.17.x):
+        // hann(8), hop=2, scaled=True → alpha=0.5, dual all 0.5 (COLA).
+        let (d, a) = closest_stft_dual_window(&hann(8), 2, None, true).unwrap();
+        assert!((a - 0.5).abs() < 1e-12);
+        for &v in &d {
+            assert!((v - 0.5).abs() < 1e-12, "dual {v}");
+        }
+        // hann(16), hop=4, scaled=True, desired_dual = 1+0.1*i.
+        let dd: Vec<f64> = (0..16).map(|i| 1.0 + 0.1 * i as f64).collect();
+        let (d, a) = closest_stft_dual_window(&hann(16), 4, Some(&dd), true).unwrap();
+        assert!((a - 0.277_774_867_796_830_7).abs() < 1e-12, "alpha {a}");
+        assert!((d[0] - 0.277_774_867_796_830_7).abs() < 1e-10);
+        assert!((d[1] - 0.305_436_478_404_085_9).abs() < 1e-10);
+        assert!((d[2] - 0.333_330_864_132_620_3).abs() < 1e-10);
+        // scaled=False ⇒ alpha exactly 1.
+        let (_, a) = closest_stft_dual_window(&hann(8), 2, None, false).unwrap();
+        assert_eq!(a, 1.0);
+        // error cases
+        assert!(closest_stft_dual_window(&hann(8), 0, None, true).is_err());
+        assert!(closest_stft_dual_window(&hann(8), 9, None, true).is_err());
+        assert!(closest_stft_dual_window(&hann(8), 2, Some(&[1.0, 2.0]), true).is_err());
+    }
 
     fn czt_xin(n: usize) -> Vec<(f64, f64)> {
         (0..n)
