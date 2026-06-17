@@ -3679,6 +3679,205 @@ pub fn leaves_list(z: &[[f64; 4]]) -> Vec<usize> {
     result
 }
 
+/// Reorder a linkage matrix to minimize the sum of distances between adjacent
+/// leaves of the dendrogram (Bar-Joseph, Gifford & Jaakkola 2001), matching
+/// `scipy.cluster.hierarchy.optimal_leaf_ordering(Z, y)`.
+///
+/// `z` is the linkage matrix (`n-1` rows) and `y` the *condensed* pairwise
+/// distance matrix (`n(n-1)/2` entries) from which `z` was generated. Returns a
+/// copy of `z` whose children are swapped (rotated) so that [`leaves_list`]
+/// yields the optimally ordered leaves.
+///
+/// This is a faithful port of SciPy's implementation: leaves are relabelled to
+/// their current linear positions, the dynamic-programming cost table `M` is
+/// accumulated in `f32` (distances stay `f64`) exactly as SciPy does, per-node
+/// optimal endpoints break ties toward the lowest `(u, w)`, and the recovered
+/// per-node swaps are propagated to descendants via the rotation parity rule.
+pub fn optimal_leaf_ordering(z: &[[f64; 4]], y: &[f64]) -> Result<Vec<[f64; 4]>, ClusterError> {
+    let n = z.len() + 1;
+    if n < 2 {
+        return Ok(z.to_vec());
+    }
+    let expected = n * (n - 1) / 2;
+    if y.len() != expected {
+        return Err(ClusterError::InvalidArgument(format!(
+            "optimal_leaf_ordering: condensed distance length {} != expected {expected}",
+            y.len()
+        )));
+    }
+    // Square distance matrix from the condensed form.
+    let mut dmat = vec![0.0f64; n * n];
+    let mut idx = 0usize;
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let v = y[idx];
+            idx += 1;
+            dmat[i * n + j] = v;
+            dmat[j * n + i] = v;
+        }
+    }
+
+    // Relabel leaves to their current linear order, so every cluster occupies a
+    // contiguous [min, max) range of positions.
+    let sorted_leaves = leaves_list(z);
+    let mut posn = vec![0usize; n];
+    for (sp, &orig) in sorted_leaves.iter().enumerate() {
+        posn[orig] = sp;
+    }
+    // Distance matrix permuted into sorted-leaf order.
+    let mut sd = vec![0.0f64; n * n];
+    for a in 0..n {
+        for b in 0..n {
+            sd[a * n + b] = dmat[sorted_leaves[a] * n + sorted_leaves[b]];
+        }
+    }
+    // Linkage children remapped: leaves -> sorted positions, internal nodes keep id.
+    let mut szl = vec![0usize; n - 1];
+    let mut szr = vec![0usize; n - 1];
+    for i in 0..(n - 1) {
+        let l = z[i][0] as usize;
+        let r = z[i][1] as usize;
+        szl[i] = if l < n { posn[l] } else { l };
+        szr[i] = if r < n { posn[r] } else { r };
+    }
+    // Contiguous range of every node id (leaf position p -> [p, p+1)).
+    let nc = 2 * n - 1;
+    let mut crmin = vec![0usize; nc];
+    let mut crmax = vec![0usize; nc];
+    for p in 0..n {
+        crmin[p] = p;
+        crmax[p] = p + 1;
+    }
+    for i in 0..(n - 1) {
+        let v = i + n;
+        crmin[v] = crmin[szl[i]];
+        crmax[v] = crmax[szr[i]];
+    }
+
+    // Dynamic program. M is f32 (matching SciPy); swap_status records, per (u,w),
+    // which child sub-cluster supplied each endpoint.
+    let mut mm = vec![0.0f32; n * n];
+    let mut sw0 = vec![0u8; n * n];
+    let mut sw1 = vec![0u8; n * n];
+    let mut must_swap = vec![0u8; n - 1];
+    let big = 1_073_741_824.0f32; // 2^30
+
+    for i in 0..(n - 1) {
+        let vl = szl[i];
+        let vr = szr[i];
+        let (total_u, ucl, mcl): (usize, [usize; 2], [usize; 2]) = if vl < n {
+            (1, [vl, 0], [vl, 0])
+        } else {
+            let li = vl - n;
+            (2, [szl[li], szr[li]], [szr[li], szl[li]])
+        };
+        let (total_w, wcl, kcl): (usize, [usize; 2], [usize; 2]) = if vr < n {
+            (1, [vr, 0], [vr, 0])
+        } else {
+            let ri = vr - n;
+            (2, [szr[ri], szl[ri]], [szl[ri], szr[ri]])
+        };
+
+        for sl in 0..total_u {
+            for sr in 0..total_w {
+                let umin = crmin[ucl[sl]];
+                let umax = crmax[ucl[sl]];
+                let mmin = crmin[mcl[sl]];
+                let mmax = crmax[mcl[sl]];
+                let wmin = crmin[wcl[sr]];
+                let wmax = crmax[wcl[sr]];
+                let kmin = crmin[kcl[sr]];
+                let kmax = crmax[kcl[sr]];
+                for u in umin..umax {
+                    for w in wmin..wmax {
+                        let mut cur = big;
+                        for mp in mmin..mmax {
+                            for kp in kmin..kmax {
+                                // SciPy: float M + float M (f32) + double D, stored f32.
+                                let cand = ((mm[u * n + mp] + mm[w * n + kp]) as f64
+                                    + sd[mp * n + kp])
+                                    as f32;
+                                if cand < cur {
+                                    cur = cand;
+                                }
+                            }
+                        }
+                        mm[u * n + w] = cur;
+                        mm[w * n + u] = cur;
+                        sw0[u * n + w] = sl as u8;
+                        sw0[w * n + u] = sl as u8;
+                        sw1[u * n + w] = sr as u8;
+                        sw1[w * n + u] = sr as u8;
+                    }
+                }
+            }
+        }
+
+        // Best endpoints for this node (tie-break: lowest u, then lowest w).
+        let mut cur = big;
+        let mut bu = 0usize;
+        let mut bw = 0usize;
+        for u in crmin[vl]..crmax[vl] {
+            for w in crmin[vr]..crmax[vr] {
+                if mm[u * n + w] < cur {
+                    cur = mm[u * n + w];
+                    bu = u;
+                    bw = w;
+                }
+            }
+        }
+        if vl >= n {
+            must_swap[vl - n] = sw0[bu * n + bw];
+        }
+        if vr >= n {
+            must_swap[vr - n] = sw1[bu * n + bw];
+        }
+    }
+
+    // Propagate swaps: rotating a node flips all of its descendants, so a node's
+    // effective swap is the parity of `must_swap` over itself and its ancestors.
+    let m1 = n - 1;
+    let mut isdesc = vec![0i64; m1 * m1];
+    for i in 0..m1 {
+        isdesc[i * m1 + i] += 1;
+        let l = z[i][0] as usize;
+        let r = z[i][1] as usize;
+        if l >= n {
+            let li = l - n;
+            isdesc[i * m1 + li] += 1;
+            for c in 0..m1 {
+                isdesc[i * m1 + c] += isdesc[li * m1 + c];
+            }
+        }
+        if r >= n {
+            let ri = r - n;
+            isdesc[i * m1 + ri] += 1;
+            for c in 0..m1 {
+                isdesc[i * m1 + c] += isdesc[ri * m1 + c];
+            }
+        }
+    }
+    let mut final_swap = vec![false; m1];
+    for j in 0..m1 {
+        let mut s = 0usize;
+        for i in 0..m1 {
+            if must_swap[i] != 0 && isdesc[i * m1 + j] > 0 {
+                s += 1;
+            }
+        }
+        final_swap[j] = s % 2 == 1;
+    }
+
+    let mut out = z.to_vec();
+    for i in 0..m1 {
+        if final_swap[i] {
+            out[i] = [z[i][1], z[i][0], z[i][2], z[i][3]];
+        }
+    }
+    Ok(out)
+}
+
+
 /// Cluster data directly from observations.
 ///
 /// Combines distance computation, linkage, and fcluster into one step.
