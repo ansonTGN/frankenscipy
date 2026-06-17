@@ -54,6 +54,15 @@ fn gaussian_kernel_radius(sigma: f64) -> usize {
     (DEFAULT_GAUSSIAN_TRUNCATE * sigma + 0.5) as usize
 }
 
+fn gaussian_kernel_len(radius: usize) -> Result<usize, NdimageError> {
+    radius
+        .checked_mul(2)
+        .and_then(|diameter| diameter.checked_add(1))
+        .ok_or_else(|| {
+            NdimageError::InvalidArgument("gaussian kernel radius is too large".to_string())
+        })
+}
+
 /// Computes a 1-D Gaussian convolution kernel for the `order`-th derivative.
 ///
 /// Mirrors `scipy.ndimage._filters._gaussian_kernel1d`: builds the normalized
@@ -62,9 +71,9 @@ fn gaussian_kernel_radius(sigma: f64) -> usize {
 /// maps `q -> q' + q * p'` with `p'(x) = -x / sigma^2`; `Q_deriv` applies that
 /// operator to the polynomial coefficients of `q` (superdiagonal `D` for `q'`,
 /// subdiagonal `P` for `q * p'`).
-fn gaussian_kernel1d(sigma: f64, order: usize, radius: usize) -> Vec<f64> {
+fn gaussian_kernel1d(sigma: f64, order: usize, radius: usize) -> Result<Vec<f64>, NdimageError> {
     let sigma2 = sigma * sigma;
-    let n = 2 * radius + 1;
+    let n = gaussian_kernel_len(radius)?;
     let mut phi_x: Vec<f64> = (0..n)
         .map(|i| {
             let x = i as f64 - radius as f64;
@@ -76,7 +85,7 @@ fn gaussian_kernel1d(sigma: f64, order: usize, radius: usize) -> Vec<f64> {
         *v /= sum;
     }
     if order == 0 {
-        return phi_x;
+        return Ok(phi_x);
     }
 
     let mut q = vec![0.0; order + 1];
@@ -97,7 +106,7 @@ fn gaussian_kernel1d(sigma: f64, order: usize, radius: usize) -> Vec<f64> {
     }
 
     // kernel[i] = (sum_e x_i^e * q[e]) * phi(x_i)
-    (0..n)
+    Ok((0..n)
         .map(|i| {
             let x = i as f64 - radius as f64;
             let mut poly = 0.0;
@@ -108,7 +117,7 @@ fn gaussian_kernel1d(sigma: f64, order: usize, radius: usize) -> Vec<f64> {
             }
             poly * phi_x[i]
         })
-        .collect()
+        .collect())
 }
 
 /// Apply a 1-D Gaussian (or its `order`-th derivative) along a single axis.
@@ -125,7 +134,7 @@ fn gaussian_filter1d_axis(
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
     let radius = gaussian_kernel_radius(sigma);
-    let kernel_1d = gaussian_kernel1d(sigma, order, radius);
+    let kernel_1d = gaussian_kernel1d(sigma, order, radius)?;
     if input.size() == 0 {
         return Err(NdimageError::EmptyInput);
     }
@@ -1872,7 +1881,7 @@ pub fn gaussian_filter1d_via_convolve_ref(
     cval: f64,
 ) -> Result<NdArray, NdimageError> {
     let radius = gaussian_kernel_radius(sigma);
-    let kernel_1d = gaussian_kernel1d(sigma, order, radius);
+    let kernel_1d = gaussian_kernel1d(sigma, order, radius)?;
     let mut kernel_shape = vec![1usize; input.ndim()];
     kernel_shape[axis] = kernel_1d.len();
     let kernel = NdArray::new(kernel_1d, kernel_shape)?;
@@ -9269,7 +9278,7 @@ mod tests {
             4.431861620031e-03,
             1.338306246147e-04,
         ];
-        let got = gaussian_kernel1d(1.0, 0, 4);
+        let got = gaussian_kernel1d(1.0, 0, 4).unwrap();
         assert_eq!(got.len(), expect.len());
         for (g, e) in got.iter().zip(&expect) {
             assert!((g - e).abs() < 1e-12, "order0 kernel mismatch: {g} vs {e}");
@@ -9292,7 +9301,7 @@ mod tests {
             -1.329558486009e-02,
             -5.353224984590e-04,
         ];
-        let got = gaussian_kernel1d(1.0, 1, 4);
+        let got = gaussian_kernel1d(1.0, 1, 4).unwrap();
         for (g, e) in got.iter().zip(&expect) {
             assert!((g - e).abs() < 1e-12, "order1 kernel mismatch: {g} vs {e}");
         }
@@ -9314,7 +9323,7 @@ mod tests {
             3.545489296025e-02,
             2.007459369221e-03,
         ];
-        let got = gaussian_kernel1d(1.0, 2, 4);
+        let got = gaussian_kernel1d(1.0, 2, 4).unwrap();
         for (g, e) in got.iter().zip(&expect) {
             assert!((g - e).abs() < 1e-12, "order2 kernel mismatch: {g} vs {e}");
         }
@@ -9392,6 +9401,11 @@ mod tests {
         let sigma_err = gaussian_filter1d(&input, 0.0, 0, 0, BoundaryMode::Reflect, 0.0)
             .expect_err("non-positive sigma should be rejected");
         assert!(matches!(sigma_err, NdimageError::InvalidArgument(_)));
+
+        let huge_sigma_err =
+            gaussian_filter1d(&input, f64::MAX, 0, 0, BoundaryMode::Reflect, 0.0)
+                .expect_err("overflowing Gaussian kernel radius should be rejected");
+        assert!(matches!(huge_sigma_err, NdimageError::InvalidArgument(_)));
     }
 
     #[test]
@@ -10169,11 +10183,13 @@ mod tests {
                                     }
                                 }
                                 (Err(_), Err(_)) => {}
-                                (r, f) => panic!(
-                                    "accept/reject parity: shape={shape:?} size={size} origin={origin} ref_ok={} fast_ok={}",
-                                    r.is_ok(),
-                                    f.is_ok()
-                                ),
+                                (r, f) => {
+                                    assert_eq!(
+                                        r.is_ok(),
+                                        f.is_ok(),
+                                        "accept/reject parity: shape={shape:?} size={size} origin={origin}"
+                                    );
+                                }
                             }
                         }
                     }

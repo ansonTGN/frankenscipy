@@ -2,7 +2,7 @@ use fsci_fft::Complex64;
 use fsci_ndimage::{fourier_gaussian, fourier_shift, fourier_uniform};
 fn dump(name: &str, v: &[Complex64]) {
     for (i, c) in v.iter().enumerate() {
-        println!("{name},{i},{:.17e},{:.17e}", c.re, c.im);
+        println!("{name},{i},{:.17e},{:.17e}", c.0, c.1);
     }
 }
 fn main() {
@@ -10,7 +10,7 @@ fn main() {
     let mut input = Vec::new();
     for k in 0..20 {
         let t = k as f64;
-        input.push(Complex64::new(
+        input.push((
             (0.5 * t).cos() + 0.2 * t,
             (0.3 * t).sin() - 0.1 * t,
         ));
