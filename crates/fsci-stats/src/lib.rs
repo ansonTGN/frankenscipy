@@ -66054,6 +66054,80 @@ mod tests {
     }
 
     #[test]
+    fn bws_test_matches_scipy_reference_values() {
+        // Golden values captured from scipy.stats.bws_test (SciPy 1.17.1), which
+        // enumerates the exact permutation distribution for these small samples.
+        // Tuple: (x, y, alternative, expected_statistic, expected_pvalue).
+        let cases: &[(&[f64], &[f64], &str, f64, f64)] = &[
+            // fully separated samples
+            (
+                &[1.0, 2.0, 3.0, 4.0, 5.0],
+                &[6.0, 7.0, 8.0, 9.0, 10.0],
+                "two-sided",
+                4.8940000000000001,
+                0.0079365079365079361,
+            ),
+            (
+                &[1.0, 2.0, 3.0, 4.0, 5.0],
+                &[6.0, 7.0, 8.0, 9.0, 10.0],
+                "less",
+                -4.8940000000000001,
+                0.003968253968253968,
+            ),
+            (
+                &[1.0, 2.0, 3.0, 4.0, 5.0],
+                &[6.0, 7.0, 8.0, 9.0, 10.0],
+                "greater",
+                -4.8940000000000001,
+                1.0,
+            ),
+            // tied, interleaved samples (exercises average-rank tie handling)
+            (
+                &[1.0, 2.0, 2.0, 3.0, 5.0],
+                &[2.0, 3.0, 3.0, 4.0],
+                "two-sided",
+                0.73521527777777795,
+                0.7142857142857143,
+            ),
+            (
+                &[1.0, 2.0, 2.0, 3.0, 5.0],
+                &[2.0, 3.0, 3.0, 4.0],
+                "less",
+                -0.54424305555555574,
+                0.32539682539682541,
+            ),
+            (
+                &[1.0, 2.0, 2.0, 3.0, 5.0],
+                &[2.0, 3.0, 3.0, 4.0],
+                "greater",
+                -0.54424305555555574,
+                0.74603174603174605,
+            ),
+        ];
+        for &(x, y, alt, want_stat, want_p) in cases {
+            let r = bws_test(x, y, alt, None).unwrap();
+            assert!(
+                (r.statistic - want_stat).abs() < 1e-12,
+                "bws_test stat ({alt}): got {}, want {want_stat}",
+                r.statistic
+            );
+            assert!(
+                (r.pvalue - want_p).abs() < 1e-12,
+                "bws_test pvalue ({alt}): got {}, want {want_p}",
+                r.pvalue
+            );
+        }
+
+        // Error conditions: empty input, invalid alternative, non-finite data.
+        assert!(bws_test(&[], &[1.0, 2.0], "two-sided", None).is_err());
+        assert!(bws_test(&[1.0, 2.0], &[3.0, 4.0], "bogus", None).is_err());
+        assert!(bws_test(&[1.0, f64::NAN], &[3.0, 4.0], "two-sided", None).is_err());
+        // Exhaustive-enumeration cap is enforced when splits exceed max_exact.
+        let big: Vec<f64> = (0..40).map(|i| i as f64).collect();
+        assert!(bws_test(&big, &big, "two-sided", Some(1000)).is_err());
+    }
+
+    #[test]
     fn wilcoxon_matches_scipy_reference_values() {
         // scipy.stats.wilcoxon([1,2,3,4], [2,3,4,5]) = WilcoxonResult(statistic=0.0, pvalue=0.125)
         let x = vec![1.0, 2.0, 3.0, 4.0];
