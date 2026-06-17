@@ -1,0 +1,59 @@
+Script started on 2026-06-17 02:46:08-04:00 [COMMAND="env RCH_REQUIRE_REMOTE=0 CARGO_TARGET_DIR=/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x17-target cargo test -j 1 -p fsci-linalg --lib lower_band_envelope_frontier_rotation_perf_probe --release --locked -- --ignored --nocapture" <not executed on terminal>]
+warning: unused variable: `total`
+  --> crates/fsci-fft/src/helpers.rs:58:9
+   |
+58 |     let total: usize = input.len();
+   |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_total`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `fsci-fft` (lib) generated 1 warning (run `cargo fix --lib -p fsci-fft` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 0.15s
+     Running unittests src/lib.rs (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x17-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+LOWER_BAND_ENVELOPE_FRONTIER_PERF_BEGIN
+shape=128x128
+bandwidth=32
+envelope_width=33
+rotation_count=4
+repeats=64
+dense_ms=0.126179
+envelope_ms=0.047370
+speedup=2.663690
+max_abs_diff=1.19371179607696831e-12
+dense_digest=0xb140a829862f372c
+envelope_digest=0x2f5c5316092aa29d
+LOWER_BAND_ENVELOPE_FRONTIER_PERF_END
+LOWER_BAND_ENVELOPE_FRONTIER_PERF_BEGIN
+shape=256x256
+bandwidth=32
+envelope_width=33
+rotation_count=8
+repeats=64
+dense_ms=0.852425
+envelope_ms=0.103977
+speedup=8.198207
+max_abs_diff=3.63797880709171295e-12
+dense_digest=0xd776a4456bccc16d
+envelope_digest=0x17bd69b191265bed
+LOWER_BAND_ENVELOPE_FRONTIER_PERF_END
+LOWER_BAND_ENVELOPE_FRONTIER_PERF_BEGIN
+shape=512x512
+bandwidth=32
+envelope_width=33
+rotation_count=16
+repeats=64
+dense_ms=5.853210
+envelope_ms=0.433301
+speedup=13.508416
+max_abs_diff=8.64019966684281826e-12
+dense_digest=0xd75092c23f6da1ef
+envelope_digest=0x32e784d545f458c6
+LOWER_BAND_ENVELOPE_FRONTIER_PERF_END
+test proptest_tests::lower_band_envelope_frontier_rotation_perf_probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 479 filtered out; finished in 0.02s
+
+
+Script done on 2026-06-17 02:46:08-04:00 [COMMAND_EXIT_CODE="0"]

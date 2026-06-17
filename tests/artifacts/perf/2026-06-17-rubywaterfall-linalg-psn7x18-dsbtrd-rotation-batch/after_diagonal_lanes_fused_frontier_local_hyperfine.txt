@@ -1,0 +1,361 @@
+Script started on 2026-06-17 02:45:56-04:00 [COMMAND="env RCH_REQUIRE_REMOTE=0 CARGO_TARGET_DIR=/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x17-target hyperfine --warmup 1 --runs 5 --show-output 'cargo test -j 1 -p fsci-linalg --lib lower_band_fused_frontier_chase_perf_probe --release --locked -- --ignored --nocapture'" <not executed on terminal>]
+Benchmark 1: cargo test -j 1 -p fsci-linalg --lib lower_band_fused_frontier_chase_perf_probe --release --locked -- --ignored --nocapture
+warning: unused variable: `total`
+  --> crates/fsci-fft/src/helpers.rs:58:9
+   |
+58 |     let total: usize = input.len();
+   |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_total`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `fsci-fft` (lib) generated 1 warning (run `cargo fix --lib -p fsci-fft` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 0.14s
+     Running unittests src/lib.rs (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x17-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=128x128
+bandwidth=32
+cols=64
+rotation_count=4
+repeats=32
+dense_ms=12.365368
+compact_ms=5.631219
+speedup=2.195860
+transformed_drift=1.13686837721616030e-13
+eigenvector_drift=6.93889390390722838e-18
+dense_digest=0x9105700991057009
+compact_digest=0x325d2bcbcda2d434
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=256x256
+bandwidth=32
+cols=96
+rotation_count=8
+repeats=16
+dense_ms=30.019317
+compact_ms=17.228793
+speedup=1.742392
+transformed_drift=1.13686837721616030e-13
+eigenvector_drift=1.11022302462515654e-16
+dense_digest=0xef3001c2de10cf1d
+compact_digest=0xcf9442ea75930712
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=512x512
+bandwidth=32
+cols=128
+rotation_count=16
+repeats=8
+dense_ms=49.587221
+compact_ms=29.284504
+speedup=1.693292
+transformed_drift=2.27373675443232059e-13
+eigenvector_drift=1.11022302462515654e-16
+dense_digest=0xd14b98dc70ded6a6
+compact_digest=0xd5488334a24b80bc
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+test proptest_tests::lower_band_fused_frontier_chase_perf_probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 479 filtered out; finished in 0.16s
+
+warning: unused variable: `total`
+  --> crates/fsci-fft/src/helpers.rs:58:9
+   |
+58 |     let total: usize = input.len();
+   |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_total`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `fsci-fft` (lib) generated 1 warning (run `cargo fix --lib -p fsci-fft` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 0.11s
+     Running unittests src/lib.rs (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x17-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=128x128
+bandwidth=32
+cols=64
+rotation_count=4
+repeats=32
+dense_ms=12.055040
+compact_ms=5.915818
+speedup=2.037764
+transformed_drift=1.13686837721616030e-13
+eigenvector_drift=6.93889390390722838e-18
+dense_digest=0x9105700991057009
+compact_digest=0x325d2bcbcda2d434
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=256x256
+bandwidth=32
+cols=96
+rotation_count=8
+repeats=16
+dense_ms=26.434084
+compact_ms=15.106892
+speedup=1.749803
+transformed_drift=1.13686837721616030e-13
+eigenvector_drift=1.11022302462515654e-16
+dense_digest=0xef3001c2de10cf1d
+compact_digest=0xcf9442ea75930712
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=512x512
+bandwidth=32
+cols=128
+rotation_count=16
+repeats=8
+dense_ms=49.928759
+compact_ms=27.692959
+speedup=1.802941
+transformed_drift=2.27373675443232059e-13
+eigenvector_drift=1.11022302462515654e-16
+dense_digest=0xd14b98dc70ded6a6
+compact_digest=0xd5488334a24b80bc
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+test proptest_tests::lower_band_fused_frontier_chase_perf_probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 479 filtered out; finished in 0.15s
+
+warning: unused variable: `total`
+  --> crates/fsci-fft/src/helpers.rs:58:9
+   |
+58 |     let total: usize = input.len();
+   |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_total`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `fsci-fft` (lib) generated 1 warning (run `cargo fix --lib -p fsci-fft` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 0.11s
+     Running unittests src/lib.rs (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x17-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=128x128
+bandwidth=32
+cols=64
+rotation_count=4
+repeats=32
+dense_ms=12.459467
+compact_ms=4.715074
+speedup=2.642475
+transformed_drift=1.13686837721616030e-13
+eigenvector_drift=6.93889390390722838e-18
+dense_digest=0x9105700991057009
+compact_digest=0x325d2bcbcda2d434
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=256x256
+bandwidth=32
+cols=96
+rotation_count=8
+repeats=16
+dense_ms=23.592880
+compact_ms=14.739617
+speedup=1.600644
+transformed_drift=1.13686837721616030e-13
+eigenvector_drift=1.11022302462515654e-16
+dense_digest=0xef3001c2de10cf1d
+compact_digest=0xcf9442ea75930712
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=512x512
+bandwidth=32
+cols=128
+rotation_count=16
+repeats=8
+dense_ms=60.668006
+compact_ms=36.067987
+speedup=1.682046
+transformed_drift=2.27373675443232059e-13
+eigenvector_drift=1.11022302462515654e-16
+dense_digest=0xd14b98dc70ded6a6
+compact_digest=0xd5488334a24b80bc
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+test proptest_tests::lower_band_fused_frontier_chase_perf_probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 479 filtered out; finished in 0.17s
+
+warning: unused variable: `total`
+  --> crates/fsci-fft/src/helpers.rs:58:9
+   |
+58 |     let total: usize = input.len();
+   |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_total`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `fsci-fft` (lib) generated 1 warning (run `cargo fix --lib -p fsci-fft` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 0.10s
+     Running unittests src/lib.rs (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x17-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=128x128
+bandwidth=32
+cols=64
+rotation_count=4
+repeats=32
+dense_ms=11.802342
+compact_ms=6.016539
+speedup=1.961650
+transformed_drift=1.13686837721616030e-13
+eigenvector_drift=6.93889390390722838e-18
+dense_digest=0x9105700991057009
+compact_digest=0x325d2bcbcda2d434
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=256x256
+bandwidth=32
+cols=96
+rotation_count=8
+repeats=16
+dense_ms=24.244465
+compact_ms=15.497232
+speedup=1.564438
+transformed_drift=1.13686837721616030e-13
+eigenvector_drift=1.11022302462515654e-16
+dense_digest=0xef3001c2de10cf1d
+compact_digest=0xcf9442ea75930712
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=512x512
+bandwidth=32
+cols=128
+rotation_count=16
+repeats=8
+dense_ms=52.067020
+compact_ms=33.799499
+speedup=1.540467
+transformed_drift=2.27373675443232059e-13
+eigenvector_drift=1.11022302462515654e-16
+dense_digest=0xd14b98dc70ded6a6
+compact_digest=0xd5488334a24b80bc
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+test proptest_tests::lower_band_fused_frontier_chase_perf_probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 479 filtered out; finished in 0.16s
+
+warning: unused variable: `total`
+  --> crates/fsci-fft/src/helpers.rs:58:9
+   |
+58 |     let total: usize = input.len();
+   |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_total`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `fsci-fft` (lib) generated 1 warning (run `cargo fix --lib -p fsci-fft` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 0.12s
+     Running unittests src/lib.rs (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x17-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=128x128
+bandwidth=32
+cols=64
+rotation_count=4
+repeats=32
+dense_ms=11.004790
+compact_ms=4.726245
+speedup=2.328443
+transformed_drift=1.13686837721616030e-13
+eigenvector_drift=6.93889390390722838e-18
+dense_digest=0x9105700991057009
+compact_digest=0x325d2bcbcda2d434
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=256x256
+bandwidth=32
+cols=96
+rotation_count=8
+repeats=16
+dense_ms=28.145246
+compact_ms=19.213713
+speedup=1.464852
+transformed_drift=1.13686837721616030e-13
+eigenvector_drift=1.11022302462515654e-16
+dense_digest=0xef3001c2de10cf1d
+compact_digest=0xcf9442ea75930712
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=512x512
+bandwidth=32
+cols=128
+rotation_count=16
+repeats=8
+dense_ms=54.677346
+compact_ms=28.318955
+speedup=1.930768
+transformed_drift=2.27373675443232059e-13
+eigenvector_drift=1.11022302462515654e-16
+dense_digest=0xd14b98dc70ded6a6
+compact_digest=0xd5488334a24b80bc
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+test proptest_tests::lower_band_fused_frontier_chase_perf_probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 479 filtered out; finished in 0.16s
+
+warning: unused variable: `total`
+  --> crates/fsci-fft/src/helpers.rs:58:9
+   |
+58 |     let total: usize = input.len();
+   |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_total`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `fsci-fft` (lib) generated 1 warning (run `cargo fix --lib -p fsci-fft` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 0.11s
+     Running unittests src/lib.rs (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x17-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=128x128
+bandwidth=32
+cols=64
+rotation_count=4
+repeats=32
+dense_ms=9.716570
+compact_ms=4.727838
+speedup=2.055183
+transformed_drift=1.13686837721616030e-13
+eigenvector_drift=6.93889390390722838e-18
+dense_digest=0x9105700991057009
+compact_digest=0x325d2bcbcda2d434
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=256x256
+bandwidth=32
+cols=96
+rotation_count=8
+repeats=16
+dense_ms=26.214769
+compact_ms=18.865294
+speedup=1.389576
+transformed_drift=1.13686837721616030e-13
+eigenvector_drift=1.11022302462515654e-16
+dense_digest=0xef3001c2de10cf1d
+compact_digest=0xcf9442ea75930712
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_BEGIN
+shape=512x512
+bandwidth=32
+cols=128
+rotation_count=16
+repeats=8
+dense_ms=50.618085
+compact_ms=32.170252
+speedup=1.573444
+transformed_drift=2.27373675443232059e-13
+eigenvector_drift=1.11022302462515654e-16
+dense_digest=0xd14b98dc70ded6a6
+compact_digest=0xd5488334a24b80bc
+LOWER_BAND_FUSED_FRONTIER_CHASE_PERF_END
+test proptest_tests::lower_band_fused_frontier_chase_perf_probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 479 filtered out; finished in 0.16s
+
+  Time (mean ± σ):     324.8 ms ±  14.2 ms    [User: 195.0 ms, System: 129.8 ms]
+  Range (min … max):   310.6 ms … 340.2 ms    5 runs
+ 
+
+Script done on 2026-06-17 02:45:58-04:00 [COMMAND_EXIT_CODE="0"]

@@ -1,0 +1,24 @@
+Script started on 2026-06-17 02:46:57-04:00 [COMMAND="env RCH_REQUIRE_REMOTE=0 CARGO_TARGET_DIR=/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x17-target cargo test -j 1 -p fsci-linalg --lib lower_band_fused_frontier_chase_matches_dense_oracle --release --locked -- --nocapture" <not executed on terminal>]
+warning: unused variable: `total`
+  --> crates/fsci-fft/src/helpers.rs:58:9
+   |
+58 |     let total: usize = input.len();
+   |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_total`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `fsci-fft` (lib) generated 1 warning (run `cargo fix --lib -p fsci-fft` to apply 1 suggestion)
+   Compiling fsci-linalg v0.1.0 (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x7-20260617T0621Z/crates/fsci-linalg)
+    Finished `release` profile [optimized] target(s) in 35.46s
+     Running unittests src/lib.rs (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x17-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+lower_band_fused_chase n=18 bandwidth=4 cols=7 rotations=3 transformed_drift=7.10542735760100186e-15 eigenvector_drift=3.46944695195361419e-18 compact_digest=0x1c3ef0d9d3dc1083
+lower_band_fused_chase n=37 bandwidth=8 cols=13 rotations=4 transformed_drift=2.84217094304040074e-14 eigenvector_drift=2.22044604925031308e-16 compact_digest=0x8a89e08b8c6dc6dd
+lower_band_fused_chase n=64 bandwidth=12 cols=17 rotations=5 transformed_drift=5.68434188608080149e-14 eigenvector_drift=6.93889390390722838e-18 compact_digest=0xf1534a90714d38a0
+test proptest_tests::lower_band_fused_frontier_chase_matches_dense_oracle ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 479 filtered out; finished in 0.00s
+
+
+Script done on 2026-06-17 02:47:32-04:00 [COMMAND_EXIT_CODE="0"]

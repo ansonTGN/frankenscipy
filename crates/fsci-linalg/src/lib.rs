@@ -27192,7 +27192,19 @@ mod proptest_tests {
         }
 
         fn to_dense(&self) -> DMatrix<f64> {
-            DMatrix::<f64>::from_fn(self.n, self.n, |row, col| self.get(row, col))
+            let mut dense = DMatrix::<f64>::zeros(self.n, self.n);
+            for col in 0..self.n {
+                let max_offset = self.width.min(self.n - 1 - col);
+                for offset in 0..=max_offset {
+                    let value = self.data[offset * self.n + col];
+                    let row = col + offset;
+                    dense[(row, col)] = value;
+                    if offset != 0 {
+                        dense[(col, row)] = value;
+                    }
+                }
+            }
+            dense
         }
     }
 
@@ -27263,52 +27275,69 @@ mod proptest_tests {
         }
     }
 
-    fn apply_adjacent_rotation_envelope(
+    fn apply_adjacent_rotation_envelope_diagonal_lanes(
         envelope: &mut LowerBandEnvelopeProbe,
         p: usize,
         c: f64,
         s: f64,
     ) {
         let n = envelope.n;
+        let width = envelope.width;
         let q = p + 1;
-        let app = envelope.get(p, p);
-        let apq = envelope.get(q, p);
-        let aqq = envelope.get(q, q);
-        let min_row = p.saturating_sub(envelope.width);
-        let max_row = (q + envelope.width).min(n - 1);
+        let app = envelope.data[p];
+        let apq = envelope.data[n + p];
+        let aqq = envelope.data[q];
 
-        for k in min_row..=max_row {
-            if k == p || k == q {
-                continue;
-            }
-            let akp = envelope.get(k, p);
-            let akq = envelope.get(k, q);
+        for distance in 1..=p.min(width) {
+            let col = p - distance;
+            let kp_idx = distance * n + col;
+            let akp = envelope.data[kp_idx];
+            let akq = if distance < width {
+                envelope.data[(distance + 1) * n + col]
+            } else {
+                0.0
+            };
             let new_kp = c * akp - s * akq;
             let new_kq = s * akp + c * akq;
-            if envelope.index(k, p).is_some() {
-                envelope.set(k, p, new_kp);
-            } else {
-                assert!(
-                    new_kp.abs() <= 1e-14,
-                    "rotation ({p},{q}) moved {new_kp:.17e} outside envelope at ({k},{p})"
-                );
-            }
-            if envelope.index(k, q).is_some() {
-                envelope.set(k, q, new_kq);
+            envelope.data[kp_idx] = new_kp;
+            if distance < width {
+                envelope.data[(distance + 1) * n + col] = new_kq;
             } else {
                 assert!(
                     new_kq.abs() <= 1e-14,
-                    "rotation ({p},{q}) moved {new_kq:.17e} outside envelope at ({k},{q})"
+                    "rotation ({p},{q}) moved {new_kq:.17e} outside envelope at ({col},{q})"
                 );
             }
+        }
+
+        for distance in 1..=((n - 1 - q).min(width)) {
+            let row = q + distance;
+            let kq_idx = distance * n + q;
+            let akq = envelope.data[kq_idx];
+            let akp = if distance < width {
+                envelope.data[(distance + 1) * n + p]
+            } else {
+                0.0
+            };
+            let new_kp = c * akp - s * akq;
+            let new_kq = s * akp + c * akq;
+            if distance < width {
+                envelope.data[(distance + 1) * n + p] = new_kp;
+            } else {
+                assert!(
+                    new_kp.abs() <= 1e-14,
+                    "rotation ({p},{q}) moved {new_kp:.17e} outside envelope at ({row},{p})"
+                );
+            }
+            envelope.data[kq_idx] = new_kq;
         }
 
         let c2 = c * c;
         let s2 = s * s;
         let cs = c * s;
-        envelope.set(p, p, c2 * app - 2.0 * cs * apq + s2 * aqq);
-        envelope.set(q, q, s2 * app + 2.0 * cs * apq + c2 * aqq);
-        envelope.set(p, q, cs * (app - aqq) + (c2 - s2) * apq);
+        envelope.data[p] = c2 * app - 2.0 * cs * apq + s2 * aqq;
+        envelope.data[q] = s2 * app + 2.0 * cs * apq + c2 * aqq;
+        envelope.data[n + p] = cs * (app - aqq) + (c2 - s2) * apq;
     }
 
     fn apply_frontier_rotations_envelope(
@@ -27316,7 +27345,7 @@ mod proptest_tests {
         rotations: &[(usize, f64, f64)],
     ) {
         for &(p, c, s) in rotations {
-            apply_adjacent_rotation_envelope(envelope, p, c, s);
+            apply_adjacent_rotation_envelope_diagonal_lanes(envelope, p, c, s);
         }
     }
 
