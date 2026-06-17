@@ -1,0 +1,4 @@
+ad9d2853b91209842ac85d8fdda7655a3ccf8bbe8f110a2a9c4d0829a0b5a298  tests/artifacts/perf/2026-06-17-rubywaterfall-linalg-wm1gg-compact-lane-bulge/EVIDENCE.md
+46bbb2cb3871b63024cbf3b4ad62d47f501a1d1b48c7c5e25a4cf61a5565edd6  tests/artifacts/perf/2026-06-17-rubywaterfall-linalg-wm1gg-compact-lane-bulge/baseline_hyperfine_local.txt
+4e55ade095c5a0493d3fff221ae36403fda00b0177d48fef41cd3bc3c3c8c6ff  tests/artifacts/perf/2026-06-17-rubywaterfall-linalg-wm1gg-compact-lane-bulge/baseline_probe_local.txt
+0a00d70b45e0bee935b9875670fce3f7585300113acd19861b90d8cd851e4708  .skill-loop-progress.md
