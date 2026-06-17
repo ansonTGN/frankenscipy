@@ -11372,6 +11372,156 @@ fn abcd_shape(m: &[Vec<f64>], name: &str) -> Result<(usize, usize), SignalError>
     Ok((m.len(), cols))
 }
 
+/// Result of [`place_poles`]: the state-feedback gain and the achieved
+/// closed-loop poles.
+pub struct PlacePolesResult {
+    /// Gain matrix `K` (shape `1×n` for single-input), so `eig(A − B·K)` are the
+    /// requested poles.
+    pub gain_matrix: Vec<Vec<f64>>,
+    /// Achieved closed-loop poles (real, imaginary).
+    pub computed_poles: Vec<(f64, f64)>,
+}
+
+/// Pole placement by state feedback for a **single-input** system, matching
+/// `scipy.signal.place_poles(A, B, poles)` when `B` has one column.
+///
+/// Computes the gain `K` (via Ackermann's formula) such that the eigenvalues of
+/// `A − B·K` equal `poles`. For a controllable single-input system this gain is
+/// unique, so it matches SciPy's result exactly. `poles` are `(re, im)` pairs and
+/// must be closed under conjugation (so `K` is real). Multi-input systems
+/// (`B` with more than one column) return an error — that case needs the
+/// Kautsky–Nichols–Van Dooren optimizer, not yet ported.
+pub fn place_poles(
+    a: &[Vec<f64>],
+    b: &[Vec<f64>],
+    poles: &[(f64, f64)],
+) -> Result<PlacePolesResult, SignalError> {
+    let n = a.len();
+    if n == 0 || a.iter().any(|r| r.len() != n) {
+        return Err(SignalError::InvalidInputShape {
+            detail: "place_poles: A must be a non-empty square matrix".to_string(),
+        });
+    }
+    if b.len() != n {
+        return Err(SignalError::InvalidInputShape {
+            detail: format!("place_poles: B must have {n} rows to match A"),
+        });
+    }
+    let m = b[0].len();
+    if b.iter().any(|r| r.len() != m) {
+        return Err(SignalError::InvalidInputShape {
+            detail: "place_poles: B rows must have equal length".to_string(),
+        });
+    }
+    if m != 1 {
+        return Err(SignalError::InvalidParameter {
+            detail: "place_poles: only single-input systems (B with 1 column) are supported"
+                .to_string(),
+        });
+    }
+    if poles.len() != n {
+        return Err(SignalError::InvalidParameter {
+            detail: format!("place_poles: need {n} poles, got {}", poles.len()),
+        });
+    }
+
+    let bvec: Vec<f64> = (0..n).map(|i| b[i][0]).collect();
+
+    // Controllability matrix C = [b, A·b, …, A^{n-1}·b] (column k = A^k·b).
+    let mut ctrl = vec![vec![0.0; n]; n]; // ctrl[i][k]
+    let mut col = bvec.clone();
+    for k in 0..n {
+        for i in 0..n {
+            ctrl[i][k] = col[i];
+        }
+        // col <- A·col
+        let mut next = vec![0.0; n];
+        for i in 0..n {
+            let mut s = 0.0;
+            for j in 0..n {
+                s += a[i][j] * col[j];
+            }
+            next[i] = s;
+        }
+        col = next;
+    }
+
+    // Desired monic characteristic-polynomial coefficients (highest degree first)
+    // from the roots, via complex polynomial expansion; result is real.
+    let mut poly: Vec<(f64, f64)> = vec![(1.0, 0.0)];
+    for &(lr, li) in poles {
+        let mut next = vec![(0.0, 0.0); poly.len() + 1];
+        for (k, &(pr, pi)) in poly.iter().enumerate() {
+            // multiply by (x - λ): contributes +coeff to x^{deg+1}, -λ·coeff to x^{deg}
+            next[k].0 += pr;
+            next[k].1 += pi;
+            next[k + 1].0 -= lr * pr - li * pi;
+            next[k + 1].1 -= lr * pi + li * pr;
+        }
+        poly = next;
+    }
+    let coeffs: Vec<f64> = poly.iter().map(|&(re, _)| re).collect(); // length n+1, coeffs[0]=1
+
+    // p(A) via Horner: pA = I; for k=1..=n: pA = pA·A + coeffs[k]·I.
+    let mut pa = vec![vec![0.0; n]; n];
+    for (i, row) in pa.iter_mut().enumerate() {
+        row[i] = 1.0;
+    }
+    for &ck in &coeffs[1..] {
+        // pA <- pA·A
+        let mut prod = vec![vec![0.0; n]; n];
+        for i in 0..n {
+            for l in 0..n {
+                let pil = pa[i][l];
+                if pil != 0.0 {
+                    for j in 0..n {
+                        prod[i][j] += pil * a[l][j];
+                    }
+                }
+            }
+        }
+        for i in 0..n {
+            prod[i][i] += ck;
+        }
+        pa = prod;
+    }
+
+    // K = e_nᵀ·C⁻¹·p(A). Let y = (C⁻¹)ᵀ e_n  ⟺  solve Cᵀ y = e_n; then K = p(A)ᵀ y.
+    let ct: Vec<Vec<f64>> = (0..n).map(|i| (0..n).map(|j| ctrl[j][i]).collect()).collect();
+    let mut e_n = vec![0.0; n];
+    e_n[n - 1] = 1.0;
+    let solve_opts = fsci_linalg::SolveOptions {
+        mode: fsci_runtime::RuntimeMode::Strict,
+        ..Default::default()
+    };
+    let y = fsci_linalg::solve(&ct, &e_n, solve_opts)
+        .map_err(|e| {
+            SignalError::NumericalFailure(format!("place_poles: uncontrollable system ({e})"))
+        })?
+        .x;
+    let gain: Vec<f64> = (0..n)
+        .map(|j| (0..n).map(|i| pa[i][j] * y[i]).sum())
+        .collect();
+
+    // Closed-loop poles: eig(A − B·K).
+    let a_cl: Vec<Vec<f64>> = (0..n)
+        .map(|i| (0..n).map(|j| a[i][j] - bvec[i] * gain[j]).collect())
+        .collect();
+    let eig = fsci_linalg::eig(&a_cl, fsci_linalg::DecompOptions::default())
+        .map_err(|e| SignalError::NumericalFailure(format!("place_poles: eig failed ({e})")))?;
+    let computed_poles: Vec<(f64, f64)> = eig
+        .eigenvalues_re
+        .iter()
+        .zip(eig.eigenvalues_im.iter())
+        .map(|(&r, &i)| (r, i))
+        .collect();
+
+    Ok(PlacePolesResult {
+        gain_matrix: vec![gain],
+        computed_poles,
+    })
+}
+
 /// Check state-space matrix compatibility and fill missing matrices with
 /// zero-arrays of compatible shape, matching `scipy.signal.abcd_normalize`.
 ///
