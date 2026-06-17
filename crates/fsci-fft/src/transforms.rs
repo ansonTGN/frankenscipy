@@ -2100,49 +2100,46 @@ fn apply_dst_along_axis(
     let total: usize = shape.iter().product();
     let outer_size = total / axis_len;
     let mut result = vec![0.0; total];
+    let axis_stride = strides[axis];
 
-    // For each "fiber" along the axis
-    let mut temp = vec![0.0; axis_len];
-    let mut temp_out = vec![0.0; axis_len];
-
-    for outer_idx in 0..outer_size {
-        // Convert outer_idx to multi-index (excluding axis)
-        let mut multi_idx = vec![0usize; ndim];
+    // Flat offset of fiber `outer_idx` (axis coord 0); fiber elements are at
+    // `base + i*axis_stride`. Distinct fibers touch disjoint flat indices (the multi-index
+    // decomposition is a bijection), matching the original `Σ multi_idx[d]*strides[d]`
+    // bit-for-bit (`multi_idx[axis]=i` contributes exactly `i*axis_stride`).
+    let base_of = |outer_idx: usize| -> usize {
         let mut remaining = outer_idx;
+        let mut base = 0usize;
         for d in (0..ndim).rev() {
             if d == axis {
                 continue;
             }
             let dim_size = shape[d];
-            multi_idx[d] = remaining % dim_size;
+            base += (remaining % dim_size) * strides[d];
             remaining /= dim_size;
         }
+        base
+    };
 
-        // Extract the fiber
-        for (i, value) in temp.iter_mut().enumerate().take(axis_len) {
-            multi_idx[axis] = i;
-            let flat_idx: usize = multi_idx
-                .iter()
-                .zip(strides.iter())
-                .map(|(m, s)| m * s)
-                .sum();
-            *value = data[flat_idx];
+    // Each fiber is extracted from the immutable `data`, transformed by a pure 1-D DST-II
+    // (forward) / DST-III + idstn rescale (inverse), and returned by move — independent work,
+    // computed in parallel (threads own disjoint `outer_idx` slots) then scattered serially.
+    // Byte-identical to the sequential fiber loop (same per-fiber input, same pure transform +
+    // per-fiber scale, each disjoint output index written exactly once).
+    let fiber = |outer_idx: usize| -> Result<Vec<f64>, FftError> {
+        let base = base_of(outer_idx);
+        let mut temp = vec![0.0; axis_len];
+        for (i, value) in temp.iter_mut().enumerate() {
+            *value = data[base + i * axis_stride];
         }
-
-        // Apply DST or IDST (DST-II forward, DST-III inverse)
         let mut transformed = if inverse {
             dst_iii(&temp, options)?
         } else {
             dst_ii(&temp, options)?
         };
-        // Convert dst_iii (scipy.fft.dst type=3, scaled by options.normalization)
-        // into idst (the inverse of dst type=2 that scipy.fft.idstn computes), so
-        // that idstn(dstn(x)) = x for every normalization:
-        //   backward: dst_iii returns the unnormalized DST-III → apply 1/(2N).
-        //   forward:  dst_iii already divided by 2N (forward norm) → multiply it
-        //             back by 2N so the inverse carries no scaling (the forward
-        //             dstn already absorbed the 1/(2N)). Without this idstn/forward
-        //             was wrong by 1/(2N) per axis.
+        // Convert dst_iii into idst (the inverse of dst type=2 that scipy.fft.idstn computes),
+        // so idstn(dstn(x)) = x for every normalization (per-axis scale; see history below):
+        //   backward: dst_iii is unnormalized DST-III → apply 1/(2N).
+        //   forward:  dst_iii already /2N → multiply back by 2N (the forward dstn absorbed it).
         //   ortho:    dst_iii already applied 1/sqrt(2N), which idst also needs.
         if inverse {
             let scale = match options.normalization {
@@ -2156,17 +2153,46 @@ fn apply_dst_along_axis(
                 }
             }
         }
-        temp_out.copy_from_slice(&transformed);
+        Ok(transformed)
+    };
 
-        // Store back
-        for (i, &value) in temp_out.iter().enumerate().take(axis_len) {
-            multi_idx[axis] = i;
-            let flat_idx: usize = multi_idx
-                .iter()
-                .zip(strides.iter())
-                .map(|(m, s)| m * s)
-                .sum();
-            result[flat_idx] = value;
+    // Threads are re-spawned per axis pass, so gate on the total fiber work.
+    let work = (outer_size as u64).saturating_mul(axis_len as u64);
+    let nthreads = if work < (1 << 15) || outer_size < 2 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(1)
+            .min(outer_size)
+    };
+
+    let fibers: Vec<Result<Vec<f64>, FftError>> = if nthreads <= 1 {
+        (0..outer_size).map(fiber).collect()
+    } else {
+        let mut out: Vec<Result<Vec<f64>, FftError>> =
+            (0..outer_size).map(|_| Ok(Vec::new())).collect();
+        let chunk = outer_size.div_ceil(nthreads);
+        let fiber = &fiber;
+        std::thread::scope(|scope| {
+            for (t, slot) in out.chunks_mut(chunk).enumerate() {
+                let base_outer = t * chunk;
+                scope.spawn(move || {
+                    for (off, o) in slot.iter_mut().enumerate() {
+                        *o = fiber(base_outer + off);
+                    }
+                });
+            }
+        });
+        out
+    };
+
+    // Serial scatter of the transformed fibers into `result` (disjoint flat indices).
+    for (outer_idx, fib) in fibers.into_iter().enumerate() {
+        let transformed = fib?;
+        let base = base_of(outer_idx);
+        for (i, &value) in transformed.iter().enumerate() {
+            result[base + i * axis_stride] = value;
         }
     }
 
