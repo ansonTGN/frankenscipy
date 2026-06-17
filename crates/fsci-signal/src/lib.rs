@@ -13353,6 +13353,9 @@ pub struct ShortTimeFft {
     fft_mode: StftFftMode,
     phase_shift: Option<i64>,
     scaling: Option<StftScaling>,
+    // Explicit dual window (set by `from_dual`); when None, the canonical dual
+    // is computed on demand.
+    explicit_dual: Option<Vec<f64>>,
 }
 
 impl ShortTimeFft {
@@ -13383,7 +13386,29 @@ impl ShortTimeFft {
             fft_mode: StftFftMode::Onesided,
             phase_shift: Some(0),
             scaling: None,
+            explicit_dual: None,
         })
+    }
+
+    /// Construct from a *dual* window, mirroring
+    /// `scipy.signal.ShortTimeFFT.from_dual(dual_win, hop, fs)`: the analysis
+    /// window is the canonical dual of `dual_win` (`win = calc_dual(dual_win)`),
+    /// and `dual_win` is stored as the synthesis window used by [`Self::istft`].
+    pub fn from_dual(dual_win: Vec<f64>, hop: usize, fs: f64) -> Result<Self, SignalError> {
+        if hop < 1 {
+            return Err(SignalError::InvalidArgument(
+                "ShortTimeFft::from_dual: hop must be an integer >= 1".to_string(),
+            ));
+        }
+        if !dual_win.iter().all(|v| v.is_finite()) {
+            return Err(SignalError::InvalidArgument(
+                "ShortTimeFft::from_dual: dual_win must have finite entries".to_string(),
+            ));
+        }
+        let win = calc_dual_canonical_window(&dual_win, hop)?;
+        let mut sft = Self::new(win, hop, fs)?;
+        sft.explicit_dual = Some(dual_win);
+        Ok(sft)
     }
 
     /// Construct from a named window, mirroring
@@ -13422,6 +13447,12 @@ impl ShortTimeFft {
         };
         for w in self.win.iter_mut() {
             *w *= fac;
+        }
+        // scipy scales an explicit dual window inversely so the frame stays dual.
+        if let Some(d) = self.explicit_dual.as_mut() {
+            for w in d.iter_mut() {
+                *w /= fac;
+            }
         }
         self.scaling = Some(scaling);
         self
@@ -13715,7 +13746,15 @@ impl ShortTimeFft {
 
     /// Canonical dual window (the default dual used by [`Self::istft`]).
     pub fn dual_win(&self) -> Result<Vec<f64>, SignalError> {
+        if let Some(d) = &self.explicit_dual {
+            return Ok(d.clone());
+        }
         calc_dual_canonical_window(&self.win, self.hop)
+    }
+
+    /// The analysis window (read-only view), mirroring scipy's `ShortTimeFFT.win`.
+    pub fn win_view(&self) -> &[f64] {
+        &self.win
     }
 
     // scipy ShortTimeFFT.nearest_k_p: nearest multiple of hop (left or right).
@@ -13831,7 +13870,10 @@ impl ShortTimeFft {
         let k_q0 = self.nearest_k_p(k0, true);
         let k_q1 = self.nearest_k_p(k1, false);
         let n_pts = k_q1 - k_q0 + m_num - mid;
-        let dual = calc_dual_canonical_window(&self.win, self.hop)?;
+        let dual = match &self.explicit_dual {
+            Some(d) => d.clone(),
+            None => calc_dual_canonical_window(&self.win, self.hop)?,
+        };
         let mut x = vec![0.0_f64; n_pts.max(0) as usize];
         for q_ in q0..q1 {
             // gather column (all f_pts frequency bins) for slice index q_-p_min
