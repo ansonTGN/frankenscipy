@@ -74,7 +74,12 @@ fn validate_nd_shape(len: usize, shape: &[usize]) -> Result<(), FftError> {
             detail: "shape must have at least one dimension",
         });
     }
-    let expected: usize = shape.iter().product();
+    let expected = shape
+        .iter()
+        .try_fold(1usize, |acc, &dim| acc.checked_mul(dim))
+        .ok_or(FftError::InvalidShape {
+            detail: "shape product overflows usize",
+        })?;
     if expected != len {
         return Err(FftError::InvalidShape {
             detail: "shape product does not match input length",
@@ -555,6 +560,14 @@ mod tests {
         // shape mismatch errors
         assert!(fftshift(&d, &[2, 3], None).is_err());
         assert!(fftshift(&d, &[5], Some(&[1])).is_err());
+    }
+
+    #[test]
+    fn fftshift_rejects_overflowing_shape_product() {
+        let input = vec![0_i32; 1];
+        let shape = [usize::MAX, 2];
+        assert!(fftshift(&input, &shape, None).is_err());
+        assert!(ifftshift(&input, &shape, None).is_err());
     }
 
     #[test]
