@@ -1628,6 +1628,12 @@ pub fn lgmres(
             message: "tol must be finite and non-negative".to_string(),
         });
     }
+    let x0_has_non_finite = x0.is_some_and(|initial| initial.iter().any(|v| !v.is_finite()));
+    if a.data().iter().any(|v| !v.is_finite()) || b.iter().any(|v| !v.is_finite()) || x0_has_non_finite {
+        return Err(SparseError::NonFiniteInput {
+            message: "matrix/rhs/initial guess contains NaN or Inf".to_string(),
+        });
+    }
 
     let max_iter = options.max_iter.unwrap_or(n * 10);
     let inner_m = options.inner_m.min(n);
@@ -7487,6 +7493,43 @@ mod tests {
         };
         let err = lgmres(&a, &b, None, negative_tol).expect_err("negative tolerance");
         assert!(matches!(err, SparseError::InvalidArgument { .. }));
+    }
+
+    #[test]
+    fn lgmres_rejects_non_finite_inputs() {
+        let finite = diagonally_dominant_csr_3x3();
+        let rhs_err = lgmres(
+            &finite,
+            &[f64::NAN, 7.0, 7.0],
+            None,
+            LgmresOptions::default(),
+        )
+        .expect_err("non-finite rhs");
+        assert!(matches!(rhs_err, SparseError::NonFiniteInput { .. }));
+
+        let x0 = vec![0.0, f64::INFINITY, 0.0];
+        let x0_err = lgmres(&finite, &[7.0, 7.0, 7.0], Some(&x0), LgmresOptions::default())
+            .expect_err("non-finite initial guess");
+        assert!(matches!(x0_err, SparseError::NonFiniteInput { .. }));
+
+        let non_finite_matrix = CooMatrix::from_triplets(
+            Shape2D::new(3, 3),
+            vec![4.0, f64::INFINITY, 1.0, 3.0, 1.0, 1.0, 2.0],
+            vec![0, 0, 1, 1, 1, 2, 2],
+            vec![0, 1, 0, 1, 2, 1, 2],
+            false,
+        )
+        .expect("coo")
+        .to_csr()
+        .expect("csr");
+        let matrix_err = lgmres(
+            &non_finite_matrix,
+            &[7.0, 7.0, 7.0],
+            None,
+            LgmresOptions::default(),
+        )
+        .expect_err("non-finite matrix");
+        assert!(matches!(matrix_err, SparseError::NonFiniteInput { .. }));
     }
 
     #[test]
