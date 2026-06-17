@@ -125,27 +125,44 @@ fn get_twiddle_cache() -> &'static RwLock<HashMap<TwiddleKey, TwiddleTable>> {
     TWIDDLE_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
+thread_local! {
+    /// Per-thread twiddle cache: a lock-free fast path in front of the shared
+    /// [`TWIDDLE_CACHE`]. In parallel transform loops (e.g. N-D DCT/DST/rfft
+    /// fiber passes) every worker re-fetches the same `(n, inverse)` table per
+    /// fiber; routing those hits through a thread-local map removes the global
+    /// `RwLock` read on each call (64 threads otherwise ping-pong the lock's
+    /// reader counter across 1M+ acquisitions). The cached `Arc<[Complex64]>` is
+    /// shared with the global cache, so the returned twiddles are bit-identical.
+    static LOCAL_TWIDDLE_CACHE: std::cell::RefCell<HashMap<TwiddleKey, TwiddleTable>> =
+        std::cell::RefCell::new(HashMap::new());
+}
+
 fn get_or_compute_twiddles(n: usize, inverse: bool) -> TwiddleTable {
-    let cache = get_twiddle_cache();
     let key = (n, inverse);
 
-    if let Some(table) = cache.read().ok().and_then(|guard| guard.get(&key).cloned()) {
+    // Lock-free per-thread fast path.
+    if let Some(table) = LOCAL_TWIDDLE_CACHE.with(|c| c.borrow().get(&key).cloned()) {
         return table;
     }
 
-    let sign = if inverse { 1.0 } else { -1.0 };
-    let mut table = Vec::with_capacity(n);
-    for k in 0..n {
-        let angle = sign * 2.0 * PI * k as f64 / n as f64;
-        table.push((angle.cos(), angle.sin()));
-    }
+    let cache = get_twiddle_cache();
+    let table = if let Some(table) = cache.read().ok().and_then(|guard| guard.get(&key).cloned()) {
+        table
+    } else {
+        let sign = if inverse { 1.0 } else { -1.0 };
+        let mut table = Vec::with_capacity(n);
+        for k in 0..n {
+            let angle = sign * 2.0 * PI * k as f64 / n as f64;
+            table.push((angle.cos(), angle.sin()));
+        }
+        let table = Arc::<[Complex64]>::from(table);
+        if let Ok(mut guard) = cache.write() {
+            guard.insert(key, Arc::clone(&table));
+        }
+        table
+    };
 
-    let table = Arc::<[Complex64]>::from(table);
-
-    if let Ok(mut guard) = cache.write() {
-        guard.insert(key, Arc::clone(&table));
-    }
-
+    LOCAL_TWIDDLE_CACHE.with(|c| c.borrow_mut().insert(key, Arc::clone(&table)));
     table
 }
 
