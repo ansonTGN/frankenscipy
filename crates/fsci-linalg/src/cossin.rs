@@ -564,6 +564,46 @@ pub(crate) fn dlartgs(x: f64, y: f64, sigma: f64) -> (f64, f64) {
     (cs, sn)
 }
 
+/// Apply a forward sequence of variable-pivot plane rotations to a row-major
+/// matrix `a`, matching LAPACK `DLASR` with `PIVOT='V'`, `DIRECT='F'`. Rotation
+/// `k` (cosine `c[k]`, sine `s[k]`) acts in the `(k, k+1)` plane: on rows for
+/// `side='L'` (`A := P·A`), on columns for `side='R'` (`A := A·Pᵀ`), applied
+/// for `k = 0, 1, …` in order.
+#[allow(dead_code)]
+pub(crate) fn dlasr_var_fwd(side: char, c: &[f64], s: &[f64], a: &mut [Vec<f64>]) {
+    let rows = a.len();
+    if rows == 0 {
+        return;
+    }
+    let cols = a[0].len();
+    if side == 'L' {
+        for j in 0..rows.saturating_sub(1) {
+            let (ct, st) = (c[j], s[j]);
+            if ct == 1.0 && st == 0.0 {
+                continue;
+            }
+            for i in 0..cols {
+                let temp = a[j + 1][i];
+                a[j + 1][i] = ct * temp - st * a[j][i];
+                a[j][i] = st * temp + ct * a[j][i];
+            }
+        }
+    } else {
+        // side == 'R'
+        for j in 0..cols.saturating_sub(1) {
+            let (ct, st) = (c[j], s[j]);
+            if ct == 1.0 && st == 0.0 {
+                continue;
+            }
+            for row in a.iter_mut().take(rows) {
+                let temp = row[j + 1];
+                row[j + 1] = ct * temp - st * row[j];
+                row[j] = st * temp + ct * row[j];
+            }
+        }
+    }
+}
+
 fn mm(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
     let (n, k, p) = (a.len(), b.len(), b[0].len());
     let mut c = vec![vec![0.0; p]; n];
@@ -786,6 +826,53 @@ mod tests {
             assert!((cs * f + sn * g - r).abs() < 1e-12);
             assert!((-sn * f + cs * g).abs() < 1e-12);
         }
+    }
+
+    #[test]
+    fn dlasr_matches_explicit_rotations() {
+        // side='R': A·Pᵀ where P = P(n-2)...P(0), each a (k,k+1) column rotation.
+        let n = 5usize;
+        let a0 = orthogonal(n, 7);
+        let c = vec![0.6, 0.8, -0.5, 0.96];
+        let s = vec![0.8, -0.6, 0.866_025_403_784, 0.28];
+        // Reference (right): for each k in 0..n-1, rotate columns k,k+1.
+        let mut aref = a0.clone();
+        for k in 0..n - 1 {
+            let (ct, st) = (c[k], s[k]);
+            for row in aref.iter_mut() {
+                let t = row[k + 1];
+                row[k + 1] = ct * t - st * row[k];
+                row[k] = st * t + ct * row[k];
+            }
+        }
+        let mut ar = a0.clone();
+        dlasr_var_fwd('R', &c, &s, &mut ar);
+        let mut maxd = 0.0f64;
+        for i in 0..n {
+            for j in 0..n {
+                maxd = maxd.max((ar[i][j] - aref[i][j]).abs());
+            }
+        }
+        assert!(maxd < 1e-14, "DLASR 'R' mismatch {maxd:.2e}");
+        // side='L' on rows, reference.
+        let mut lref = a0.clone();
+        for k in 0..n - 1 {
+            let (ct, st) = (c[k], s[k]);
+            for i in 0..n {
+                let t = lref[k + 1][i];
+                lref[k + 1][i] = ct * t - st * lref[k][i];
+                lref[k][i] = st * t + ct * lref[k][i];
+            }
+        }
+        let mut al = a0.clone();
+        dlasr_var_fwd('L', &c, &s, &mut al);
+        let mut maxl = 0.0f64;
+        for i in 0..n {
+            for j in 0..n {
+                maxl = maxl.max((al[i][j] - lref[i][j]).abs());
+            }
+        }
+        assert!(maxl < 1e-14, "DLASR 'L' mismatch {maxl:.2e}");
     }
 
     #[test]
