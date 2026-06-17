@@ -2931,6 +2931,17 @@ pub fn vq(
     Ok((labels, dists))
 }
 
+/// Assign each observation to its nearest code-book entry, matching
+/// `scipy.cluster.vq.py_vq(obs, code_book)`: the pure-Python reference
+/// implementation of [`vq`]. Returns `(code, dist)` — the index of the nearest
+/// code and the Euclidean distance to it for each observation.
+pub fn py_vq(
+    obs: &[Vec<f64>],
+    code_book: &[Vec<f64>],
+) -> Result<(Vec<usize>, Vec<f64>), ClusterError> {
+    vq(obs, code_book)
+}
+
 /// K-means clustering from explicit initial centroids (Lloyd iteration).
 ///
 /// Matches `scipy.cluster.vq.kmeans2(data, k, iter, minit='matrix')`, the
