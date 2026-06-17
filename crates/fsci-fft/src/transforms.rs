@@ -2678,9 +2678,49 @@ fn run_real_nd_forward(
     let plan_cache_hit = touch_plan_cache(&key, expected_len);
 
     let started = Instant::now();
-    let mut output = Vec::with_capacity(expected_len / last_len * reduced_last);
-    for lane in input.chunks_exact(last_len) {
-        output.extend(real_fft_unscaled(lane, backend));
+    // Real-FFT each contiguous lane along the last axis. The lanes are independent (each is a
+    // separate real→complex transform writing its own `reduced_last` outputs), so they are
+    // computed in parallel into disjoint contiguous output chunks — byte-identical to the
+    // serial `chunks_exact`/`extend` (same per-lane transform, same lane order).
+    let n_lanes = expected_len / last_len;
+    let mut output = vec![(0.0f64, 0.0f64); n_lanes * reduced_last];
+    let lane_work = (n_lanes as u64).saturating_mul(last_len as u64);
+    let nthreads = if lane_work < (1 << 15) || n_lanes < 2 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(1)
+            .min(n_lanes)
+    };
+    if nthreads <= 1 {
+        for (lane, slot) in input
+            .chunks_exact(last_len)
+            .zip(output.chunks_mut(reduced_last))
+        {
+            slot.copy_from_slice(&real_fft_unscaled(lane, backend));
+        }
+    } else {
+        // `&dyn FftBackend` is not `Sync`, so each worker re-resolves the backend from its
+        // `BackendKind` (Copy) — the same idiom `apply_axis_transform` uses.
+        let backend_kind = options.backend;
+        let chunk = n_lanes.div_ceil(nthreads);
+        std::thread::scope(|scope| {
+            for (in_block, out_block) in input
+                .chunks(chunk * last_len)
+                .zip(output.chunks_mut(chunk * reduced_last))
+            {
+                scope.spawn(move || {
+                    let backend = resolve_backend(backend_kind);
+                    for (lane, slot) in in_block
+                        .chunks_exact(last_len)
+                        .zip(out_block.chunks_mut(reduced_last))
+                    {
+                        slot.copy_from_slice(&real_fft_unscaled(lane, backend));
+                    }
+                });
+            }
+        });
     }
 
     let mut complex_shape = shape.to_vec();
