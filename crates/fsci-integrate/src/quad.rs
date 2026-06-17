@@ -749,6 +749,16 @@ pub struct CompositeQuadResult {
     pub integral: f64,
 }
 
+fn validate_sample_coordinates(x: &[f64]) -> Result<(), IntegrateValidationError> {
+    if x.iter().all(|value| value.is_finite()) {
+        Ok(())
+    } else {
+        Err(IntegrateValidationError::QuadInvalidBounds {
+            detail: "x coordinates must be finite".to_string(),
+        })
+    }
+}
+
 /// Integrate sampled data using the composite trapezoidal rule.
 ///
 /// Matches `scipy.integrate.trapezoid(y, x)` (formerly `trapz`).
@@ -770,6 +780,7 @@ pub fn trapezoid(y: &[f64], x: &[f64]) -> Result<CompositeQuadResult, IntegrateV
             detail: "need at least 2 points for trapezoidal rule".to_string(),
         });
     }
+    validate_sample_coordinates(x)?;
 
     let mut integral = 0.0;
     for i in 0..y.len() - 1 {
@@ -830,6 +841,7 @@ pub fn simpson(y: &[f64], x: &[f64]) -> Result<CompositeQuadResult, IntegrateVal
             detail: "need at least 2 points for Simpson's rule".to_string(),
         });
     }
+    validate_sample_coordinates(x)?;
     if y.len() == 2 {
         // Fall back to trapezoidal
         return trapezoid(y, x);
@@ -976,6 +988,7 @@ pub fn cumulative_trapezoid(y: &[f64], x: &[f64]) -> Result<Vec<f64>, IntegrateV
             detail: "need at least 2 points for cumulative trapezoid".to_string(),
         });
     }
+    validate_sample_coordinates(x)?;
 
     let n = y.len();
     let mut result = Vec::with_capacity(n - 1);
@@ -4141,6 +4154,17 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn trapezoid_rejects_nonfinite_x() {
+        for x in [[0.0, f64::NAN], [0.0, f64::INFINITY]] {
+            let err = trapezoid(&[1.0, 2.0], &x).expect_err("non-finite x");
+            assert!(matches!(
+                err,
+                IntegrateValidationError::QuadInvalidBounds { .. }
+            ));
+        }
+    }
+
     // ── simpson tests ───────────────────────────────────────────────
 
     #[test]
@@ -4284,6 +4308,17 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn simpson_rejects_nonfinite_x() {
+        for x in [[0.0, 0.5, f64::NAN], [0.0, 0.5, f64::INFINITY]] {
+            let err = simpson(&[1.0, 2.0, 3.0], &x).expect_err("non-finite x");
+            assert!(matches!(
+                err,
+                IntegrateValidationError::QuadInvalidBounds { .. }
+            ));
+        }
+    }
+
     // ── cumulative_trapezoid tests ──────────────────────────────────
 
     #[test]
@@ -4334,6 +4369,17 @@ mod tests {
             err,
             IntegrateValidationError::QuadInvalidBounds { .. }
         ));
+    }
+
+    #[test]
+    fn cumtrapz_rejects_nonfinite_x() {
+        for x in [[0.0, f64::NAN], [0.0, f64::INFINITY]] {
+            let err = cumulative_trapezoid(&[1.0, 2.0], &x).expect_err("non-finite x");
+            assert!(matches!(
+                err,
+                IntegrateValidationError::QuadInvalidBounds { .. }
+            ));
+        }
     }
 
     #[test]
