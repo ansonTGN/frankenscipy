@@ -4254,13 +4254,58 @@ pub fn k_nearest_neighbors(data: &[Vec<f64>], k: usize) -> (Vec<Vec<usize>>, Vec
     if k > 0
         && let Ok(tree) = KDTree::new(data)
     {
-        for (i, point) in data.iter().enumerate() {
+        // Each point's k-NN descent reads the shared, immutable tree and writes only its
+        // own output row, so the queries are independent. Running them across threads into
+        // index-ordered slots is byte-identical to the serial loop (same per-point
+        // `knn_search_composite` result, reassembled in the original 0..n order).
+        let query = |i: usize| -> (Vec<usize>, Vec<f64>) {
             let mut best: Vec<(f64, usize)> = Vec::with_capacity(k + 1);
             if !tree.nodes.is_empty() {
-                knn_search_composite(&tree.nodes, 0, point, i, k, &mut best);
+                knn_search_composite(&tree.nodes, 0, &data[i], i, k, &mut best);
             }
-            all_indices.push(best.iter().map(|&(_, idx)| idx).collect());
-            all_distances.push(best.iter().map(|&(ds, _)| ds.sqrt()).collect());
+            (
+                best.iter().map(|&(_, idx)| idx).collect(),
+                best.iter().map(|&(ds, _)| ds.sqrt()).collect(),
+            )
+        };
+        let work = (n as u64).saturating_mul((k as u64).max(1));
+        let nthreads = if work < (1 << 14) || n < 64 {
+            1
+        } else {
+            std::thread::available_parallelism()
+                .map(std::num::NonZero::get)
+                .unwrap_or(1)
+                .min(n)
+        };
+        if nthreads <= 1 {
+            for i in 0..n {
+                let (idx, dst) = query(i);
+                all_indices.push(idx);
+                all_distances.push(dst);
+            }
+        } else {
+            let mut idx_out: Vec<Vec<usize>> = vec![Vec::new(); n];
+            let mut dst_out: Vec<Vec<f64>> = vec![Vec::new(); n];
+            let chunk = n.div_ceil(nthreads);
+            let query = &query;
+            std::thread::scope(|scope| {
+                for (t, (islot, dslot)) in idx_out
+                    .chunks_mut(chunk)
+                    .zip(dst_out.chunks_mut(chunk))
+                    .enumerate()
+                {
+                    let base = t * chunk;
+                    scope.spawn(move || {
+                        for (off, (io, do_)) in islot.iter_mut().zip(dslot.iter_mut()).enumerate() {
+                            let (idx, dst) = query(base + off);
+                            *io = idx;
+                            *do_ = dst;
+                        }
+                    });
+                }
+            });
+            all_indices = idx_out;
+            all_distances = dst_out;
         }
         return (all_indices, all_distances);
     }
