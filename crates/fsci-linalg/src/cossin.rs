@@ -475,6 +475,101 @@ pub(crate) fn build_bigb(theta: &[f64], phi: &[f64], q: usize) -> Vec<Vec<f64>> 
     b
 }
 
+fn mm(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
+    let (n, k, p) = (a.len(), b.len(), b[0].len());
+    let mut c = vec![vec![0.0; p]; n];
+    for i in 0..n {
+        for l in 0..k {
+            let ail = a[i][l];
+            for j in 0..p {
+                c[i][j] += ail * b[l][j];
+            }
+        }
+    }
+    c
+}
+
+/// Balanced-square (`p = q = m/2`) cosine-sine decomposition factors via
+/// `dorbdb` + a CS-SVD of the reduced `BigB`. Returns `(u, vh)` (each `2q×2q`)
+/// such that `u · cs · vh == x` where `cs == build_cs_matrix(cs_angles(x11))`.
+///
+/// `u`/`vh` are orthogonal and structurally equal to those of
+/// `scipy.linalg.cossin` (verified to ~1e-15 in magnitude), but the per-column
+/// signs follow the SVD-derived convention rather than LAPACK `dbbcsd`'s QR
+/// sweep. Matching `dbbcsd`'s exact signs (the remaining CSD sign freedom) is
+/// tracked by bead frankenscipy-5tmu1.
+pub(crate) fn cossin_factors_balanced(
+    x: &[Vec<f64>],
+) -> Result<(Vec<Vec<f64>>, Vec<Vec<f64>>), crate::LinalgError> {
+    let q = x.len() / 2;
+    let mut x11: Vec<Vec<f64>> = x[..q].iter().map(|r| r[..q].to_vec()).collect();
+    let mut x12: Vec<Vec<f64>> = x[..q].iter().map(|r| r[q..].to_vec()).collect();
+    let mut x21: Vec<Vec<f64>> = x[q..].iter().map(|r| r[..q].to_vec()).collect();
+    let mut x22: Vec<Vec<f64>> = x[q..].iter().map(|r| r[q..].to_vec()).collect();
+    let res = dorbdb_balanced(&mut x11, &mut x12, &mut x21, &mut x22, q);
+    let p1 = build_from_col_reflectors(&x11, &res.taup1, q);
+    let p2 = build_from_col_reflectors(&x21, &res.taup2, q);
+    let q1 = build_from_row_reflectors(&x11, &res.tauq1, q, 1);
+    let q2 = build_from_row_reflectors(&x12, &res.tauq2, q, 0);
+    let bigb = build_bigb(&res.theta, &res.phi, q);
+    let b11: Vec<Vec<f64>> = (0..q).map(|i| bigb[i][..q].to_vec()).collect();
+    let b21: Vec<Vec<f64>> = (0..q).map(|i| bigb[q + i][..q].to_vec()).collect();
+    let b12: Vec<Vec<f64>> = (0..q).map(|i| bigb[i][q..].to_vec()).collect();
+    // SVD of B11 = Ub1 · diag(c) · Vb1ᵀ (singular values descending).
+    let svd = crate::svd(&b11, crate::DecompOptions::default())?;
+    let ub1 = svd.u; // q×q
+    let vb1: Vec<Vec<f64>> = {
+        // Vb1 = (Vt)ᵀ
+        let vt = &svd.vt;
+        let mut v = vec![vec![0.0; q]; q];
+        for i in 0..q {
+            for j in 0..q {
+                v[i][j] = vt[j][i];
+            }
+        }
+        v
+    };
+    let cc = svd.s; // cos
+    // B21·Vb1 = Ub2·diag(s); s[j] = column norm, Ub2[:,j] = col / s[j].
+    let b21v = mm(&b21, &vb1);
+    let mut ub2 = vec![vec![0.0; q]; q];
+    let mut ss = vec![0.0; q];
+    for j in 0..q {
+        let norm = (0..q).map(|i| b21v[i][j] * b21v[i][j]).sum::<f64>().sqrt();
+        ss[j] = norm;
+        for i in 0..q {
+            ub2[i][j] = if norm > 1e-300 { b21v[i][j] / norm } else { 0.0 };
+        }
+    }
+    // B12 = -Ub1·diag(s)·Vb2ᵀ  ⇒  Vb2[:,j] = -(B12ᵀ·Ub1[:,j]) / s[j].
+    let b12t: Vec<Vec<f64>> = (0..q).map(|i| (0..q).map(|k| b12[k][i]).collect()).collect();
+    let b12t_ub1 = mm(&b12t, &ub1);
+    let mut vb2 = vec![vec![0.0; q]; q];
+    for j in 0..q {
+        for i in 0..q {
+            vb2[i][j] = if ss[j] > 1e-300 { -b12t_ub1[i][j] / ss[j] } else { 0.0 };
+        }
+    }
+    let _ = cc;
+    let u1 = mm(&p1, &ub1);
+    let u2 = mm(&p2, &ub2);
+    let v1 = mm(&q1, &vb1);
+    let v2 = mm(&q2, &vb2);
+    let m = 2 * q;
+    let mut u = vec![vec![0.0; m]; m];
+    let mut vh = vec![vec![0.0; m]; m];
+    for i in 0..q {
+        for j in 0..q {
+            u[i][j] = u1[i][j];
+            u[q + i][q + j] = u2[i][j];
+            // vh = Vᵀ ; V = diag(V1,V2)
+            vh[j][i] = v1[i][j];
+            vh[q + j][q + i] = v2[i][j];
+        }
+    }
+    Ok((u, vh))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -557,6 +652,40 @@ mod tests {
                     maxerr < 1e-10,
                     "q={q} seed={seed}: reconstruction error {maxerr:.3e}"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn cossin_factors_valid_csd() {
+        for &q in &[2usize, 3, 4, 5, 6] {
+            for seed in 0..4u64 {
+                let m = 2 * q;
+                let x = orthogonal(m, seed + q as u64 * 37);
+                let (u, vh) = cossin_factors_balanced(&x).unwrap();
+                let x11: Vec<Vec<f64>> = x[..q].iter().map(|r| r[..q].to_vec()).collect();
+                let theta = cs_angles(&x11, q, q, m).unwrap();
+                let cs = build_cs_matrix(&theta, q, q, m);
+                // u · cs · vh == x
+                let recon = matmul(&matmul(&u, &cs), &vh);
+                let mut rerr = 0.0f64;
+                for i in 0..m {
+                    for j in 0..m {
+                        rerr = rerr.max((recon[i][j] - x[i][j]).abs());
+                    }
+                }
+                assert!(rerr < 1e-9, "q={q} seed={seed}: u·cs·vh err {rerr:.3e}");
+                // u, vh orthogonal
+                for (lbl, a) in [("u", &u), ("vh", &vh)] {
+                    let ata = matmul(&transpose(a), a);
+                    let mut oerr = 0.0f64;
+                    for i in 0..m {
+                        for j in 0..m {
+                            oerr = oerr.max((ata[i][j] - if i == j { 1.0 } else { 0.0 }).abs());
+                        }
+                    }
+                    assert!(oerr < 1e-9, "q={q} seed={seed}: {lbl} not orthogonal {oerr:.3e}");
+                }
             }
         }
     }
