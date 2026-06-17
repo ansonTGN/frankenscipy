@@ -1,0 +1,3 @@
+eeef705033f177091082a31eba880ddacb5c80485027f5de03326cb59378aebe  tests/artifacts/perf/2026-06-17-rubywaterfall-linalg-psn7x17-bounded-bulge-queue/baseline_fused_frontier_local_hyperfine.txt
+8e521331d0bf1b1a2a45f4aca156fc296416ceb759244091c86de8606c2ae2d7  tests/artifacts/perf/2026-06-17-rubywaterfall-linalg-psn7x17-bounded-bulge-queue/after_packet_fused_frontier_local_hyperfine.txt
+faf1826311ba4607d2c10053f6a7fab62a6f3edf6b0b8a08d09ed2aca6310489  tests/artifacts/perf/2026-06-17-rubywaterfall-linalg-psn7x17-bounded-bulge-queue/EVIDENCE.md
