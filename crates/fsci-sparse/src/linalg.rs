@@ -1250,6 +1250,7 @@ pub fn pcg(
             message: "rhs length must match matrix rows".to_string(),
         });
     }
+    validate_iterative_finite_inputs(a, b, x0, options)?;
 
     let max_iter = options.max_iter.unwrap_or(n * 10);
 
@@ -6078,6 +6079,44 @@ mod tests {
         let result = cg(&a, &b, None, IterativeSolveOptions::default()).expect("cg works");
         assert!(result.converged);
         assert_close_slice(&result.solution, &[2.0, 2.0], 1e-10);
+    }
+
+    #[test]
+    fn pcg_hardened_rejects_non_finite_when_check_disabled() {
+        let a = spd_csr_3x3();
+        let a_csc = a.to_csc().expect("csc");
+        let preconditioner = spilu(&a_csc, IluOptions::default()).expect("spilu");
+        let err = pcg(
+            &a,
+            &[f64::NAN, 1.0, 1.0],
+            &preconditioner,
+            None,
+            hardened_unchecked_iterative_options(),
+        )
+        .expect_err("hardened finite guard");
+        assert!(matches!(err, SparseError::NonFiniteInput { .. }));
+    }
+
+    #[test]
+    fn pcg_rejects_invalid_tolerance() {
+        let a = spd_csr_3x3();
+        let a_csc = a.to_csc().expect("csc");
+        let preconditioner = spilu(&a_csc, IluOptions::default()).expect("spilu");
+        let b = vec![5.0, 5.0, 3.0];
+        let nan_tol = IterativeSolveOptions {
+            tol: f64::NAN,
+            ..IterativeSolveOptions::default()
+        };
+        let err = pcg(&a, &b, &preconditioner, None, nan_tol).expect_err("nan tolerance");
+        assert!(matches!(err, SparseError::InvalidArgument { .. }));
+
+        let negative_tol = IterativeSolveOptions {
+            tol: -1e-6,
+            ..IterativeSolveOptions::default()
+        };
+        let err =
+            pcg(&a, &b, &preconditioner, None, negative_tol).expect_err("negative tolerance");
+        assert!(matches!(err, SparseError::InvalidArgument { .. }));
     }
 
     // ── GMRES iterative solver tests ────────────────────────────────
