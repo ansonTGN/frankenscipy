@@ -2534,6 +2534,11 @@ pub fn gaussian_mixture(
             "n_components={k} must be in [1, n={n}]"
         )));
     }
+    if max_iter == 0 {
+        return Err(ClusterError::InvalidArgument(
+            "max_iter must be positive".to_string(),
+        ));
+    }
     if !(reg_covar.is_finite() && reg_covar >= 0.0) {
         return Err(ClusterError::InvalidArgument(
             "reg_covar must be finite and non-negative".to_string(),
@@ -2565,7 +2570,7 @@ pub fn gaussian_mixture(
     let mut old_ll = f64::NEG_INFINITY;
     let mut iters = 0;
 
-    for it in 0..max_iter.max(1) {
+    for it in 0..max_iter {
         iters = it + 1;
         // Precompute per-component log-weight and −½Σ log(2π σ²) normalizer.
         let mut log_norm = vec![0.0f64; k];
@@ -2740,6 +2745,11 @@ pub fn gaussian_mixture_full(
             "n_components={k} must be in [1, n={n}]"
         )));
     }
+    if max_iter == 0 {
+        return Err(ClusterError::InvalidArgument(
+            "max_iter must be positive".to_string(),
+        ));
+    }
     if !(reg_covar.is_finite() && reg_covar > 0.0) {
         return Err(ClusterError::InvalidArgument(
             "reg_covar must be finite and positive".to_string(),
@@ -2781,7 +2791,7 @@ pub fn gaussian_mixture_full(
     let mut old_ll = f64::NEG_INFINITY;
     let mut iters = 0;
 
-    for it in 0..max_iter.max(1) {
+    for it in 0..max_iter {
         iters = it + 1;
         // Per-component Cholesky factor + log-normalizer (log π_k − ½ log det Σ_k − (d/2)log2π).
         let mut chols: Vec<Vec<Vec<f64>>> = Vec::with_capacity(k);
@@ -7122,6 +7132,7 @@ mod tests {
         assert!(gaussian_mixture(&[], 2, 10, 1e-3, 1e-6, 1).is_err());
         assert!(gaussian_mixture(&data, 0, 10, 1e-3, 1e-6, 1).is_err());
         assert!(gaussian_mixture(&data, n + 1, 10, 1e-3, 1e-6, 1).is_err());
+        assert!(gaussian_mixture(&data, 2, 0, 1e-3, 1e-6, 1).is_err());
         assert!(gaussian_mixture(&data, 2, 10, 1e-3, -1.0, 1).is_err()); // reg_covar < 0
     }
 
@@ -7195,6 +7206,7 @@ mod tests {
         }
 
         assert!(gaussian_mixture_full(&data, 2, 10, 1e-3, 0.0, 1).is_err()); // reg_covar must be > 0
+        assert!(gaussian_mixture_full(&data, 2, 0, 1e-3, 1e-6, 1).is_err());
         assert!(gaussian_mixture_full(&[], 2, 10, 1e-3, 1e-6, 1).is_err());
     }
 
