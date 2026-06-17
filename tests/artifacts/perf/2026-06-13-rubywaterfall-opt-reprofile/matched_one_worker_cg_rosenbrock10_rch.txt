@@ -1,0 +1,210 @@
+  [2m2026-06-13T22:00:06.559624Z[0m [33m WARN[0m [1;33mrch::hook[0m[33m: [33mexec called with non-compilation command: sh -lc '
+set -eu
+tmp="$(mktemp -d /tmp/frankenscipy-8l8r1-104.XXXXXX)"
+mkdir "$tmp/baseline"
+cp -a Cargo.toml Cargo.lock rust-toolchain.toml crates "$tmp/baseline"/
+printf "%s\n" "$BASELINE_PATCH" > "$tmp/baseline.patch"
+cd "$tmp/baseline"
+patch -p1 < "$tmp/baseline.patch"
+printf "\n=== BASELINE_REVERSED_DIFF ===\n"
+CARGO_TARGET_DIR="$tmp/target-baseline" cargo bench -p fsci-opt --bench optimize_bench --locked -- cg/rosenbrock/10 --sample-size 10
+printf "\n=== CANDIDATE_CURRENT_DIFF ===\n"
+cd /data/projects/frankenscipy
+CARGO_TARGET_DIR="$tmp/target-candidate" cargo bench -p fsci-opt --bench optimize_bench --locked -- cg/rosenbrock/10 --sample-size 10
+'[0m
+    [2;3mat[0m rch/src/hook.rs:402 [2;3mon[0m ThreadId(1)
+
+patching file crates/fsci-opt/src/linesearch.rs
+patching file crates/fsci-opt/src/minimize.rs
+
+=== BASELINE_REVERSED_DIFF ===
+   Compiling cfg-if v1.0.4
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.45
+   Compiling unicode-ident v1.0.24
+   Compiling libc v0.2.185
+   Compiling find-msvc-tools v0.1.9
+   Compiling shlex v1.3.0
+   Compiling serde_core v1.0.228
+   Compiling zmij v1.0.21
+   Compiling serde v1.0.228
+   Compiling hashbrown v0.17.0
+   Compiling equivalent v1.0.2
+   Compiling serde_json v1.0.149
+   Compiling cpufeatures v0.3.0
+   Compiling memchr v2.8.0
+   Compiling itoa v1.0.18
+   Compiling getrandom v0.4.2
+   Compiling rand_core v0.10.1
+   Compiling arrayref v0.3.9
+   Compiling arrayvec v0.7.6
+   Compiling constant_time_eq v0.4.2
+   Compiling getrandom v0.3.4
+   Compiling zerocopy v0.8.48
+   Compiling crossbeam-utils v0.8.21
+   Compiling autocfg v1.5.0
+   Compiling rustix v1.1.4
+   Compiling either v1.15.0
+   Compiling bitflags v2.11.1
+   Compiling linux-raw-sys v0.12.1
+   Compiling rayon-core v1.13.0
+   Compiling regex-syntax v0.8.10
+   Compiling clap_lex v1.1.0
+   Compiling fastrand v2.4.1
+   Compiling plotters-backend v0.3.7
+   Compiling ciborium-io v0.2.2
+   Compiling anstyle v1.0.14
+   Compiling once_cell v1.21.4
+   Compiling cast v0.3.0
+   Compiling fnv v1.0.7
+   Compiling bit-vec v0.8.0
+   Compiling quick-error v1.2.3
+   Compiling same-file v1.0.6
+   Compiling unarray v0.1.4
+   Compiling oorandom v11.1.5
+   Compiling anes v0.1.6
+   Compiling cc v1.2.60
+   Compiling walkdir v2.5.0
+   Compiling chacha20 v0.10.0
+   Compiling itertools v0.13.0
+   Compiling clap_builder v4.6.0
+   Compiling bit-set v0.8.0
+   Compiling plotters-svg v0.3.7
+   Compiling num-traits v0.2.19
+   Compiling crossbeam-epoch v0.9.18
+   Compiling indexmap v2.14.0
+   Compiling syn v2.0.117
+   Compiling crossbeam-deque v0.8.6
+   Compiling blake3 v1.8.4
+   Compiling alloca v0.4.0
+   Compiling wait-timeout v0.2.1
+   Compiling page_size v0.6.0
+   Compiling rand v0.10.1
+   Compiling rand_core v0.9.5
+   Compiling plotters v0.3.7
+   Compiling rand_xorshift v0.4.0
+   Compiling rand v0.9.4
+   Compiling rayon v1.12.0
+   Compiling criterion-plot v0.8.2
+   Compiling regex-automata v0.4.14
+   Compiling tempfile v3.27.0
+   Compiling clap v4.6.1
+   Compiling rusty-fork v0.3.1
+   Compiling serde_derive v1.0.228
+   Compiling zerocopy-derive v0.8.48
+   Compiling regex v1.12.3
+   Compiling fsci-runtime v0.1.0 (/tmp/frankenscipy-8l8r1-104.E1U2Lm/baseline/crates/fsci-runtime)
+   Compiling tinytemplate v1.2.1
+   Compiling fsci-opt v0.1.0 (/tmp/frankenscipy-8l8r1-104.E1U2Lm/baseline/crates/fsci-opt)
+   Compiling half v2.7.1
+   Compiling ppv-lite86 v0.2.21
+   Compiling ciborium-ll v0.2.2
+   Compiling rand_chacha v0.9.0
+   Compiling ciborium v0.2.2
+   Compiling proptest v1.11.0
+   Compiling criterion v0.8.2
+    Finished `bench` profile [optimized] target(s) in 12.10s
+     Running benches/optimize_bench.rs (/tmp/frankenscipy-8l8r1-104.E1U2Lm/target-baseline/release/deps/optimize_bench-56c0493ef8a014b9)
+Gnuplot not found, using plotters backend
+Benchmarking cg/rosenbrock/10
+Benchmarking cg/rosenbrock/10: Warming up for 3.0000 s
+Benchmarking cg/rosenbrock/10: Collecting 10 samples in estimated 5.0212 s (11k iterations)
+Benchmarking cg/rosenbrock/10: Analyzing
+cg/rosenbrock/10        time:   [408.17 µs 435.74 µs 454.70 µs]
+
+
+=== CANDIDATE_CURRENT_DIFF ===
+   Compiling proc-macro2 v1.0.106
+   Compiling cfg-if v1.0.4
+   Compiling quote v1.0.45
+   Compiling unicode-ident v1.0.24
+   Compiling libc v0.2.185
+   Compiling find-msvc-tools v0.1.9
+   Compiling shlex v1.3.0
+   Compiling serde_core v1.0.228
+   Compiling serde v1.0.228
+   Compiling zmij v1.0.21
+   Compiling serde_json v1.0.149
+   Compiling hashbrown v0.17.0
+   Compiling equivalent v1.0.2
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.0
+   Compiling cpufeatures v0.3.0
+   Compiling getrandom v0.4.2
+   Compiling rand_core v0.10.1
+   Compiling constant_time_eq v0.4.2
+   Compiling arrayref v0.3.9
+   Compiling arrayvec v0.7.6
+   Compiling zerocopy v0.8.48
+   Compiling getrandom v0.3.4
+   Compiling crossbeam-utils v0.8.21
+   Compiling autocfg v1.5.0
+   Compiling rustix v1.1.4
+   Compiling rayon-core v1.13.0
+   Compiling bitflags v2.11.1
+   Compiling linux-raw-sys v0.12.1
+   Compiling regex-syntax v0.8.10
+   Compiling either v1.15.0
+   Compiling fastrand v2.4.1
+   Compiling anstyle v1.0.14
+   Compiling once_cell v1.21.4
+   Compiling plotters-backend v0.3.7
+   Compiling clap_lex v1.1.0
+   Compiling ciborium-io v0.2.2
+   Compiling fnv v1.0.7
+   Compiling quick-error v1.2.3
+   Compiling bit-vec v0.8.0
+   Compiling same-file v1.0.6
+   Compiling cast v0.3.0
+   Compiling unarray v0.1.4
+   Compiling oorandom v11.1.5
+   Compiling anes v0.1.6
+   Compiling cc v1.2.60
+   Compiling chacha20 v0.10.0
+   Compiling walkdir v2.5.0
+   Compiling itertools v0.13.0
+   Compiling bit-set v0.8.0
+   Compiling num-traits v0.2.19
+   Compiling clap_builder v4.6.0
+   Compiling plotters-svg v0.3.7
+   Compiling indexmap v2.14.0
+   Compiling crossbeam-epoch v0.9.18
+   Compiling syn v2.0.117
+   Compiling crossbeam-deque v0.8.6
+   Compiling blake3 v1.8.4
+   Compiling alloca v0.4.0
+   Compiling wait-timeout v0.2.1
+   Compiling page_size v0.6.0
+   Compiling rand v0.10.1
+   Compiling rand_core v0.9.5
+   Compiling plotters v0.3.7
+   Compiling rand v0.9.4
+   Compiling rand_xorshift v0.4.0
+   Compiling rayon v1.12.0
+   Compiling criterion-plot v0.8.2
+   Compiling regex-automata v0.4.14
+   Compiling tempfile v3.27.0
+   Compiling clap v4.6.1
+   Compiling rusty-fork v0.3.1
+   Compiling serde_derive v1.0.228
+   Compiling zerocopy-derive v0.8.48
+   Compiling regex v1.12.3
+   Compiling fsci-runtime v0.1.0 (/data/projects/frankenscipy/crates/fsci-runtime)
+   Compiling tinytemplate v1.2.1
+   Compiling fsci-opt v0.1.0 (/data/projects/frankenscipy/crates/fsci-opt)
+   Compiling half v2.7.1
+   Compiling ppv-lite86 v0.2.21
+   Compiling ciborium-ll v0.2.2
+   Compiling rand_chacha v0.9.0
+   Compiling ciborium v0.2.2
+   Compiling proptest v1.11.0
+   Compiling criterion v0.8.2
+    Finished `bench` profile [optimized] target(s) in 12.65s
+     Running benches/optimize_bench.rs (/tmp/frankenscipy-8l8r1-104.E1U2Lm/target-candidate/release/deps/optimize_bench-56c0493ef8a014b9)
+Gnuplot not found, using plotters backend
+Benchmarking cg/rosenbrock/10
+Benchmarking cg/rosenbrock/10: Warming up for 3.0000 s
+Benchmarking cg/rosenbrock/10: Collecting 10 samples in estimated 5.0038 s (12k iterations)
+Benchmarking cg/rosenbrock/10: Analyzing
+cg/rosenbrock/10        time:   [363.18 µs 378.63 µs 400.13 µs]
+

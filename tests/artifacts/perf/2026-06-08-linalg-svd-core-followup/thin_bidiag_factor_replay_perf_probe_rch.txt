@@ -1,0 +1,53 @@
+date_utc=2026-06-08T04:22:47Z
+command=RCH_FORCE_REMOTE=1 RCH_WORKER=fmd rch exec -- cargo test -p fsci-linalg --release --lib --locked thin_bidiag_factor_replay_perf_probe -- --ignored --nocapture
+[RCH] local (no admissible workers: critical_pressure=1,insufficient_slots=6)
+   Compiling proc-macro2 v1.0.106
+   Compiling cc v1.2.60
+   Compiling getrandom v0.3.4
+   Compiling serde_json v1.0.149
+   Compiling rand_core v0.9.5
+   Compiling tempfile v3.27.0
+   Compiling rand v0.9.4
+   Compiling rand_xorshift v0.4.0
+   Compiling quote v1.0.45
+   Compiling rusty-fork v0.3.1
+   Compiling syn v2.0.117
+   Compiling blake3 v1.8.4
+   Compiling alloca v0.4.0
+   Compiling zerocopy-derive v0.8.48
+   Compiling serde_derive v1.0.228
+   Compiling nalgebra-macros v0.3.0
+   Compiling nalgebra v0.34.2
+   Compiling zerocopy v0.8.48
+   Compiling serde v1.0.228
+   Compiling tinytemplate v1.2.1
+   Compiling fsci-runtime v0.1.0 (/data/projects/frankenscipy/crates/fsci-runtime)
+   Compiling fsci-fft v0.1.0 (/data/projects/frankenscipy/crates/fsci-fft)
+   Compiling half v2.7.1
+   Compiling ppv-lite86 v0.2.21
+   Compiling ciborium-ll v0.2.2
+   Compiling rand_chacha v0.9.0
+   Compiling ciborium v0.2.2
+   Compiling proptest v1.11.0
+   Compiling criterion v0.8.2
+   Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
+    Finished `release` profile [optimized] target(s) in 18.01s
+     Running unittests src/lib.rs (/data/tmp/cargo-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+THIN_BIDIAG_FACTOR_REPLAY_PERF_BEGIN
+shape=1024x512
+reduction_digest=0x90cdd3f8f71ed2c1
+reference_ms=443.183934
+replay_ms=76.846719
+speedup=5.767116
+u_max_abs_diff=4.99600361081320443e-15
+vt_max_abs_diff=2.88657986402540701e-15
+reference_digest=0xc264908a21811a83
+replay_digest=0x46e400c14112e593
+THIN_BIDIAG_FACTOR_REPLAY_PERF_END
+test tests::thin_bidiag_factor_replay_perf_probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 395 filtered out; finished in 0.78s
+
+EXIT_STATUS=0

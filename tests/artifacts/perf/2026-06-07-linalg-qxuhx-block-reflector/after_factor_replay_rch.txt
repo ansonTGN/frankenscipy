@@ -1,0 +1,83 @@
+  [2m2026-06-07T18:34:04.723111Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSelected worker: vmi1264463 at ubuntu@38.242.209.154 (0 slots remaining after reservation, speed 50.0)[0m
+    [2;3mat[0m rch/src/hook.rs:514 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:05.047696Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mStarting remote compilation pipeline for frankenscipy (hash: 89a6ab7f74c7b48d)[0m
+    [2;3mat[0m rch/src/hook.rs:5987 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:05.047824Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mPrepared dependency sync manifest for 20 roots[0m
+    [2;3mat[0m rch/src/hook.rs:6009 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:09.133186Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSyncing project to worker vmi1264463...[0m
+    [2;3mat[0m rch/src/hook.rs:6039 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:09.133249Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy -> /data/projects/frankenscipy on vmi1264463[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:16.724543Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 7591ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:16.724629Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-arrayapi -> /data/projects/frankenscipy/crates/fsci-arrayapi on vmi1264463[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:20.287531Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 3562ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:20.287601Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-cluster -> /data/projects/frankenscipy/crates/fsci-cluster on vmi1264463[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:24.109137Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 3821ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:24.109229Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-conformance -> /data/projects/frankenscipy/crates/fsci-conformance on vmi1264463[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:28.910337Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 4801ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:28.910422Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-constants -> /data/projects/frankenscipy/crates/fsci-constants on vmi1264463[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:31.285869Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 2375ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:31.285963Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-datasets -> /data/projects/frankenscipy/crates/fsci-datasets on vmi1264463[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:34.584242Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSync completed in 3298ms[0m
+    [2;3mat[0m rch/src/transfer.rs:1469 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:34.584336Z[0m [32m INFO[0m [1;32mrch::transfer[0m[32m: [32mSyncing /data/projects/frankenscipy/crates/fsci-fft -> /data/projects/frankenscipy/crates/fsci-fft on vmi1264463[0m
+    [2;3mat[0m rch/src/transfer.rs:1400 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:34.807304Z[0m [33m WARN[0m [1;33mrch::transfer[0m[33m: [33mrsync failed with retryable error (retries exhausted): kex_exchange_identification: read: Connection reset by peer
+Connection reset by 38.242.209.154 port 22
+rsync: connection unexpectedly closed (0 bytes received so far) [sender]
+rsync error: unexplained error (code 255) at io.c(232) [sender=3.4.1]
+[0m
+    [2;3mat[0m rch/src/transfer.rs:1430 [2;3mon[0m ThreadId(1)
+
+  [2m2026-06-07T18:34:34.860167Z[0m [33m WARN[0m [1;33mrch::hook[0m[33m: [33mRemote execution failed: Project sync failed: rsync failed, running locally[0m
+    [2;3mat[0m rch/src/hook.rs:658 [2;3mon[0m ThreadId(1)
+
+[RCH] local (remote execution failed)
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `release` profile [optimized] target(s) in 0.15s
+     Running unittests src/lib.rs (/data/tmp/cargo-target/release/deps/fsci_linalg-c77e6f7433863ced)
+
+running 1 test
+THIN_BIDIAG_FACTOR_REPLAY_PERF_BEGIN
+shape=1024x512
+reduction_digest=0x90cdd3f8f71ed2c1
+reference_ms=521.177983
+replay_ms=86.157023
+speedup=6.049164
+u_max_abs_diff=4.88498130835068878e-15
+vt_max_abs_diff=2.66453525910037570e-15
+reference_digest=0x22223a463752097f
+replay_digest=0x8f521a39638fb520
+THIN_BIDIAG_FACTOR_REPLAY_PERF_END
+test tests::thin_bidiag_factor_replay_perf_probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 391 filtered out; finished in 0.95s
+

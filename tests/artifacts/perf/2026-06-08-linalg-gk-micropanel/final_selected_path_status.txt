@@ -1,0 +1,4 @@
+ M .beads/issues.jsonl
+ M .skill-loop-progress.md
+ M crates/fsci-linalg/src/lib.rs
+?? tests/artifacts/perf/2026-06-08-linalg-gk-micropanel/

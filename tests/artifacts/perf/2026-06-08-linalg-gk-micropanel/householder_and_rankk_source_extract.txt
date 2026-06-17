@@ -1,0 +1,316 @@
+  6380	    }
+  6381	}
+  6382	
+  6383	fn apply_householder_left(
+  6384	    matrix: &mut DMatrix<f64>,
+  6385	    reflector: &HouseholderReflector,
+  6386	    col_start: usize,
+  6387	) {
+  6388	    if reflector.tau == 0.0 || reflector.values.is_empty() {
+  6389	        return;
+  6390	    }
+  6391	
+  6392	    let rows = matrix.nrows();
+  6393	    let cols = matrix.ncols();
+  6394	    let start = reflector.start;
+  6395	    let data = matrix.as_mut_slice();
+  6396	    for col in col_start..cols {
+  6397	        let col_base = col * rows;
+  6398	        let mut dot = 0.0;
+  6399	        for (offset, value) in reflector.values.iter().enumerate() {
+  6400	            dot += value * data[col_base + start + offset];
+  6401	        }
+  6402	        let scale = reflector.tau * dot;
+  6403	        if scale != 0.0 {
+  6404	            for (offset, value) in reflector.values.iter().enumerate() {
+  6405	                data[col_base + start + offset] -= scale * value;
+  6406	            }
+  6407	        }
+  6408	    }
+  6409	}
+  6410	
+  6411	#[allow(dead_code)]
+  6412	fn apply_left_reflectors_column_chunks(
+  6413	    matrix: &mut DMatrix<f64>,
+  6414	    reflectors: &[HouseholderReflector],
+  6415	    worker_count: usize,
+  6416	) {
+  6417	    let rows = matrix.nrows();
+  6418	    let cols = matrix.ncols();
+  6419	    let usable_workers = worker_count
+  6420	        .min(THIN_BIDIAG_LEFT_REPLAY_MAX_WORKERS)
+  6421	        .min(cols / THIN_BIDIAG_LEFT_REPLAY_MIN_COLS_PER_WORKER);
+  6422	    if rows == 0 || cols == 0 || usable_workers <= 1 || cols < THIN_BIDIAG_LEFT_REPLAY_MIN_PAR_COLS
+  6423	    {
+  6424	        for reflector in reflectors.iter().rev() {
+  6425	            apply_householder_left(matrix, reflector, 0);
+  6426	        }
+  6427	        return;
+  6428	    }
+  6429	
+  6430	    let cols_per_worker = cols.div_ceil(usable_workers);
+  6431	    let chunk_len = rows * cols_per_worker;
+  6432	    std::thread::scope(|scope| {
+  6433	        for chunk in matrix.as_mut_slice().chunks_mut(chunk_len) {
+  6434	            let chunk_cols = chunk.len() / rows;
+  6435	            scope.spawn(move || {
+  6436	                apply_left_reflectors_to_column_chunk(chunk, rows, chunk_cols, reflectors);
+  6437	            });
+  6438	        }
+  6439	    });
+  6440	}
+  6441	
+  6442	fn apply_left_reflectors_to_column_chunk(
+  6443	    chunk: &mut [f64],
+  6444	    rows: usize,
+  6445	    cols: usize,
+  6446	    reflectors: &[HouseholderReflector],
+  6447	) {
+  6448	    for reflector in reflectors.iter().rev() {
+  6449	        if reflector.tau == 0.0 || reflector.values.is_empty() {
+  6450	            continue;
+  6451	        }
+  6452	        for col in 0..cols {
+  6453	            let col_base = col * rows;
+  6454	            let mut dot = 0.0;
+  6455	            for (offset, value) in reflector.values.iter().enumerate() {
+  6456	                dot += value * chunk[col_base + reflector.start + offset];
+  6457	            }
+  6458	            let scale = reflector.tau * dot;
+  6459	            if scale != 0.0 {
+  6460	                for (offset, value) in reflector.values.iter().enumerate() {
+  6461	                    chunk[col_base + reflector.start + offset] -= scale * value;
+  6462	                }
+  6463	            }
+  6464	        }
+  6465	    }
+  6466	}
+  6467	
+  6468	fn apply_householder_right(
+  6469	    matrix: &mut DMatrix<f64>,
+  6470	    reflector: &HouseholderReflector,
+  6471	    row_start: usize,
+  6472	) {
+  6473	    let mut dot_workspace = vec![0.0_f64; matrix.nrows()];
+  6474	    apply_householder_right_with_workspace(matrix, reflector, row_start, &mut dot_workspace);
+  6475	}
+  6476	
+  6477	fn apply_householder_right_with_workspace(
+  6478	    matrix: &mut DMatrix<f64>,
+  6479	    reflector: &HouseholderReflector,
+  6480	    row_start: usize,
+  6481	    dot_workspace: &mut [f64],
+  6482	) {
+  6483	    if reflector.tau == 0.0 || reflector.values.is_empty() {
+  6484	        return;
+  6485	    }
+  6486	    let rows = matrix.nrows();
+  6487	    if row_start >= rows {
+  6488	        return;
+  6489	    }
+  6490	    debug_assert!(dot_workspace.len() >= rows);
+  6491	    let start = reflector.start;
+  6492	    let data = matrix.as_mut_slice();
+  6493	
+  6494	    for dot in &mut dot_workspace[row_start..rows] {
+  6495	        *dot = 0.0;
+  6496	    }
+  6497	
+  6498	    // DMatrix is column-major. This preserves each row's summation order while
+  6499	    // streaming down contiguous columns instead of striding across rows.
+  6500	    for (offset, value) in reflector.values.iter().enumerate() {
+  6501	        let col = start + offset;
+  6502	        let col_base = col * rows;
+  6503	        for row in row_start..rows {
+  6504	            dot_workspace[row] += data[col_base + row] * value;
+  6505	        }
+  6506	    }
+  6507	
+  6508	    for scale in &mut dot_workspace[row_start..rows] {
+  6509	        *scale *= reflector.tau;
+  6510	    }
+  6511	
+  6512	    for (offset, value) in reflector.values.iter().enumerate() {
+  6513	        let col = start + offset;
+  6514	        let col_base = col * rows;
+  6515	        for row in row_start..rows {
+  6516	            let scale = dot_workspace[row];
+  6517	            if scale != 0.0 {
+  6518	                data[col_base + row] -= scale * value;
+  6519	            }
+  6520	        }
+  6521	    }
+  6522	}
+  6523	
+  6524	#[allow(dead_code)]
+  6525	#[allow(clippy::too_many_arguments)]
+  6526	fn apply_bidiag_fused_rank_k_update(
+  6527	    matrix: &mut DMatrix<f64>,
+  6528	    row_start: usize,
+  6529	    col_start: usize,
+  6530	    k_count: usize,
+  6531	    v_by_k_row: &[f64],
+  6532	    y_by_col_k: &[f64],
+  6533	    x_by_k_row: &[f64],
+  6534	    u_by_col_k: &[f64],
+  6535	) -> Result<(), LinalgError> {
+  6536	    let rows = matrix.nrows();
+  6537	    let cols = matrix.ncols();
+  6538	    if row_start > rows || col_start > cols {
+  6539	        return Err(LinalgError::IncompatibleShapes {
+  6540	            a_shape: (rows, cols),
+  6541	            b_len: row_start.max(col_start),
+  6542	        });
+  6543	    }
+  6544	    let row_count = rows - row_start;
+  6545	    let col_count = cols - col_start;
+  6546	    let row_panel_len = k_count
+  6547	        .checked_mul(row_count)
+  6548	        .ok_or(LinalgError::UnsupportedAssumption)?;
+  6549	    let col_panel_len = col_count
+  6550	        .checked_mul(k_count)
+  6551	        .ok_or(LinalgError::UnsupportedAssumption)?;
+  6552	    if v_by_k_row.len() != row_panel_len
+  6553	        || x_by_k_row.len() != row_panel_len
+  6554	        || y_by_col_k.len() != col_panel_len
+  6555	        || u_by_col_k.len() != col_panel_len
+  6556	    {
+  6557	        return Err(LinalgError::IncompatibleShapes {
+  6558	            a_shape: (row_panel_len, col_panel_len),
+  6559	            b_len: v_by_k_row
+  6560	                .len()
+  6561	                .max(x_by_k_row.len())
+  6562	                .max(y_by_col_k.len())
+  6563	                .max(u_by_col_k.len()),
+  6564	        });
+  6565	    }
+  6566	    if k_count == 0 || row_count == 0 || col_count == 0 {
+  6567	        return Ok(());
+  6568	    }
+  6569	
+  6570	    for col_rel in 0..col_count {
+  6571	        let col = col_start + col_rel;
+  6572	        let col_panel_base = col_rel * k_count;
+  6573	        for row_rel in 0..row_count {
+  6574	            let row = row_start + row_rel;
+  6575	            let mut value = matrix[(row, col)];
+  6576	            for k in 0..k_count {
+  6577	                let row_panel_idx = k * row_count + row_rel;
+  6578	                let col_panel_idx = col_panel_base + k;
+  6579	                value -= v_by_k_row[row_panel_idx] * y_by_col_k[col_panel_idx];
+  6580	                value -= x_by_k_row[row_panel_idx] * u_by_col_k[col_panel_idx];
+  6581	            }
+  6582	            matrix[(row, col)] = value;
+  6583	        }
+  6584	    }
+  6585	
+  6586	    Ok(())
+  6587	}
+  6588	
+  6589	fn apply_bidiag_fused_step(
+  6590	    matrix: &mut DMatrix<f64>,
+  6591	    left_reflector: &HouseholderReflector,
+  6592	    step: usize,
+  6593	    left_scale_workspace: &mut [f64],
+  6594	    right_dot_workspace: &mut [f64],
+  6595	) -> HouseholderReflector {
+  6596	    let rows = matrix.nrows();
+  6597	    let cols = matrix.ncols();
+  6598	    debug_assert!(step + 1 < cols);
+  6599	    debug_assert!(left_scale_workspace.len() >= cols - step);
+  6600	    debug_assert!(right_dot_workspace.len() >= rows);
+  6601	
+  6602	    let left_values = left_reflector.values.as_slice();
+  6603	    let left_start = left_reflector.start;
+  6604	    let data = matrix.as_mut_slice();
+  6605	
+  6606	    if left_reflector.tau == 0.0 || left_values.is_empty() {
+  6607	        for scale in &mut left_scale_workspace[..cols - step] {
+  6608	            *scale = 0.0;
+  6609	        }
+  6610	    } else {
+  6611	        for col in step..cols {
+  6612	            let col_base = col * rows;
+  6613	            let mut dot = 0.0;
+  6614	            for (offset, value) in left_values.iter().enumerate() {
+  6615	                dot += value * data[col_base + left_start + offset];
+  6616	            }
+  6617	            left_scale_workspace[col - step] = left_reflector.tau * dot;
+  6618	        }
+  6619	
+  6620	        let first_left_value = left_values[0];
+  6621	        for col in step..cols {
+  6622	            let scale = left_scale_workspace[col - step];
+  6623	            if scale != 0.0 {
+  6624	                data[col * rows + step] -= scale * first_left_value;
+  6625	            }
+  6626	        }
+  6627	    }
+  6628	
+  6629	    let row_values = (step + 1..cols)
+  6630	        .map(|col| data[col * rows + step])
+  6631	        .collect();
+  6632	    let right_reflector = make_householder_reflector(step + 1, row_values);
+  6633	
+  6634	    for dot in &mut right_dot_workspace[step..rows] {
+  6635	        *dot = 0.0;
+  6636	    }
+  6637	
+  6638	    let right_values = right_reflector.values.as_slice();
+  6639	    if !right_values.is_empty() {
+  6640	        for col in step + 1..cols {
+  6641	            let col_base = col * rows;
+  6642	            let right_value = right_values[col - (step + 1)];
+  6643	            let left_scale = left_scale_workspace[col - step];
+  6644	            for (left_offset, left_value) in left_values.iter().enumerate().skip(1) {
+  6645	                let row = left_start + left_offset;
+  6646	                if left_scale != 0.0 {
+  6647	                    data[col_base + row] -= left_scale * left_value;
+  6648	                }
+  6649	                right_dot_workspace[row] += data[col_base + row] * right_value;
+  6650	            }
+  6651	        }
+  6652	
+  6653	        let mut row_dot = 0.0;
+  6654	        for (offset, value) in right_values.iter().enumerate() {
+  6655	            row_dot += data[(right_reflector.start + offset) * rows + step] * value;
+  6656	        }
+  6657	        right_dot_workspace[step] = row_dot;
+  6658	    }
+  6659	
+  6660	    let current_col_base = step * rows;
+  6661	    for row in step + 1..rows {
+  6662	        data[current_col_base + row] = 0.0;
+  6663	    }
+  6664	
+  6665	    if right_reflector.tau != 0.0 && !right_values.is_empty() {
+  6666	        for scale in &mut right_dot_workspace[step..rows] {
+  6667	            *scale *= right_reflector.tau;
+  6668	        }
+  6669	
+  6670	        for (offset, value) in right_values.iter().enumerate() {
+  6671	            let col = right_reflector.start + offset;
+  6672	            let col_base = col * rows;
+  6673	            for row in step..rows {
+  6674	                let scale = right_dot_workspace[row];
+  6675	                if scale != 0.0 {
+  6676	                    data[col_base + row] -= scale * value;
+  6677	                }
+  6678	            }
+  6679	        }
+  6680	    }
+  6681	
+  6682	    let row_tail_start = step + 2;
+  6683	    for col in row_tail_start..cols {
+  6684	        data[col * rows + step] = 0.0;
+  6685	    }
+  6686	
+  6687	    right_reflector
+  6688	}
+  6689	
+  6690	fn symmetric_offdiagonal_max(matrix: &DMatrix<f64>) -> f64 {
+  6691	    let mut max_abs = 0.0_f64;
+  6692	    for row in 0..matrix.nrows() {
+  6693	        for col in row + 1..matrix.ncols() {
+  6694	            max_abs = max_abs.max(matrix[(row, col)].abs());
+  6695	        }

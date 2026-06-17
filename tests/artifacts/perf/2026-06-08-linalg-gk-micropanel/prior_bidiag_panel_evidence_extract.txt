@@ -1,0 +1,13 @@
+tests/artifacts/perf/2026-06-07-linalg-ca-bidiag-reduction/rejection_parallel_left_reduction.md:1:frankenscipy-8l8r1.48 rejected lever: parallel left-column Householder reduction
+tests/artifacts/perf/2026-06-07-linalg-ca-bidiag-reduction/rejection_parallel_left_reduction.md:27:- Source was restored. Next direction should be a true communication-avoiding/two-stage bidiagonalization or packed DLABRD-style panel algorithm, not another independent-column scheduling tweak.
+tests/artifacts/perf/2026-06-05-linalg-full-rank-svd-vgs9h/keep_fused_rank_k_update_stage4d.md:77:with packed block-reflector panels, reconstruction proof, and same-worker RCH
+tests/artifacts/perf/2026-06-05-linalg-full-rank-svd-vgs9h/keep_tiled_rank_k_update_stage4f.md:20:- current fused helper: `6.830909 ms`
+tests/artifacts/perf/2026-06-05-linalg-full-rank-svd-vgs9h/keep_tiled_rank_k_update_stage4f.md:48:`f64::to_bits` against the current fused helper.
+tests/artifacts/perf/2026-06-05-linalg-full-rank-svd-vgs9h/keep_tiled_rank_k_update_stage4f.md:54:- current fused helper: `28.084901 ms`
+tests/artifacts/perf/2026-06-05-linalg-full-rank-svd-vgs9h/keep_tiled_rank_k_update_stage4f.md:63:Score >= 2.0 keep gate and was slightly slower than the current fused helper.
+tests/artifacts/perf/2026-06-05-linalg-full-rank-svd-vgs9h/keep_tiled_rank_k_update_stage4f.md:67:reusable packed panel buffers feeding the kept fused far-update kernel, or a
+tests/artifacts/perf/2026-06-05-linalg-full-rank-svd-vgs9h/keep_tiled_rank_k_update_stage4f.md:68:two-stage communication-avoiding bidiagonalization path. Target for that next
+tests/artifacts/perf/2026-06-05-linalg-full-rank-svd-vgs9h/reject_private_blocked_dlabrd_stage4e.md:7:Private blocked Golub-Kahan/DLABRD-style reducer with local `X/Y` panels and the
+tests/artifacts/perf/2026-06-05-linalg-full-rank-svd-vgs9h/reject_private_blocked_dlabrd_stage4e.md:8:kept fused rank-k far-update helper. The candidate was never wired to public
+tests/artifacts/perf/2026-06-05-linalg-full-rank-svd-vgs9h/reject_private_blocked_dlabrd_stage4e.md:10:same-worker rejection gate.
+tests/artifacts/perf/2026-06-05-linalg-full-rank-svd-vgs9h/reject_private_blocked_dlabrd_stage4e.md:66:panel buffers, or a two-stage communication-avoiding bidiagonalization path.

@@ -1,0 +1,25 @@
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:5552:
+                         sum -= sqrt_t[(i, k)] * sqrt_t[(k, j)];
+                     }
+                     let denom = si + sj;
+[31m-                    sqrt_t[(i, j)] = if denom.abs() > 1e-15 { sum / denom } else { 0.0 };
+[m[32m+                    sqrt_t[(i, j)] = if denom.abs() > 1e-15 {
+[m[32m+                        sum / denom
+[m[32m+                    } else {
+[m[32m+                        0.0
+[m[32m+                    };
+[m                 }
+             }
+             &q * sqrt_t * q.transpose()
+Diff in /data/projects/frankenscipy/crates/fsci-linalg/src/lib.rs:5700:
+     if n == 0 {
+         return Ok(Vec::new());
+     }
+[31m-    let is_symmetric = (0..n).all(|i| {
+[m[31m-        (0..n).all(|j| (m[(i, j)] - m[(j, i)]).abs() < 1e-12 * m[(i, j)].abs().max(1.0))
+[m[31m-    });
+[m[32m+    let is_symmetric = (0..n)
+[m[32m+        .all(|i| (0..n).all(|j| (m[(i, j)] - m[(j, i)]).abs() < 1e-12 * m[(i, j)].abs().max(1.0)));
+[m     if is_symmetric {
+         return funm(a, |x| if x >= 0.0 { 1.0 } else { -1.0 }, options);
+     }

@@ -1,0 +1,81 @@
+## phase artifact excerpts
+
+### tests/artifacts/perf/2026-06-08-linalg-svd-core-followup/baseline_lstsq_pinv_criterion_rch.txt
+1:  [2m2026-06-08T04:23:20.873733Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSelected worker: fmd at ubuntu@51.222.245.56 (0 slots remaining after reservation, speed 50.0)[0m
+399:[RCH] remote fmd (68.2s)
+
+### tests/artifacts/perf/2026-06-08-linalg-svd-core-followup/bidiag_large_reduction_perf_probe_rch.txt
+3:  [2m2026-06-08T04:20:32.000925Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSelected worker: fmd at ubuntu@51.222.245.56 (4 slots remaining after reservation, speed 50.0)[0m
+360:BIDIAG_LARGE_REDUCTION_PERF_BEGIN
+361:shape=1024x512
+362:elapsed_ms=185.095579
+363:digest=0x90cdd3f8f71ed2c1
+386:[RCH] remote fmd (53.6s)
+387:zsh:3: read-only variable: status
+
+### tests/artifacts/perf/2026-06-08-linalg-svd-core-followup/bidiag_svd_symmetric_eigen_route_perf_probe_rch.txt
+3:  [2m2026-06-08T04:21:40.672801Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSelected worker: fmd at ubuntu@51.222.245.56 (4 slots remaining after reservation, speed 50.0)[0m
+360:BIDIAG_SYMMETRIC_EIGEN_ROUTE_PERF_BEGIN
+361:shape=1024x512
+362:reduction_digest=0x90cdd3f8f71ed2c1
+363:jacobi_reference_ms=2443.371290
+364:symmetric_eigen_route_ms=52.554489
+365:backend_sweeps=875
+366:speedup=46.492152
+370:jacobi_reference_digest=0xd485296937b9f15f
+371:svd_digest=0x7c2787acb98e625f
+392:[RCH] remote fmd (56.3s)
+393:EXIT_STATUS=0
+
+### tests/artifacts/perf/2026-06-08-linalg-svd-core-followup/proof_reduction_bits_rch.txt
+1:  [2m2026-06-08T04:27:49.422384Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSelected worker: fmd at ubuntu@51.222.245.56 (4 slots remaining after reservation, speed 50.0)[0m
+
+### tests/artifacts/perf/2026-06-08-linalg-svd-core-followup/public_bidiag_svd_route_perf_probe_rch.txt
+3:  [2m2026-06-08T04:26:40.889853Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSelected worker: fmd at ubuntu@51.222.245.56 (0 slots remaining after reservation, speed 50.0)[0m
+360:PUBLIC_BIDIAG_SVD_ROUTE_PERF_BEGIN
+361:shape=512x256
+362:reference_lstsq_ms=87.669803
+363:routed_lstsq_ms=50.016476
+364:lstsq_speedup=1.752818
+365:reference_pinv_ms=89.496712
+366:routed_pinv_ms=49.531226
+367:pinv_speedup=1.806875
+370:lstsq_max_abs_diff=1.07647224467655178e-12
+371:pinv_max_abs_diff=2.28428387316625958e-14
+392:[RCH] remote fmd (52.5s)
+393:EXIT_STATUS=0
+
+### tests/artifacts/perf/2026-06-08-linalg-svd-core-followup/thin_bidiag_factor_replay_perf_probe_fmd_retry_rch.txt
+3:  [2m2026-06-08T04:25:33.620152Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSelected worker: fmd at ubuntu@51.222.245.56 (4 slots remaining after reservation, speed 50.0)[0m
+360:THIN_BIDIAG_FACTOR_REPLAY_PERF_BEGIN
+361:shape=1024x512
+362:reduction_digest=0x90cdd3f8f71ed2c1
+363:reference_ms=415.697391
+364:replay_ms=84.331748
+365:speedup=4.929311
+366:u_max_abs_diff=4.99600361081320443e-15
+367:vt_max_abs_diff=2.88657986402540701e-15
+368:reference_digest=0xc264908a21811a83
+369:replay_digest=0x46e400c14112e593
+390:[RCH] remote fmd (52.6s)
+391:EXIT_STATUS=0
+
+### tests/artifacts/perf/2026-06-08-linalg-svd-core-followup/thin_bidiag_factor_replay_perf_probe_rch.txt
+3:[RCH] local (no admissible workers: critical_pressure=1,insufficient_slots=6)
+38:THIN_BIDIAG_FACTOR_REPLAY_PERF_BEGIN
+39:shape=1024x512
+40:reduction_digest=0x90cdd3f8f71ed2c1
+41:reference_ms=443.183934
+42:replay_ms=76.846719
+43:speedup=5.767116
+44:u_max_abs_diff=4.99600361081320443e-15
+45:vt_max_abs_diff=2.88657986402540701e-15
+46:reference_digest=0xc264908a21811a83
+47:replay_digest=0x46e400c14112e593
+53:EXIT_STATUS=0
+
+## computed fmd core percentages
+reduction_ms=185.095579 pct=57.49
+bidiag_svd_route_ms=52.554489 pct=16.32
+factor_replay_ms=84.331748 pct=26.19
+core_probe_sum_ms=321.981816

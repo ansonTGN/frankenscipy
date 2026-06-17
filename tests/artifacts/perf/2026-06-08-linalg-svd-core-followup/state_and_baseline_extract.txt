@@ -1,0 +1,37 @@
+## br show frankenscipy-8l8r1.50 --json
+[{"id":"frankenscipy-8l8r1.50","title":"[perf] lstsq/512x256: attack deterministic thin-SVD core after pinv materialization reject","description":"Post-rejection RCH reprofile on worker fmd after restoring source: lstsq/512x256 [46.002 ms 46.225 ms 46.489 ms], pinv/512x256 [48.867 ms 50.152 ms 51.712 ms], matmul/1024x1024 [51.849 ms 55.796 ms 61.098 ms]. Do not repeat direct final pseudoinverse row materialization: frankenscipy-8l8r1.49 proved public golden unchanged but same-worker pinv regressed 51.694 ms -> 108.24 ms. Next lever must attack SVD/GEMM work itself with a structurally different safe-Rust primitive: blocked bidiagonal update fusion, communication-avoiding SVD stages, or deeper packed-kernel reuse. Baseline via RCH on fmd or same worker first, one lever only, golden sha256 and isomorphism proof required, keep only Score>=2.0.","status":"in_progress","priority":1,"issue_type":"task","assignee":"BlackThrush","created_at":"2026-06-08T04:02:12.239006680Z","created_by":"ubuntu","updated_at":"2026-06-08T04:17:43.353262222Z","source_repo":"frankenscipy","source_repo_path":"/data/projects/frankenscipy","compaction_level":0,"original_size":0,"labels":["linalg","no-gaps","perf"],"dependencies":[{"id":"frankenscipy-8l8r1","title":"[perf][no-gaps] Close ALL vs-upstream perf gaps in pure safe Rust — no C BLAS/LAPACK/XLA linkage","status":"in_progress","priority":1,"dependency_type":"parent-child"}],"parent":"frankenscipy-8l8r1"}]
+
+## git status selected paths
+ M .beads/issues.jsonl
+ M .skill-loop-progress.md
+ M crates/fsci-linalg/src/lib.rs
+?? tests/artifacts/perf/2026-06-08-linalg-svd-core-followup/
+
+## baseline artifact excerpt
+   Compiling ciborium v0.2.2
+   Compiling proptest v1.11.0
+   Compiling criterion v0.8.2
+   Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
+    Finished `bench` profile [optimized] target(s) in 24.41s
+     Running benches/linalg_bench.rs (.rch-target-fmd-job-29872254800117735-1780891217522276706-0/release/deps/linalg_bench-6587fedccc9c4d1d)
+Gnuplot not found, using plotters backend
+Benchmarking lstsq/512x256
+Benchmarking lstsq/512x256: Warming up for 1.0000 s
+
+Warning: Unable to complete 100 samples in 2.0s. You may wish to increase target time to 4.8s, or reduce sample count to 40.
+Benchmarking lstsq/512x256: Collecting 100 samples in estimated 4.8154 s (100 iterations)
+Benchmarking lstsq/512x256: Analyzing
+lstsq/512x256           time:   [46.002 ms 46.225 ms 46.489 ms]
+Found 6 outliers among 100 measurements (6.00%)
+  2 (2.00%) high mild
+  4 (4.00%) high severe
+
+Benchmarking pinv/512x256
+Benchmarking pinv/512x256: Warming up for 1.0000 s
+
+Warning: Unable to complete 100 samples in 2.0s. You may wish to increase target time to 4.9s, or reduce sample count to 40.
+Benchmarking pinv/512x256: Collecting 100 samples in estimated 4.8910 s (100 iterations)
+Benchmarking pinv/512x256: Analyzing
+pinv/512x256            time:   [48.867 ms 50.152 ms 51.712 ms]
+Found 13 outliers among 100 measurements (13.00%)
+  4 (4.00%) high mild

@@ -1,0 +1,115 @@
+[RCH] local (no admissible workers: insufficient_slots=6,active_project_exclusion=1)
+    Blocking waiting for file lock on build directory
+   Compiling num-traits v0.2.19
+   Compiling serde_core v1.0.228
+   Compiling serde v1.0.228
+   Compiling zerocopy v0.8.48
+   Compiling crossbeam-utils v0.8.21
+   Compiling rayon-core v1.13.0
+   Compiling either v1.15.0
+   Compiling clap_lex v1.1.0
+   Compiling anstyle v1.0.14
+   Compiling plotters-backend v0.3.7
+   Compiling ciborium-io v0.2.2
+   Compiling same-file v1.0.6
+   Compiling regex-automata v0.4.14
+   Compiling cast v0.3.0
+   Compiling oorandom v11.1.5
+   Compiling anes v0.1.6
+   Compiling alloca v0.4.0
+   Compiling zerocopy-derive v0.8.48
+   Compiling getrandom v0.3.4
+   Compiling page_size v0.6.0
+   Compiling walkdir v2.5.0
+   Compiling clap_builder v4.6.0
+   Compiling itertools v0.13.0
+   Compiling rand_core v0.9.5
+   Compiling tempfile v3.27.0
+   Compiling plotters-svg v0.3.7
+   Compiling rand_xorshift v0.4.0
+   Compiling rand v0.9.4
+   Compiling rusty-fork v0.3.1
+   Compiling crossbeam-epoch v0.9.18
+   Compiling crossbeam-deque v0.8.6
+   Compiling approx v0.5.1
+   Compiling num-integer v0.1.46
+   Compiling num-complex v0.4.6
+   Compiling plotters v0.3.7
+   Compiling num-rational v0.4.2
+   Compiling simba v0.9.1
+   Compiling rayon v1.12.0
+   Compiling criterion-plot v0.8.2
+   Compiling regex v1.12.3
+   Compiling clap v4.6.1
+   Compiling serde_json v1.0.149
+   Compiling fsci-runtime v0.1.0 (/data/projects/frankenscipy/crates/fsci-runtime)
+   Compiling tinytemplate v1.2.1
+   Compiling fsci-fft v0.1.0 (/data/projects/frankenscipy/crates/fsci-fft)
+   Compiling half v2.7.1
+   Compiling ppv-lite86 v0.2.21
+   Compiling ciborium-ll v0.2.2
+   Compiling rand_chacha v0.9.0
+   Compiling ciborium v0.2.2
+   Compiling nalgebra v0.34.2
+   Compiling proptest v1.11.0
+   Compiling criterion v0.8.2
+   Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
+    Finished `bench` profile [optimized] target(s) in 1m 13s
+     Running benches/linalg_bench.rs (/data/tmp/cargo-target/release/deps/linalg_bench-8e3810d6a4356137)
+Gnuplot not found, using plotters backend
+Benchmarking solve/256x256
+Benchmarking solve/256x256: Warming up for 1.0000 s
+Benchmarking solve/256x256: Collecting 100 samples in estimated 2.0854 s (600 iterations)
+Benchmarking solve/256x256: Analyzing
+solve/256x256           time:   [3.4278 ms 3.4864 ms 3.5492 ms]
+Found 7 outliers among 100 measurements (7.00%)
+  5 (5.00%) high mild
+  2 (2.00%) high severe
+
+Benchmarking inv/256x256
+Benchmarking inv/256x256: Warming up for 1.0000 s
+Benchmarking inv/256x256: Collecting 100 samples in estimated 2.4882 s (200 iterations)
+Benchmarking inv/256x256: Analyzing
+inv/256x256             time:   [12.435 ms 12.573 ms 12.723 ms]
+Found 7 outliers among 100 measurements (7.00%)
+  6 (6.00%) high mild
+  1 (1.00%) high severe
+
+Benchmarking det/256x256
+Benchmarking det/256x256: Warming up for 1.0000 s
+Benchmarking det/256x256: Collecting 100 samples in estimated 2.0428 s (1400 iterations)
+Benchmarking det/256x256: Analyzing
+det/256x256             time:   [1.3989 ms 1.4153 ms 1.4352 ms]
+Found 14 outliers among 100 measurements (14.00%)
+  1 (1.00%) low mild
+  7 (7.00%) high mild
+  6 (6.00%) high severe
+
+Benchmarking lstsq/512x256
+Benchmarking lstsq/512x256: Warming up for 1.0000 s
+
+Warning: Unable to complete 100 samples in 2.0s. You may wish to increase target time to 4.7s, or reduce sample count to 40.
+Benchmarking lstsq/512x256: Collecting 100 samples in estimated 4.7116 s (100 iterations)
+Benchmarking lstsq/512x256: Analyzing
+lstsq/512x256           time:   [46.497 ms 47.119 ms 47.811 ms]
+Found 4 outliers among 100 measurements (4.00%)
+  3 (3.00%) high mild
+  1 (1.00%) high severe
+
+Benchmarking pinv/512x256
+Benchmarking pinv/512x256: Warming up for 1.0000 s
+
+Warning: Unable to complete 100 samples in 2.0s. You may wish to increase target time to 5.3s, or reduce sample count to 30.
+Benchmarking pinv/512x256: Collecting 100 samples in estimated 5.3244 s (100 iterations)
+Benchmarking pinv/512x256: Analyzing
+pinv/512x256            time:   [51.287 ms 52.412 ms 53.630 ms]
+Found 10 outliers among 100 measurements (10.00%)
+  9 (9.00%) high mild
+  1 (1.00%) high severe
+
+Benchmarking matmul/1024x1024
+Benchmarking matmul/1024x1024: Warming up for 1.0000 s
+Benchmarking matmul/1024x1024: Collecting 10 samples in estimated 7.2099 s (165 iterations)
+Benchmarking matmul/1024x1024: Analyzing
+matmul/1024x1024        time:   [46.383 ms 48.300 ms 50.660 ms]
+

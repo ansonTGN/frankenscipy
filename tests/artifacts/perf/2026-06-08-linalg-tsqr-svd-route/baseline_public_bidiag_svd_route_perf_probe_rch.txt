@@ -1,0 +1,48 @@
+[RCH] local (no admissible workers: critical_pressure=2,insufficient_slots=3,hard_preflight=2,active_project_exclusion=1)
+   Compiling serde_json v1.0.149
+   Compiling paste v1.0.15
+   Compiling num-traits v0.2.19
+   Compiling bytemuck v1.25.0
+   Compiling matrixmultiply v0.3.10
+   Compiling rawpointer v0.2.1
+   Compiling blake3 v1.8.4
+   Compiling nalgebra-macros v0.3.0
+   Compiling half v2.7.1
+   Compiling safe_arch v0.7.4
+   Compiling ciborium-ll v0.2.2
+   Compiling ciborium v0.2.2
+   Compiling wide v0.7.33
+   Compiling num-complex v0.4.6
+   Compiling num-integer v0.1.46
+   Compiling approx v0.5.1
+   Compiling plotters v0.3.7
+   Compiling proptest v1.11.0
+   Compiling tinytemplate v1.2.1
+   Compiling fsci-runtime v0.1.0 (/data/projects/frankenscipy/crates/fsci-runtime)
+   Compiling num-rational v0.4.2
+   Compiling fsci-fft v0.1.0 (/data/projects/frankenscipy/crates/fsci-fft)
+   Compiling criterion v0.8.2
+   Compiling simba v0.9.1
+   Compiling nalgebra v0.34.2
+   Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
+    Finished `release` profile [optimized] target(s) in 17.63s
+     Running unittests src/lib.rs (/data/tmp/cargo-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+PUBLIC_BIDIAG_SVD_ROUTE_PERF_BEGIN
+shape=512x256
+reference_lstsq_ms=99.205726
+routed_lstsq_ms=55.622798
+lstsq_speedup=1.783544
+reference_pinv_ms=101.057460
+routed_pinv_ms=56.189260
+pinv_speedup=1.798519
+lstsq_rank=256
+pinv_rank=256
+lstsq_max_abs_diff=1.07647224467655178e-12
+pinv_max_abs_diff=2.28428387316625958e-14
+PUBLIC_BIDIAG_SVD_ROUTE_PERF_END
+test tests::public_bidiag_svd_route_perf_probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 395 filtered out; finished in 0.32s
+

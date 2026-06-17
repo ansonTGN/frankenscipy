@@ -1,0 +1,56 @@
+  7440	    let cols = matrix.ncols();
+  7441	    if rows < cols {
+  7442	        return Err(LinalgError::UnsupportedAssumption);
+  7443	    }
+  7444	    if matrix.iter().any(|value| !value.is_finite()) {
+  7445	        return Err(LinalgError::NonFiniteInput);
+  7446	    }
+  7447	
+  7448	    let mut work = matrix.clone();
+  7449	    let mut left_reflectors = Vec::with_capacity(cols);
+  7450	    let mut right_reflectors = Vec::with_capacity(cols.saturating_sub(1));
+  7451	    let mut right_dot_workspace = vec![0.0_f64; rows];
+  7452	    let mut left_scale_workspace = vec![0.0_f64; cols];
+  7453	
+  7454	    for step in 0..cols {
+  7455	        let column_values = (step..rows).map(|row| work[(row, step)]).collect();
+  7456	        let left_reflector = make_householder_reflector(step, column_values);
+  7457	
+  7458	        if step + 1 < cols {
+  7459	            let right_reflector = apply_bidiag_fused_step(
+  7460	                &mut work,
+  7461	                &left_reflector,
+  7462	                step,
+  7463	                &mut left_scale_workspace,
+  7464	                &mut right_dot_workspace,
+  7465	            );
+  7466	            left_reflectors.push(left_reflector);
+  7467	            right_reflectors.push(right_reflector);
+  7468	        } else {
+  7469	            apply_householder_left(&mut work, &left_reflector, step);
+  7470	            for row in step + 1..rows {
+  7471	                work[(row, step)] = 0.0;
+  7472	            }
+  7473	            left_reflectors.push(left_reflector);
+  7474	        }
+  7475	    }
+  7476	
+  7477	    let diagonal = (0..cols).map(|idx| work[(idx, idx)]).collect();
+  7478	    let superdiagonal = (0..cols.saturating_sub(1))
+  7479	        .map(|idx| work[(idx, idx + 1)])
+  7480	        .collect();
+  7481	    let mut bidiagonal = DMatrix::<f64>::zeros(rows, cols);
+  7482	    for idx in 0..cols {
+  7483	        bidiagonal[(idx, idx)] = work[(idx, idx)];
+  7484	        if idx + 1 < cols {
+  7485	            bidiagonal[(idx, idx + 1)] = work[(idx, idx + 1)];
+  7486	        }
+  7487	    }
+  7488	
+  7489	    Ok(BidiagonalReduction {
+  7490	        rows,
+  7491	        cols,
+  7492	        diagonal,
+  7493	        superdiagonal,
+  7494	        bidiagonal,
+  7495	        left_reflectors,

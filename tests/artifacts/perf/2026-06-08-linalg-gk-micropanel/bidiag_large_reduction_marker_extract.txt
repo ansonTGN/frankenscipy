@@ -1,0 +1,9 @@
+1:  [2m2026-06-08T08:32:07.533554Z[0m [32m INFO[0m [1;32mrch::hook[0m[32m: [32mSelected worker: ts2 at ubuntu@192.168.1.124 (4 slots remaining after reservation, speed 50.0)[0m
+358:BIDIAG_LARGE_REDUCTION_PERF_BEGIN
+359:shape=1024x512
+360:elapsed_ms=346.334752
+361:digest=0x90cdd3f8f71ed2c1
+362:first_diagonal=-1.00455335940616146e3
+363:last_diagonal=-6.45492359226604862e1
+364:BIDIAG_LARGE_REDUCTION_PERF_END
+367:test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 395 filtered out; finished in 0.36s
