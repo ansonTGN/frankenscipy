@@ -493,9 +493,9 @@ pub fn spectral_embedding(
             "n_components={n_components} must be in [1, n={n}]"
         )));
     }
-    if affinity.iter().flatten().any(|v| !v.is_finite()) {
+    if affinity.iter().flatten().any(|v| !v.is_finite() || *v < 0.0) {
         return Err(ClusterError::InvalidArgument(
-            "affinity must be finite".to_string(),
+            "affinity must be finite and non-negative".to_string(),
         ));
     }
 
@@ -6786,6 +6786,10 @@ mod tests {
         assert!(spectral_embedding(&[], 2, 1).is_err());
         assert!(spectral_embedding(&aff, 0, 1).is_err());
         assert!(spectral_embedding(&[vec![0.0, 1.0]], 1, 1).is_err()); // non-square
+        assert!(matches!(
+            spectral_embedding(&[vec![1.0, -0.1], vec![-0.1, 1.0]], 1, 1),
+            Err(ClusterError::InvalidArgument(_))
+        ));
     }
 
     #[test]
