@@ -4683,14 +4683,23 @@ impl NdBSpline {
     /// Build an N-D B-spline; validates the coefficient count against the knots.
     pub fn new(t: Vec<Vec<f64>>, c: Vec<f64>, k: usize) -> Result<Self, InterpError> {
         let ndim = t.len();
+        let min_knots = k
+            .checked_mul(2)
+            .and_then(|value| value.checked_add(2))
+            .ok_or_else(|| InterpError::InvalidArgument {
+                detail: "degree is too large for knot validation".to_string(),
+            })?;
         let mut prod = 1usize;
         for d in 0..ndim {
-            if t[d].len() < 2 * k + 2 {
+            if t[d].len() < min_knots {
                 return Err(InterpError::InvalidArgument {
-                    detail: format!("dimension {d}: need >= {} knots for degree {k}", 2 * k + 2),
+                    detail: format!("dimension {d}: need >= {min_knots} knots for degree {k}"),
                 });
             }
-            prod *= t[d].len() - k - 1;
+            let coeff_count = t[d].len() - k - 1;
+            prod = prod.checked_mul(coeff_count).ok_or_else(|| InterpError::InvalidArgument {
+                detail: "coefficient shape product overflow".to_string(),
+            })?;
         }
         if c.len() != prod {
             return Err(InterpError::InvalidArgument {
@@ -4758,12 +4767,19 @@ impl NdPPoly {
     /// breakpoints.
     pub fn new(c: Vec<f64>, c_shape: Vec<usize>, x: Vec<Vec<f64>>) -> Result<Self, InterpError> {
         let ndim = x.len();
-        if c_shape.len() != 2 * ndim {
+        let expected_shape_len = ndim.checked_mul(2).ok_or_else(|| InterpError::InvalidArgument {
+            detail: "c_shape length overflow".to_string(),
+        })?;
+        if c_shape.len() != expected_shape_len {
             return Err(InterpError::InvalidArgument {
                 detail: "c_shape length must be 2*ndim".to_string(),
             });
         }
-        let prod: usize = c_shape.iter().product();
+        let prod = c_shape.iter().try_fold(1usize, |acc, &dim| acc.checked_mul(dim)).ok_or_else(
+            || InterpError::InvalidArgument {
+                detail: "coefficient shape product overflow".to_string(),
+            },
+        )?;
         if c.len() != prod {
             return Err(InterpError::InvalidArgument {
                 detail: format!("c has {} entries, expected {prod}", c.len()),
@@ -8013,6 +8029,12 @@ mod tests {
     }
 
     #[test]
+    fn ndbspline_rejects_degree_overflow() {
+        let result = NdBSpline::new(vec![vec![0.0, 1.0]], Vec::new(), usize::MAX / 2 + 1);
+        assert!(matches!(result, Err(InterpError::InvalidArgument { .. })));
+    }
+
+    #[test]
     fn ndppoly_matches_scipy() {
         // c = arange(1..=36).reshape(3,2,2,3); x=([0,1,2],[0,1,2,3]).
         let c: Vec<f64> = (1..=36).map(|v| v as f64).collect();
@@ -8024,6 +8046,13 @@ mod tests {
         for (pt, w) in pts.iter().zip(want.iter()) {
             assert!((p.evaluate(pt) - w).abs() <= 1e-9, "{:?}: {} vs {w}", pt, p.evaluate(pt));
         }
+    }
+
+    #[test]
+    fn ndppoly_rejects_shape_product_overflow() {
+        let result =
+            NdPPoly::new(Vec::new(), vec![usize::MAX, 2], vec![vec![0.0, 1.0, 2.0]]);
+        assert!(matches!(result, Err(InterpError::InvalidArgument { .. })));
     }
 
     #[test]
@@ -8299,7 +8328,13 @@ mod tests {
                         assert_eq!(fc.to_bits(), sc.to_bits(), "npts={npts} q={q:?}: l3");
                     }
                     (None, None) => {}
-                    (f, s) => panic!("npts={npts} q={q:?}: match disagreement {f:?} vs {s:?}"),
+                    (f, s) => {
+                        assert_eq!(
+                            f.is_some(),
+                            s.is_some(),
+                            "npts={npts} q={q:?}: match disagreement"
+                        );
+                    }
                 }
             }
         }
