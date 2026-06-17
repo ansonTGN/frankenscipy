@@ -26203,6 +26203,24 @@ pub fn wilcoxon_alternative(x: &[f64], y: &[f64], alternative: &str) -> TtestRes
 ///
 /// Non-parametric alternative to one-way ANOVA.
 /// Tests H0: all groups come from the same distribution.
+/// Kruskal-Wallis H-test, matching `scipy.stats.mstats.kruskalwallis` (the
+/// `mstats` spelling of [`kruskal`]; identical for data without masked values).
+pub fn kruskalwallis(groups: &[&[f64]]) -> TtestResult {
+    kruskal(groups)
+}
+
+/// Two-sample Kolmogorov-Smirnov test, matching `scipy.stats.mstats.ks_twosamp`
+/// (the `mstats` spelling of [`ks_2samp`]; identical for unmasked data).
+pub fn ks_twosamp(data1: &[f64], data2: &[f64]) -> GoodnessOfFitResult {
+    ks_2samp(data1, data2)
+}
+
+/// One-sample t-test, matching `scipy.stats.mstats.ttest_onesamp` (the `mstats`
+/// spelling of [`ttest_1samp`]; identical for unmasked data).
+pub fn ttest_onesamp(data: &[f64], popmean: f64) -> TtestResult {
+    ttest_1samp(data, popmean)
+}
+
 pub fn kruskal(groups: &[&[f64]]) -> TtestResult {
     if groups.len() < 2
         || groups.iter().any(|g| g.is_empty())
