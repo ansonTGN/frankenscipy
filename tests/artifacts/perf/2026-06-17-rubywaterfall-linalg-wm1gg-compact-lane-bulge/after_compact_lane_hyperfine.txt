@@ -1,0 +1,119 @@
+Script started on 2026-06-17 03:35:50-04:00 [COMMAND="env RCH_REQUIRE_REMOTE=0 CARGO_TARGET_DIR=/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x19-target hyperfine --warmup 1 --runs 3 --show-output 'cargo test -j 1 -p fsci-linalg --lib eig_banded_eigenvectors_perf_probe --release --locked -- --ignored --nocapture --test-threads=1'" <not executed on terminal>]
+Benchmark 1: cargo test -j 1 -p fsci-linalg --lib eig_banded_eigenvectors_perf_probe --release --locked -- --ignored --nocapture --test-threads=1
+    Finished `release` profile [optimized] target(s) in 0.10s
+     Running unittests src/lib.rs (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x19-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+test proptest_tests::eig_banded_eigenvectors_perf_probe ... EIG_BANDED_EIGENVECTORS_PERF_BEGIN
+shape=128x128
+bandwidth=32
+candidate_ms=3.929003
+max_abs_diff=7.56017470848746598e-12
+residual=1.64845914696343243e-12
+candidate_values_digest=0xd6dbb9200f65bd92
+candidate_vectors_digest=0x6cf3573b5b50c275
+dense_values_digest=0x7bdbe4513b62a730
+EIG_BANDED_EIGENVECTORS_PERF_END
+EIG_BANDED_EIGENVECTORS_PERF_BEGIN
+shape=256x256
+bandwidth=32
+candidate_ms=13.372494
+max_abs_diff=4.16093826061114669e-11
+residual=7.73070496506989002e-12
+candidate_values_digest=0x09ed4d367faab431
+candidate_vectors_digest=0xc32797c0d224a75a
+dense_values_digest=0xbc00c62977653f28
+EIG_BANDED_EIGENVECTORS_PERF_END
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 479 filtered out; finished in 0.05s
+
+    Finished `release` profile [optimized] target(s) in 0.11s
+     Running unittests src/lib.rs (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x19-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+test proptest_tests::eig_banded_eigenvectors_perf_probe ... EIG_BANDED_EIGENVECTORS_PERF_BEGIN
+shape=128x128
+bandwidth=32
+candidate_ms=3.556746
+max_abs_diff=7.56017470848746598e-12
+residual=1.64845914696343243e-12
+candidate_values_digest=0xd6dbb9200f65bd92
+candidate_vectors_digest=0x6cf3573b5b50c275
+dense_values_digest=0x7bdbe4513b62a730
+EIG_BANDED_EIGENVECTORS_PERF_END
+EIG_BANDED_EIGENVECTORS_PERF_BEGIN
+shape=256x256
+bandwidth=32
+candidate_ms=14.656970
+max_abs_diff=4.16093826061114669e-11
+residual=7.73070496506989002e-12
+candidate_values_digest=0x09ed4d367faab431
+candidate_vectors_digest=0xc32797c0d224a75a
+dense_values_digest=0xbc00c62977653f28
+EIG_BANDED_EIGENVECTORS_PERF_END
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 479 filtered out; finished in 0.05s
+
+    Finished `release` profile [optimized] target(s) in 0.10s
+     Running unittests src/lib.rs (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x19-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+test proptest_tests::eig_banded_eigenvectors_perf_probe ... EIG_BANDED_EIGENVECTORS_PERF_BEGIN
+shape=128x128
+bandwidth=32
+candidate_ms=4.035033
+max_abs_diff=7.56017470848746598e-12
+residual=1.64845914696343243e-12
+candidate_values_digest=0xd6dbb9200f65bd92
+candidate_vectors_digest=0x6cf3573b5b50c275
+dense_values_digest=0x7bdbe4513b62a730
+EIG_BANDED_EIGENVECTORS_PERF_END
+EIG_BANDED_EIGENVECTORS_PERF_BEGIN
+shape=256x256
+bandwidth=32
+candidate_ms=13.035655
+max_abs_diff=4.16093826061114669e-11
+residual=7.73070496506989002e-12
+candidate_values_digest=0x09ed4d367faab431
+candidate_vectors_digest=0xc32797c0d224a75a
+dense_values_digest=0xbc00c62977653f28
+EIG_BANDED_EIGENVECTORS_PERF_END
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 479 filtered out; finished in 0.05s
+
+    Finished `release` profile [optimized] target(s) in 0.10s
+     Running unittests src/lib.rs (/data/projects/.scratch/frankenscipy-rubywaterfall-psn7x19-target/release/deps/fsci_linalg-c4287c5201a86d5d)
+
+running 1 test
+test proptest_tests::eig_banded_eigenvectors_perf_probe ... EIG_BANDED_EIGENVECTORS_PERF_BEGIN
+shape=128x128
+bandwidth=32
+candidate_ms=3.860742
+max_abs_diff=7.56017470848746598e-12
+residual=1.64845914696343243e-12
+candidate_values_digest=0xd6dbb9200f65bd92
+candidate_vectors_digest=0x6cf3573b5b50c275
+dense_values_digest=0x7bdbe4513b62a730
+EIG_BANDED_EIGENVECTORS_PERF_END
+EIG_BANDED_EIGENVECTORS_PERF_BEGIN
+shape=256x256
+bandwidth=32
+candidate_ms=13.904262
+max_abs_diff=4.16093826061114669e-11
+residual=7.73070496506989002e-12
+candidate_values_digest=0x09ed4d367faab431
+candidate_vectors_digest=0xc32797c0d224a75a
+dense_values_digest=0xbc00c62977653f28
+EIG_BANDED_EIGENVECTORS_PERF_END
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 479 filtered out; finished in 0.05s
+
+  Time (mean ± σ):     202.7 ms ±  12.1 ms    [User: 150.7 ms, System: 67.8 ms]
+  Range (min … max):   194.0 ms … 216.5 ms    3 runs
+ 
+
+Script done on 2026-06-17 03:35:51-04:00 [COMMAND_EXIT_CODE="0"]

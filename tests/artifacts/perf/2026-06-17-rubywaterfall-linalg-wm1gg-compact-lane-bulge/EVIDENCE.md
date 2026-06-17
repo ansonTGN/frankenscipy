@@ -58,3 +58,34 @@ Do not retry:
 - worker-count retuning
 - raw/stale compact-WY panels
 - scalar spelling or SIMD rank-2 spelling
+
+## Pass 2 Reject: Fixed-Width Compact Lane Route
+
+Candidate:
+
+- Added a production-facing compact lane envelope route for `eig_banded(lower=true, eigvals_only=false)`.
+- The route used the kept diagonal-band adjacent rotation formulas, selected actual Givens rotations from live band lanes, and replayed rotation metadata into tridiagonal eigenvectors.
+- The lane envelope was fixed at `bandwidth + 1` and returned `None` to fall back when a bulge escaped the explicit lanes.
+
+Proof:
+
+- `after_compact_lane_probe.txt`: public `eig_banded_eigenvectors_perf_probe` passed.
+- Public values/vectors digests and residuals were unchanged, proving fallback preserved behavior:
+  - 128x128 values `0xd6dbb9200f65bd92`, vectors `0x6cf3573b5b50c275`, residual `1.64845914696343243e-12`
+  - 256x256 values `0x09ed4d367faab431`, vectors `0xc32797c0d224a75a`, residual `7.73070496506989002e-12`
+
+Rebench:
+
+- Baseline: `198.7 ms +/- 5.6 ms`
+- Candidate: `202.7 ms +/- 12.1 ms` (`after_compact_lane_hyperfine.txt`)
+- The unchanged digests plus the slower wall time show the compact route fell back and only added failed-attempt overhead.
+
+Score:
+
+- `Impact 0.0 * Confidence 5.0 / Effort 2.0 = 0.0`
+- Source restored; `git diff -- crates/fsci-linalg/src/lib.rs` is empty after restore.
+
+Route:
+
+- Do not retry a fixed `bandwidth + 1` lane envelope that falls back on escaped bulges.
+- Next primitive needs explicit bulge storage/chase queues or a wider adaptive envelope that keeps the rotation path inside compact storage without dense row/column updates.
