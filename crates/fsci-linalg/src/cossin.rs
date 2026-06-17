@@ -1133,49 +1133,33 @@ pub(crate) fn cossin_factors_balanced(
     Ok((u, vh))
 }
 
-/// Full balanced-square (`p=q=m/2`) cosine-sine decomposition `X = u · cs · vh`
-/// via `dorbdb` reduction + the `dbbcsd` implicit-QR sweep.
+/// Cosine-sine decomposition of a `2q×2q` orthogonal matrix `x` partitioned into
+/// equal `q×q` blocks (the balanced square case `p = q = m/2`), returning
+/// `(u, cs, vh)` with `x = u · cs · vh`.
 ///
-/// WIP: the `cs` factor (angles) is scipy-exact and the `dbbcsd` sweep converges
-/// correctly, but the `u`/`vh` factors are not yet right — `dorbdb` currently
-/// emits a non-standard bidiagonal convention (B12 sign / B21 orientation differ
-/// from LAPACK's `dbbcsd` input), so its P/Q do not integrate with the sweep's
-/// U/V. Closing that requires making `dorbdb` LAPACK-faithful (bead
-/// frankenscipy-5tmu1). Kept `pub(crate)` until then.
-pub(crate) fn cossin_full(
+/// `cs` is the cosine-sine middle factor and is **scipy-exact** (it equals
+/// `scipy.linalg.cossin(x, q, q)[1]`, i.e. `build_cs_matrix(cs_angles(x11))`).
+/// `u = diag(U1, U2)` and `vh = diag(V1ᵀ, V2ᵀ)` are orthogonal and form a valid
+/// CS decomposition (`u·cs·vh = x` to machine precision); they equal scipy's
+/// factors **up to the per-column sign of each singular vector** — the inherent
+/// gauge freedom of the CSD (flipping column `i` of `U1,U2` and `V1,V2` together
+/// preserves the decomposition). SciPy's specific signs come from LAPACK
+/// `dbbcsd`'s implicit-QR sweep, which has no closed-form characterization;
+/// matching them byte-for-byte is tracked by bead frankenscipy-5tmu1.
+pub fn cossin(
     x: &[Vec<f64>],
 ) -> Result<(Vec<Vec<f64>>, Vec<Vec<f64>>, Vec<Vec<f64>>), crate::LinalgError> {
-    let q = x.len() / 2;
-    let m = 2 * q;
-    let mut x11: Vec<Vec<f64>> = x[..q].iter().map(|r| r[..q].to_vec()).collect();
-    let mut x12: Vec<Vec<f64>> = x[..q].iter().map(|r| r[q..].to_vec()).collect();
-    let mut x21: Vec<Vec<f64>> = x[q..].iter().map(|r| r[..q].to_vec()).collect();
-    let mut x22: Vec<Vec<f64>> = x[q..].iter().map(|r| r[q..].to_vec()).collect();
-    let res = dorbdb_balanced(&mut x11, &mut x12, &mut x21, &mut x22, q);
-    let p1 = build_from_col_reflectors(&x11, &res.taup1, q);
-    let p2 = build_from_col_reflectors(&x21, &res.taup2, q);
-    let q1 = build_from_row_reflectors(&x11, &res.tauq1, q, 1);
-    let q2 = build_from_row_reflectors(&x12, &res.tauq2, q, 0);
-    let bb = dbbcsd_balanced(&res.theta, &res.phi, q);
-    // U1 = P1·Ub1, U2 = P2·Ub2.
-    let u1 = mm(&p1, &bb.u1);
-    let u2 = mm(&p2, &bb.u2);
-    // V1 = Q1·Vb1 where Vb1 = v1tᵀ; V1ᵀ = v1t·Q1ᵀ.
-    let q1t: Vec<Vec<f64>> = (0..q).map(|i| (0..q).map(|j| q1[j][i]).collect()).collect();
-    let q2t: Vec<Vec<f64>> = (0..q).map(|i| (0..q).map(|j| q2[j][i]).collect()).collect();
-    let v1h = mm(&bb.v1t, &q1t); // V1ᵀ (q×q)
-    let v2h = mm(&bb.v2t, &q2t);
-    let cs = build_cs_matrix(&bb.theta, q, q, m);
-    let mut u = vec![vec![0.0; m]; m];
-    let mut vh = vec![vec![0.0; m]; m];
-    for i in 0..q {
-        for j in 0..q {
-            u[i][j] = u1[i][j];
-            u[q + i][q + j] = u2[i][j];
-            vh[i][j] = v1h[i][j];
-            vh[q + i][q + j] = v2h[i][j];
-        }
+    let m = x.len();
+    let q = m / 2;
+    if m == 0 || m % 2 != 0 || x.iter().any(|r| r.len() != m) {
+        return Err(crate::LinalgError::InvalidArgument {
+            detail: "cossin: x must be a non-empty 2q×2q (even-order square) matrix".to_string(),
+        });
     }
+    let (u, vh) = cossin_factors_balanced(x)?;
+    let x11: Vec<Vec<f64>> = x[..q].iter().map(|r| r[..q].to_vec()).collect();
+    let theta = cs_angles(&x11, q, q, m)?;
+    let cs = build_cs_matrix(&theta, q, q, m);
     Ok((u, cs, vh))
 }
 
@@ -1391,6 +1375,45 @@ mod tests {
                     maxerr < 1e-9,
                     "q={q} seed={seed}: dbbcsd theta error {maxerr:.3e}"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn cossin_public_valid_decomposition() {
+        for &q in &[2usize, 3, 4, 5, 6] {
+            for seed in 0..4u64 {
+                let m = 2 * q;
+                let x = orthogonal(m, seed + q as u64 * 23);
+                let (u, cs, vh) = cossin(&x).unwrap();
+                // x == u · cs · vh
+                let recon = matmul(&matmul(&u, &cs), &vh);
+                let mut rerr = 0.0f64;
+                for i in 0..m {
+                    for j in 0..m {
+                        rerr = rerr.max((recon[i][j] - x[i][j]).abs());
+                    }
+                }
+                assert!(rerr < 1e-9, "q={q} seed={seed}: recon err {rerr:.3e}");
+                // cs == build_cs_matrix(cs_angles(x11))
+                let x11: Vec<Vec<f64>> = x[..q].iter().map(|r| r[..q].to_vec()).collect();
+                let cs_ref = build_cs_matrix(&cs_angles(&x11, q, q, m).unwrap(), q, q, m);
+                for i in 0..m {
+                    for j in 0..m {
+                        assert!((cs[i][j] - cs_ref[i][j]).abs() < 1e-12);
+                    }
+                }
+                // u, vh orthogonal
+                for a in [&u, &vh] {
+                    let g = matmul(&transpose(a), a);
+                    let mut oe = 0.0f64;
+                    for i in 0..m {
+                        for j in 0..m {
+                            oe = oe.max((g[i][j] - if i == j { 1.0 } else { 0.0 }).abs());
+                        }
+                    }
+                    assert!(oe < 1e-9, "q={q} seed={seed}: not orthogonal {oe:.3e}");
+                }
             }
         }
     }
