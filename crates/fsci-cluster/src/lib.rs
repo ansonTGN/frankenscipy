@@ -68,6 +68,11 @@ pub fn pca(x: &[Vec<f64>], n_components: usize, seed: u64) -> Result<PcaResult, 
             "all samples must have the same dimension".to_string(),
         ));
     }
+    if x.iter().flatten().any(|value| !value.is_finite()) {
+        return Err(ClusterError::InvalidArgument(
+            "pca input must be finite".to_string(),
+        ));
+    }
     let k = n_components.min(n).min(d);
     if k == 0 {
         return Err(ClusterError::InvalidArgument(
@@ -6155,6 +6160,14 @@ mod tests {
 
         assert!(pca(&[], k, 1).is_err());
         assert!(pca(&x, 0, 1).is_err());
+        assert!(matches!(
+            pca(&[vec![1.0, f64::NAN], vec![2.0, 3.0]], 1, 1),
+            Err(ClusterError::InvalidArgument(_))
+        ));
+        assert!(matches!(
+            pca(&[vec![1.0, f64::INFINITY], vec![2.0, 3.0]], 1, 1),
+            Err(ClusterError::InvalidArgument(_))
+        ));
     }
 
     #[test]
