@@ -793,6 +793,26 @@ mod tests {
     }
 
     #[test]
+    fn ifft_matches_exact_numpy_inverse_dft_golden_values() {
+        let input: Vec<Complex64> = vec![
+            (1.0, 2.0),
+            (-3.0, 0.5),
+            (4.0, -1.0),
+            (0.25, 3.0),
+            (-2.5, -4.0),
+        ];
+        let expected: Vec<Complex64> = vec![
+            (-0.05, 0.1),
+            (-1.213_305_801_862_807_1, 0.205_814_593_777_397_3),
+            (0.062_731_198_931_799, 0.317_847_781_361_829_84),
+            (2.642_435_079_130_496_2, 1.861_989_606_263_055),
+            (-0.441_860_476_199_487_8, -0.485_651_981_402_281_7),
+        ];
+        let result = ifft(&input, &FftOptions::default()).expect("ifft should succeed");
+        assert_complex_close(&result, &expected, "numpy ifft");
+    }
+
+    #[test]
     fn rfft_matches_scipy_reference_values() {
         let input: Vec<f64> = vec![1.0, 2.0, 3.0, 4.0];
         let opts = FftOptions::default();
@@ -832,6 +852,24 @@ mod tests {
         let expected: Vec<f64> = vec![1.0, 2.0, 3.0, 4.0];
         for (i, (got, want)) in result.iter().zip(expected.iter()).enumerate() {
             assert!((got - want).abs() < 1e-9, "irfft[{i}] = {got}, want {want}");
+        }
+    }
+
+    #[test]
+    fn irfft_matches_exact_numpy_inverse_dft_golden_values() {
+        let input: Vec<Complex64> = vec![(3.0, 0.75), (-1.5, 2.0), (0.25, -0.5), (2.0, -3.0)];
+        let opts = FftOptions::default();
+        let result = irfft(&input, Some(6), &opts).expect("irfft should succeed");
+        let expected = [
+            0.416_666_666_666_666_63,
+            -0.558_012_701_892_219_3,
+            0.319_978_830_179_634_5,
+            0.75,
+            1.763_354_503_153_698_8,
+            0.308_012_701_892_219_3,
+        ];
+        for (i, (got, want)) in result.iter().zip(expected.iter()).enumerate() {
+            assert!((got - want).abs() < 1e-12, "numpy irfft[{i}] = {got}, want {want}");
         }
     }
 
