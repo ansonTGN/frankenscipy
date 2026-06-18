@@ -8472,6 +8472,25 @@ mod tests {
     }
 
     #[test]
+    fn proximity_cliques_finds_two_groups() {
+        // proximity_cliques (Bron-Kerbosch maximal cliques on the eps-proximity
+        // graph) was untested. Two well-separated pairs within eps -> two maximal
+        // cliques {0,1} and {2,3}.
+        let data = vec![
+            vec![0.0, 0.0],
+            vec![0.1, 0.0],
+            vec![10.0, 10.0],
+            vec![10.1, 10.0],
+        ];
+        let mut cliques = proximity_cliques(&data, 0.5);
+        for c in cliques.iter_mut() {
+            c.sort_unstable();
+        }
+        cliques.sort();
+        assert_eq!(cliques, vec![vec![0, 1], vec![2, 3]]);
+    }
+
+    #[test]
     fn elbow_inertias_recovers_known_inertia() {
         // elbow_inertias was untested. 4 points at square corners: the k=1 inertia
         // is the exact total within-cluster SS = sum||x-centroid||^2 = 4*2 = 8
