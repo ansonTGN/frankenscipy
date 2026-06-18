@@ -2667,6 +2667,7 @@ pub fn minres(
             message: "rhs length must match matrix rows".to_string(),
         });
     }
+    validate_iterative_finite_inputs(a, b, x0, options)?;
 
     let b_norm = vec_norm(b);
     if b_norm <= f64::EPSILON {
@@ -6361,6 +6362,48 @@ mod tests {
         let result = minres(&a, &b, None, IterativeSolveOptions::default()).expect("minres works");
         assert!(result.converged);
         assert_close_slice(&result.solution, &b, 1e-10);
+    }
+
+    #[test]
+    fn minres_zero_rhs_still_rejects_invalid_tolerance() {
+        let a = identity_csr(3);
+        let b = vec![0.0, 0.0, 0.0];
+        let infinite_tol = IterativeSolveOptions {
+            tol: f64::INFINITY,
+            ..IterativeSolveOptions::default()
+        };
+        let err = minres(&a, &b, None, infinite_tol).expect_err("infinite tolerance");
+        assert!(matches!(err, SparseError::InvalidArgument { .. }));
+
+        let negative_tol = IterativeSolveOptions {
+            tol: -1e-6,
+            ..IterativeSolveOptions::default()
+        };
+        let err = minres(&a, &b, None, negative_tol).expect_err("negative tolerance");
+        assert!(matches!(err, SparseError::InvalidArgument { .. }));
+    }
+
+    #[test]
+    fn minres_zero_rhs_still_rejects_non_finite_matrix() {
+        let a = CooMatrix::from_triplets(
+            Shape2D::new(3, 3),
+            vec![f64::NAN, 1.0, 1.0],
+            vec![0, 1, 2],
+            vec![0, 1, 2],
+            false,
+        )
+        .expect("coo")
+        .to_csr()
+        .expect("csr");
+        let b = vec![0.0, 0.0, 0.0];
+        let err = minres(
+            &a,
+            &b,
+            None,
+            hardened_unchecked_iterative_options(),
+        )
+        .expect_err("hardened finite guard");
+        assert!(matches!(err, SparseError::NonFiniteInput { .. }));
     }
 
     #[test]
