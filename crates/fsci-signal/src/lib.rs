@@ -10847,9 +10847,9 @@ pub fn chirp(
     f1: f64,
     method: ChirpMethod,
 ) -> Result<Vec<f64>, SignalError> {
-    if !t1.is_finite() || t1 <= 0.0 {
+    if !t1.is_finite() || t1 == 0.0 {
         return Err(SignalError::InvalidArgument(
-            "t1 must be positive".to_string(),
+            "t1 must be finite and nonzero".to_string(),
         ));
     }
     if !f0.is_finite() || !f1.is_finite() {
@@ -21437,6 +21437,28 @@ mod tests {
     }
 
     #[test]
+    fn chirp_allows_negative_nonzero_t1() {
+        let t = vec![0.0, 1.0];
+        let linear = chirp(&t, 1.0, -1.0, 2.0, ChirpMethod::Linear)
+            .expect("negative t1 linear chirp");
+        let quadratic = chirp(&t, 1.0, -1.0, 2.0, ChirpMethod::Quadratic)
+            .expect("negative t1 quadratic chirp");
+        let logarithmic = chirp(&t, 2.0, -1.0, 8.0, ChirpMethod::Logarithmic)
+            .expect("negative t1 logarithmic chirp");
+
+        let expected = [
+            (&linear, [1.0, -1.0]),
+            (&quadratic, [1.0, -0.49999999999999922]),
+            (&logarithmic, [1.0, 0.8701178641345797]),
+        ];
+        for (got, want) in expected {
+            for (i, (&g, w)) in got.iter().zip(want).enumerate() {
+                assert!((g - w).abs() < 1e-12, "chirp sample {i}: {g} != {w}");
+            }
+        }
+    }
+
+    #[test]
     fn chirp_logarithmic() {
         let t: Vec<f64> = vec![0.0];
         let sig = chirp(&t, 10.0, 1.0, 100.0, ChirpMethod::Logarithmic).unwrap();
@@ -21469,6 +21491,7 @@ mod tests {
     #[test]
     fn chirp_rejects_non_finite_parameters() {
         let t = vec![0.0, 0.5, 1.0];
+        assert!(chirp(&t, 1.0, 0.0, 2.0, ChirpMethod::Linear).is_err());
         assert!(chirp(&t, 1.0, f64::NAN, 2.0, ChirpMethod::Linear).is_err());
         assert!(chirp(&t, 1.0, f64::INFINITY, 2.0, ChirpMethod::Linear).is_err());
         assert!(chirp(&t, f64::NAN, 1.0, 2.0, ChirpMethod::Linear).is_err());
