@@ -2,6 +2,7 @@
 
 use fsci_runtime::RuntimeMode;
 
+use crate::validation::validate_rhs_shape;
 use crate::{IntegrateValidationError, ToleranceValue};
 
 /// Type alias for the right-hand side function used in step size selection.
@@ -41,6 +42,7 @@ where
     F: FnMut(f64, &[f64]) -> Vec<f64> + ?Sized,
 {
     let n = request.y0.len();
+    validate_rhs_shape(request.f0.len(), n)?;
 
     // Empty system: infinite step is fine.
     if n == 0 {
@@ -123,6 +125,7 @@ where
 
     // Evaluate f1 = fun(t0 + h0 * direction, y1)
     let f1 = fun(request.t0 + h0 * request.direction, &y1);
+    validate_rhs_shape(f1.len(), n)?;
 
     // d2 = norm((f1 - f0) / scale) / h0
     let mut diff_scaled_sum_sq = 0.0_f64;
@@ -211,6 +214,56 @@ mod tests {
         };
         let h = select_initial_step(&mut |_t, _y| vec![0.5], &request).unwrap();
         assert_eq!(h, 0.0);
+    }
+
+    #[test]
+    fn select_initial_step_rejects_wrong_size_f0() {
+        let request = InitialStepRequest {
+            t0: 0.0,
+            y0: &[1.0, 2.0],
+            t_bound: 1.0,
+            max_step: f64::INFINITY,
+            f0: &[0.5],
+            direction: 1.0,
+            order: 4.0,
+            rtol: 1e-3,
+            atol: ToleranceValue::Scalar(1e-6),
+            mode: RuntimeMode::Strict,
+        };
+        let err = select_initial_step(&mut |_t, _y| vec![0.5, 0.25], &request)
+            .expect_err("wrong-size f0");
+        assert_eq!(
+            err,
+            IntegrateValidationError::RhsWrongShape {
+                expected: 2,
+                actual: 1
+            }
+        );
+    }
+
+    #[test]
+    fn select_initial_step_rejects_wrong_size_probe_rhs() {
+        let request = InitialStepRequest {
+            t0: 0.0,
+            y0: &[1.0, 2.0],
+            t_bound: 1.0,
+            max_step: f64::INFINITY,
+            f0: &[0.5, 0.25],
+            direction: 1.0,
+            order: 4.0,
+            rtol: 1e-3,
+            atol: ToleranceValue::Scalar(1e-6),
+            mode: RuntimeMode::Strict,
+        };
+        let err =
+            select_initial_step(&mut |_t, _y| vec![0.5], &request).expect_err("wrong-size f1");
+        assert_eq!(
+            err,
+            IntegrateValidationError::RhsWrongShape {
+                expected: 2,
+                actual: 1
+            }
+        );
     }
 
     #[test]
