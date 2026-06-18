@@ -3510,6 +3510,32 @@ mod tests {
     }
 
     #[test]
+    fn quad_simpson_trapezoid_match_scipy() {
+        // Golden values from scipy.integrate (1.17.1).
+        // scipy.integrate.quad(exp(-x^2), 0, 2) = 0.8820813907624215 (= √π/2·erf(2)).
+        let g = quad(|x: f64| (-x * x).exp(), 0.0, 2.0, QuadOptions::default()).expect("quad");
+        assert!(
+            (g.integral - 0.882_081_390_762_421_5).abs() < 1e-9,
+            "quad gauss: {}",
+            g.integral
+        );
+        // scipy.integrate.quad(x^3, 0, 3) = 20.25.
+        let c = quad(|x: f64| x * x * x, 0.0, 3.0, QuadOptions::default()).expect("quad");
+        assert!((c.integral - 20.25).abs() < 1e-9, "quad x^3: {}", c.integral);
+        // scipy.integrate.simpson / trapezoid of y=x^2 samples on [0..4].
+        let x = [0.0, 1.0, 2.0, 3.0, 4.0];
+        let y = [0.0, 1.0, 4.0, 9.0, 16.0];
+        let s = simpson(&y, &x).expect("simpson");
+        assert!(
+            (s.integral - 21.333_333_333_333_332).abs() < 1e-9,
+            "simpson: {}",
+            s.integral
+        );
+        let t = trapezoid(&y, &x).expect("trapezoid");
+        assert!((t.integral - 22.0).abs() < 1e-12, "trapezoid: {}", t.integral);
+    }
+
+    #[test]
     fn quad_constant_function() {
         // ∫₀¹ 5 dx = 5
         let result = quad(|_| 5.0, 0.0, 1.0, QuadOptions::default()).expect("quad works");
