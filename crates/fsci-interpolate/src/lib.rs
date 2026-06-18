@@ -4621,8 +4621,39 @@ impl BPoly {
     }
 
     /// Evaluate at multiple points.
+    ///
+    /// Byte-identical to mapping [`evaluate`](Self::evaluate), but the per-segment
+    /// Bernstein binomial coefficients (which depend only on each piece's degree,
+    /// not on the query point) are computed ONCE up front instead of recomputed —
+    /// `O(k)` per term — on every point.
     pub fn evaluate_many(&self, xs: &[f64]) -> Vec<f64> {
-        xs.iter().map(|&x| self.evaluate(x)).collect()
+        let binoms: Vec<Vec<f64>> = self
+            .c
+            .iter()
+            .map(|coeffs| {
+                let k = coeffs.len() - 1;
+                (0..=k).map(|a| binom(k, a)).collect()
+            })
+            .collect();
+        xs.iter()
+            .map(|&xval| {
+                if xval.is_nan() {
+                    return f64::NAN;
+                }
+                let seg = self.segment(xval);
+                let coeffs = &self.c[seg];
+                let k = coeffs.len() - 1;
+                let d = self.x[seg + 1] - self.x[seg];
+                let s = (xval - self.x[seg]) / d;
+                let s1 = 1.0 - s;
+                let bn = &binoms[seg];
+                let mut value = 0.0;
+                for (a, &ca) in coeffs.iter().enumerate() {
+                    value += ca * bn[a] * s.powi(a as i32) * s1.powi((k - a) as i32);
+                }
+                value
+            })
+            .collect()
     }
 
     /// The first derivative as a degree `k-1` Bernstein polynomial; the
@@ -8214,6 +8245,11 @@ mod tests {
         ];
         for (&p, &w) in pts.iter().zip(want.iter()) {
             assert!((bp.evaluate(p) - w).abs() <= 1e-9, "eval({p}): {} vs {w}", bp.evaluate(p));
+        }
+        // evaluate_many (precomputed binomials) must be byte-identical to per-point.
+        let batch = bp.evaluate_many(&pts);
+        for (&p, b) in pts.iter().zip(batch.iter()) {
+            assert_eq!(*b, bp.evaluate(p), "evaluate_many != evaluate at {p}");
         }
         let d = bp.derivative();
         let dwant = [(0.1, 0.36000000000000004), (0.6, 4.68), (0.9, 1.0799999999999992)];
