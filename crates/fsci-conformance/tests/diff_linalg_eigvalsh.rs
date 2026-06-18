@@ -142,6 +142,25 @@ fn generate_query() -> OracleQuery {
                 vec![0.0, 0.0, 0.0, 1.0, 5.0],
             ],
         ),
+        (
+            "clustered_5",
+            vec![
+                vec![1.0, 1.0e-5, 0.0, 0.0, 0.0],
+                vec![1.0e-5, 1.0001, -2.0e-5, 0.0, 0.0],
+                vec![0.0, -2.0e-5, 1.0002, 3.0e-5, 0.0],
+                vec![0.0, 0.0, 3.0e-5, 1.0003, -1.5e-5],
+                vec![0.0, 0.0, 0.0, -1.5e-5, 1.0004],
+            ],
+        ),
+        (
+            "scale_separated_4",
+            vec![
+                vec![1.0e-3, 2.0e-4, 0.0, 0.0],
+                vec![2.0e-4, 1.0, -0.25, 0.0],
+                vec![0.0, -0.25, 1000.0, 3.0],
+                vec![0.0, 0.0, 3.0, -100.0],
+            ],
+        ),
     ];
     let points = matrices
         .iter()
@@ -187,9 +206,18 @@ for case in q["points"]:
 print(json.dumps({"points": points}))
 "#;
     let query_json = serde_json::to_string(query).expect("serialize eigvalsh query");
+    ensure_output_dir();
+    let script_path = output_dir().join(format!("eigvalsh_oracle_{}.py", timestamp_ms()));
+    if let Err(e) = fs::write(&script_path, script) {
+        assert!(
+            std::env::var(REQUIRE_SCIPY_ENV).is_err(),
+            "failed to write eigvalsh oracle script: {e}"
+        );
+        eprintln!("skipping eigvalsh oracle: script write failed ({e})");
+        return None;
+    }
     let mut child = match Command::new("python3")
-        .arg("-c")
-        .arg(script)
+        .arg(&script_path)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
