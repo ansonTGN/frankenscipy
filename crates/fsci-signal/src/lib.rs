@@ -5540,6 +5540,9 @@ pub fn xcorr_coefficient(x: &[f64], y: &[f64]) -> f64 {
     if x.len() != y.len() || x.is_empty() {
         return 0.0;
     }
+    if x.iter().chain(y.iter()).any(|value| !value.is_finite()) {
+        return f64::NAN;
+    }
     let n = x.len() as f64;
     let mx: f64 = x.iter().sum::<f64>() / n;
     let my: f64 = y.iter().sum::<f64>() / n;
@@ -23512,6 +23515,13 @@ mod tests {
             r[1]
         );
         assert!(r[2] > 0.5, "r[2] = {} should be re-correlated", r[2]);
+    }
+
+    #[test]
+    fn xcorr_coefficient_rejects_non_finite_samples() {
+        assert!(xcorr_coefficient(&[1.0, f64::NAN], &[1.0, 2.0]).is_nan());
+        assert!(xcorr_coefficient(&[1.0, 2.0], &[1.0, f64::INFINITY]).is_nan());
+        assert_eq!(xcorr_coefficient(&[1.0, 1.0], &[2.0, 2.0]), 0.0);
     }
 
     #[test]
