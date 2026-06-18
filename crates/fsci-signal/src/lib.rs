@@ -5694,6 +5694,9 @@ pub fn dominant_frequency(magnitudes: &[f64], freqs: &[f64]) -> f64 {
     if magnitudes.is_empty() || freqs.is_empty() {
         return 0.0;
     }
+    if has_invalid_paired_spectral_bins(magnitudes, freqs) {
+        return f64::NAN;
+    }
     let max_idx = magnitudes
         .iter()
         .enumerate()
@@ -19586,6 +19589,22 @@ mod tests {
 
         assert_eq!(spectral_centroid(&[0.0, 0.0], &[10.0, 20.0]), 0.0);
         assert_eq!(spectral_bandwidth(&[0.0, 0.0], &[10.0, 20.0]), 0.0);
+    }
+
+    #[test]
+    fn dominant_frequency_invalid_bins_return_nan() {
+        for (magnitudes, freqs) in [
+            ([-1.0, 2.0], [10.0, 20.0]),
+            ([f64::NAN, 2.0], [10.0, 20.0]),
+            ([1.0, 2.0], [10.0, f64::INFINITY]),
+        ] {
+            assert!(
+                dominant_frequency(&magnitudes, &freqs).is_nan(),
+                "dominant_frequency should reject malformed bins"
+            );
+        }
+
+        assert_eq!(dominant_frequency(&[], &[10.0, 20.0]), 0.0);
     }
 
     #[test]
