@@ -13365,7 +13365,7 @@ pub fn companion(a: &[f64]) -> Result<Vec<Vec<f64>>, LinalgError> {
             detail: "companion requires at least 2 coefficients".to_string(),
         });
     }
-    if a[0].abs() < f64::EPSILON {
+    if a[0] == 0.0 {
         return Err(LinalgError::InvalidArgument {
             detail: "leading coefficient must be nonzero".to_string(),
         });
@@ -24400,6 +24400,24 @@ mod tests {
     #[test]
     fn companion_too_few_coeffs() {
         assert!(companion(&[1.0]).is_err());
+    }
+
+    #[test]
+    fn companion_accepts_scipy_nonzero_leading_edges() {
+        let tiny = companion(&[1.0e-16, 1.0]).expect("tiny nonzero leading coefficient");
+        assert_eq!(tiny, vec![vec![-1.0e16]]);
+
+        let subnormal = companion(&[1.0e-320, 1.0]).expect("subnormal leading coefficient");
+        assert!(subnormal[0][0].is_infinite() && subnormal[0][0].is_sign_negative());
+
+        let nan_leading = companion(&[f64::NAN, 1.0]).expect("nan leading coefficient");
+        assert!(nan_leading[0][0].is_nan());
+
+        let inf_leading = companion(&[f64::INFINITY, 1.0]).expect("infinite leading coefficient");
+        assert_eq!(inf_leading[0][0], -0.0);
+
+        assert!(companion(&[0.0, 1.0]).is_err());
+        assert!(companion(&[-0.0, 1.0]).is_err());
     }
 
     #[test]
