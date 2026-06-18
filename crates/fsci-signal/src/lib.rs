@@ -3709,6 +3709,9 @@ pub fn zero_crossing_rate(x: &[f64]) -> f64 {
     if x.len() < 2 {
         return 0.0;
     }
+    if x.iter().any(|value| !value.is_finite()) {
+        return f64::NAN;
+    }
     let crossings = x
         .windows(2)
         .filter(|w| (w[0] >= 0.0) != (w[1] >= 0.0))
@@ -19563,6 +19566,13 @@ mod tests {
             chroma_vec.iter().any(|value| value.is_nan()),
             "NaN input should remain visible in at least one chroma bin"
         );
+    }
+
+    #[test]
+    fn zero_crossing_rate_rejects_non_finite_samples() {
+        assert!(zero_crossing_rate(&[-1.0, f64::NAN, 1.0]).is_nan());
+        assert!(zero_crossing_rate(&[-1.0, f64::INFINITY, 1.0]).is_nan());
+        assert_eq!(zero_crossing_rate(&[f64::NAN]), 0.0);
     }
 
     #[test]
