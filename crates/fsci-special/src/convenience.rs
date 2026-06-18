@@ -7331,6 +7331,17 @@ mod tests {
     }
 
     #[test]
+    fn fresnel_real_match_scipy() {
+        // scipy.special.fresnel returns (S, C) Fresnel integrals.
+        let (s, c) = fresnel(1.0);
+        assert!((s - 0.438_259_147_390_354_7).abs() < 1e-13, "S(1)");
+        assert!((c - 0.779_893_400_376_823).abs() < 1e-13, "C(1)");
+        let (s2, c2) = fresnel(0.5);
+        assert!((s2 - 0.064_732_432_859_999_29).abs() < 1e-13, "S(0.5)");
+        assert!((c2 - 0.492_344_225_871_446_4).abs() < 1e-13, "C(0.5)");
+    }
+
+    #[test]
     fn spence_scalar_match_scipy() {
         // scipy.special.spence (Spence's dilogarithm): spence(0)=pi^2/6, spence(1)=0,
         // spence(2)=-pi^2/12.
