@@ -72646,6 +72646,23 @@ mod tests {
     }
 
     #[test]
+    fn exp_regression_and_biweight_match_analytic() {
+        // exponential_regression/biweight_midcorrelation were previously untested.
+        // exponential_regression recovers (a,b) from y=a*exp(b*x) exactly.
+        let x = [0.0, 1.0, 2.0, 3.0];
+        let y: Vec<f64> = x.iter().map(|&xi| 2.0 * (0.5 * xi).exp()).collect();
+        let (a, b) = exponential_regression(&x, &y);
+        assert!((a - 2.0).abs() < 1e-10 && (b - 0.5).abs() < 1e-10, "exp regression a={a} b={b}");
+        // biweight midcorrelation of perfectly correlated data = 1.
+        let bic = biweight_midcorrelation(
+            &[1.0, 2.0, 3.0, 4.0, 5.0],
+            &[2.0, 4.0, 6.0, 8.0, 10.0],
+            9.0,
+        );
+        assert!((bic - 1.0).abs() < 1e-10, "biweight perfect corr = {bic}");
+    }
+
+    #[test]
     fn weighted_corr_and_cronbach_match_analytic() {
         // corrcoef_weighted/cronbachs_alpha were previously untested.
         // corrcoef_weighted with uniform weights = Pearson: y=2x -> +1, y=-x -> -1.
