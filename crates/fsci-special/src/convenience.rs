@@ -7331,6 +7331,18 @@ mod tests {
     }
 
     #[test]
+    fn stdtr_stdtrit_match_scipy() {
+        // scipy.special.stdtr (Student's t CDF) and stdtrit (its inverse).
+        use crate::beta::{stdtr, stdtrit};
+        assert!((stdtr(5.0, 1.0) - 0.818_391_266_175_438_6).abs() < 1e-13, "stdtr(5,1)");
+        assert!((stdtr(10.0, 2.0) - 0.963_305_982_614_629_9).abs() < 1e-13, "stdtr(10,2)");
+        assert!(
+            (stdtrit(5.0, 0.95) - 2.015_048_373_333_023_3).abs() < 1e-11,
+            "stdtrit(5,0.95)"
+        );
+    }
+
+    #[test]
     fn factorial_match_scipy() {
         // scipy.special.factorial / factorial2 (double factorial).
         use crate::gamma::{factorial, factorial2};
