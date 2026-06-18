@@ -4027,6 +4027,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn orthopoly_eval_match_scipy() {
+        // scipy.special.eval_legendre/eval_chebyt/eval_hermite at sample points.
+        assert!((eval_legendre(3, 0.5) - -0.4375).abs() < 1e-13, "P3(0.5)");
+        assert!((eval_chebyt(4, 0.3) - 0.3448).abs() < 1e-13, "T4(0.3)");
+        assert!((eval_hermite(3, 0.5) - -5.0).abs() < 1e-12, "H3(0.5)");
+    }
+
+    #[test]
     fn ellip_harm_matches_scipy() {
         // frankenscipy: golden from scipy.special.ellip_harm (h2=5, k2=8, 1.17.1).
         let c = |got: f64, want: f64, msg: &str| {
