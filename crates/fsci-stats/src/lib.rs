@@ -71305,6 +71305,37 @@ mod tests {
     }
 
     #[test]
+    fn ttest_ind_and_ks_2samp_match_exact_scipy_golden_values() {
+        let a = vec![2.0, 3.5, 4.25, 5.0, 7.75];
+        let b = vec![1.25, 2.0, 2.5, 3.25, 4.0, 4.75];
+        let t = ttest_ind(&a, &b);
+        assert!(
+            (t.statistic - 1.4822679580667575).abs() < 1e-12,
+            "ttest_ind statistic got {}, expected 1.4822679580667575",
+            t.statistic
+        );
+        assert!(
+            (t.pvalue - 0.17241355953958107).abs() < 1e-12,
+            "ttest_ind pvalue got {}, expected 0.17241355953958107",
+            t.pvalue
+        );
+
+        let x = vec![0.1, 0.4, 0.9, 1.7, 2.2];
+        let y = vec![0.2, 0.3, 0.8, 1.0, 1.1, 2.4];
+        let ks = ks_2samp(&x, &y);
+        assert!(
+            (ks.statistic - 0.23333333333333334).abs() < 1e-12,
+            "ks_2samp statistic got {}, expected 0.23333333333333334",
+            ks.statistic
+        );
+        assert!(
+            (ks.pvalue - 0.9913419913419914).abs() < 1e-12,
+            "ks_2samp pvalue got {}, expected 0.9913419913419914",
+            ks.pvalue
+        );
+    }
+
+    #[test]
     fn sem_matches_scipy_reference_values() {
         // scipy.stats.sem([1,2,3,4,5]) = std(ddof=1) / sqrt(n) = sqrt(2.5) / sqrt(5)
         // std(ddof=1) = sqrt(10/4) = sqrt(2.5) ≈ 1.5811
@@ -71452,6 +71483,19 @@ mod tests {
         assert!((b.pdf(0.4) - 1.727_999_999_999_999_8).abs() < 1e-12, "beta pdf");
         assert!((b.cdf(0.4) - 0.524_799_999_999_999_9).abs() < 1e-12, "beta cdf");
         assert!((b.ppf(0.5) - 0.385_727_568_132_389_5).abs() < 1e-8, "beta ppf");
+    }
+
+    #[test]
+    fn mode_moment_match_scipy() {
+        // scipy.stats.mode returns the SMALLEST value on ties (1.17 convention).
+        assert_eq!(mode(&[1.0, 2.0, 2.0, 3.0, 3.0]), 2.0);
+        assert_eq!(mode(&[3.0, 1.0, 1.0, 2.0]), 1.0);
+        assert_eq!(mode(&[5.0, 5.0, 1.0, 1.0, 1.0]), 1.0);
+        // scipy.stats.moment(a, moment=k): population central moments (÷n).
+        let a = [1.0, 2.0, 2.0, 3.0, 5.0, 8.0];
+        assert!((moment(&a, 2) - 5.583_333_333_333_333).abs() < 1e-12, "moment2");
+        assert!((moment(&a, 3) - 12.0).abs() < 1e-12, "moment3");
+        assert!((moment(&a, 4) - 77.395_833_333_333_33).abs() < 1e-10, "moment4");
     }
 
     #[test]
