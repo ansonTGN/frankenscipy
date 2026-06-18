@@ -18405,6 +18405,22 @@ mod tests {
     }
 
     #[test]
+    fn correlate_modes_match_scipy() {
+        // scipy.signal.correlate([1,2,3],[0,1,0.5]) full/same/valid.
+        let a = [1.0, 2.0, 3.0];
+        let v = [0.0, 1.0, 0.5];
+        assert_eq!(
+            correlate(&a, &v, ConvolveMode::Full).unwrap(),
+            vec![0.5, 2.0, 3.5, 3.0, 0.0]
+        );
+        assert_eq!(
+            correlate(&a, &v, ConvolveMode::Same).unwrap(),
+            vec![2.0, 3.5, 3.0]
+        );
+        assert_eq!(correlate(&a, &v, ConvolveMode::Valid).unwrap(), vec![3.5]);
+    }
+
+    #[test]
     fn convolve_modes_match_scipy() {
         // scipy.signal.convolve full/same/valid for a=[1,2,3], b=[0,1,0.5].
         let a = [1.0, 2.0, 3.0];
