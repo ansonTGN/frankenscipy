@@ -4109,14 +4109,13 @@ pub fn clarkson_woodruff_transform(
 /// The `k` dominant (largest-magnitude) eigenpairs of a symmetric matrix `a` (n×n), via
 /// randomized range finding.
 ///
-/// Computes a truncated SVD with [`randomized_svd`] — for symmetric A the left singular
-/// vectors span the dominant invariant subspace and the singular values are |λ| — then
-/// recovers each signed eigenvalue from the Rayleigh quotient `λ = uᵀ·A·u` (exact for a true
-/// eigenvector). Cost O(n²·k + n²·n_iter) versus O(n³) for a full symmetric
-/// eigendecomposition — a large win when k ≪ n (PCA, spectral embeddings). Approximate (the
-/// dominant subspace is captured to the random-sketch error, machine-precision when the
-/// sketch dimension exceeds the numerical rank). Returns an [`EighResult`] with the k
-/// eigenvalues in ASCENDING order and matching eigenvector columns.
+/// Builds a randomized invariant subspace, projects to the small symmetric matrix
+/// `QᵀAQ`, solves that reduced eigenproblem exactly, and lifts the leading Ritz vectors.
+/// Cost O(n²·k + n²·n_iter) versus O(n³) for a full symmetric eigendecomposition — a large
+/// win when k ≪ n (PCA, spectral embeddings). Approximate (the dominant subspace is captured
+/// to the random-sketch error, machine-precision when the sketch dimension exceeds the
+/// numerical rank). Returns an [`EighResult`] with the k eigenvalues in ASCENDING order and
+/// matching eigenvector columns.
 pub fn randomized_eigh(
     a: &[Vec<f64>],
     k: usize,
@@ -4128,22 +4127,71 @@ pub fn randomized_eigh(
     if n != cols {
         return Err(LinalgError::ExpectedSquareMatrix);
     }
-    let svd = randomized_svd(a, k, n_oversamples, n_iter, seed)?;
-    let kk = svd.s.len();
-
-    // Rayleigh quotient λ_i = u_iᵀ (A u_i) gives the signed eigenvalue for each captured
-    // singular vector u_i (column i of svd.u, row-major storage).
-    let mut pairs: Vec<(f64, Vec<f64>)> = Vec::with_capacity(kk);
-    for i in 0..kk {
-        let u_i: Vec<f64> = svd.u.iter().map(|row| row[i]).collect();
-        let au: Vec<f64> = a
-            .iter()
-            .map(|row| row.iter().zip(&u_i).map(|(&p, &q)| p * q).sum())
-            .collect();
-        let lambda: f64 = u_i.iter().zip(&au).map(|(&p, &q)| p * q).sum();
-        pairs.push((lambda, u_i));
+    let kk = k.min(n);
+    if kk == 0 {
+        return Ok(EighResult {
+            eigenvalues: Vec::new(),
+            eigenvectors: vec![Vec::new(); n],
+        });
     }
-    // Ascending eigenvalue order to honour the EighResult contract.
+    let l = (kk + n_oversamples).min(n);
+    let opts = DecompOptions::default();
+
+    // Use the same deterministic normal sketch as randomized_svd. For symmetric A,
+    // Y = A(A²)^qΩ captures the dominant invariant subspace by eigenvalue magnitude
+    // without paying the general rectangular SVD projection path.
+    let mut state = seed ^ 0x9e37_79b9_7f4a_7c15;
+    let mut draw_u01 = || -> f64 {
+        state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^= z >> 31;
+        ((z >> 11) as f64 + 1.0) / ((1u64 << 53) as f64 + 2.0)
+    };
+    let mut next_gauss = move || -> f64 {
+        let u1 = draw_u01();
+        let u2 = draw_u01();
+        (-2.0 * u1.ln()).sqrt() * (std::f64::consts::TAU * u2).cos()
+    };
+    let omega: Vec<Vec<f64>> = (0..n)
+        .map(|_| (0..l).map(|_| next_gauss()).collect())
+        .collect();
+
+    let mut y = matmul(a, &omega)?;
+    for _ in 0..n_iter {
+        let ay = matmul(a, &y)?;
+        y = matmul(a, &ay)?;
+    }
+    let q_full = qr(&y, opts)?.q;
+    let q: Vec<Vec<f64>> = q_full
+        .iter()
+        .map(|row| row[..l.min(row.len())].to_vec())
+        .collect();
+
+    let aq = matmul(a, &q)?;
+    let qt = transpose_rows(&q);
+    let mut t = matmul(&qt, &aq)?;
+    for i in 0..l {
+        for j in 0..i {
+            let sym = 0.5 * (t[i][j] + t[j][i]);
+            t[i][j] = sym;
+            t[j][i] = sym;
+        }
+    }
+
+    let reduced = eigh(&t, opts)?;
+    let mut pairs: Vec<(f64, Vec<f64>)> = Vec::with_capacity(reduced.eigenvalues.len());
+    for (j, &lambda) in reduced.eigenvalues.iter().enumerate() {
+        let z_j: Vec<f64> = (0..l).map(|row| reduced.eigenvectors[row][j]).collect();
+        let lifted: Vec<f64> = q
+            .iter()
+            .map(|q_row| q_row.iter().zip(&z_j).map(|(&p, &qv)| p * qv).sum())
+            .collect();
+        pairs.push((lambda, lifted));
+    }
+    pairs.sort_by(|x, y| y.0.abs().total_cmp(&x.0.abs()));
+    pairs.truncate(kk);
     pairs.sort_by(|x, y| x.0.total_cmp(&y.0));
 
     let eigenvalues: Vec<f64> = pairs.iter().map(|(l, _)| *l).collect();
