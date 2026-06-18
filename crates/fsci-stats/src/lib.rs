@@ -50387,6 +50387,16 @@ mod tests {
     }
 
     #[test]
+    fn mielke_pdf_cdf_interior_match_scipy() {
+        // Exact scipy.stats.mielke(k=3, s=2). mielke_pdf_boundary_matches_scipy only
+        // checks the boundary; this pins the pdf/cdf at interior points.
+        let m = Mielke::new(3.0, 2.0);
+        assert!((m.pdf(1.0) - 0.530_330_085_889_910_6).abs() < 1e-12, "pdf(1)");
+        assert!((m.pdf(2.0) - 0.214_662_525_839_979_8).abs() < 1e-12, "pdf(2)");
+        assert!((m.cdf(1.0) - 0.353_553_390_593_273_73).abs() < 1e-12, "cdf(1)");
+    }
+
+    #[test]
     fn mielke_pdf_boundary_matches_scipy() {
         // /mock-code-finder regression for [frankenscipy-zu96v]:
         // mielke.pdf at x=0 is 0/1/+∞ depending on shape k per scipy.
