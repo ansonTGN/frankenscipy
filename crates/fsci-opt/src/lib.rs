@@ -2603,6 +2603,21 @@ where
             detail: "x0 must be non-empty".to_string(),
         });
     }
+    if x0.iter().any(|v| !v.is_finite()) {
+        return Err(OptError::NonFiniteInput {
+            detail: "x0 must be finite".to_string(),
+        });
+    }
+    if maxiter == 0 {
+        return Err(OptError::InvalidArgument {
+            detail: "maxiter must be greater than zero".to_string(),
+        });
+    }
+    if !rhobeg.is_finite() || rhobeg <= 0.0 {
+        return Err(OptError::InvalidArgument {
+            detail: "rhobeg must be a positive finite value".to_string(),
+        });
+    }
 
     let mut x = x0.to_vec();
     let mut f_best = func(&x);
@@ -5296,6 +5311,11 @@ mod tests {
         let xopt = fmin_cobyla(f, &[3.0, 2.0], &cons, 1.0, 2000).expect("fmin_cobyla");
         assert!((xopt[0] - 1.0).abs() < 1e-3, "x0 = {}", xopt[0]);
         assert!(xopt[1].abs() < 1e-3, "x1 = {}", xopt[1]);
+        assert!(cobyla(f, &[], &cons, 10, 1.0).is_err());
+        assert!(cobyla(f, &[f64::NAN, 2.0], &cons, 10, 1.0).is_err());
+        assert!(cobyla(f, &[3.0, 2.0], &cons, 0, 1.0).is_err());
+        assert!(cobyla(f, &[3.0, 2.0], &cons, 10, 0.0).is_err());
+        assert!(fmin_cobyla(f, &[3.0, 2.0], &cons, f64::INFINITY, 10).is_err());
     }
 
     #[test]
