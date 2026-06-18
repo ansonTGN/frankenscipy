@@ -105,6 +105,7 @@ where
             "y_guess must be non-empty".to_string(),
         ));
     }
+    validate_bvp_options(&options)?;
 
     let mut y0 = y_guess.to_vec();
 
@@ -183,6 +184,15 @@ where
             residual: residual_norm,
         })
     }
+}
+
+fn validate_bvp_options(options: &BvpOptions) -> Result<(), BvpError> {
+    if !options.tol.is_finite() || options.tol < 0.0 {
+        return Err(BvpError::InvalidArgument(
+            "tol must be finite and non-negative".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn validate_boundary_residual_len(residual: &[f64], expected: usize) -> Result<(), BvpError> {
@@ -361,6 +371,21 @@ mod tests {
         let err = solve_bvp(&mut f, &bc, (0.0, 1.0), &[], BvpOptions::default())
             .expect_err("empty guess");
         assert!(matches!(err, BvpError::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn bvp_rejects_invalid_boundary_tolerance() {
+        for tol in [f64::NAN, f64::INFINITY, -1e-6] {
+            let mut f = |_t: f64, _y: &[f64]| vec![0.0];
+            let bc = |_ya: &[f64], _yb: &[f64]| vec![1.0];
+            let options = BvpOptions {
+                tol,
+                ..BvpOptions::default()
+            };
+            let err = solve_bvp(&mut f, &bc, (0.0, 1.0), &[0.0], options)
+                .expect_err("invalid boundary tolerance");
+            assert!(matches!(err, BvpError::InvalidArgument(msg) if msg.contains("tol")));
+        }
     }
 
     #[test]
