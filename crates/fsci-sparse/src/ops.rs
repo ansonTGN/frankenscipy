@@ -395,6 +395,15 @@ pub fn spmv_coo(matrix: &CooMatrix, vector: &[f64]) -> SparseResult<Vec<f64>> {
     Ok(result)
 }
 
+fn validate_scale_factor(alpha: f64) -> SparseResult<()> {
+    if !alpha.is_finite() {
+        return Err(SparseError::InvalidArgument {
+            message: "scale factor must be finite".to_string(),
+        });
+    }
+    Ok(())
+}
+
 pub fn add_csr(lhs: &CsrMatrix, rhs: &CsrMatrix) -> SparseResult<CsrMatrix> {
     ensure_same_shape(lhs.shape(), rhs.shape())?;
     match csr_row_combine_mode(lhs, rhs) {
@@ -418,6 +427,7 @@ pub fn sub_csr(lhs: &CsrMatrix, rhs: &CsrMatrix) -> SparseResult<CsrMatrix> {
 }
 
 pub fn scale_csr(matrix: &CsrMatrix, alpha: f64) -> SparseResult<CsrMatrix> {
+    validate_scale_factor(alpha)?;
     let data: Vec<f64> = matrix.data().iter().map(|v| v * alpha).collect();
     let mut scaled = CsrMatrix::from_components_unchecked(
         matrix.shape(),
@@ -440,6 +450,7 @@ pub fn sub_csc(lhs: &CscMatrix, rhs: &CscMatrix) -> SparseResult<CscMatrix> {
 }
 
 pub fn scale_csc(matrix: &CscMatrix, alpha: f64) -> SparseResult<CscMatrix> {
+    validate_scale_factor(alpha)?;
     let data: Vec<f64> = matrix.data().iter().map(|v| v * alpha).collect();
     let mut scaled = CscMatrix::from_components(
         matrix.shape(),
@@ -463,6 +474,7 @@ pub fn sub_coo(lhs: &CooMatrix, rhs: &CooMatrix) -> SparseResult<CooMatrix> {
 }
 
 pub fn scale_coo(matrix: &CooMatrix, alpha: f64) -> SparseResult<CooMatrix> {
+    validate_scale_factor(alpha)?;
     let data: Vec<f64> = matrix.data().iter().map(|v| v * alpha).collect();
     CooMatrix::from_triplets(
         matrix.shape(),
@@ -1234,6 +1246,35 @@ mod tests {
             via_method.nnz(),
             "trait-object path must match the inherent method (no materialized zeros)"
         );
+    }
+
+    #[test]
+    fn scale_helpers_reject_non_finite_factors() {
+        let coo = CooMatrix::from_triplets(
+            Shape2D::new(2, 3),
+            vec![1.0, -2.5, 4.0],
+            vec![0, 1, 1],
+            vec![2, 0, 2],
+            false,
+        )
+        .expect("coo");
+        let csr = coo.to_csr().expect("csr");
+        let csc = coo.to_csc().expect("csc");
+
+        for alpha in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert!(matches!(
+                scale_csr(&csr, alpha),
+                Err(SparseError::InvalidArgument { .. })
+            ));
+            assert!(matches!(
+                scale_csc(&csc, alpha),
+                Err(SparseError::InvalidArgument { .. })
+            ));
+            assert!(matches!(
+                scale_coo(&coo, alpha),
+                Err(SparseError::InvalidArgument { .. })
+            ));
+        }
     }
 
     #[test]
