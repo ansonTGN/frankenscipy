@@ -853,6 +853,11 @@ where
             detail: String::from("newton: x0 must be finite"),
         });
     }
+    if fprime.is_none() && fprime2.is_some() {
+        return Err(OptError::InvalidArgument {
+            detail: String::from("fprime2 requires fprime"),
+        });
+    }
     let close = |p: f64, prev: f64| (p - prev).abs() <= tol + rtol * prev.abs();
     let mut funcalls = 0usize;
 
@@ -2628,6 +2633,16 @@ mod tests {
                 .expect_err("invalid scalar Newton tolerance should fail");
             assert!(matches!(err, crate::OptError::InvalidArgument { .. }));
         }
+    }
+
+    #[test]
+    fn newton_rejects_second_derivative_without_first_derivative() {
+        let f = |x: f64| x * x - 2.0;
+        let fp2 = |_x: f64| 2.0;
+
+        let err = newton(f, 1.0, None, Some(&fp2), None, 1.0e-8, 0.0, 20)
+            .expect_err("fprime2 without fprime should fail");
+        assert!(matches!(err, crate::OptError::InvalidArgument { .. }));
     }
 
     #[test]
