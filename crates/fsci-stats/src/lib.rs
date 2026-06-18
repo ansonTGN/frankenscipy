@@ -69722,6 +69722,19 @@ mod tests {
     }
 
     #[test]
+    fn trapezoid_pdf_cdf_match_scipy() {
+        // Exact scipy.stats.trapezoid(0.3,0.7,loc=1,scale=4). The other Trapezoid
+        // tests check pdf-integral~1 (tol 1e-3) and cdf/ppf roundtrip but not exact
+        // values; this pins pdf/cdf on the rising, flat, and falling segments.
+        let d = Trapezoid::new(0.3, 0.7, 1.0, 4.0);
+        assert!((d.pdf(2.0) - 0.297_619_047_619_047_6).abs() < 1e-12, "pdf(2) rising");
+        assert!((d.pdf(3.0) - 0.357_142_857_142_857_15).abs() < 1e-12, "pdf(3) flat");
+        assert!((d.cdf(2.0) - 0.148_809_523_809_523_84).abs() < 1e-12, "cdf(2)");
+        assert!((d.cdf(3.0) - 0.5).abs() < 1e-12, "cdf(3) center");
+        assert!((d.cdf(4.0) - 0.851_190_476_190_476_3).abs() < 1e-12, "cdf(4)");
+    }
+
+    #[test]
     fn trapezoid_metamorphic_endpoint_invariants_and_pdf_integrates() {
         // /testing-metamorphic + /testing-conformance-harnesses for the
         // previously-untested Trapezoid distribution.
