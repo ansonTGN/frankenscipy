@@ -3635,6 +3635,16 @@ mod tests {
     }
 
     #[test]
+    fn trapezoid_richardson_exact_for_cubic() {
+        // Richardson extrapolation of trapezoid (T=(4*T1-T2)/3) cancels the O(h^2)
+        // error -> exact for cubics. y=x^3 at [0,1,2,3,4]; integral_0^4 x^3 = 64.
+        // trapezoid_richardson was untested.
+        let x = [0.0, 1.0, 2.0, 3.0, 4.0];
+        let y = [0.0, 1.0, 8.0, 27.0, 64.0];
+        assert!((trapezoid_richardson(&y, &x) - 64.0).abs() < 1e-10, "richardson cubic");
+    }
+
+    #[test]
     fn quad_full_inf_gaussian_matches_analytic() {
         // integral_{-inf}^{inf} exp(-x^2) dx = sqrt(pi). quad_full_inf was untested.
         let r = quad_full_inf(|x: f64| (-x * x).exp(), QuadOptions::default()).unwrap();
