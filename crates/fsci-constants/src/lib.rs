@@ -765,6 +765,20 @@ pub fn lb_to_kg(lb: f64) -> f64 {
 mod tests {
     use super::*;
 
+    #[test]
+    fn lambda2nu_nu2lambda_convert_temp_match_scipy() {
+        // scipy.constants helpers.
+        assert!((lambda2nu(1e-6) - 299_792_458_000_000.0).abs() < 1.0, "lambda2nu(1e-6)");
+        assert!(
+            (nu2lambda(3e14) - 9.993_081_933_333_334e-7).abs() < 1e-19,
+            "nu2lambda(3e14)"
+        );
+        assert!(
+            (convert_temperature(100.0, "Celsius", "Kelvin").unwrap() - 373.15).abs() < 1e-10,
+            "convert C->K"
+        );
+    }
+
     fn assert_close(actual: f64, expected: f64, tolerance: f64, relation: &str) {
         let delta = (actual - expected).abs();
         assert!(
