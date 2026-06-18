@@ -1720,9 +1720,14 @@ pub fn lombscargle(
             "x and y must have the same length".to_string(),
         ));
     }
-    if x.len() < 2 {
+    if x.is_empty() {
         return Err(SignalError::InvalidArgument(
-            "need at least 2 data points".to_string(),
+            "need at least 1 data point".to_string(),
+        ));
+    }
+    if freqs.is_empty() {
+        return Err(SignalError::InvalidArgument(
+            "freqs must not be empty".to_string(),
         ));
     }
 
@@ -24221,6 +24226,28 @@ mod tests {
     fn lombscargle_rejects_mismatched() {
         let err = lombscargle(&[1.0, 2.0], &[1.0], &[1.0], false).expect_err("mismatch");
         assert!(err.is_argument_error());
+    }
+
+    #[test]
+    fn lombscargle_rejects_empty_frequency_grid() {
+        let err = lombscargle(&[0.0, 1.0], &[1.0, 2.0], &[], false).expect_err("empty freqs");
+        assert!(err.is_argument_error());
+    }
+
+    #[test]
+    fn lombscargle_singleton_matches_scipy_reference() {
+        let x = [2.0];
+        let y = [3.0];
+        let freqs = [0.0, 1.0, 2.0];
+        let power = lombscargle(&x, &y, &freqs, false).expect("singleton power");
+        let normalized = lombscargle(&x, &y, &freqs, true).expect("singleton normalized");
+
+        for value in power {
+            assert!((value - 4.5).abs() < 1e-12, "power={value}");
+        }
+        for value in normalized {
+            assert!((value - 1.0).abs() < 1e-12, "normalized={value}");
+        }
     }
 
     #[test]
