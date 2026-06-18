@@ -8434,6 +8434,24 @@ pub fn freqz(b: &[f64], a: &[f64], n_freqs: Option<usize>) -> Result<FreqzResult
     freqz_with_whole(b, a, n_freqs, false)
 }
 
+fn validate_ba_coefficients_finite(
+    b: &[f64],
+    a: &[f64],
+    context: &str,
+) -> Result<(), SignalError> {
+    if b.iter().any(|value| !value.is_finite()) {
+        return Err(SignalError::NonFiniteInput {
+            detail: format!("{context} numerator coefficients must be finite"),
+        });
+    }
+    if a.iter().any(|value| !value.is_finite()) {
+        return Err(SignalError::NonFiniteInput {
+            detail: format!("{context} denominator coefficients must be finite"),
+        });
+    }
+    Ok(())
+}
+
 /// Compute the frequency response of a digital filter over half or the whole unit circle.
 ///
 /// Matches `scipy.signal.freqz(b, a, worN, whole=...)`.
@@ -8451,6 +8469,7 @@ pub fn freqz_with_whole(
             "b and a must be non-empty".to_string(),
         ));
     }
+    validate_ba_coefficients_finite(b, a, "freqz")?;
 
     let n = n_freqs.unwrap_or(512);
     if n == 0 {
@@ -9016,6 +9035,7 @@ pub fn group_delay(
             "b and a must be non-empty".to_string(),
         ));
     }
+    validate_ba_coefficients_finite(b, a, "group_delay")?;
 
     let n = n_freqs.unwrap_or(512);
     if n == 0 {
@@ -21444,6 +21464,38 @@ mod tests {
     fn phase_delay_rejects_empty_coefficients() {
         assert!(phase_delay(&[], &[1.0], Some(16)).is_err());
         assert!(phase_delay(&[1.0], &[], Some(16)).is_err());
+    }
+
+    #[test]
+    fn freqz_rejects_non_finite_coefficients() {
+        assert_eq!(
+            freqz(&[1.0, f64::NAN], &[1.0], Some(8)),
+            Err(SignalError::NonFiniteInput {
+                detail: "freqz numerator coefficients must be finite".to_string(),
+            })
+        );
+        assert_eq!(
+            freqz(&[1.0], &[1.0, f64::INFINITY], Some(8)),
+            Err(SignalError::NonFiniteInput {
+                detail: "freqz denominator coefficients must be finite".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn group_and_phase_delay_reject_non_finite_coefficients() {
+        assert_eq!(
+            group_delay(&[1.0, f64::NEG_INFINITY], &[1.0], Some(8)),
+            Err(SignalError::NonFiniteInput {
+                detail: "group_delay numerator coefficients must be finite".to_string(),
+            })
+        );
+        assert_eq!(
+            phase_delay(&[1.0], &[1.0, f64::NAN], Some(8)),
+            Err(SignalError::NonFiniteInput {
+                detail: "freqz denominator coefficients must be finite".to_string(),
+            })
+        );
     }
 
     #[test]
