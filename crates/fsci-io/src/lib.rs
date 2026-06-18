@@ -9,6 +9,10 @@
 //! - `netcdf_file` — NetCDF (simplified) read/write
 //! - `readsav` — IDL SAVE scalar and primitive array read support
 
+// `write!` into the output String avoids the temporary String that
+// `push_str(&format!(...))` allocates per cell/entry on the hot write paths.
+use std::fmt::Write as _;
+
 /// Error type for I/O operations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IoError {
@@ -481,7 +485,7 @@ pub fn mmwrite(rows: usize, cols: usize, data: &[f64]) -> Result<String, IoError
     for c in 0..cols {
         for r in 0..rows {
             let v = data[r * cols + c];
-            out.push_str(&format!("{v}\n"));
+            let _ = writeln!(out, "{v}");
         }
     }
 
@@ -510,7 +514,7 @@ pub fn mmwrite_sparse(
         let col = c.checked_add(1).ok_or_else(|| {
             IoError::InvalidFormat("sparse col index overflowed Matrix Market encoding".to_string())
         })?;
-        out.push_str(&format!("{row} {col} {v}\n"));
+        let _ = writeln!(out, "{row} {col} {v}");
     }
 
     Ok(out)
@@ -536,7 +540,7 @@ pub fn mmwrite_complex(rows: usize, cols: usize, data: &[(f64, f64)]) -> Result<
     for c in 0..cols {
         for r in 0..rows {
             let (vr, vi) = data[r * cols + c];
-            out.push_str(&format!("{vr} {vi}\n"));
+            let _ = writeln!(out, "{vr} {vi}");
         }
     }
 
@@ -565,7 +569,7 @@ pub fn mmwrite_sparse_complex(
         let col = c.checked_add(1).ok_or_else(|| {
             IoError::InvalidFormat("sparse col index overflowed Matrix Market encoding".to_string())
         })?;
-        out.push_str(&format!("{row} {col} {vr} {vi}\n"));
+        let _ = writeln!(out, "{row} {col} {vr} {vi}");
     }
 
     Ok(out)
@@ -1398,7 +1402,7 @@ pub fn savemat_text(arrays: &[MatArray]) -> Result<String, IoError> {
                 if c > 0 {
                     out.push(' ');
                 }
-                out.push_str(&format!("{}", arr.data[r * arr.cols + c]));
+                let _ = write!(out, "{}", arr.data[r * arr.cols + c]);
             }
             out.push('\n');
         }
@@ -2349,7 +2353,7 @@ pub fn savetxt(rows: usize, cols: usize, data: &[f64], delimiter: &str) -> Resul
             if c > 0 {
                 out.push_str(delimiter);
             }
-            out.push_str(&format!("{}", data[r * cols + c]));
+            let _ = write!(out, "{}", data[r * cols + c]);
         }
         out.push('\n');
     }
