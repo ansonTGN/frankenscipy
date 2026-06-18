@@ -18315,6 +18315,19 @@ mod tests {
     }
 
     #[test]
+    fn lfilter_fir_iir_match_scipy() {
+        // scipy.signal.lfilter: FIR moving-average and IIR one-pole responses.
+        let fir = lfilter(&[0.5, 0.5], &[1.0], &[1.0, 2.0, 3.0, 4.0], None).expect("fir");
+        for (g, e) in fir.iter().zip(&[0.5, 1.5, 2.5, 3.5]) {
+            assert!((g - e).abs() < 1e-12, "fir: {g} vs {e}");
+        }
+        let iir = lfilter(&[1.0], &[1.0, -0.5], &[1.0, 0.0, 0.0, 0.0], None).expect("iir");
+        for (g, e) in iir.iter().zip(&[1.0, 0.5, 0.25, 0.125]) {
+            assert!((g - e).abs() < 1e-12, "iir: {g} vs {e}");
+        }
+    }
+
+    #[test]
     fn cheby1_lowpass_coeffs_match_scipy() {
         // scipy.signal.cheby1(2, 1.0 dB ripple, 0.3, 'low') exact b/a (1.17.1).
         let c = cheby1(2, 1.0, &[0.3], FilterType::Lowpass).expect("cheby1");
