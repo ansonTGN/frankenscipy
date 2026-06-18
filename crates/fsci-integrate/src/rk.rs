@@ -28,6 +28,16 @@ const RHS_WRONG_SHAPE_RUNTIME_ERROR: &str =
 
 type OdeFn = Box<dyn FnMut(f64, &[f64]) -> Vec<f64>>;
 
+fn validate_hardened_initial_rhs(
+    mode: RuntimeMode,
+    f0: &[f64],
+) -> Result<(), IntegrateValidationError> {
+    if mode == RuntimeMode::Hardened && !f0.iter().all(|value| value.is_finite()) {
+        return Err(IntegrateValidationError::NonFiniteF0);
+    }
+    Ok(())
+}
+
 /// Butcher tableau for an explicit Runge-Kutta method.
 pub struct ButcherTableau {
     /// A coefficients (lower-triangular, row-major, n_stages × n_stages).
@@ -485,6 +495,7 @@ impl RkSolver {
         // Evaluate f0
         let f0 = fun(config.t0, config.y0);
         validate_rhs_shape(f0.len(), n)?;
+        validate_hardened_initial_rhs(config.mode, &f0)?;
         let nfev = 1;
 
         // Determine initial step size
@@ -586,6 +597,7 @@ impl RkSolver {
         // Evaluate f0
         let f0 = fun_box(config.t0, config.y0);
         validate_rhs_shape(f0.len(), n)?;
+        validate_hardened_initial_rhs(config.mode, &f0)?;
         let nfev = 1;
 
         // Determine initial step size
@@ -1207,6 +1219,24 @@ mod tests {
         };
         let solver = RkSolver::new(&mut fun, config).expect("solver creation should succeed");
         assert_eq!(solver.state(), OdeSolverState::Running);
+    }
+
+    #[test]
+    fn solver_with_first_step_hardened_rejects_non_finite_f0() {
+        let mut fun = |_t: f64, _y: &[f64]| -> Vec<f64> { vec![f64::NAN] };
+        let config = RkSolverConfig {
+            t0: 0.0,
+            y0: &[1.0],
+            t_bound: 1.0,
+            rtol: 1e-6,
+            atol: ToleranceValue::Scalar(1e-8),
+            max_step: f64::INFINITY,
+            first_step: Some(0.01),
+            mode: RuntimeMode::Hardened,
+            tableau: &RK45_TABLEAU,
+        };
+        let err = RkSolver::new(&mut fun, config).expect_err("non-finite f0 should fail");
+        assert_eq!(err, IntegrateValidationError::NonFiniteF0);
     }
 
     #[test]
