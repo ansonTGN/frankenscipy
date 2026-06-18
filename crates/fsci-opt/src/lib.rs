@@ -2077,6 +2077,11 @@ where
             detail: "x0 must not contain NaN or Inf".to_string(),
         });
     }
+    if opts.niter == 0 {
+        return Err(OptError::InvalidArgument {
+            detail: "niter must be greater than zero".to_string(),
+        });
+    }
     if !opts.temperature.is_finite() || opts.temperature <= 0.0 {
         return Err(OptError::InvalidArgument {
             detail: format!(
@@ -6502,6 +6507,17 @@ mod tests {
         let func = |x: &[f64]| -> f64 { x[0] * x[0] };
         let opts = BasinhoppingOptions {
             stepsize: 0.0,
+            ..Default::default()
+        };
+        let err = basinhopping(func, &[1.0], opts).unwrap_err();
+        assert!(matches!(err, crate::OptError::InvalidArgument { .. }));
+    }
+
+    #[test]
+    fn basinhopping_rejects_zero_iteration_budget() {
+        let func = |x: &[f64]| -> f64 { x[0] * x[0] };
+        let opts = BasinhoppingOptions {
+            niter: 0,
             ..Default::default()
         };
         let err = basinhopping(func, &[1.0], opts).unwrap_err();
