@@ -61310,6 +61310,16 @@ mod tests {
     }
 
     #[test]
+    fn truncexpon_pdf_cdf_match_scipy() {
+        // Exact scipy.stats.truncexpon(b=2). The TruncExpon suite covers entropy,
+        // ppf, skew/kurt, and fit but no exact pdf/cdf at a point.
+        let t = TruncExpon::new(2.0);
+        assert!((t.pdf(0.5) - 0.701_463_408_826_254_5).abs() < 1e-12, "pdf(0.5)");
+        assert!((t.pdf(1.5) - 0.258_053_966_841_217_45).abs() < 1e-12, "pdf(1.5)");
+        assert!((t.cdf(1.0) - 0.731_058_578_630_004_9).abs() < 1e-12, "cdf(1)");
+    }
+
+    #[test]
     fn truncexpon_ppf_matches_scipy_reference_values() {
         let dist = TruncExpon::new(2.5);
         let qs = [0.001, 0.1, 0.25, 0.5, 0.75, 0.9, 0.999];
