@@ -71583,6 +71583,17 @@ mod tests {
     }
 
     #[test]
+    fn rice_pdf_cdf_sf_match_scipy() {
+        // scipy.stats.rice(0.7). Infinite right support; probed CLEAN in the
+        // sf-override-gap scan (no >1e-9 1-cdf cancellation) — lock the values.
+        let d = Rice::new(0.7);
+        assert!((d.pdf(1.0) - 0.534_694_674_916_093_3).abs() < 1e-12, "pdf(1)");
+        assert!((d.cdf(1.0) - 0.325_609_355_397_459_94).abs() < 1e-12, "cdf(1)");
+        let rel = |g: f64, e: f64| (g - e).abs() / e < 1e-9;
+        assert!(rel(d.sf(5.0), 2.428_999_138_859_300_2e-5), "sf(5): {}", d.sf(5.0));
+    }
+
+    #[test]
     fn kstwobign_sf_tail_match_scipy() {
         // scipy.stats.kstwobign — sf IS the KS-test asymptotic p-value. The
         // default 1-cdf re-cancels the Kolmogorov series and underflowed sf to 0
