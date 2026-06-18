@@ -80,6 +80,20 @@ mod tests {
     const PROPTEST_CASES: u32 = 512;
     const FFT_TOL: f64 = 1e-9;
 
+    fn assert_complex_close(got: &[Complex64], want: &[Complex64], context: &str) {
+        assert_eq!(got.len(), want.len(), "{context} length");
+        for (i, (got, want)) in got.iter().zip(want.iter()).enumerate() {
+            assert!(
+                (got.0 - want.0).abs() < FFT_TOL && (got.1 - want.1).abs() < FFT_TOL,
+                "{context}[{i}] = ({}, {}), want ({}, {})",
+                got.0,
+                got.1,
+                want.0,
+                want.1
+            );
+        }
+    }
+
     #[test]
     fn normalization_default_matches_scipy() {
         assert_eq!(Normalization::default(), Normalization::Backward);
@@ -740,6 +754,26 @@ mod tests {
     }
 
     #[test]
+    fn fft_matches_exact_numpy_dft_golden_values() {
+        let input: Vec<Complex64> = vec![
+            (1.0, 2.0),
+            (-3.0, 0.5),
+            (0.0, -1.0),
+            (4.0, 3.0),
+            (-2.0, 0.0),
+        ];
+        let expected: Vec<Complex64> = vec![
+            (0.0, 4.5),
+            (-5.656765700396843, 3.838672033902625),
+            (10.379271640701377, -1.00291532132572),
+            (2.1830342580476767, 5.429966304450563),
+            (-1.9055401983522113, -2.7657230170274674),
+        ];
+        let result = fft(&input, &FftOptions::default()).expect("fft should succeed");
+        assert_complex_close(&result, &expected, "numpy fft");
+    }
+
+    #[test]
     fn ifft_matches_scipy_reference_values() {
         let input: Vec<Complex64> = vec![(10.0, 0.0), (-2.0, 2.0), (-2.0, 0.0), (-2.0, -2.0)];
         let opts = FftOptions::default();
@@ -775,6 +809,18 @@ mod tests {
                 want.1
             );
         }
+    }
+
+    #[test]
+    fn rfft_matches_exact_numpy_dft_golden_values() {
+        let input: Vec<f64> = vec![0.5, -1.0, 2.5, 0.0, -3.5];
+        let expected: Vec<Complex64> = vec![
+            (-1.5, 0.0),
+            (-2.9131189606246322, -3.8471044214690666),
+            (4.913118960624631, 0.9081781600067007),
+        ];
+        let result = rfft(&input, &FftOptions::default()).expect("rfft should succeed");
+        assert_complex_close(&result, &expected, "numpy rfft");
     }
 
     #[test]
