@@ -7331,6 +7331,18 @@ mod tests {
     }
 
     #[test]
+    fn erfcx_scalar_match_scipy() {
+        // scipy.special.erfcx = exp(x^2)*erfc(x) (scaled to avoid erfc underflow).
+        assert!((erfcx_scalar(0.0) - 1.0).abs() < 1e-14, "erfcx(0)");
+        assert!((erfcx_scalar(1.0) - 0.427_583_576_155_807).abs() < 1e-13, "erfcx(1)");
+        assert!(
+            (erfcx_scalar(10.0) - 0.056_140_992_743_822_59).abs() < 1e-15,
+            "erfcx(10)"
+        );
+        assert!((erfcx_scalar(-1.0) - 5.008_980_080_762_283).abs() < 1e-12, "erfcx(-1)");
+    }
+
+    #[test]
     fn log_ndtr_scalar_tail_match_scipy() {
         // scipy.special.log_ndtr = log(Phi(x)), stable in BOTH tails. The left tail
         // is the key: Phi(-50)=0 underflows but log_ndtr stays finite (-1254.83).
