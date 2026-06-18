@@ -17208,6 +17208,59 @@ mod tests {
     }
 
     #[test]
+    fn basic_windows_match_scipy_symmetric() {
+        // Golden values from scipy.signal.windows (1.17.1), default sym=True,
+        // length 7. Covers the basic hann/hamming/blackman/bartlett/kaiser.
+        let check = |got: &[f64], want: &[f64], name: &str| {
+            assert_eq!(got.len(), want.len(), "{name} length");
+            for (i, (&g, &w)) in got.iter().zip(want.iter()).enumerate() {
+                assert!((g - w).abs() < 1e-9, "{name}[{i}]: {g} != {w}");
+            }
+        };
+        check(
+            &hann(7),
+            &[0.0, 0.25, 0.75, 1.0, 0.75, 0.25, 0.0],
+            "hann",
+        );
+        check(
+            &hamming(7),
+            &[0.08, 0.31, 0.77, 1.0, 0.77, 0.31, 0.08],
+            "hamming",
+        );
+        check(
+            &blackman(7),
+            &[0.0, 0.13, 0.63, 1.0, 0.63, 0.13, 0.0],
+            "blackman",
+        );
+        check(
+            &bartlett(7),
+            &[
+                0.0,
+                0.333_333_333_333_333_3,
+                0.666_666_666_666_666_6,
+                1.0,
+                0.666_666_666_666_666_6,
+                0.333_333_333_333_333_3,
+                0.0,
+            ],
+            "bartlett",
+        );
+        check(
+            &kaiser(7, 14.0),
+            &[
+                7.726_866_835_270_368e-6,
+                0.032_885_525_977_867_8,
+                0.462_716_497_800_791_16,
+                1.0,
+                0.462_716_497_800_791_16,
+                0.032_885_525_977_867_8,
+                7.726_866_835_270_368e-6,
+            ],
+            "kaiser(beta=14)",
+        );
+    }
+
+    #[test]
     fn barthann_window_matches_scipy_reference() {
         let w = barthann(8);
         let expected = [
