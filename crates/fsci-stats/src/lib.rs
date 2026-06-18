@@ -70773,6 +70773,18 @@ mod tests {
     }
 
     #[test]
+    fn neg_hypergeometric_pmf_cdf_match_scipy() {
+        // Exact scipy.stats.nhypergeom(20,7,3). test_neg_hypergeometric only
+        // checks sum~1 and cdf(0)==pmf(0); this pins exact pmf/cdf/mean/var.
+        let d = NegHypergeometric::new(20, 7, 3);
+        assert!((d.pmf(2) - 0.232_430_340_557_275_4).abs() < 1e-12, "pmf(2)");
+        assert!((d.pmf(5) - 0.017_879_256_965_944_293).abs() < 1e-12, "pmf(5)");
+        assert!((d.cdf(5) - 0.995_562_435_500_515_9).abs() < 1e-12, "cdf(5)");
+        assert!((d.mean() - 1.5).abs() < 1e-12, "mean");
+        assert!((d.var() - 1.65).abs() < 1e-12, "var");
+    }
+
+    #[test]
     fn test_neg_hypergeometric() {
         let nhg = NegHypergeometric::new(20, 7, 3);
         let mut total = 0.0;
