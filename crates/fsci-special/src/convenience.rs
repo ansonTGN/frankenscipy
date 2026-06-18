@@ -7316,6 +7316,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn xlogy_xlog1py_match_scipy() {
+        // scipy.special.xlogy/xlog1py: x==0 forces 0 (even 0*log(0)=0), else
+        // x*log(y); xlog1py uses log1p for small-y precision.
+        assert_eq!(xlogy_scalar(0.0, 0.0), 0.0);
+        assert_eq!(xlogy_scalar(0.0, 5.0), 0.0);
+        assert!(
+            (xlogy_scalar(2.0, 3.0) - 2.197_224_577_336_219_6).abs() < 1e-15,
+            "xlogy(2,3)"
+        );
+        assert_eq!(xlogy_scalar(3.0, 0.0), f64::NEG_INFINITY);
+        assert_eq!(xlog1py_scalar(0.0, -1.0), 0.0);
+        // log1p precision: x*log1p(1e-10) ~ 2e-10, not the 0 a naive (1+y).ln gives.
+        assert!(
+            (xlog1py_scalar(2.0, 1e-10) - 1.999_999_999_900_000_1e-10).abs() < 1e-25,
+            "xlog1py precision"
+        );
+    }
+
+    #[test]
     fn expit_logit_match_scipy() {
         // scipy.special.expit (stable two-branch form, no overflow) and logit.
         assert_eq!(expit_scalar(0.0), 0.5);
