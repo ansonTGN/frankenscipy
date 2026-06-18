@@ -122,6 +122,43 @@ fn bench_rand_index(c: &mut Criterion) {
     group.finish();
 }
 
+/// Batch density/mass evaluation vs mapping the scalar pdf/pmf (the "original").
+/// Quantifies the constant-special-function-normalizer hoist: pdf_many/pmf_many
+/// compute the expensive lgamma/ln_beta normalizer ONCE instead of per point.
+fn bench_distribution_batch(c: &mut Criterion) {
+    use fsci_stats::{
+        BetaDist, ContinuousDistribution, DiscreteDistribution, GammaDist, Hypergeometric,
+    };
+    let n = 4096usize;
+    let mut group = c.benchmark_group("distribution_batch");
+
+    // GammaDist: 1 lgamma/point hoisted.
+    let g = GammaDist::new(2.7, 1.5);
+    let gx: Vec<f64> = (0..n).map(|i| 0.01 + i as f64 * 0.01).collect();
+    group.bench_function("gamma/pdf_many", |b| b.iter(|| g.pdf_many(&gx)));
+    group.bench_function("gamma/map_pdf", |b| {
+        b.iter(|| gx.iter().map(|&x| g.pdf(x)).collect::<Vec<_>>())
+    });
+
+    // BetaDist: 3 lgamma/point (ln_beta) hoisted.
+    let bt = BetaDist::new(2.5, 3.5);
+    let bx: Vec<f64> = (0..n).map(|i| (i as f64 + 0.5) / n as f64).collect();
+    group.bench_function("beta/pdf_many", |b| b.iter(|| bt.pdf_many(&bx)));
+    group.bench_function("beta/map_pdf", |b| {
+        b.iter(|| bx.iter().map(|&x| bt.pdf(x)).collect::<Vec<_>>())
+    });
+
+    // Hypergeometric: 5 lgamma/point hoisted (Fisher's-exact-test full support).
+    let h = Hypergeometric::new(2000, 700, 1200);
+    let ks: Vec<u64> = (0..=700).collect();
+    group.bench_function("hypergeom/pmf_many", |b| b.iter(|| h.pmf_many(&ks)));
+    group.bench_function("hypergeom/map_pmf", |b| {
+        b.iter(|| ks.iter().map(|&k| h.pmf(k)).collect::<Vec<_>>())
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_qmc_discrepancy,
@@ -130,6 +167,7 @@ criterion_group!(
     bench_time_series,
     bench_rank_correlation,
     bench_somersd,
-    bench_rand_index
+    bench_rand_index,
+    bench_distribution_batch
 );
 criterion_main!(benches);
