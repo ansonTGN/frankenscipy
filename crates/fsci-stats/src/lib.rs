@@ -52260,6 +52260,17 @@ mod tests {
     }
 
     #[test]
+    fn gilbrat_pdf_cdf_match_scipy() {
+        // Exact scipy.stats.gilbrat (standard lognormal). Gilbrat is a SEPARATE
+        // struct from Gibrat and had only entropy/skew-kurt/relationship/fit tests,
+        // never an exact pdf/cdf.
+        let d = Gilbrat;
+        assert!((d.pdf(1.0) - 0.398_942_280_401_432_7).abs() < 1e-12, "pdf(1)");
+        assert!((d.pdf(2.0) - 0.156_874_019_278_981_12).abs() < 1e-12, "pdf(2)");
+        assert!((d.cdf(2.0) - 0.755_891_404_214_417_3).abs() < 1e-12, "cdf(2)");
+    }
+
+    #[test]
     fn gilbrat_skewness_and_kurtosis_match_scipy_reference_values() {
         // scipy.stats.lognorm(s=1, scale=1).stats(moments='sk'); Gilbrat
         // is the parameterless restriction so values are constants.
