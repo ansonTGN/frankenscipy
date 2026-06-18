@@ -64035,6 +64035,16 @@ mod tests {
     }
 
     #[test]
+    fn gennorm_pdf_cdf_match_scipy() {
+        // Exact scipy.stats.gennorm(beta=1.5). The GenNorm suite covers a left-tail
+        // cdf, entropy, and skew/kurt but no exact pdf/central-cdf at a point.
+        let g = GenNorm::new(1.5);
+        assert!((g.pdf(0.0) - 0.553_866_083_716_236_2).abs() < 1e-12, "pdf(0) peak");
+        assert!((g.pdf(1.0) - 0.203_755_945_361_344_28).abs() < 1e-12, "pdf(1)");
+        assert!((g.cdf(1.0) - 0.887_591_235_991_927_8).abs() < 1e-12, "cdf(1)");
+    }
+
+    #[test]
     fn gennorm_skewness_and_kurtosis_match_scipy_reference_values() {
         // GenNorm is symmetric ⇒ skew = 0 for all β.
         // Excess kurt = m_4/m_2² − 3 with m_2k = Γ((2k+1)/β)/Γ(1/β).
