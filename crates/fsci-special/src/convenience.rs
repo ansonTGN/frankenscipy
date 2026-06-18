@@ -7331,6 +7331,15 @@ mod tests {
     }
 
     #[test]
+    fn poch_match_scipy() {
+        // scipy.special.poch (Pochhammer rising factorial) = Gamma(x+n)/Gamma(x).
+        assert!((poch(2.0, 3.0) - 24.0).abs() < 1e-12, "poch(2,3)");
+        assert!((poch(0.5, 2.0) - 0.75).abs() < 1e-13, "poch(0.5,2)");
+        assert!((poch(3.0, 0.0) - 1.0).abs() < 1e-14, "poch(3,0)");
+        assert!((poch(2.5, 1.5) - 4.513_516_668_382_049).abs() < 1e-12, "poch(2.5,1.5)");
+    }
+
+    #[test]
     fn erfcx_scalar_match_scipy() {
         // scipy.special.erfcx = exp(x^2)*erfc(x) (scaled to avoid erfc underflow).
         assert!((erfcx_scalar(0.0) - 1.0).abs() < 1e-14, "erfcx(0)");
