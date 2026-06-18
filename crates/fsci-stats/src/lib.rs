@@ -70166,6 +70166,18 @@ mod tests {
     }
 
     #[test]
+    fn beta_negative_binomial_pmf_cdf_match_scipy() {
+        // Exact scipy.stats.betanbinom(5,2,4). test_betanegativebinomial only
+        // checks sum~1 (tol 0.01) and mean>0; this pins exact pmf/cdf/mean.
+        // (Variance is infinite at a=2, so it is left to the existing var>0 check.)
+        let d = BetaNegativeBinomial::new(5, 2.0, 4.0);
+        assert!((d.pmf(0) - 0.023_809_523_809_523_808).abs() < 1e-12, "pmf(0)");
+        assert!((d.pmf(3) - 0.058_275_058_275_058_265).abs() < 1e-12, "pmf(3)");
+        assert!((d.cdf(3) - 0.179_487_179_487_179_5).abs() < 1e-10, "cdf(3)");
+        assert!((d.mean() - 20.0).abs() < 1e-10, "mean");
+    }
+
+    #[test]
     fn test_betanegativebinomial() {
         let bnb = BetaNegativeBinomial::new(5, 2.0, 4.0);
         let mut total = 0.0;
