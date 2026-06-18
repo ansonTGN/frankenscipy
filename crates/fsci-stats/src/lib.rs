@@ -72020,6 +72020,21 @@ mod tests {
     }
 
     #[test]
+    fn bartlett_match_scipy() {
+        // scipy.stats.bartlett (equal-variance test) on 3 groups.
+        let g1 = [1.0, 2.0, 3.0, 4.0];
+        let g2 = [1.0, 3.0, 5.0, 7.0];
+        let g3 = [2.0, 2.0, 3.0, 3.0];
+        let r = bartlett(&[&g1, &g2, &g3]);
+        assert!((r.statistic - 4.894_706_049_284_968).abs() < 1e-10, "stat: {}", r.statistic);
+        assert!(
+            (r.pvalue - 0.086_522_306_070_336_83).abs() < 1e-12,
+            "p: {}",
+            r.pvalue
+        );
+    }
+
+    #[test]
     fn kruskal_match_scipy() {
         // scipy.stats.kruskal (Kruskal-Wallis H test) with tied ranks.
         let g1 = [1.0, 2.0, 3.0, 4.0];
