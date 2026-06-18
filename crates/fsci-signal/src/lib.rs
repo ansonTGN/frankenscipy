@@ -18315,6 +18315,21 @@ mod tests {
     }
 
     #[test]
+    fn welch_match_scipy() {
+        // scipy.signal.welch(x, fs=1, window='hann', nperseg=4, noverlap=2):
+        // two overlapping segments, hann-windowed, averaged.
+        let x = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let r = welch(&x, 1.0, Some("hann"), Some(4), Some(2)).expect("welch");
+        let ef = [0.0, 0.25, 0.5];
+        for (g, e) in r.frequencies.iter().zip(&ef) {
+            assert!((g - e).abs() < 1e-12, "freq: {g} vs {e}");
+        }
+        assert!((r.psd[0] - 0.666_666_666_666_666_6).abs() < 1e-11, "psd0: {}", r.psd[0]);
+        assert!((r.psd[1] - 1.666_666_666_666_667_2).abs() < 1e-11, "psd1: {}", r.psd[1]);
+        assert!(r.psd[2].abs() < 1e-10, "psd2 ~0: {}", r.psd[2]);
+    }
+
+    #[test]
     fn periodogram_match_scipy() {
         // scipy.signal.periodogram (density, detrend='constant', one-sided), fs=1.
         // psd[0]=0 confirms the mean is removed before the FFT.
