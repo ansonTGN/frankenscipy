@@ -16727,6 +16727,28 @@ mod tests {
     }
 
     #[test]
+    fn cholesky_match_scipy() {
+        // scipy.linalg.cholesky(A, lower=True) for SPD A=[[4,2,2],[2,5,3],[2,3,6]]
+        // gives L=[[2,0,0],[1,2,0],[1,1,2]] (L·Lᵀ = A).
+        let a = vec![
+            vec![4.0, 2.0, 2.0],
+            vec![2.0, 5.0, 3.0],
+            vec![2.0, 3.0, 6.0],
+        ];
+        let r = cholesky(&a, true, DecompOptions::default()).expect("cholesky");
+        let expect = [
+            [2.0, 0.0, 0.0],
+            [1.0, 2.0, 0.0],
+            [1.0, 1.0, 2.0],
+        ];
+        for (gr, er) in r.factor.iter().zip(&expect) {
+            for (g, e) in gr.iter().zip(er) {
+                assert!((g - e).abs() < 1e-12, "cholesky L: {g} vs {e}");
+            }
+        }
+    }
+
+    #[test]
     fn det_solve_eigvalsh_match_scipy() {
         // A = [[4,1,2],[1,3,0],[2,0,5]] (symmetric). Golden from scipy.linalg /
         // numpy 1.17.1: det=43, solve(A,[1,2,3]), eigvalsh ascending.
