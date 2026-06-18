@@ -92,6 +92,32 @@ condition so dead ends are not repeated casually.
   reject this exact full-square arena formulation and do not retry without a
   profile showing `agglomerate_nnarray` row traversal or allocation is again a
   top-5 cluster hotspot.
+
+## 2026-06-18 - frankenscipy-8l8r1.118 - coherence chunk-local spectra accumulator
+
+- Agent: cod-b / MistyBirch
+- Lever: keep `coherence` on the fused Welch segment pass, but replace the
+  per-segment `CoherenceSegmentSpectra` materialization with chunk-local
+  Pxy/Pxx/Pyy accumulators and reusable windowed `wx`/`wy` scratch buffers. This
+  removes one spectra allocation triplet per segment and avoids retaining all
+  segment spectra before the final fold on the target
+  `spectral/coherence/65536_w1024_o512` workload.
+- Status: pending batch-test. This is a code-first commit per campaign
+  instruction; local `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b
+  cargo check -p fsci-signal` is the only required pre-commit gate.
+- Correctness guard: existing `coherence_matches_compositional_csd_formula`
+  compares the fused path against `csd(x,y)`, `csd(x,x)`, and `csd(y,y)`;
+  existing SciPy-reference coherence coverage anchors the public tolerance
+  contract.
+- Benchmark guard: compare focused Criterion
+  `spectral/coherence/65536_w1024_o512` and any batch Welch/coherence rows
+  against the pre-change commit on the same worker/target dir.
+- Retry condition: keep only if same-worker coherence timings improve without
+  frequency-grid, range-clamp, or compositional-formula drift; if chunk-local
+  reduction grouping or scratch initialization costs erase the allocation win,
+  reject this accumulator formulation and do not retry it without allocation
+  profiles showing retained segment spectra are again a top-5 signal hotspot.
+
 ## 2026-06-18 - frankenscipy-8l8r1.119 - BDF Newton streamed scaled RMS norm
 
 - Agent: cod-a / MistyBirch

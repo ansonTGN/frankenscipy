@@ -14789,10 +14789,35 @@ pub struct CoherenceResult {
     pub coherence: Vec<f64>,
 }
 
-struct CoherenceSegmentSpectra {
+struct CoherenceSpectraAccumulator {
     pxy: Vec<(f64, f64)>,
     pxx: Vec<f64>,
     pyy: Vec<f64>,
+}
+
+impl CoherenceSpectraAccumulator {
+    fn new(n_freqs: usize) -> Self {
+        Self {
+            pxy: vec![(0.0, 0.0); n_freqs],
+            pxx: vec![0.0; n_freqs],
+            pyy: vec![0.0; n_freqs],
+        }
+    }
+
+    fn add_assign(&mut self, other: &Self) {
+        for (((xy, xx), yy), (&other_xy, (&other_xx, &other_yy))) in self
+            .pxy
+            .iter_mut()
+            .zip(self.pxx.iter_mut())
+            .zip(self.pyy.iter_mut())
+            .zip(other.pxy.iter().zip(other.pxx.iter().zip(other.pyy.iter())))
+        {
+            xy.0 += other_xy.0;
+            xy.1 += other_xy.1;
+            *xx += other_xx;
+            *yy += other_yy;
+        }
+    }
 }
 
 /// Compute magnitude-squared coherence between two signals.
@@ -14853,53 +14878,61 @@ pub fn coherence(
     let opts = fsci_fft::FftOptions::default();
     let n_segments = (x.len() - nperseg) / step + 1;
 
-    let compute_segment = |s: usize| -> Result<CoherenceSegmentSpectra, SignalError> {
-        let start = s * step;
-        let xs = &x[start..start + nperseg];
-        let ys = &y[start..start + nperseg];
-        let xmean = xs.iter().sum::<f64>() / nperseg as f64;
-        let ymean = ys.iter().sum::<f64>() / nperseg as f64;
-        let mut wx = Vec::with_capacity(nperseg);
-        let mut wy = Vec::with_capacity(nperseg);
-        for ((&xi, &yi), &wi) in xs.iter().zip(ys.iter()).zip(&win_coeffs) {
-            wx.push((xi - xmean) * wi);
-            wy.push((yi - ymean) * wi);
-        }
+    let accumulate_range =
+        |s0: usize, s1: usize| -> Result<CoherenceSpectraAccumulator, SignalError> {
+            let mut acc = CoherenceSpectraAccumulator::new(n_freqs);
+            let mut wx = vec![0.0; nperseg];
+            let mut wy = vec![0.0; nperseg];
 
-        let sx = fsci_fft::rfft(&wx, &opts)
-            .map_err(|e| SignalError::InvalidArgument(format!("FFT failed: {e}")))?;
-        let sy = fsci_fft::rfft(&wy, &opts)
-            .map_err(|e| SignalError::InvalidArgument(format!("FFT failed: {e}")))?;
-        let mut pxy = Vec::with_capacity(n_freqs);
-        let mut pxx = Vec::with_capacity(n_freqs);
-        let mut pyy = Vec::with_capacity(n_freqs);
-        for (k, (&(xr, xi), &(yr, yi))) in sx.iter().zip(sy.iter()).take(n_freqs).enumerate() {
-            let factor = if k == 0 || (nperseg.is_multiple_of(2) && k == n_freqs - 1) {
-                1.0
-            } else {
-                2.0
-            };
-            let re = xr * yr + xi * yi;
-            let im = xr * yi - xi * yr;
-            pxy.push((re * factor, im * factor));
-            pxx.push((xr * xr + xi * xi) * factor);
-            pyy.push((yr * yr + yi * yi) * factor);
-        }
+            for s in s0..s1 {
+                let start = s * step;
+                let xs = &x[start..start + nperseg];
+                let ys = &y[start..start + nperseg];
+                let xmean = xs.iter().sum::<f64>() / nperseg as f64;
+                let ymean = ys.iter().sum::<f64>() / nperseg as f64;
+                for (((wxi, wyi), (&xi, &yi)), &wi) in wx
+                    .iter_mut()
+                    .zip(wy.iter_mut())
+                    .zip(xs.iter().zip(ys.iter()))
+                    .zip(&win_coeffs)
+                {
+                    *wxi = (xi - xmean) * wi;
+                    *wyi = (yi - ymean) * wi;
+                }
 
-        Ok(CoherenceSegmentSpectra { pxy, pxx, pyy })
-    };
+                let sx = fsci_fft::rfft(&wx, &opts)
+                    .map_err(|e| SignalError::InvalidArgument(format!("FFT failed: {e}")))?;
+                let sy = fsci_fft::rfft(&wy, &opts)
+                    .map_err(|e| SignalError::InvalidArgument(format!("FFT failed: {e}")))?;
+                for (k, (&(xr, xi), &(yr, yi))) in
+                    sx.iter().zip(sy.iter()).take(n_freqs).enumerate()
+                {
+                    let factor = if k == 0 || (nperseg.is_multiple_of(2) && k == n_freqs - 1) {
+                        1.0
+                    } else {
+                        2.0
+                    };
+                    let re = xr * yr + xi * yi;
+                    let im = xr * yi - xi * yr;
+                    acc.pxy[k].0 += re * factor;
+                    acc.pxy[k].1 += im * factor;
+                    acc.pxx[k] += (xr * xr + xi * xi) * factor;
+                    acc.pyy[k] += (yr * yr + yi * yi) * factor;
+                }
+            }
 
-    let seg_spectra: Vec<CoherenceSegmentSpectra> = {
+            Ok(acc)
+        };
+
+    let avg_spectra = {
         let nthreads = stft_frame_thread_count(n_segments, nperseg);
         if nthreads <= 1 {
-            (0..n_segments)
-                .map(&compute_segment)
-                .collect::<Result<Vec<_>, _>>()?
+            accumulate_range(0, n_segments)?
         } else {
             let chunk = n_segments.div_ceil(nthreads);
-            let cs = &compute_segment;
-            type SegChunk = Result<Vec<CoherenceSegmentSpectra>, SignalError>;
-            let chunk_results: Vec<SegChunk> = std::thread::scope(|scope| {
+            let ar = &accumulate_range;
+            type ChunkAcc = Result<CoherenceSpectraAccumulator, SignalError>;
+            let chunk_results: Vec<ChunkAcc> = std::thread::scope(|scope| {
                 let handles: Vec<_> = (0..nthreads)
                     .filter_map(|t| {
                         let s0 = t * chunk;
@@ -14907,7 +14940,7 @@ pub fn coherence(
                             return None;
                         }
                         let s1 = (s0 + chunk).min(n_segments);
-                        Some(scope.spawn(move || (s0..s1).map(cs).collect::<Result<Vec<_>, _>>()))
+                        Some(scope.spawn(move || ar(s0, s1)))
                     })
                     .collect();
                 handles
@@ -14915,35 +14948,19 @@ pub fn coherence(
                     .map(|h| h.join().expect("coherence worker panicked"))
                     .collect()
             });
-            let mut v = Vec::with_capacity(n_segments);
-            for cr in chunk_results {
-                v.extend(cr?);
+            let mut avg = CoherenceSpectraAccumulator::new(n_freqs);
+            for chunk_acc in chunk_results {
+                avg.add_assign(&chunk_acc?);
             }
-            v
+            avg
         }
     };
 
-    let mut avg_pxy = vec![(0.0, 0.0); n_freqs];
-    let mut avg_pxx = vec![0.0; n_freqs];
-    let mut avg_pyy = vec![0.0; n_freqs];
-    for seg in &seg_spectra {
-        for (((avg_xy, avg_xx), avg_yy), (&xy, (&xx, &yy))) in avg_pxy
-            .iter_mut()
-            .zip(avg_pxx.iter_mut())
-            .zip(avg_pyy.iter_mut())
-            .zip(seg.pxy.iter().zip(seg.pxx.iter().zip(seg.pyy.iter())))
-        {
-            avg_xy.0 += xy.0;
-            avg_xy.1 += xy.1;
-            *avg_xx += xx;
-            *avg_yy += yy;
-        }
-    }
-
     let scale = 1.0 / (fs * nperseg as f64 * win_power * n_segments as f64);
-    let coh: Vec<f64> = avg_pxy
+    let coh: Vec<f64> = avg_spectra
+        .pxy
         .iter()
-        .zip(avg_pxx.iter().zip(avg_pyy.iter()))
+        .zip(avg_spectra.pxx.iter().zip(avg_spectra.pyy.iter()))
         .map(|(&(pxy_re, pxy_im), (&pxx, &pyy))| {
             let pxy_re = pxy_re * scale;
             let pxy_im = pxy_im * scale;
