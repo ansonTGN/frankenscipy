@@ -29176,14 +29176,11 @@ pub fn mquantiles(data: &[f64], prob: &[f64], alphap: f64, betap: f64) -> Vec<f6
 ///
 /// Matches `scipy.stats.variation(a)`.
 pub fn variation(data: &[f64]) -> f64 {
-    if data.len() < 2 {
+    if data.is_empty() {
         return f64::NAN;
     }
     let n = data.len() as f64;
     let mean_val = data.iter().sum::<f64>() / n;
-    if mean_val == 0.0 {
-        return f64::NAN;
-    }
     let var: f64 = data.iter().map(|&x| (x - mean_val).powi(2)).sum::<f64>() / n;
     var.sqrt() / mean_val
 }
@@ -74267,6 +74264,23 @@ mod tests {
         assert!(
             (result - 0.5222329678670935).abs() < 1e-10,
             "variation got {result}, expected 0.5222329678670935"
+        );
+    }
+
+    #[test]
+    fn variation_edge_cases_match_scipy_reference_values() {
+        assert_eq!(variation(&[1.0]).to_bits(), 0.0f64.to_bits());
+        assert_eq!(variation(&[-1.0]).to_bits(), (-0.0f64).to_bits());
+        assert!(variation(&[0.0]).is_nan());
+        assert!(variation(&[0.0, 0.0]).is_nan());
+
+        let zero_mean = variation(&[-1.0, 1.0]);
+        assert!(zero_mean.is_infinite() && zero_mean.is_sign_positive());
+
+        let negative_mean = variation(&[-2.0, 1.0]);
+        assert!(
+            (negative_mean - (-3.0)).abs() < 1e-15,
+            "variation got {negative_mean}, expected -3.0"
         );
     }
 
