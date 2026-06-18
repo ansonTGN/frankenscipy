@@ -268,14 +268,17 @@ pub fn mmread(content: &str) -> Result<MmMatrix, IoError> {
                 if trimmed.is_empty() || trimmed.starts_with('%') {
                     continue;
                 }
-                let vals: Vec<&str> = trimmed.split_whitespace().collect();
-                if vals.len() < 2 {
+                // Pull the row/col indices (and optional value) straight off the
+                // split iterator instead of materializing a Vec<&str> per entry —
+                // byte-identical (same fields, same skip-if-<2-tokens, same errors).
+                let mut fields = trimmed.split_whitespace();
+                let (Some(f_row), Some(f_col)) = (fields.next(), fields.next()) else {
                     continue;
-                }
-                let r_one_based = vals[0]
+                };
+                let r_one_based = f_row
                     .parse::<usize>()
                     .map_err(|e| IoError::InvalidFormat(format!("bad row index: {e}")))?;
-                let c_one_based = vals[1]
+                let c_one_based = f_col
                     .parse::<usize>()
                     .map_err(|e| IoError::InvalidFormat(format!("bad col index: {e}")))?;
                 let r = r_one_based.checked_sub(1).ok_or_else(|| {
@@ -291,8 +294,8 @@ pub fn mmread(content: &str) -> Result<MmMatrix, IoError> {
                 let v: f64;
                 if info.field == MmField::Pattern {
                     v = 1.0;
-                } else if vals.len() >= 3 {
-                    v = vals[2]
+                } else if let Some(f_val) = fields.next() {
+                    v = f_val
                         .parse()
                         .map_err(|e| IoError::InvalidFormat(format!("bad value: {e}")))?;
                 } else {
