@@ -7331,6 +7331,17 @@ mod tests {
     }
 
     #[test]
+    fn factorial_match_scipy() {
+        // scipy.special.factorial / factorial2 (double factorial).
+        use crate::gamma::{factorial, factorial2};
+        assert_eq!(factorial(5), 120.0);
+        assert_eq!(factorial(0), 1.0);
+        assert_eq!(factorial(10), 3_628_800.0);
+        assert!((factorial2(7) - 105.0).abs() < 1e-10, "factorial2(7)=7*5*3*1");
+        assert_eq!(factorial2(8), 384.0, "factorial2(8)=8*6*4*2");
+    }
+
+    #[test]
     fn gammaln_scalar_match_scipy() {
         // scipy.special.gammaln = ln|Gamma(x)|; stays finite where Gamma overflows.
         use crate::gamma::gammaln_scalar;
