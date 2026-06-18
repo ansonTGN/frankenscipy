@@ -14980,6 +14980,11 @@ pub fn upfirdn(h: &[f64], x: &[f64], up: usize, down: usize) -> Result<Vec<f64>,
             "h must be 1-D with non-zero length".to_string(),
         ));
     }
+    if h.iter().any(|value| !value.is_finite()) {
+        return Err(SignalError::NonFiniteInput {
+            detail: "upfirdn filter taps must be finite".to_string(),
+        });
+    }
     if up == 0 || down == 0 {
         return Err(SignalError::InvalidArgument(
             "up and down must be >= 1".to_string(),
@@ -14987,6 +14992,11 @@ pub fn upfirdn(h: &[f64], x: &[f64], up: usize, down: usize) -> Result<Vec<f64>,
     }
     if x.is_empty() {
         return Ok(Vec::new());
+    }
+    if x.iter().any(|value| !value.is_finite()) {
+        return Err(SignalError::NonFiniteInput {
+            detail: "upfirdn input samples must be finite".to_string(),
+        });
     }
 
     let upsampled_len = (x.len() - 1)
@@ -24908,6 +24918,30 @@ mod tests {
                 "upfirdn output length overflows usize".to_string()
             ))
         );
+    }
+
+    #[test]
+    fn upfirdn_rejects_non_finite_taps() {
+        for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                upfirdn(&[1.0, bad], &[1.0, 2.0], 1, 1),
+                Err(SignalError::NonFiniteInput {
+                    detail: "upfirdn filter taps must be finite".to_string(),
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn upfirdn_rejects_non_finite_samples() {
+        for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                upfirdn(&[1.0, 0.5], &[1.0, bad], 1, 1),
+                Err(SignalError::NonFiniteInput {
+                    detail: "upfirdn input samples must be finite".to_string(),
+                })
+            );
+        }
     }
 
     // ── Max-length sequence + matched filter tests ───────────────────
