@@ -7316,6 +7316,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn scalar_special_functions_match_scipy() {
+        // Golden values from scipy.special (1.17.1) for foundational scalar fns.
+        let close = |got: f64, want: f64, name: &str| {
+            assert!((got - want).abs() < 1e-12, "{name}: {got} != {want}");
+        };
+        close(crate::error::erf_scalar(0.5), 0.520_499_877_813_046_5, "erf(0.5)");
+        close(crate::error::erfc_scalar(0.5), 0.479_500_122_186_953_5, "erfc(0.5)");
+        close(crate::gamma::zeta(2.0), 1.644_934_066_848_226_4, "zeta(2)");
+        close(crate::bessel::i0_scalar(1.0), 1.266_065_877_752_008_2, "i0(1)");
+        close(crate::bessel::k0_scalar(1.0), 0.421_024_438_240_708_23, "k0(1)");
+        close(ndtr_scalar(1.0), 0.841_344_746_068_542_9, "ndtr(1)");
+        close(ndtri_scalar(0.975), 1.959_963_984_540_054, "ndtri(0.975)");
+    }
+
+    #[test]
     fn fresnel_complex_matches_scipy() {
         // frankenscipy: golden (S, C) from scipy.special.fresnel(z) (1.17.1) on
         // complex arguments. Reduces to the real fresnel on the real axis.
