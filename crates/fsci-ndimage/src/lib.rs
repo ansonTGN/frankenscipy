@@ -2031,14 +2031,17 @@ pub fn rank_filter_perpixel_ref(
     let pixel = |flat_out: usize| -> f64 {
         let out_idx = input.unravel(flat_out);
         let mut neighborhood = Vec::with_capacity(kernel_total);
+        // k_idx/in_idx hoisted out of the kernel loop: allocated once per output
+        // pixel instead of once per kernel element (both fully overwritten each
+        // element -> byte-identical). frankenscipy-gy6to.
+        let mut k_idx = vec![0usize; ndim];
+        let mut in_idx = vec![0i64; ndim];
         for flat_k in 0..kernel_total {
-            let mut k_idx = vec![0usize; ndim];
             let mut rem = flat_k;
             for d in 0..ndim {
                 k_idx[d] = rem / kernel_strides[d];
                 rem %= kernel_strides[d];
             }
-            let mut in_idx = vec![0i64; ndim];
             for d in 0..ndim {
                 in_idx[d] = out_idx[d] as i64 + k_idx[d] as i64 - offsets[d];
             }
