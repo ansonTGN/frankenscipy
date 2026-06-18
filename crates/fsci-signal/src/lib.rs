@@ -3793,6 +3793,12 @@ pub fn spectral_rolloff(magnitudes: &[f64], freqs: &[f64], rolloff_percent: f64)
         return 0.0;
     }
     let total: f64 = magnitudes.iter().zip(freqs.iter()).map(|(&m, _)| m).sum();
+    if !(rolloff_percent.is_finite() && (0.0..=100.0).contains(&rolloff_percent)) {
+        return f64::NAN;
+    }
+    if !(total.is_finite() && total > 0.0) {
+        return f64::NAN;
+    }
     let threshold = total * rolloff_percent / 100.0;
     let mut cumsum = 0.0;
     for (&m, &f) in magnitudes.iter().zip(freqs.iter()) {
@@ -19547,6 +19553,22 @@ mod tests {
             (rolloff - 30.0).abs() < 1e-12,
             "expected paired-sample rolloff, got {rolloff}"
         );
+    }
+
+    #[test]
+    fn spectral_rolloff_invalid_percent_and_energy_return_nan() {
+        let magnitudes = [1.0, 3.0, 2.0];
+        let freqs = [10.0, 30.0, 50.0];
+        for percent in [f64::NAN, f64::INFINITY, -1.0, 100.1] {
+            let rolloff = spectral_rolloff(&magnitudes, &freqs, percent);
+            assert!(
+                rolloff.is_nan(),
+                "invalid rolloff percent {percent} should return NaN, got {rolloff}"
+            );
+        }
+
+        assert!(spectral_rolloff(&[0.0, 0.0], &[10.0, 20.0], 85.0).is_nan());
+        assert!(spectral_rolloff(&[f64::NAN, 1.0], &[10.0, 20.0], 85.0).is_nan());
     }
 
     #[test]
