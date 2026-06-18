@@ -927,6 +927,11 @@ where
     let mut p0 = x0;
     let mut p1 = match x1 {
         Some(x1v) => {
+            if !x1v.is_finite() {
+                return Err(OptError::NonFiniteInput {
+                    detail: String::from("newton: x1 must be finite"),
+                });
+            }
             if x1v == x0 {
                 return Err(OptError::InvalidArgument {
                     detail: String::from("x1 and x0 must be different"),
@@ -2613,6 +2618,17 @@ mod tests {
             let err = newton(f, 1.0, Some(&fp), None, None, tol, rtol, 20)
                 .expect_err("invalid scalar Newton tolerance should fail");
             assert!(matches!(err, crate::OptError::InvalidArgument { .. }));
+        }
+    }
+
+    #[test]
+    fn newton_rejects_nonfinite_secant_seed() {
+        let f = |x: f64| x * x - 2.0;
+
+        for x1 in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let err = newton(f, 1.0, None, None, Some(x1), 1.0e-8, 0.0, 20)
+                .expect_err("non-finite secant seed should fail");
+            assert!(matches!(err, crate::OptError::NonFiniteInput { .. }));
         }
     }
 
