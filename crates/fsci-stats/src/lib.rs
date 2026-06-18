@@ -14643,6 +14643,39 @@ impl Nakagami {
         assert!(nu >= 0.5, "nu must be >= 0.5");
         Self { nu }
     }
+
+    /// Log-density at many points, hoisting the `ln2 + ν·ln(ν) − lnΓ(ν)` lead term
+    /// out of the per-point loop. Byte-identical to mapping `logpdf` (lead kept as
+    /// the leading addends, same subtraction order); x≤0 delegates to `pdf`.
+    #[must_use]
+    pub fn logpdf_many(&self, xs: &[f64]) -> Vec<f64> {
+        let nu = self.nu;
+        let lead = 2.0_f64.ln() + nu * nu.ln() - ln_gamma(nu);
+        xs.iter()
+            .map(|&x| {
+                if x <= 0.0 {
+                    return self.pdf(x).ln();
+                }
+                lead + (2.0 * nu - 1.0) * x.ln() - nu * x * x
+            })
+            .collect()
+    }
+
+    /// Density at many points; hoists the `2·ν^ν / Γ(ν)` coefficient like
+    /// [`logpdf_many`](Self::logpdf_many). Byte-identical to mapping `pdf`.
+    #[must_use]
+    pub fn pdf_many(&self, xs: &[f64]) -> Vec<f64> {
+        let nu = self.nu;
+        let coeff = 2.0 * nu.powf(nu) / ln_gamma(nu).exp();
+        xs.iter()
+            .map(|&x| {
+                if x < 0.0 {
+                    return 0.0;
+                }
+                coeff * x.powf(2.0 * nu - 1.0) * (-nu * x * x).exp()
+            })
+            .collect()
+    }
 }
 
 impl ContinuousDistribution for Nakagami {
@@ -65038,6 +65071,20 @@ mod tests {
         assert!(n.pdf(1.0) > 0.0);
         let c = n.cdf(1.0);
         assert!(c > 0.0 && c < 1.0);
+    }
+
+    #[test]
+    fn nakagami_pdf_many_matches_pdf() {
+        // Batch pdf_many/logpdf_many (coeff/lead hoisted) must be byte-identical to
+        // per-point pdf/logpdf, including x<=0.
+        let n = Nakagami::new(2.5);
+        let xs = [-1.0, 0.0, 0.3, 1.0, 2.0, 4.0];
+        let pm = n.pdf_many(&xs);
+        let lpm = n.logpdf_many(&xs);
+        for (i, &x) in xs.iter().enumerate() {
+            assert_eq!(pm[i], n.pdf(x), "pdf_many != pdf at {x}");
+            assert_eq!(lpm[i], n.logpdf(x), "logpdf_many != logpdf at {x}");
+        }
     }
 
     #[test]
