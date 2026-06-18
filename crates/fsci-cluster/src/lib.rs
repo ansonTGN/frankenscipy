@@ -1205,6 +1205,11 @@ pub fn nmf(
             "max_iter must be positive".to_string(),
         ));
     }
+    if !tol.is_finite() || tol < 0.0 {
+        return Err(ClusterError::InvalidArgument(
+            "tol must be finite and non-negative".to_string(),
+        ));
+    }
 
     let (mut w, mut h) = match init {
         NmfInit::Nndsvd => nndsvd_init(x, k, seed)?,
@@ -1428,6 +1433,11 @@ pub fn factor_analysis(
     if max_iter == 0 {
         return Err(ClusterError::InvalidArgument(
             "max_iter must be positive".to_string(),
+        ));
+    }
+    if !tol.is_finite() || tol < 0.0 {
+        return Err(ClusterError::InvalidArgument(
+            "tol must be finite and non-negative".to_string(),
         ));
     }
     if x.iter().flatten().any(|v| !v.is_finite()) {
@@ -7320,6 +7330,21 @@ mod tests {
 
         let err = kmedoids(&data, 1, 0, 42).expect_err("kmedoids should reject max_iter=0");
         assert!(matches!(err, ClusterError::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn factorization_estimators_reject_invalid_tolerances() {
+        let data = vec![vec![0.0, 1.0], vec![1.0, 0.0]];
+
+        for tol in [f64::NAN, f64::INFINITY, -1e-6] {
+            let err = nmf(&data, 1, 10, tol, NmfInit::Random, 42)
+                .expect_err("nmf should reject invalid tol");
+            assert!(matches!(err, ClusterError::InvalidArgument(_)));
+
+            let err = factor_analysis(&data, 1, 10, tol, 42)
+                .expect_err("factor_analysis should reject invalid tol");
+            assert!(matches!(err, ClusterError::InvalidArgument(_)));
+        }
     }
 
     #[test]
