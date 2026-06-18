@@ -2167,6 +2167,11 @@ where
             detail: "bounds must be non-empty".to_string(),
         });
     }
+    if maxiter == 0 {
+        return Err(OptError::InvalidArgument {
+            detail: "maxiter must be greater than zero".to_string(),
+        });
+    }
     for (i, &(lo, hi)) in bounds.iter().enumerate() {
         if !lo.is_finite() || !hi.is_finite() {
             return Err(OptError::InvalidBounds {
@@ -6342,6 +6347,12 @@ mod tests {
     #[test]
     fn dual_annealing_empty_bounds_rejected() {
         let err = dual_annealing(|_| 0.0, &[], 100, 42).expect_err("empty");
+        assert!(matches!(err, crate::OptError::InvalidArgument { .. }));
+    }
+
+    #[test]
+    fn dual_annealing_zero_iteration_budget_rejected() {
+        let err = dual_annealing(|x| x[0] * x[0], &[(-1.0, 1.0)], 0, 42).expect_err("maxiter");
         assert!(matches!(err, crate::OptError::InvalidArgument { .. }));
     }
 
