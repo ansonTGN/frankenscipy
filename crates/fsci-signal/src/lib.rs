@@ -1778,6 +1778,8 @@ pub fn lombscargle(
             "freqs must not be empty".to_string(),
         ));
     }
+    validate_real_values_finite(x, "lombscargle sample times must be finite")?;
+    validate_real_values_finite(y, "lombscargle observations must be finite")?;
 
     let sample_count = x.len() as f64;
     let inv_sample_count = 1.0 / sample_count;
@@ -25440,6 +25442,22 @@ mod tests {
     fn lombscargle_rejects_empty_frequency_grid() {
         let err = lombscargle(&[0.0, 1.0], &[1.0, 2.0], &[], false).expect_err("empty freqs");
         assert!(err.is_argument_error());
+    }
+
+    #[test]
+    fn lombscargle_rejects_non_finite_samples() {
+        assert_eq!(
+            lombscargle(&[0.0, f64::NAN], &[1.0, 2.0], &[1.0], false),
+            Err(SignalError::NonFiniteInput {
+                detail: "lombscargle sample times must be finite".to_string(),
+            })
+        );
+        assert_eq!(
+            lombscargle(&[0.0, 1.0], &[1.0, f64::INFINITY], &[1.0], true),
+            Err(SignalError::NonFiniteInput {
+                detail: "lombscargle observations must be finite".to_string(),
+            })
+        );
     }
 
     #[test]
