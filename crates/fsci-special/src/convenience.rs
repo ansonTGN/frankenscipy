@@ -7316,6 +7316,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn comb_perm_match_scipy() {
+        // scipy.special.comb/perm: direct path, k>n edge, and the log-gamma path.
+        use crate::gamma::{comb, perm};
+        assert_eq!(comb(10, 3), 120.0);
+        assert_eq!(comb(5, 7), 0.0); // k > n -> 0
+        assert_eq!(comb(0, 0), 1.0);
+        assert_eq!(perm(10, 3), 720.0);
+        // Large values use the log-gamma branch; compare with relative tolerance.
+        let rel = |g: f64, e: f64| (g - e).abs() / e < 1e-10;
+        assert!(rel(comb(100, 50), 1.008_913_445_455_641_5e29), "comb(100,50)");
+        assert!(rel(perm(50, 30), 1.250_115_832_840_612_2e46), "perm(50,30)");
+    }
+
+    #[test]
     fn softmax_log_softmax_match_scipy() {
         // scipy.special.softmax/log_softmax, including shift-invariant stability.
         let es = [
