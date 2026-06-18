@@ -5107,6 +5107,29 @@ mod tests {
     }
 
     #[test]
+    fn sparse_zeros_submatrix_rowmin() {
+        use crate::{CsrMatrix, Shape2D};
+        // [[1,0],[3,4]] with the (0,1) zero stored EXPLICITLY. These ops were
+        // previously untested.
+        let a = CsrMatrix::from_components(
+            Shape2D::new(2, 2),
+            vec![1.0, 0.0, 3.0, 4.0],
+            vec![0, 1, 0, 1],
+            vec![0, 2, 4],
+            false,
+        )
+        .unwrap();
+        assert!(sparse_has_explicit_zeros(&a), "has explicit zero");
+        assert_eq!(sparse_row_min(&a), vec![0.0, 3.0]);
+        let cleaned = sparse_eliminate_zeros(&a);
+        assert!(!sparse_has_explicit_zeros(&cleaned), "zeros removed");
+        assert!((sparse_sum(&cleaned) - 8.0).abs() < 1e-12, "sum unchanged");
+        // submatrix rows [1,2) cols [0,2) -> [[3,4]] -> sum 7.
+        let sub = sparse_submatrix(&a, 1, 2, 0, 2);
+        assert!((sparse_sum(&sub) - 7.0).abs() < 1e-12, "submatrix row 1");
+    }
+
+    #[test]
     fn closeness_betweenness_on_path_graph() {
         use crate::{CsrMatrix, Shape2D};
         // Undirected path 0-1-2. closeness/betweenness_centrality were untested.
