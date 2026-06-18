@@ -8472,6 +8472,22 @@ mod tests {
     }
 
     #[test]
+    fn vq_match_scipy() {
+        // scipy.cluster.vq.vq: assign each obs to nearest centroid (code, distance).
+        let obs = vec![vec![1.0, 1.0], vec![5.0, 5.0], vec![1.0, 6.0]];
+        let cb = vec![vec![0.0, 0.0], vec![6.0, 6.0]];
+        let (codes, dist) = vq(&obs, &cb).expect("vq");
+        assert_eq!(codes, vec![0, 1, 1]);
+        let sqrt2 = std::f64::consts::SQRT_2;
+        assert!(
+            (dist[0] - sqrt2).abs() < 1e-12 && (dist[1] - sqrt2).abs() < 1e-12,
+            "dist01: {:?}",
+            &dist[..2]
+        );
+        assert!((dist[2] - 5.0).abs() < 1e-12, "dist2: {}", dist[2]);
+    }
+
+    #[test]
     fn whiten_match_scipy() {
         // scipy.cluster.vq.whiten: divide each column by its (population) std.
         let x = vec![vec![1.0, 2.0], vec![4.0, 8.0], vec![7.0, 2.0]];
