@@ -7331,6 +7331,16 @@ mod tests {
     }
 
     #[test]
+    fn chdtr_fdtr_match_scipy() {
+        // scipy.special chi-square CDF/inverse and F CDF.
+        use crate::beta::fdtr;
+        use crate::gamma::{chdtr, chdtri};
+        assert!((chdtr(5.0, 3.0) - 0.300_014_164_121_372_4).abs() < 1e-13, "chdtr(5,3)");
+        assert!((chdtri(5.0, 0.3) - 6.064_429_984_154_905).abs() < 1e-11, "chdtri(5,0.3)");
+        assert!((fdtr(5.0, 10.0, 2.0) - 0.835_805_049_100_261_1).abs() < 1e-13, "fdtr(5,10,2)");
+    }
+
+    #[test]
     fn stdtr_stdtrit_match_scipy() {
         // scipy.special.stdtr (Student's t CDF) and stdtrit (its inverse).
         use crate::beta::{stdtr, stdtrit};
