@@ -18315,6 +18315,27 @@ mod tests {
     }
 
     #[test]
+    fn hilbert_analytic_signal_match_scipy() {
+        // scipy.signal.hilbert: real part == input, imag == Hilbert transform.
+        let a = hilbert(&[1.0, 2.0, 3.0, 4.0]).expect("hilbert");
+        let expect = [(1.0, 1.0), (2.0, -1.0), (3.0, -1.0), (4.0, 1.0)];
+        for (g, e) in a.iter().zip(&expect) {
+            assert!(
+                (g.0 - e.0).abs() < 1e-12 && (g.1 - e.1).abs() < 1e-12,
+                "hilbert: {g:?} vs {e:?}"
+            );
+        }
+        // Odd-length: real part recovers the input exactly; check two imag bins.
+        let a2 = hilbert(&[1.0, 3.0, 2.0, 5.0, 4.0]).expect("hilbert odd");
+        let inp = [1.0, 3.0, 2.0, 5.0, 4.0];
+        for (g, e) in a2.iter().zip(&inp) {
+            assert!((g.0 - e).abs() < 1e-12, "hilbert odd real: {} vs {e}", g.0);
+        }
+        assert!((a2[0].1 - 0.179_611_190_632).abs() < 1e-9, "imag0: {}", a2[0].1);
+        assert!((a2[4].1 - 2.607_455_335_341).abs() < 1e-9, "imag4: {}", a2[4].1);
+    }
+
+    #[test]
     fn welch_match_scipy() {
         // scipy.signal.welch(x, fs=1, window='hann', nperseg=4, noverlap=2):
         // two overlapping segments, hann-windowed, averaged.
