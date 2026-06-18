@@ -2708,6 +2708,7 @@ pub fn lsqr(
             message: "rhs length must match matrix rows".to_string(),
         });
     }
+    validate_iterative_finite_inputs(a, b, None, options)?;
 
     let max_iter = options.max_iter.unwrap_or(n * 10);
     let b_norm = vec_norm(b);
@@ -6653,6 +6654,37 @@ mod tests {
         let result = lsqr(&a, &b, IterativeSolveOptions::default()).expect("lsqr works");
         assert!(result.converged);
         assert_eq!(result.iterations, 0);
+    }
+
+    #[test]
+    fn lsqr_hardened_rejects_non_finite_when_check_disabled() {
+        let a = identity_csr(3);
+        let err = lsqr(
+            &a,
+            &[f64::NAN, 1.0, 1.0],
+            hardened_unchecked_iterative_options(),
+        )
+        .expect_err("hardened finite guard");
+        assert!(matches!(err, SparseError::NonFiniteInput { .. }));
+    }
+
+    #[test]
+    fn lsqr_rejects_invalid_tolerance() {
+        let a = identity_csr(3);
+        let b = vec![1.0, 2.0, 3.0];
+        let infinite_tol = IterativeSolveOptions {
+            tol: f64::INFINITY,
+            ..IterativeSolveOptions::default()
+        };
+        let err = lsqr(&a, &b, infinite_tol).expect_err("infinite tolerance");
+        assert!(matches!(err, SparseError::InvalidArgument { .. }));
+
+        let negative_tol = IterativeSolveOptions {
+            tol: -1e-6,
+            ..IterativeSolveOptions::default()
+        };
+        let err = lsqr(&a, &b, negative_tol).expect_err("negative tolerance");
+        assert!(matches!(err, SparseError::InvalidArgument { .. }));
     }
 
     // ── LSMR least-squares solver tests ─────────────────────────────
