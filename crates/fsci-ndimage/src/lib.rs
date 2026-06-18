@@ -9368,6 +9368,22 @@ mod tests {
     }
 
     #[test]
+    fn label_connected_components_match_scipy() {
+        // scipy.ndimage.label default (4-connectivity cross) on a 3x4 binary image.
+        let input = NdArray::new(
+            vec![1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0],
+            vec![3, 4],
+        )
+        .unwrap();
+        let (labels, n) = label(&input).unwrap();
+        assert_eq!(n, 3, "component count");
+        let expect = [1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 3.0, 0.0, 2.0, 2.0];
+        for (g, e) in labels.data.iter().zip(&expect) {
+            assert_eq!(*g, *e, "label: {g} vs {e}");
+        }
+    }
+
+    #[test]
     fn uniform_maximum_filter1d_match_scipy() {
         // scipy.ndimage.{uniform,maximum}_filter1d(a, 3, mode='reflect') for
         // a=[1,2,3,4,5,4,3,2,1]. gaussian_filter1d has a golden test; these did not.
