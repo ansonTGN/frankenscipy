@@ -1207,9 +1207,9 @@ pub fn romb(y: &[f64], dx: f64) -> Result<f64, IntegrateValidationError> {
             detail: "need at least 2 points".to_string(),
         });
     }
-    if dx <= 0.0 || !dx.is_finite() {
+    if !dx.is_finite() {
         return Err(IntegrateValidationError::QuadInvalidBounds {
-            detail: "dx must be positive and finite".to_string(),
+            detail: "dx must be finite".to_string(),
         });
     }
     // Check n = 2^k + 1
@@ -4569,6 +4569,13 @@ mod tests {
             "romb sampled x^2 = {}, expected ~21.33",
             result
         );
+    }
+
+    #[test]
+    fn romb_accepts_signed_and_zero_dx() {
+        let y = [1.0, 2.0, 3.0, 4.0, 5.0];
+        assert_eq!(romb(&y, -1.0).expect("negative dx"), -12.0);
+        assert_eq!(romb(&y, 0.0).expect("zero dx"), 0.0);
     }
 
     #[test]
