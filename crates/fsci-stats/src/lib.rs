@@ -1849,6 +1849,60 @@ impl ChiSquared {
         assert!(df > 0.0, "df must be positive, got {df}");
         Self { df }
     }
+
+    /// Log-density at many points, hoisting `ln_gamma(df/2)` and `(df/2)·ln(2)` out
+    /// of the per-point loop. Byte-identical to mapping `logpdf`: the normalizer
+    /// terms stay as SEPARATE subtractions (a − b − c ≠ a − (b+c) in f64), matching
+    /// the arithmetic order exactly; the x<0 / x==0 special cases are preserved.
+    #[must_use]
+    pub fn logpdf_many(&self, xs: &[f64]) -> Vec<f64> {
+        let k2 = 0.5 * self.df;
+        let k2_ln2 = k2 * 2.0_f64.ln();
+        let lg = ln_gamma(k2);
+        xs.iter()
+            .map(|&x| {
+                if x < 0.0 {
+                    return f64::NEG_INFINITY;
+                }
+                if x == 0.0 {
+                    return if self.df == 2.0 {
+                        0.5_f64.ln()
+                    } else if self.df > 2.0 {
+                        f64::NEG_INFINITY
+                    } else {
+                        f64::INFINITY
+                    };
+                }
+                (k2 - 1.0) * x.ln() - 0.5 * x - k2_ln2 - lg
+            })
+            .collect()
+    }
+
+    /// Density at many points; hoists `ln_gamma(df/2)` like
+    /// [`logpdf_many`](Self::logpdf_many). Byte-identical to mapping `pdf`.
+    #[must_use]
+    pub fn pdf_many(&self, xs: &[f64]) -> Vec<f64> {
+        let k2 = 0.5 * self.df;
+        let k2_ln2 = k2 * 2.0_f64.ln();
+        let lg = ln_gamma(k2);
+        xs.iter()
+            .map(|&x| {
+                if x < 0.0 {
+                    return 0.0;
+                }
+                if x == 0.0 {
+                    return if self.df == 2.0 {
+                        0.5
+                    } else if self.df > 2.0 {
+                        0.0
+                    } else {
+                        f64::INFINITY
+                    };
+                }
+                ((k2 - 1.0) * x.ln() - 0.5 * x - k2_ln2 - lg).exp()
+            })
+            .collect()
+    }
 }
 
 impl ContinuousDistribution for ChiSquared {
@@ -47377,6 +47431,20 @@ mod tests {
         let c = ChiSquared::new(6.0);
         assert_close(g.mean(), c.mean(), 1e-10, "Gamma mean = Chi2 mean");
         assert_close(g.var(), c.var(), 1e-10, "Gamma var = Chi2 var");
+    }
+
+    #[test]
+    fn chi_squared_pdf_many_matches_pdf() {
+        // Batch pdf_many/logpdf_many (lgamma hoisted) must be byte-identical to
+        // per-point pdf/logpdf, including x<0 and x==0 special cases.
+        let c = ChiSquared::new(3.0);
+        let xs = [-1.0, 0.0, 0.5, 2.0, 6.0, 15.0];
+        let pm = c.pdf_many(&xs);
+        let lpm = c.logpdf_many(&xs);
+        for (i, &x) in xs.iter().enumerate() {
+            assert_eq!(pm[i], c.pdf(x), "pdf_many != pdf at {x}");
+            assert_eq!(lpm[i], c.logpdf(x), "logpdf_many != logpdf at {x}");
+        }
     }
 
     #[test]
