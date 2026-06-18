@@ -127,6 +127,9 @@ impl RadauSolver {
         let y0 = config.y0.to_vec();
         let f0 = fun(config.t0, &y0);
         validate_rhs_shape(f0.len(), n)?;
+        if config.mode == RuntimeMode::Hardened && !f0.iter().all(|value| value.is_finite()) {
+            return Err(crate::IntegrateValidationError::NonFiniteF0);
+        }
 
         let s6 = 6.0_f64.sqrt();
         let c = [(4.0 - s6) / 10.0, (4.0 + s6) / 10.0, 1.0];
@@ -464,5 +467,31 @@ impl RadauSolver {
                 state,
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn radau_first_step_hardened_rejects_non_finite_f0() {
+        let mut fun = |_t: f64, _y: &[f64]| vec![f64::INFINITY];
+        let config = RadauSolverConfig {
+            t0: 0.0,
+            y0: &[1.0],
+            t_bound: 0.1,
+            rtol: 1e-6,
+            atol: ToleranceValue::Scalar(1e-8),
+            max_step: f64::INFINITY,
+            first_step: Some(1e-6),
+            mode: RuntimeMode::Hardened,
+        };
+
+        let err = match RadauSolver::new(&mut fun, config) {
+            Ok(_) => panic!("non-finite f0 should fail"),
+            Err(err) => err,
+        };
+        assert_eq!(err, crate::IntegrateValidationError::NonFiniteF0);
     }
 }
