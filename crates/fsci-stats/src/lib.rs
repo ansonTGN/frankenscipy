@@ -48946,6 +48946,16 @@ mod tests {
     }
 
     #[test]
+    fn gumbel_pdf_match_scipy() {
+        // Exact scipy.stats.gumbel_r(loc=0.5, scale=2). The Gumbel suite locks the
+        // cdf (gumbel_r_cdf_matches), tail, mean/var, and roundtrip but not the pdf.
+        let g = Gumbel::new(0.5, 2.0);
+        assert!((g.pdf(1.0) - 0.178_717_673_086_091_24).abs() < 1e-12, "pdf(1)");
+        assert!((g.pdf(2.0) - 0.147_266_157_620_177_33).abs() < 1e-12, "pdf(2)");
+        assert!((g.cdf(1.0) - 0.458_956_069_307_663_8).abs() < 1e-12, "cdf(1)");
+    }
+
+    #[test]
     fn gumbel_mean_and_variance() {
         let g = Gumbel::new(0.5, 1.5);
         assert_close(
