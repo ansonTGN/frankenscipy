@@ -46875,6 +46875,17 @@ mod tests {
     // ── F-distribution ──────────────────────────────────────────────
 
     #[test]
+    fn f_dist_pdf_cdf_match_scipy() {
+        // Exact scipy.stats.f(5,10). The other f_dist tests cover positivity,
+        // moments, sf-tail, and entropy, but no exact pdf/cdf value at a regular
+        // interior point.
+        let f = FDistribution::new(5.0, 10.0);
+        assert!((f.pdf(1.0) - 0.495_479_783_486_639_5).abs() < 1e-12, "pdf(1)");
+        assert!((f.pdf(2.0) - 0.162_005_742_180_115_15).abs() < 1e-12, "pdf(2)");
+        assert!((f.cdf(1.0) - 0.534_880_573_462_199_6).abs() < 1e-10, "cdf(1)");
+    }
+
+    #[test]
     fn f_dist_pdf_positive_only() {
         let f = FDistribution::new(5.0, 10.0);
         assert_eq!(f.pdf(-1.0), 0.0);
