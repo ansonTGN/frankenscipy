@@ -7316,6 +7316,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn gammasgn_scalar_match_scipy() {
+        // scipy.special.gammasgn: +1 for x>0, sign(sin pi x) on negative non-integer
+        // intervals, +1 at x=0 (Gamma(0)=+inf), and NaN at negative-integer poles.
+        use crate::gamma::gammasgn_scalar;
+        let m = RuntimeMode::Strict;
+        assert_eq!(gammasgn_scalar(3.0, m).unwrap(), 1.0);
+        assert_eq!(gammasgn_scalar(0.5, m).unwrap(), 1.0);
+        assert_eq!(gammasgn_scalar(-0.5, m).unwrap(), -1.0);
+        assert_eq!(gammasgn_scalar(-1.5, m).unwrap(), 1.0);
+        assert_eq!(gammasgn_scalar(-2.5, m).unwrap(), -1.0);
+        assert_eq!(gammasgn_scalar(0.0, m).unwrap(), 1.0);
+        assert!(gammasgn_scalar(-1.0, m).unwrap().is_nan());
+    }
+
+    #[test]
     fn cbrt_handles_negatives_match_scipy() {
         // scipy.special.cbrt = real cube root, so cbrt(-8)=-2 (NOT NaN like the
         // (-8).powf(1/3) trap). Regression guard for the powf-domain class.
