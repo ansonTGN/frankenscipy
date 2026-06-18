@@ -3,8 +3,8 @@ use std::time::Duration;
 use criterion::{Criterion, criterion_group, criterion_main};
 use fsci_linalg::{
     DecompOptions, InvOptions, LstsqOptions, MatrixAssumption, PinvOptions, SolveOptions,
-    TriangularSolveOptions, det, eigh, inv, lstsq, matmul, pinv, solve, solve_banded,
-    solve_triangular,
+    TriangularSolveOptions, det, eigh, inv, lstsq, matmul, pinv, randomized_eigh, solve,
+    solve_banded, solve_triangular,
 };
 use fsci_runtime::RuntimeMode;
 
@@ -14,6 +14,7 @@ const SIZES: &[usize] = &[4, 16, 64, 256];
 const BASELINE_SIZES: &[usize] = &[100, 500, 1000, 2000, 4000];
 const MATMUL_SIZES: &[usize] = &[256, 512, 768, 1024];
 const EIGH_SIZES: &[usize] = &[256, 512];
+const RANDOMIZED_EIGH_CASES: &[(usize, usize)] = &[(256, 16), (512, 24)];
 
 /// Diagonally-dominant matrix: guaranteed non-singular, well-conditioned.
 fn make_diag_dominant(n: usize) -> Vec<Vec<f64>> {
@@ -103,6 +104,34 @@ fn make_symmetric_eigh_matrix(n: usize) -> Vec<Vec<f64>> {
             };
             a[i][j] = value;
             a[j][i] = value;
+        }
+    }
+    a
+}
+
+#[allow(clippy::needless_range_loop)]
+fn make_low_rank_symmetric_eigh_matrix(n: usize, rank: usize) -> Vec<Vec<f64>> {
+    let mut factors = vec![vec![0.0; n]; rank];
+    for (r, row) in factors.iter_mut().enumerate() {
+        for (i, value) in row.iter_mut().enumerate() {
+            let x = ((r + 3) * (i + 5)) as f64;
+            *value = (x.sin() * 0.5) + (x.cos() * 0.25);
+        }
+    }
+
+    let mut a = vec![vec![0.0; n]; n];
+    for r in 0..rank {
+        let weight = (rank - r) as f64;
+        for i in 0..n {
+            let scaled = weight * factors[r][i];
+            for j in 0..=i {
+                a[i][j] += scaled * factors[r][j];
+            }
+        }
+    }
+    for i in 0..n {
+        for j in 0..i {
+            a[j][i] = a[i][j];
         }
     }
     a
@@ -237,6 +266,28 @@ fn bench_eigh_dense(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_randomized_eigh(c: &mut Criterion) {
+    let mut group = c.benchmark_group("randomized_eigh");
+    group.sample_size(10);
+    group.measurement_time(Duration::from_secs(5));
+    for &(n, k) in RANDOMIZED_EIGH_CASES {
+        let a = make_low_rank_symmetric_eigh_matrix(n, k + 8);
+        group.bench_function(format!("{n}x{n}_k{k}"), |bencher| {
+            bencher.iter(|| {
+                randomized_eigh(
+                    std::hint::black_box(&a),
+                    std::hint::black_box(k),
+                    8,
+                    2,
+                    0x5eed_1234,
+                )
+                .unwrap()
+            });
+        });
+    }
+    group.finish();
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // BASELINE BENCHMARKS - Per SPEC §17, capture p50/p95/p99 at standard sizes
 // Run with: cargo bench --bench linalg_bench -- baseline
@@ -351,7 +402,8 @@ criterion_group!(
     bench_lstsq,
     bench_pinv,
     bench_matmul,
-    bench_eigh_dense
+    bench_eigh_dense,
+    bench_randomized_eigh
 );
 
 criterion_group!(

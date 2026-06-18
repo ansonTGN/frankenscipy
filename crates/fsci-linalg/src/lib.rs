@@ -4106,6 +4106,80 @@ pub fn clarkson_woodruff_transform(
     Ok(out)
 }
 
+fn push_orthonormalized_column(
+    basis_columns: &mut Vec<Vec<f64>>,
+    mut candidate: Vec<f64>,
+    tolerance: f64,
+) -> bool {
+    for _ in 0..2 {
+        for basis in basis_columns.iter() {
+            let dot: f64 = candidate
+                .iter()
+                .zip(basis.iter())
+                .map(|(&lhs, &rhs)| lhs * rhs)
+                .sum();
+            for (value, &basis_value) in candidate.iter_mut().zip(basis.iter()) {
+                *value -= dot * basis_value;
+            }
+        }
+    }
+
+    let norm = candidate
+        .iter()
+        .map(|value| value * value)
+        .sum::<f64>()
+        .sqrt();
+    if norm <= tolerance {
+        return false;
+    }
+    let inv_norm = norm.recip();
+    for value in &mut candidate {
+        *value *= inv_norm;
+    }
+    basis_columns.push(candidate);
+    true
+}
+
+fn thin_orthonormalized_columns(matrix: &[Vec<f64>], target_cols: usize) -> Vec<Vec<f64>> {
+    let rows = matrix.len();
+    if rows == 0 || target_cols == 0 {
+        return vec![Vec::new(); rows];
+    }
+
+    let source_cols = matrix.first().map_or(0, Vec::len).min(target_cols);
+    let target_cols = target_cols.min(rows);
+    let scale = matrix
+        .iter()
+        .flat_map(|row| row.iter())
+        .fold(0.0_f64, |max_value, &value| max_value.max(value.abs()))
+        .max(1.0);
+    let tolerance = scale * (rows as f64).sqrt() * 64.0 * f64::EPSILON;
+
+    let mut basis_columns: Vec<Vec<f64>> = Vec::with_capacity(target_cols);
+    for col in 0..source_cols {
+        let candidate: Vec<f64> = matrix.iter().map(|row| row[col]).collect();
+        push_orthonormalized_column(&mut basis_columns, candidate, tolerance);
+    }
+
+    for row in 0..rows {
+        if basis_columns.len() == target_cols {
+            break;
+        }
+        let mut candidate = vec![0.0; rows];
+        candidate[row] = 1.0;
+        push_orthonormalized_column(&mut basis_columns, candidate, tolerance);
+    }
+
+    let cols = basis_columns.len();
+    let mut q = vec![vec![0.0; cols]; rows];
+    for (col, basis) in basis_columns.iter().enumerate() {
+        for (row, value) in basis.iter().enumerate() {
+            q[row][col] = *value;
+        }
+    }
+    q
+}
+
 /// The `k` dominant (largest-magnitude) eigenpairs of a symmetric matrix `a` (n×n), via
 /// randomized range finding.
 ///
@@ -4163,16 +4237,13 @@ pub fn randomized_eigh(
         let ay = matmul(a, &y)?;
         y = matmul(a, &ay)?;
     }
-    let q_full = qr(&y, opts)?.q;
-    let q: Vec<Vec<f64>> = q_full
-        .iter()
-        .map(|row| row[..l.min(row.len())].to_vec())
-        .collect();
+    let q = thin_orthonormalized_columns(&y, l);
+    let q_cols = q.first().map_or(0, Vec::len);
 
     let aq = matmul(a, &q)?;
     let qt = transpose_rows(&q);
     let mut t = matmul(&qt, &aq)?;
-    for i in 0..l {
+    for i in 0..q_cols {
         for j in 0..i {
             let sym = 0.5 * (t[i][j] + t[j][i]);
             t[i][j] = sym;
@@ -4183,7 +4254,9 @@ pub fn randomized_eigh(
     let reduced = eigh(&t, opts)?;
     let mut pairs: Vec<(f64, Vec<f64>)> = Vec::with_capacity(reduced.eigenvalues.len());
     for (j, &lambda) in reduced.eigenvalues.iter().enumerate() {
-        let z_j: Vec<f64> = (0..l).map(|row| reduced.eigenvectors[row][j]).collect();
+        let z_j: Vec<f64> = (0..q_cols)
+            .map(|row| reduced.eigenvectors[row][j])
+            .collect();
         let lifted: Vec<f64> = q
             .iter()
             .map(|q_row| q_row.iter().zip(&z_j).map(|(&p, &qv)| p * qv).sum())
@@ -20736,9 +20809,12 @@ mod tests {
 
         let full = eigh(&a, DecompOptions::default()).expect("full eigh");
         let re = randomized_eigh(&a, k, 12, 2, 3).expect("randomized_eigh");
+        let repeat = randomized_eigh(&a, k, 12, 2, 3).expect("randomized_eigh repeat");
         assert_eq!(re.eigenvalues.len(), k);
         assert_eq!(re.eigenvectors.len(), n);
         assert_eq!(re.eigenvectors[0].len(), k);
+        assert_eq!(re.eigenvalues, repeat.eigenvalues);
+        assert_eq!(re.eigenvectors, repeat.eigenvectors);
         for win in re.eigenvalues.windows(2) {
             assert!(win[0] <= win[1] + 1e-9, "eigenvalues must be ascending");
         }
@@ -20764,6 +20840,16 @@ mod tests {
                 .sum::<f64>()
                 .sqrt();
             assert!(resid < 1e-6, "eigenvector residual {resid} for column {j}");
+            for col in 0..=j {
+                let dot: f64 = (0..n)
+                    .map(|row| re.eigenvectors[row][j] * re.eigenvectors[row][col])
+                    .sum();
+                let expected = if col == j { 1.0 } else { 0.0 };
+                assert!(
+                    (dot - expected).abs() < 1e-9,
+                    "eigenvector dot({j},{col})={dot}"
+                );
+            }
         }
         assert!(randomized_eigh(&[vec![1.0, 2.0]], k, 4, 1, 1).is_err());
     }
