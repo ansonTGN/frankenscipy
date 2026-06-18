@@ -11218,6 +11218,13 @@ pub static DISABLE_TALL_PINV_TRSM_THREADS: std::sync::atomic::AtomicBool =
 #[doc(hidden)]
 pub static DISABLE_TALL_PINV_STREAMING_CERT: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
+/// Runtime switch to force the tall `pinv` streaming certificate to read the
+/// column-major `DMatrix` result instead of reusing the row-major public output
+/// copy for same-binary A/B benchmarks. Defaults off. `#[doc(hidden)]`;
+/// internal.
+#[doc(hidden)]
+pub static DISABLE_TALL_PINV_ROW_MAJOR_CERT: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 /// Loose conditioning sanity floor for the solve-only normal-equations lstsq
 /// route: spectra below this rcond are hopeless even with refinement, so we
 /// fall back to the public thin-SVD route. Real acceptance is governed by the
@@ -11256,6 +11263,14 @@ fn tall_pinv_streaming_cert_disabled() -> bool {
     }
     static ENV: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ENV.get_or_init(|| std::env::var_os("FSCI_DISABLE_TALL_PINV_STREAMING_CERT").is_some())
+}
+
+fn tall_pinv_row_major_cert_disabled() -> bool {
+    if DISABLE_TALL_PINV_ROW_MAJOR_CERT.load(std::sync::atomic::Ordering::Relaxed) {
+        return true;
+    }
+    static ENV: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENV.get_or_init(|| std::env::var_os("FSCI_DISABLE_TALL_PINV_ROW_MAJOR_CERT").is_some())
 }
 
 fn pinv_full_rank_tall_cholesky(
@@ -11313,6 +11328,7 @@ fn pinv_full_rank_tall_cholesky_with_min_cols(
     if pinv.iter().any(|value| !value.is_finite()) {
         return None;
     }
+    let pseudo_inverse = rows_from_dmatrix(&pinv);
 
     let max_error = if tall_pinv_streaming_cert_disabled() {
         let right_inverse = &pinv * matrix;
@@ -11324,8 +11340,10 @@ fn pinv_full_rank_tall_cholesky_with_min_cols(
             }
         }
         max_error
-    } else {
+    } else if tall_pinv_row_major_cert_disabled() {
         pinv_right_inverse_max_error_streaming(&pinv, matrix)?
+    } else {
+        pinv_right_inverse_max_error_streaming_rows(&pseudo_inverse, matrix)?
     };
     let tolerance = FULL_RANK_TALL_PINV_RIGHT_INVERSE_REL_TOL * (cols as f64).sqrt();
     if max_error > tolerance {
@@ -11333,7 +11351,7 @@ fn pinv_full_rank_tall_cholesky_with_min_cols(
     }
 
     Some(FullRankTallPinvResult {
-        pseudo_inverse: rows_from_dmatrix(&pinv),
+        pseudo_inverse,
         rank: cols,
         rcond_estimate: (min_diag / max_diag).sqrt(),
     })
@@ -11401,6 +11419,67 @@ fn pinv_right_inverse_max_error_streaming(
                 value += pinv[(row, k)] * matrix[(k, col)];
             }
             let target = if row == col { 1.0 } else { 0.0 };
+            let error = (value - target).abs();
+            if !error.is_finite() {
+                return None;
+            }
+            max_error = max_error.max(error);
+            col += 1;
+        }
+    }
+    Some(max_error)
+}
+
+/// Row-major twin of [`pinv_right_inverse_max_error_streaming`]. The accepted
+/// tall-`pinv` route must return `Vec<Vec<f64>>` anyway, so the hot default
+/// certificate reuses that contiguous row layout instead of striding through a
+/// column-major `DMatrix` row.
+fn pinv_right_inverse_max_error_streaming_rows(
+    pinv_rows: &[Vec<f64>],
+    matrix: &DMatrix<f64>,
+) -> Option<f64> {
+    let rows = matrix.nrows();
+    let cols = matrix.ncols();
+    if pinv_rows.len() != cols || pinv_rows.iter().any(|row| row.len() != rows) {
+        return None;
+    }
+
+    let mut max_error = 0.0_f64;
+    for (row_idx, pinv_row) in pinv_rows.iter().enumerate() {
+        let mut col = 0;
+        while col + 4 <= cols {
+            let mut acc0 = 0.0_f64;
+            let mut acc1 = 0.0_f64;
+            let mut acc2 = 0.0_f64;
+            let mut acc3 = 0.0_f64;
+            for k in 0..rows {
+                let scale = pinv_row[k];
+                acc0 += scale * matrix[(k, col)];
+                acc1 += scale * matrix[(k, col + 1)];
+                acc2 += scale * matrix[(k, col + 2)];
+                acc3 += scale * matrix[(k, col + 3)];
+            }
+            let targets = [
+                if row_idx == col { 1.0 } else { 0.0 },
+                if row_idx == col + 1 { 1.0 } else { 0.0 },
+                if row_idx == col + 2 { 1.0 } else { 0.0 },
+                if row_idx == col + 3 { 1.0 } else { 0.0 },
+            ];
+            for (value, target) in [acc0, acc1, acc2, acc3].into_iter().zip(targets) {
+                let error = (value - target).abs();
+                if !error.is_finite() {
+                    return None;
+                }
+                max_error = max_error.max(error);
+            }
+            col += 4;
+        }
+        while col < cols {
+            let mut value = 0.0_f64;
+            for k in 0..rows {
+                value += pinv_row[k] * matrix[(k, col)];
+            }
+            let target = if row_idx == col { 1.0 } else { 0.0 };
             let error = (value - target).abs();
             if !error.is_finite() {
                 return None;
@@ -18859,9 +18938,12 @@ mod tests {
         let gram = &a_t * &matrix;
         let chol = Cholesky::new(gram).expect("SPD Gram factor");
         let pinv = cholesky_solve_matrix_rhs_batched(&chol, &a_t).expect("batched solve");
+        let pinv_rows = rows_from_dmatrix(&pinv);
 
         let streaming =
             pinv_right_inverse_max_error_streaming(&pinv, &matrix).expect("streaming certificate");
+        let row_major = pinv_right_inverse_max_error_streaming_rows(&pinv_rows, &matrix)
+            .expect("row-major streaming certificate");
         let materialized = &pinv * &matrix;
         let mut expected = 0.0_f64;
         for row in 0..cols {
@@ -18872,6 +18954,7 @@ mod tests {
         }
 
         assert!((streaming - expected).abs() <= 1e-12);
+        assert!((row_major - expected).abs() <= 1e-12);
     }
 
     #[test]
