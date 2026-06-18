@@ -3993,7 +3993,10 @@ pub fn dice(u: &[bool], v: &[bool]) -> f64 {
 
 /// Kulsinski dissimilarity for boolean vectors.
 ///
-/// Matches `scipy.spatial.distance.kulsinski`.
+/// Implements the historical `scipy.spatial.distance.kulsinski` formula
+/// `(ntf + nft - ntt + n) / (ntf + nft + n)`. NOTE: SciPy deprecated this metric
+/// and **removed it in SciPy 1.15+** (gone from 1.17), so there is no current
+/// SciPy oracle; retained here for backward compatibility.
 pub fn kulsinski(u: &[bool], v: &[bool]) -> f64 {
     let n = u.len() as f64;
     let mut ctf = 0usize;
@@ -4050,7 +4053,9 @@ pub fn russellrao(u: &[bool], v: &[bool]) -> f64 {
 
 /// Sokal-Michener dissimilarity for boolean vectors.
 ///
-/// Matches `scipy.spatial.distance.sokalmichener`.
+/// Equal to [`rogerstanimoto`] (`2(ntf+nft) / (ntt+nff + 2(ntf+nft))`). NOTE:
+/// SciPy deprecated this metric and **removed it in SciPy 1.15+** (gone from
+/// 1.17); retained here for backward compatibility.
 pub fn sokalmichener(u: &[bool], v: &[bool]) -> f64 {
     rogerstanimoto(u, v) // Same formula
 }
@@ -4082,8 +4087,10 @@ pub fn sokalsneath(u: &[bool], v: &[bool]) -> f64 {
 
 /// Matching dissimilarity for boolean vectors.
 ///
-/// Fraction of positions where both vectors agree.
-/// Matches `scipy.spatial.distance.matching` (same as Hamming for boolean).
+/// Fraction of positions where the vectors disagree — identical to [`hamming`]
+/// for boolean input. NOTE: `scipy.spatial.distance.matching` was an alias for
+/// `hamming` that SciPy **removed in 1.15+** (gone from 1.17); use [`hamming`]
+/// for current SciPy parity.
 pub fn matching(u: &[bool], v: &[bool]) -> f64 {
     let n = u.len();
     if n == 0 {
@@ -5647,6 +5654,26 @@ mod tests {
         let v = [true, true, false, true, false, false, true, false];
         assert!((dice(&u, &v) - 0.5).abs() < 1e-12);
         assert!((sokalsneath(&u, &v) - 0.8).abs() < 1e-12);
+    }
+
+    #[test]
+    fn boolean_metrics_match_scipy_1_17() {
+        // Golden values from scipy.spatial.distance (1.17.1) for
+        // u=[T,F,T,F], v=[T,T,F,F]: contingency ntt=ntf=nft=nff=1.
+        let u = [true, false, true, false];
+        let v = [true, true, false, false];
+        assert!((yule(&u, &v) - 1.0).abs() < 1e-12, "yule");
+        assert!((dice(&u, &v) - 0.5).abs() < 1e-12, "dice");
+        assert!(
+            (rogerstanimoto(&u, &v) - 0.666_666_666_666_666_6).abs() < 1e-12,
+            "rogerstanimoto"
+        );
+        assert!((russellrao(&u, &v) - 0.75).abs() < 1e-12, "russellrao");
+        assert!((sokalsneath(&u, &v) - 0.8).abs() < 1e-12, "sokalsneath");
+        // sokalmichener == rogerstanimoto (removed from SciPy but kept here).
+        assert_eq!(sokalmichener(&u, &v), rogerstanimoto(&u, &v));
+        // yule's all-equal degenerate case is 0.0 (half_R == 0).
+        assert_eq!(yule(&[true, true], &[true, true]), 0.0);
     }
 
     /// The multithreaded `pdist` must be BIT-IDENTICAL to the sequential condensed
