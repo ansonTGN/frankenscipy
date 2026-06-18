@@ -1060,6 +1060,11 @@ pub fn linprog(
             detail: "c must contain only finite values".to_string(),
         });
     }
+    if maxiter == Some(0) {
+        return Err(OptError::InvalidArgument {
+            detail: "maxiter must be greater than zero".to_string(),
+        });
+    }
 
     // Validate dimensions.
     if a_ub.len() != b_ub.len() {
@@ -6117,6 +6122,13 @@ mod tests {
         let err = linprog(&[1.0], &[], &[], &[vec![1.0]], &[f64::NAN], &[], None)
             .expect_err("NaN equality RHS should fail");
         assert!(matches!(err, crate::OptError::NonFiniteInput { .. }));
+    }
+
+    #[test]
+    fn linprog_rejects_zero_iteration_budget() {
+        let err = linprog(&[1.0], &[], &[], &[], &[], &[], Some(0))
+            .expect_err("zero maxiter should fail");
+        assert!(matches!(err, crate::OptError::InvalidArgument { .. }));
     }
 
     // ── milp tests ──────────────────────────────────────────────────
