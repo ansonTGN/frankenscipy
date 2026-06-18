@@ -72020,6 +72020,21 @@ mod tests {
     }
 
     #[test]
+    fn levene_match_scipy() {
+        // scipy.stats.levene default (median-centered) on 3 groups.
+        let g1 = [1.0, 2.0, 3.0, 4.0];
+        let g2 = [1.0, 3.0, 5.0, 7.0];
+        let g3 = [2.0, 2.0, 3.0, 3.0];
+        let r = levene(&[&g1, &g2, &g3]);
+        assert!((r.statistic - 4.2).abs() < 1e-10, "stat: {}", r.statistic);
+        assert!(
+            (r.pvalue - 0.051_477_764_080_395_73).abs() < 1e-12,
+            "p: {}",
+            r.pvalue
+        );
+    }
+
+    #[test]
     fn bartlett_match_scipy() {
         // scipy.stats.bartlett (equal-variance test) on 3 groups.
         let g1 = [1.0, 2.0, 3.0, 4.0];
