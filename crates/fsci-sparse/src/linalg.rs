@@ -5410,6 +5410,23 @@ mod tests {
     }
 
     #[test]
+    fn csr_matvec_match_scipy() {
+        // A=[[1,0,2],[0,3,0],[4,0,5]] @ [1,2,3] = [7,6,19] (scipy.sparse csr @ x).
+        let a = CooMatrix::from_triplets(
+            Shape2D::new(3, 3),
+            vec![1.0, 2.0, 3.0, 4.0, 5.0],
+            vec![0, 0, 1, 2, 2],
+            vec![0, 2, 1, 0, 2],
+            false,
+        )
+        .expect("coo")
+        .to_csr()
+        .expect("csr");
+        let y = a.matvec(&[1.0, 2.0, 3.0]).expect("matvec");
+        assert_eq!(y, vec![7.0, 6.0, 19.0]);
+    }
+
+    #[test]
     fn gmres_bicgstab_match_scipy_nonsymmetric() {
         // Non-symmetric A=[[4,1,0],[2,5,1],[0,2,6]], b=[1,2,3] -> x=[0.19,0.24,0.42]
         // (numpy.linalg.solve). cg cannot solve this (non-SPD); gmres/bicgstab can.
