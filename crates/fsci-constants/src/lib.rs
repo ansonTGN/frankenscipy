@@ -1226,4 +1226,34 @@ mod tests {
             "find('light') should include speed of light"
         );
     }
+
+    #[test]
+    fn find_lists_em_atomic_constants_exposed_by_value() {
+        // frankenscipy-g9e37: value() and find() should expose the same
+        // CODATA-2022 EM/atomic constants that SciPy lists by name.
+        let cases: &[(&str, &str, f64)] = &[
+            ("magneton", "Bohr magneton", BOHR_MAGNETON),
+            ("magneton", "nuclear magneton", NUCLEAR_MAGNETON),
+            ("flux", "mag. flux quantum", MAGNETIC_FLUX_QUANTUM),
+            ("conductance", "conductance quantum", CONDUCTANCE_QUANTUM),
+            ("josephson", "Josephson constant", JOSEPHSON),
+            ("klitzing", "von Klitzing constant", VON_KLITZING),
+            ("hartree", "Hartree energy", HARTREE),
+            (
+                "classical electron",
+                "classical electron radius",
+                CLASSICAL_ELECTRON_RADIUS,
+            ),
+        ];
+
+        for &(query, expected_name, expected_value) in cases {
+            let results = find(query);
+            assert!(
+                results
+                    .iter()
+                    .any(|&(name, value)| name == expected_name && value == expected_value),
+                "find({query:?}) should include {expected_name}"
+            );
+        }
+    }
 }
