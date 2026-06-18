@@ -1159,6 +1159,11 @@ where
 
     let max_order = max_order.unwrap_or(10);
     let tol = tol.unwrap_or(1.49e-8);
+    if !tol.is_finite() || tol <= 0.0 {
+        return Err(IntegrateValidationError::QuadInvalidTolerance {
+            detail: "Romberg tolerance must be finite and positive".to_string(),
+        });
+    }
 
     // Romberg table: R[i][j]
     let mut r = vec![vec![0.0; max_order + 1]; max_order + 1];
@@ -4718,6 +4723,18 @@ mod tests {
             result.integral,
             expected
         );
+    }
+
+    #[test]
+    fn romb_func_rejects_invalid_tolerances() {
+        for tol in [f64::NAN, f64::INFINITY, 0.0, -1.0] {
+            let err = romb_func(|x| x * x, 0.0, 1.0, None, Some(tol))
+                .expect_err("invalid Romberg tolerance should fail");
+            assert!(matches!(
+                err,
+                IntegrateValidationError::QuadInvalidTolerance { .. }
+            ));
+        }
     }
 
     #[test]
