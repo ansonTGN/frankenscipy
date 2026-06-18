@@ -10089,6 +10089,78 @@ impl Hypergeometric {
         assert!(big_n <= big_m, "N must be <= M, got N={big_n}, M={big_m}");
         Self { big_m, n, big_n }
     }
+
+    /// Log-pmf at many outcomes, hoisting the FIVE parameter-only lgamma terms
+    /// (`lnΓ(n+1)`, `lnΓ(M−n+1)`, `lnΓ(M+1)`, `lnΓ(N+1)`, `lnΓ(M−N+1)`) out of the
+    /// per-`k` loop — each substituted IN PLACE so the interleaved +/− operation
+    /// order matches `logpmf` exactly (the four `k`-dependent lgammas stay). Byte-
+    /// identical to mapping `logpmf`, same out-of-support → −∞.
+    #[must_use]
+    pub fn logpmf_many(&self, ks: &[u64]) -> Vec<f64> {
+        let m = self.big_m as f64;
+        let n = self.n as f64;
+        let big_n = self.big_n as f64;
+        let g_n1 = ln_gamma(n + 1.0);
+        let g_mn1 = ln_gamma(m - n + 1.0);
+        let g_m1 = ln_gamma(m + 1.0);
+        let g_bign1 = ln_gamma(big_n + 1.0);
+        let g_mbign1 = ln_gamma(m - big_n + 1.0);
+        let k_min = if self.big_n.saturating_add(self.n) > self.big_m {
+            (self.big_n + self.n - self.big_m) as f64
+        } else {
+            0.0
+        };
+        let k_max = n.min(big_n);
+        ks.iter()
+            .map(|&k| {
+                let kf = k as f64;
+                if kf < k_min || kf > k_max {
+                    return f64::NEG_INFINITY;
+                }
+                g_n1 - ln_gamma(kf + 1.0) - ln_gamma(n - kf + 1.0) + g_mn1
+                    - ln_gamma(big_n - kf + 1.0)
+                    - ln_gamma(m - n - big_n + kf + 1.0)
+                    - g_m1
+                    + g_bign1
+                    + g_mbign1
+            })
+            .collect()
+    }
+
+    /// Pmf at many outcomes; hoists the same five lgamma terms as
+    /// [`logpmf_many`](Self::logpmf_many). Byte-identical to mapping `pmf`.
+    #[must_use]
+    pub fn pmf_many(&self, ks: &[u64]) -> Vec<f64> {
+        let m = self.big_m as f64;
+        let n = self.n as f64;
+        let big_n = self.big_n as f64;
+        let g_n1 = ln_gamma(n + 1.0);
+        let g_mn1 = ln_gamma(m - n + 1.0);
+        let g_m1 = ln_gamma(m + 1.0);
+        let g_bign1 = ln_gamma(big_n + 1.0);
+        let g_mbign1 = ln_gamma(m - big_n + 1.0);
+        let k_min = if self.big_n.saturating_add(self.n) > self.big_m {
+            (self.big_n + self.n - self.big_m) as f64
+        } else {
+            0.0
+        };
+        let k_max = n.min(big_n);
+        ks.iter()
+            .map(|&k| {
+                let kf = k as f64;
+                if kf < k_min || kf > k_max {
+                    return 0.0;
+                }
+                let ln_pmf = g_n1 - ln_gamma(kf + 1.0) - ln_gamma(n - kf + 1.0) + g_mn1
+                    - ln_gamma(big_n - kf + 1.0)
+                    - ln_gamma(m - n - big_n + kf + 1.0)
+                    - g_m1
+                    + g_bign1
+                    + g_mbign1;
+                ln_pmf.exp()
+            })
+            .collect()
+    }
 }
 
 impl DiscreteDistribution for Hypergeometric {
@@ -55848,6 +55920,20 @@ mod tests {
         let h = Hypergeometric::new(20, 7, 12);
         let sum: f64 = (0..=7).map(|k| h.pmf(k)).sum();
         assert!((sum - 1.0).abs() < 1e-10, "PMF sum = {sum}");
+    }
+
+    #[test]
+    fn hypergeometric_pmf_many_matches_pmf() {
+        // Batch pmf_many/logpmf_many (5 lgammas hoisted) byte-identical to per-k,
+        // incl. out-of-support outcomes.
+        let h = Hypergeometric::new(20, 7, 12);
+        let ks: Vec<u64> = (0..=9).collect();
+        let pm = h.pmf_many(&ks);
+        let lpm = h.logpmf_many(&ks);
+        for (i, &k) in ks.iter().enumerate() {
+            assert_eq!(pm[i], h.pmf(k), "pmf_many != pmf at k={k}");
+            assert_eq!(lpm[i], h.logpmf(k), "logpmf_many != logpmf at k={k}");
+        }
     }
 
     #[test]
