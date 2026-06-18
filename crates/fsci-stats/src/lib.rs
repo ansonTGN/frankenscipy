@@ -72020,6 +72020,19 @@ mod tests {
     }
 
     #[test]
+    fn median_abs_deviation_match_scipy() {
+        // scipy.stats.median_abs_deviation: scale=1.0 (default) is the raw MAD;
+        // scale='normal' divides by norm.ppf(0.75)=0.6744897501960817.
+        let x = [1.0, 2.0, 3.0, 4.0, 10.0];
+        assert!((median_abs_deviation(&x, 1.0) - 1.0).abs() < 1e-12, "mad raw");
+        let normal = 0.674_489_750_196_081_7;
+        assert!(
+            (median_abs_deviation(&x, normal) - 1.482_602_218_505_602).abs() < 1e-12,
+            "mad normal"
+        );
+    }
+
+    #[test]
     fn skew_kurtosis_free_fn_match_scipy() {
         // scipy.stats.skew (bias=True) and kurtosis (Fisher + bias=True defaults).
         // Cross-reviewed: kurtosis_from_moments subtracts 3.0 (Fisher convention).
