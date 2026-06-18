@@ -10991,6 +10991,17 @@ mod tests {
     }
 
     #[test]
+    fn polyval_der_matches_numpy() {
+        // polyval_der(descending coeffs, x, der) returns [p(x), p'(x), ..., p^(der)].
+        // Was untested. p = x^2-3x+2 at x=2: p=0, p'=2x-3=1, p''=2.
+        let r = polyval_der(&[1.0, -3.0, 2.0], 2.0, 2);
+        assert_eq!(r, vec![0.0, 1.0, 2.0]);
+        // p=2x^3-3x+1 at x=1: p=0, p'=6x^2-3=3, p''=12x=12, p'''=12.
+        let r2 = polyval_der(&[2.0, 0.0, -3.0, 1.0], 1.0, 3);
+        assert_eq!(r2, vec![0.0, 3.0, 12.0, 12.0]);
+    }
+
+    #[test]
     fn polyroots_matches_numpy() {
         // numpy.roots convention: descending coeffs, real roots only. polyroots was
         // previously untested. Quadratic x^2-5x+6=(x-2)(x-3): larger root first.
