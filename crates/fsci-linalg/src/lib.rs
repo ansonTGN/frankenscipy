@@ -11130,6 +11130,11 @@ const LOW_RANK_PINV_BASIS_REL_TOL: f64 = 1e-8;
 const LOW_RANK_PINV_RECON_REL_TOL: f64 = 1e-8;
 const FULL_RANK_TALL_PINV_MIN_COLS: usize = 128;
 const FULL_RANK_TALL_PINV_RIGHT_INVERSE_REL_TOL: f64 = 1e-8;
+/// Runtime switch to force nalgebra's original Cholesky matrix-RHS solve for
+/// same-binary A/B benchmarks. Defaults off. `#[doc(hidden)]` — internal.
+#[doc(hidden)]
+pub static DISABLE_TALL_PINV_TRSM: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 /// Loose conditioning sanity floor for the solve-only normal-equations lstsq
 /// route: spectra below this rcond are hopeless even with refinement, so we
 /// fall back to the public thin-SVD route. Real acceptance is governed by the
@@ -11144,6 +11149,14 @@ const FULL_RANK_TALL_LSTSQ_REFINE_REL_TOL: f64 = 1e-4;
 struct LowRankTallFactor {
     basis: Vec<Vec<f64>>,
     coefficients: Vec<Vec<f64>>,
+}
+
+fn tall_pinv_trsm_disabled() -> bool {
+    if DISABLE_TALL_PINV_TRSM.load(std::sync::atomic::Ordering::Relaxed) {
+        return true;
+    }
+    static ENV: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENV.get_or_init(|| std::env::var_os("FSCI_DISABLE_TALL_PINV_TRSM").is_some())
 }
 
 fn pinv_full_rank_tall_cholesky(
@@ -11193,7 +11206,11 @@ fn pinv_full_rank_tall_cholesky_with_min_cols(
     }
 
     let chol = Cholesky::new(gram)?;
-    let pinv = chol.solve(&a_t);
+    let pinv = if tall_pinv_trsm_disabled() {
+        chol.solve(&a_t)
+    } else {
+        cholesky_solve_matrix_rhs_batched(&chol, &a_t)?
+    };
     if pinv.iter().any(|value| !value.is_finite()) {
         return None;
     }
@@ -15572,6 +15589,78 @@ fn block_axpy_sub(b: &mut [f64], bi: usize, bp: usize, w: usize, scal: f64) {
     }
 }
 
+/// Solve `L·Lᵀ·X = RHS` from a nalgebra Cholesky factor, but keep RHS rows in a
+/// contiguous row-major scratch so each triangular substitution streams across
+/// many columns with one 8-wide vector operation per row update.
+#[allow(clippy::needless_range_loop)]
+fn cholesky_solve_matrix_rhs_batched(
+    chol: &Cholesky<f64, Dyn>,
+    rhs: &DMatrix<f64>,
+) -> Option<DMatrix<f64>> {
+    let l = chol.l_dirty();
+    let n = l.nrows();
+    let w = rhs.ncols();
+    if l.ncols() != n || rhs.nrows() != n {
+        return None;
+    }
+
+    let mut b = vec![0.0f64; n * w];
+    for i in 0..n {
+        let bi = i * w;
+        for col in 0..w {
+            b[bi + col] = rhs[(i, col)];
+        }
+    }
+
+    // Forward solve L·Y = RHS.
+    for i in 0..n {
+        let bi = i * w;
+        for p in 0..i {
+            block_axpy_sub(&mut b, bi, p * w, w, l[(i, p)]);
+        }
+        let d = l[(i, i)];
+        if d == 0.0 || !d.is_finite() {
+            return None;
+        }
+        let dv = Simd::<f64, 8>::splat(d);
+        let mut col = 0;
+        while col + 8 <= w {
+            (Simd::<f64, 8>::from_slice(&b[bi + col..bi + col + 8]) / dv)
+                .copy_to_slice(&mut b[bi + col..bi + col + 8]);
+            col += 8;
+        }
+        while col < w {
+            b[bi + col] /= d;
+            col += 1;
+        }
+    }
+
+    // Back solve Lᵀ·X = Y.
+    for i in (0..n).rev() {
+        let bi = i * w;
+        for p in (i + 1)..n {
+            block_axpy_sub(&mut b, bi, p * w, w, l[(p, i)]);
+        }
+        let d = l[(i, i)];
+        if d == 0.0 || !d.is_finite() {
+            return None;
+        }
+        let dv = Simd::<f64, 8>::splat(d);
+        let mut col = 0;
+        while col + 8 <= w {
+            (Simd::<f64, 8>::from_slice(&b[bi + col..bi + col + 8]) / dv)
+                .copy_to_slice(&mut b[bi + col..bi + col + 8]);
+            col += 8;
+        }
+        while col < w {
+            b[bi + col] /= d;
+            col += 1;
+        }
+    }
+
+    Some(DMatrix::from_fn(n, w, |row, col| b[row * w + col]))
+}
+
 /// Multi-RHS triangular solve for the inverse: solve `A·X[:, c0..c1] = I[:, c0..c1]`
 /// using the LU `factors`, vectorized 8-wide across the RHS columns (a BLAS-3 TRSM
 /// instead of `c1-c0` scalar single-RHS substitutions). Returns the block row-major as
@@ -18508,6 +18597,29 @@ mod tests {
             1e-7,
             1e-7,
         );
+    }
+
+    #[test]
+    fn batched_cholesky_matrix_rhs_matches_nalgebra_solve() {
+        let rows = 32;
+        let cols = 16;
+        let mut data = Vec::with_capacity(rows * cols);
+        for row in 0..rows {
+            for col in 0..cols {
+                let diagonal = if row == col { 10.0 + col as f64 } else { 0.0 };
+                let smooth = ((row * 19 + col * 23 + 11) % 43) as f64 / 101.0;
+                data.push(diagonal + smooth);
+            }
+        }
+        let matrix = DMatrix::from_row_slice(rows, cols, &data);
+        let a_t = matrix.transpose();
+        let gram = &a_t * &matrix;
+        let chol = Cholesky::new(gram).expect("SPD Gram factor");
+
+        let expected = chol.solve(&a_t);
+        let actual = cholesky_solve_matrix_rhs_batched(&chol, &a_t).expect("batched solve");
+
+        assert!(max_abs_dmatrix_diff(&actual, &expected) <= 1e-12);
     }
 
     #[test]

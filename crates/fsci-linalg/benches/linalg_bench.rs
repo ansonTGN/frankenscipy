@@ -314,13 +314,20 @@ fn bench_baseline_lstsq(c: &mut Criterion) {
 }
 
 fn bench_baseline_pinv(c: &mut Criterion) {
+    use std::sync::atomic::Ordering::Relaxed;
     let mut group = c.benchmark_group("baseline_pinv");
     group.sample_size(100);
     for &n in BASELINE_SIZES {
         let rows = n * 2;
         let a = make_overdetermined(rows, n);
         group.bench_function(format!("{rows}x{n}"), |bencher| {
+            fsci_linalg::DISABLE_TALL_PINV_TRSM.store(false, Relaxed);
             bencher.iter(|| pinv(&a, PinvOptions::default()).unwrap());
+        });
+        group.bench_function(format!("{rows}x{n}_chol_solve"), |bencher| {
+            fsci_linalg::DISABLE_TALL_PINV_TRSM.store(true, Relaxed);
+            bencher.iter(|| pinv(&a, PinvOptions::default()).unwrap());
+            fsci_linalg::DISABLE_TALL_PINV_TRSM.store(false, Relaxed);
         });
     }
     group.finish();
