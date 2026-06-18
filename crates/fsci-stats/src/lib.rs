@@ -71455,6 +71455,31 @@ mod tests {
     }
 
     #[test]
+    fn linregress_match_scipy() {
+        // scipy.stats.linregress 1.17.1 for x=[1..5], y=[2.1,3.9,6.1,8.0,9.9].
+        let x = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let y = [2.1, 3.9, 6.1, 8.0, 9.9];
+        let r = linregress(&x, &y);
+        assert!((r.slope - 1.970_000_000_000_000_4).abs() < 1e-12, "slope: {}", r.slope);
+        assert!(
+            (r.intercept - 0.089_999_999_999_998_97).abs() < 1e-10,
+            "intercept: {}",
+            r.intercept
+        );
+        assert!((r.rvalue - 0.999_600_847_218_034_1).abs() < 1e-12, "rvalue: {}", r.rvalue);
+        assert!(
+            (r.pvalue - 9.572_306_454_970_347e-6).abs() < 1e-12,
+            "pvalue: {}",
+            r.pvalue
+        );
+        assert!(
+            (r.stderr - 0.032_145_502_536_637_62).abs() < 1e-12,
+            "stderr: {}",
+            r.stderr
+        );
+    }
+
+    #[test]
     fn anova_chi2_contingency_match_scipy() {
         // scipy.stats.f_oneway and chi2_contingency (Yates correction), 1.17.1.
         let g1 = [1.0, 2.0, 3.0, 4.0];
