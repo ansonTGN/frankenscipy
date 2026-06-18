@@ -3292,6 +3292,37 @@ fn nonlin_converged(fx: &[f64]) -> bool {
     fx.iter().fold(0.0_f64, |m, &v| m.max(v.abs())) < NONLIN_FTOL
 }
 
+fn validate_nonlin_maxiter(maxiter: usize) -> Result<(), OptError> {
+    if maxiter == 0 {
+        return Err(OptError::InvalidArgument {
+            detail: "maxiter must be greater than zero".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_nonzero_alpha(alpha: Option<f64>, name: &str) -> Result<(), OptError> {
+    if let Some(value) = alpha
+        && (!value.is_finite() || value == 0.0)
+    {
+        return Err(OptError::InvalidArgument {
+            detail: format!("{name} must be finite and nonzero"),
+        });
+    }
+    Ok(())
+}
+
+fn validate_positive_alpha(alpha: Option<f64>, name: &str) -> Result<(), OptError> {
+    if let Some(value) = alpha
+        && (!value.is_finite() || value <= 0.0)
+    {
+        return Err(OptError::InvalidArgument {
+            detail: format!("{name} must be a positive finite value"),
+        });
+    }
+    Ok(())
+}
+
 /// Find a root of a vector function using a diagonal Broyden Jacobian
 /// approximation, matching `scipy.optimize.diagbroyden(F, xin)`.
 ///
@@ -3309,6 +3340,8 @@ pub fn diagbroyden<F>(
 where
     F: Fn(&[f64]) -> Vec<f64>,
 {
+    validate_nonlin_maxiter(maxiter)?;
+    validate_nonzero_alpha(alpha, "alpha")?;
     let mut fx = nonlin_setup(&func, x0)?;
     let mut x = x0.to_vec();
     if nonlin_converged(&fx) {
@@ -3358,6 +3391,8 @@ pub fn linearmixing<F>(
 where
     F: Fn(&[f64]) -> Vec<f64>,
 {
+    validate_nonlin_maxiter(maxiter)?;
+    validate_nonzero_alpha(alpha, "alpha")?;
     let mut fx = nonlin_setup(&func, x0)?;
     let mut x = x0.to_vec();
     if nonlin_converged(&fx) {
@@ -3399,6 +3434,13 @@ pub fn excitingmixing<F>(
 where
     F: Fn(&[f64]) -> Vec<f64>,
 {
+    validate_nonlin_maxiter(maxiter)?;
+    validate_positive_alpha(alpha, "alpha")?;
+    if !alphamax.is_finite() || alphamax <= 0.0 {
+        return Err(OptError::InvalidArgument {
+            detail: "alphamax must be a positive finite value".to_string(),
+        });
+    }
     let mut fx = nonlin_setup(&func, x0)?;
     let mut x = x0.to_vec();
     if nonlin_converged(&fx) {
@@ -5216,6 +5258,12 @@ mod tests {
         let at_root = diagbroyden(f, &root, None, 10).expect("at root");
         assert!((at_root[0] - root[0]).abs() < 1e-3);
         assert!(diagbroyden(f, &[], None, 10).is_err());
+        assert!(diagbroyden(f, &[0.0, 0.0], None, 0).is_err());
+        assert!(diagbroyden(f, &[0.0, 0.0], Some(0.0), 10).is_err());
+        assert!(diagbroyden(f, &[0.0, 0.0], Some(f64::NAN), 10).is_err());
+        assert!(linearmixing(f, &[0.0, 0.0], None, 0).is_err());
+        assert!(linearmixing(f, &[0.0, 0.0], Some(0.0), 10).is_err());
+        assert!(linearmixing(f, &[0.0, 0.0], Some(f64::INFINITY), 10).is_err());
     }
 
     #[test]
@@ -5232,6 +5280,11 @@ mod tests {
         let r = excitingmixing(f, &[0.0, 0.0], Some(0.1), 1.0, 500).expect("converges");
         assert!((r[0] - 1.5945621166).abs() < 1e-5, "x0 {}", r[0]);
         assert!((r[1] - 2.0887301451).abs() < 1e-5, "x1 {}", r[1]);
+        assert!(excitingmixing(f, &[0.0, 0.0], Some(0.1), 1.0, 0).is_err());
+        assert!(excitingmixing(f, &[0.0, 0.0], Some(0.0), 1.0, 10).is_err());
+        assert!(excitingmixing(f, &[0.0, 0.0], Some(f64::NAN), 1.0, 10).is_err());
+        assert!(excitingmixing(f, &[0.0, 0.0], Some(0.1), 0.0, 10).is_err());
+        assert!(excitingmixing(f, &[0.0, 0.0], Some(0.1), f64::INFINITY, 10).is_err());
     }
 
     #[test]
