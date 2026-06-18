@@ -13079,9 +13079,17 @@ pub fn matrix_balance(
     scale: bool,
 ) -> Result<MatrixBalance, LinalgError> {
     let n = a.len();
-    if n == 0 || a.iter().any(|r| r.len() != n) {
+    if a.iter().any(|r| r.len() != n) {
         return Err(LinalgError::InvalidArgument {
-            detail: "matrix_balance requires a square non-empty matrix".to_string(),
+            detail: "matrix_balance requires a square matrix".to_string(),
+        });
+    }
+    if n == 0 {
+        return Ok(MatrixBalance {
+            balanced: Vec::new(),
+            transform: Vec::new(),
+            scaling: Vec::new(),
+            perm: Vec::new(),
         });
     }
 
@@ -24371,6 +24379,16 @@ mod tests {
         let res3 = matrix_balance(&a, false, false).unwrap();
         assert_eq!(res3.balanced, a);
         assert_eq!(res3.scaling, vec![1.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn matrix_balance_accepts_empty_square_input_like_scipy() {
+        let empty: Vec<Vec<f64>> = Vec::new();
+        let res = matrix_balance(&empty, true, true).expect("scipy accepts 0x0 matrix");
+        assert!(res.balanced.is_empty());
+        assert!(res.transform.is_empty());
+        assert!(res.scaling.is_empty());
+        assert!(res.perm.is_empty());
     }
 
     #[test]
