@@ -5657,6 +5657,30 @@ mod tests {
     }
 
     #[test]
+    fn kdtree_query_match_scipy() {
+        // scipy.spatial.KDTree query / query(k=2) / query_ball_point.
+        let pts = vec![
+            vec![0.0, 0.0],
+            vec![1.0, 1.0],
+            vec![2.0, 2.0],
+            vec![3.0, 3.0],
+            vec![0.0, 3.0],
+        ];
+        let tree = KDTree::new(&pts).expect("kdtree");
+        let (idx, dist) = tree.query(&[0.6, 0.6]).expect("query");
+        assert_eq!(idx, 1);
+        assert!((dist - 0.565_685_424_949_238).abs() < 1e-12, "dist: {dist}");
+        let knn = tree.query_k(&[0.6, 0.6], 2).expect("query_k");
+        assert_eq!(knn[0].0, 1);
+        assert_eq!(knn[1].0, 0);
+        assert!((knn[0].1 - 0.565_685_424_949_238).abs() < 1e-12);
+        assert!((knn[1].1 - 0.848_528_137_423_857).abs() < 1e-12);
+        let mut ball = tree.query_ball_point(&[0.0, 0.0], 1.5).expect("ball");
+        ball.sort();
+        assert_eq!(ball, vec![0, 1]);
+    }
+
+    #[test]
     fn cdist_pdist_match_scipy() {
         // scipy.spatial.distance.cdist (euclidean) and pdist (condensed), 1.17.1.
         let a = vec![vec![0.0, 0.0], vec![1.0, 1.0]];
