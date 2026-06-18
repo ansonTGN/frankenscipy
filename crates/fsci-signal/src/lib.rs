@@ -1855,8 +1855,8 @@ fn lombscargle_thread_count(m: usize, n: usize) -> usize {
 ///
 /// Matches `scipy.signal.gausspulse(t, fc, bw)`.
 pub fn gausspulse(t: &[f64], fc: f64, bw: f64) -> Vec<f64> {
-    if fc < 0.0 || bw <= 0.0 {
-        return vec![0.0; t.len()];
+    if !(fc >= 0.0 && fc.is_finite() && bw > 0.0 && bw.is_finite()) {
+        return vec![f64::NAN; t.len()];
     }
     let bwr = -6.0; // reference level in dB
     let ref_level = 10.0_f64.powf(bwr / 20.0);
@@ -24462,6 +24462,26 @@ mod tests {
         let t = [-1.0, 0.0, 1.0];
         let y = gausspulse(&t, 0.0, 0.5);
         assert_eq!(y, vec![1.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn gausspulse_invalid_controls_fail_closed_with_nan_samples() {
+        let t = [-1.0, 0.0, 1.0];
+        for (fc, bw) in [
+            (-1.0, 0.5),
+            (f64::NAN, 0.5),
+            (f64::INFINITY, 0.5),
+            (1.0, 0.0),
+            (1.0, -0.5),
+            (1.0, f64::NAN),
+        ] {
+            let y = gausspulse(&t, fc, bw);
+            assert_eq!(y.len(), t.len());
+            assert!(
+                y.iter().all(|value| value.is_nan()),
+                "fc={fc}, bw={bw} should produce all-NaN samples: {y:?}"
+            );
+        }
     }
 
     #[test]
