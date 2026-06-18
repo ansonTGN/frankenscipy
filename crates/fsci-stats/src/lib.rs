@@ -45335,6 +45335,17 @@ mod tests {
     // ── Chi-squared distribution ────────────────────────────────────
 
     #[test]
+    fn chi2_pdf_cdf_match_scipy() {
+        // Exact scipy.stats.chi2(4). chi2_pdf_positive_only checks only positivity;
+        // chi2_cdf_known is a loose df=2 special case (tol 1e-4). This pins the
+        // df=4 pdf/cdf at interior points.
+        let c = ChiSquared::new(4.0);
+        assert!((c.pdf(3.0) - 0.167_347_620_111_322_4).abs() < 1e-12, "pdf(3)");
+        assert!((c.pdf(5.0) - 0.102_606_248_279_873_48).abs() < 1e-12, "pdf(5)");
+        assert!((c.cdf(3.0) - 0.442_174_599_628_925_2).abs() < 1e-10, "cdf(3)");
+    }
+
+    #[test]
     fn chi2_pdf_positive_only() {
         let c = ChiSquared::new(3.0);
         assert_eq!(c.pdf(-1.0), 0.0);
