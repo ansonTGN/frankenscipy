@@ -3881,6 +3881,59 @@ impl GammaDist {
         assert!(scale > 0.0, "scale must be positive, got {scale}");
         Self { a, scale }
     }
+
+    /// Log-density at many points (the realistic dataset-likelihood workload),
+    /// hoisting the expensive `ln_gamma(a)` and `a·ln(scale)` normalizer terms out
+    /// of the per-point loop. Byte-identical to mapping `logpdf`: the two normalizer
+    /// terms are kept as SEPARATE subtractions (a − b − c ≠ a − (b+c) in f64), so the
+    /// arithmetic order matches `logpdf` exactly.
+    #[must_use]
+    pub fn logpdf_many(&self, xs: &[f64]) -> Vec<f64> {
+        let a_scale_ln = self.a * self.scale.ln();
+        let lg = ln_gamma(self.a);
+        xs.iter()
+            .map(|&x| {
+                if x < 0.0 {
+                    return f64::NEG_INFINITY;
+                }
+                if x == 0.0 {
+                    return if self.a == 1.0 {
+                        -self.scale.ln()
+                    } else if self.a > 1.0 {
+                        f64::NEG_INFINITY
+                    } else {
+                        f64::INFINITY
+                    };
+                }
+                (self.a - 1.0) * x.ln() - x / self.scale - a_scale_ln - lg
+            })
+            .collect()
+    }
+
+    /// Density at many points; hoists `ln_gamma(a)` out of the loop like
+    /// [`logpdf_many`](Self::logpdf_many). Byte-identical to mapping `pdf`.
+    #[must_use]
+    pub fn pdf_many(&self, xs: &[f64]) -> Vec<f64> {
+        let a_scale_ln = self.a * self.scale.ln();
+        let lg = ln_gamma(self.a);
+        xs.iter()
+            .map(|&x| {
+                if x < 0.0 {
+                    return 0.0;
+                }
+                if x == 0.0 {
+                    return if self.a == 1.0 {
+                        1.0 / self.scale
+                    } else if self.a > 1.0 {
+                        0.0
+                    } else {
+                        f64::INFINITY
+                    };
+                }
+                ((self.a - 1.0) * x.ln() - x / self.scale - a_scale_ln - lg).exp()
+            })
+            .collect()
+    }
 }
 
 impl ContinuousDistribution for GammaDist {
@@ -47245,6 +47298,20 @@ mod tests {
         let g = GammaDist::new(2.0, 1.0);
         assert_eq!(g.pdf(-1.0), 0.0);
         assert!(g.pdf(1.0) > 0.0);
+    }
+
+    #[test]
+    fn gamma_dist_pdf_many_matches_pdf() {
+        // Batch pdf_many/logpdf_many (lgamma hoisted) must be byte-identical to
+        // per-point pdf/logpdf, including the x<0 and x==0 special cases.
+        let g = GammaDist::new(2.7, 1.5);
+        let xs = [-1.0, 0.0, 0.25, 1.0, 3.0, 10.0];
+        let pm = g.pdf_many(&xs);
+        let lpm = g.logpdf_many(&xs);
+        for (i, &x) in xs.iter().enumerate() {
+            assert_eq!(pm[i], g.pdf(x), "pdf_many != pdf at {x}");
+            assert_eq!(lpm[i], g.logpdf(x), "logpdf_many != logpdf at {x}");
+        }
     }
 
     #[test]
