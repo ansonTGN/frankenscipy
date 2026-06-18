@@ -1440,6 +1440,11 @@ pub fn milp(problem: MilpProblem<'_>, options: MilpOptions) -> Result<MilpResult
             detail: "c must not be empty".to_string(),
         });
     }
+    if options.max_nodes == Some(0) {
+        return Err(OptError::InvalidArgument {
+            detail: "max_nodes must be greater than zero".to_string(),
+        });
+    }
 
     let integrality = if integrality.is_empty() {
         vec![Integrality::Continuous; n]
@@ -6240,6 +6245,27 @@ mod tests {
             MilpOptions::default(),
         )
         .expect_err("integrality length mismatch");
+        assert!(matches!(err, crate::OptError::InvalidArgument { .. }));
+    }
+
+    #[test]
+    fn milp_rejects_zero_node_budget() {
+        let err = milp(
+            MilpProblem {
+                c: &[1.0],
+                integrality: &[Integrality::Integer],
+                a_ub: &[],
+                b_ub: &[],
+                a_eq: &[],
+                b_eq: &[],
+                bounds: &[(Some(0.0), Some(1.0))],
+            },
+            MilpOptions {
+                max_nodes: Some(0),
+                ..MilpOptions::default()
+            },
+        )
+        .expect_err("zero max_nodes should fail");
         assert!(matches!(err, crate::OptError::InvalidArgument { .. }));
     }
 
