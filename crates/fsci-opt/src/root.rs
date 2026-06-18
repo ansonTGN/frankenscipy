@@ -833,9 +833,14 @@ pub fn newton<F>(
 where
     F: Fn(f64) -> f64,
 {
-    if tol <= 0.0 {
+    if !tol.is_finite() || tol <= 0.0 {
         return Err(OptError::InvalidArgument {
-            detail: format!("tol too small ({tol:e} <= 0)"),
+            detail: String::from("tol must be finite and > 0"),
+        });
+    }
+    if !rtol.is_finite() || rtol < 0.0 {
+        return Err(OptError::InvalidArgument {
+            detail: String::from("rtol must be finite and >= 0"),
         });
     }
     if maxiter < 1 {
@@ -2589,6 +2594,26 @@ mod tests {
         let r = newton(g, 0.5, None, None, None, 1.48e-8, 0.0, 50).unwrap();
         assert!((r.root - 0.7390851332151601).abs() < 1e-12);
         assert_eq!((r.iterations, r.function_calls), (5, 6));
+    }
+
+    #[test]
+    fn newton_rejects_invalid_tolerances() {
+        let f = |x: f64| x * x - 2.0;
+        let fp = |x: f64| 2.0 * x;
+
+        let cases = [
+            (f64::NAN, 0.0),
+            (f64::INFINITY, 0.0),
+            (1.0e-8, -1.0e-3),
+            (1.0e-8, f64::NAN),
+            (1.0e-8, f64::INFINITY),
+        ];
+
+        for (tol, rtol) in cases {
+            let err = newton(f, 1.0, Some(&fp), None, None, tol, rtol, 20)
+                .expect_err("invalid scalar Newton tolerance should fail");
+            assert!(matches!(err, crate::OptError::InvalidArgument { .. }));
+        }
     }
 
     #[test]
