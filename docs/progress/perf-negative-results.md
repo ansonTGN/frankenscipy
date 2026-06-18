@@ -254,3 +254,24 @@ condition so dead ends are not repeated casually.
   squared distances beats no allocation only in noise or regresses, reject this
   streaming double-centering formulation and do not retry unless allocation
   profiles again show `D^2`/`Delta` or `dshift` churn as a top cluster hotspot.
+
+## 2026-06-18 - frankenscipy-acoco - jnjnp_zeros bracket reuse
+
+- Agent: cod-a / MistyBirch
+- Lever: reuse the per-order `J_n` zero sequence already computed by
+  `jnjnp_zeros` when bracketing `J_n'` roots, avoiding a duplicate
+  `jn_zeros(n, per)` call for every positive order.
+- Status: pending batch-test. This is a code-first commit per campaign
+  instruction; only local `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a
+  cargo check -p fsci-special` is expected before commit.
+- Correctness guard: `derivative_bessel_zeros_match_scipy_reference_points`
+  now checks that the helper-fed derivative-zero route is bit-identical to the
+  public `jnp_zeros` output for representative order/count, while the existing
+  Bessel-zero SciPy anchors preserve ordering and value tolerances.
+- Benchmark guard: compare focused `jnjnp_zeros(nt=64..256)` workloads against
+  the previous same-worker commit and SciPy oracle ordering/type outputs.
+- Retry condition: keep only if same-worker special-zero timings improve
+  without zero magnitude, order, serial, type, or tie-order drift; if duplicate
+  `jn_zeros` work is hidden in noise by derivative Bessel evaluations, reject
+  this bracket-reuse formulation and do not retry unless profiles put
+  `jnp_zeros`' internal `jn_zeros` call back on the `jnjnp_zeros` hot path.

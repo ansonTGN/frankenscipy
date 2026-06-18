@@ -4517,6 +4517,12 @@ pub fn jnp_zeros(n: u32, nt: usize) -> Vec<f64> {
     }
 
     let function_zeros = jn_zeros(n, nt);
+    jnp_zeros_from_function_zeros(n, nt, &function_zeros)
+}
+
+fn jnp_zeros_from_function_zeros(n: u32, nt: usize, function_zeros: &[f64]) -> Vec<f64> {
+    debug_assert!(n > 0);
+    debug_assert!(function_zeros.len() >= nt);
     let n_f = n as f64;
     let f_at = |x: f64| -> f64 {
         bessel_derivative_real_scalar(
@@ -4720,7 +4726,8 @@ pub fn jnjnp_zeros(nt: usize) -> (Vec<f64>, Vec<i32>, Vec<i32>, Vec<i32>) {
     let per = nt + 2;
     let n_max = nt as u32 + 2;
     for n in 0..=n_max {
-        for (i, &x) in jn_zeros(n, per).iter().enumerate() {
+        let jn = jn_zeros(n, per);
+        for (i, &x) in jn.iter().enumerate() {
             cands.push((x, n as i32, (i + 1) as i32, 0));
         }
         // J_0' ≡ -J_1, so its zeros are exactly the J_1 zeros; reuse them so the
@@ -4729,7 +4736,7 @@ pub fn jnjnp_zeros(nt: usize) -> (Vec<f64>, Vec<i32>, Vec<i32>, Vec<i32>) {
         let jp = if n == 0 {
             jn_zeros(1, per)
         } else {
-            jnp_zeros(n, per)
+            jnp_zeros_from_function_zeros(n, per, &jn)
         };
         for (i, &x) in jp.iter().enumerate() {
             cands.push((x, n as i32, (i + 1) as i32, 1));
@@ -6883,6 +6890,11 @@ mod tests {
         }
 
         let jnp1 = jnp_zeros(1, 3);
+        let jn1 = jn_zeros(1, 3);
+        let reused_jnp1 = jnp_zeros_from_function_zeros(1, 3, &jn1);
+        for (&actual, &expected) in reused_jnp1.iter().zip(jnp1.iter()) {
+            assert_eq!(actual.to_bits(), expected.to_bits());
+        }
         let expected_jnp1 = [
             1.841_183_781_340_659_5_f64,
             5.331_442_773_525_032_5,
