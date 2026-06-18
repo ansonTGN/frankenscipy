@@ -14066,6 +14066,7 @@ impl ShortTimeFft {
     /// `S[freq][slice]` (shape `f_pts × p_num`), matching
     /// `scipy.signal.ShortTimeFFT.stft(x)` over the default slice range.
     pub fn stft(&self, x: &[f64]) -> Result<Vec<Vec<(f64, f64)>>, SignalError> {
+        validate_spectral_samples(x)?;
         let n = x.len();
         let m2p = self.win.len() - self.m_num_mid();
         if n < m2p {
@@ -16848,6 +16849,32 @@ mod tests {
         assert!((xr[0] - 0.5).abs() < 1e-9);
         assert!((xr[1] - 0.794_295_71).abs() < 1e-7);
         assert!((xr[2] - 1.059_750_47).abs() < 1e-7);
+    }
+
+    #[test]
+    fn short_time_fft_rejects_non_finite_samples() {
+        let sft = ShortTimeFft::new(hann(8), 3, 100.0).unwrap();
+        let mut x = [0.0; 12];
+        x[3] = f64::NAN;
+        let err = sft.stft(&x).expect_err("non-finite stft input");
+        assert_eq!(
+            err,
+            SignalError::NonFiniteInput {
+                detail: "spectral input samples must be finite".to_string()
+            }
+        );
+
+        x[3] = 0.0;
+        x[10] = f64::INFINITY;
+        let err = sft
+            .spectrogram(&x)
+            .expect_err("non-finite spectrogram input");
+        assert_eq!(
+            err,
+            SignalError::NonFiniteInput {
+                detail: "spectral input samples must be finite".to_string()
+            }
+        );
     }
 
     #[test]
