@@ -47,6 +47,28 @@ condition so dead ends are not repeated casually.
   and do not retry without allocator-profile evidence showing RK temporary Vec
   churn is again a top-5 integrate hotspot.
 
+## 2026-06-18 - frankenscipy-6m75u - Wolfe trial-point scratch reuse
+
+- Agent: cod-b / MistyBirch
+- Lever: replace per-probe `x + alpha*d` trial `Vec` construction in public
+  Wolfe line search with one reusable trial buffer, and thread that buffer
+  through the bisection zoom phase.
+- Status: pending batch-test. This is a code-first commit per campaign
+  instruction; local `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b
+  cargo check -p fsci-opt` passed before commit.
+- Correctness guard: existing Wolfe1/Wolfe2 tests cover alpha selection,
+  Armijo/curvature conditions, public-vs-probed equivalence, mismatched
+  dimensions, and gradient length rejection; the change only alters trial-point
+  storage.
+- Benchmark guard: compare high-dimensional BFGS/CG optimizer workloads with
+  repeated line-search probes against the pre-change commit on the same worker,
+  and include a focused line-search microbench if the batch wave has one.
+- Retry condition: keep only if same-worker optimizer or line-search timings
+  improve without alpha, evaluation-count, or accepted-gradient drift; if the
+  helper call/fill path is neutral or slower, reject this trial-buffer lever and
+  do not retry public Wolfe scratch reuse without allocation-profile evidence
+  showing trial-point construction is again a top-5 opt hotspot.
+
 ## 2026-06-18 - frankenscipy-va60h - linkage row-major distance arena
 
 - Agent: cod-a / MistyBirch

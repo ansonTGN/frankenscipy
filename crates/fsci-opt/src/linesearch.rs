@@ -197,20 +197,7 @@ where
 {
     let n = x.len();
     let mut evals = 0;
-
-    let eval_f = |alpha: f64, evals: &mut usize| -> f64 {
-        let xp: Vec<f64> = (0..n).map(|i| x[i] + alpha * d[i]).collect();
-        *evals += 1;
-        f(&xp)
-    };
-
-    let eval_dg = |alpha: f64, evals: &mut usize| -> Result<(f64, Vec<f64>), OptError> {
-        let xp: Vec<f64> = (0..n).map(|i| x[i] + alpha * d[i]).collect();
-        let gp = grad(&xp);
-        *evals += 1;
-        validate_gradient_output_len(&gp, n)?;
-        Ok((dot(&gp, d), gp))
-    };
+    let mut trial = vec![0.0; n];
 
     // Bracketing phase (Algorithm 3.5)
     let mut alpha_prev = 0.0;
@@ -218,16 +205,29 @@ where
     let mut alpha = 1.0_f64.min(params.amax);
 
     for i in 0..params.maxiter {
-        let fi = eval_f(alpha, &mut evals);
+        let fi = eval_f_at(f, x, d, &mut trial, alpha, &mut evals);
 
         // Armijo violation or function not decreasing
         if fi > f0 + params.c1 * alpha * dg0 || (i > 0 && fi >= f_prev) {
             return zoom(
-                f, grad, x, d, f0, dg0, alpha_prev, alpha, f_prev, fi, &params, strong, &mut evals,
+                f,
+                grad,
+                x,
+                d,
+                f0,
+                dg0,
+                alpha_prev,
+                alpha,
+                f_prev,
+                fi,
+                &params,
+                strong,
+                &mut evals,
+                &mut trial,
             );
         }
 
-        let (dgi, gi) = eval_dg(alpha, &mut evals)?;
+        let (dgi, gi) = eval_grad_at(grad, x, d, &mut trial, alpha, &mut evals)?;
 
         // Curvature condition satisfied
         let curvature_ok = if strong {
@@ -251,7 +251,20 @@ where
         // Positive slope means minimum is between alpha_prev and alpha
         if dgi >= 0.0 {
             return zoom(
-                f, grad, x, d, f0, dg0, alpha, alpha_prev, fi, f_prev, &params, strong, &mut evals,
+                f,
+                grad,
+                x,
+                d,
+                f0,
+                dg0,
+                alpha,
+                alpha_prev,
+                fi,
+                f_prev,
+                &params,
+                strong,
+                &mut evals,
+                &mut trial,
             );
         }
 
@@ -261,7 +274,7 @@ where
     }
 
     // Failed to find a step satisfying Wolfe — return best so far
-    let fi = eval_f(alpha, &mut evals);
+    let fi = eval_f_at(f, x, d, &mut trial, alpha, &mut evals);
     Ok(LineSearchWithGradient {
         result: LineSearchResult {
             alpha,
@@ -448,6 +461,24 @@ where
     f(trial)
 }
 
+fn eval_grad_at<G>(
+    grad: &G,
+    x: &[f64],
+    d: &[f64],
+    trial: &mut [f64],
+    alpha: f64,
+    evals: &mut usize,
+) -> Result<(f64, Vec<f64>), OptError>
+where
+    G: Fn(&[f64]) -> Vec<f64>,
+{
+    fill_trial(trial, x, d, alpha);
+    let gradient = grad(trial);
+    *evals += 1;
+    validate_gradient_output_len(&gradient, trial.len())?;
+    Ok((dot(&gradient, d), gradient))
+}
+
 fn eval_dg_current<G>(
     grad_dot: &mut G,
     trial: &mut [f64],
@@ -486,28 +517,22 @@ fn zoom<F, G>(
     params: &WolfeParams,
     strong: bool,
     evals: &mut usize,
+    trial: &mut [f64],
 ) -> Result<LineSearchWithGradient, OptError>
 where
     F: Fn(&[f64]) -> f64,
     G: Fn(&[f64]) -> Vec<f64>,
 {
-    let n = x.len();
-
     for _ in 0..params.maxiter {
         // Bisection (could use cubic interpolation for speed, but bisection is robust)
         let alpha_j = 0.5 * (alpha_lo + alpha_hi);
 
-        let xj: Vec<f64> = (0..n).map(|i| x[i] + alpha_j * d[i]).collect();
-        *evals += 1;
-        let fj = f(&xj);
+        let fj = eval_f_at(f, x, d, trial, alpha_j, evals);
 
         if fj > f0 + params.c1 * alpha_j * dg0 || fj >= f_lo {
             alpha_hi = alpha_j;
         } else {
-            let gj = grad(&xj);
-            *evals += 1;
-            validate_gradient_output_len(&gj, n)?;
-            let dgj = dot(&gj, d);
+            let (dgj, gj) = eval_grad_at(grad, x, d, trial, alpha_j, evals)?;
 
             let curvature_ok = if strong {
                 dgj.abs() <= params.c2 * dg0.abs()
