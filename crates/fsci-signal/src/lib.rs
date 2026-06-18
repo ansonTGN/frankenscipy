@@ -14459,6 +14459,8 @@ pub fn csd_with_scaling(
         ));
     }
     validate_sampling_frequency(fs)?;
+    validate_spectral_samples(x)?;
+    validate_spectral_samples(y)?;
 
     let nperseg = nperseg.unwrap_or_else(|| x.len().min(256));
     if nperseg == 0 || nperseg > x.len() {
@@ -20461,6 +20463,21 @@ mod tests {
         }
     }
 
+    #[test]
+    fn csd_rejects_non_finite_samples() {
+        let x = [0.0; 10];
+        let mut y = [1.0; 10];
+        y[9] = f64::INFINITY;
+        let err = csd(&x, &y, 1.0, None, Some(4), Some(0))
+            .expect_err("non-finite tail sample");
+        assert_eq!(
+            err,
+            SignalError::NonFiniteInput {
+                detail: "spectral input samples must be finite".to_string()
+            }
+        );
+    }
+
     // ── Welch tests ────────────────────────────────────────────────
 
     #[test]
@@ -23421,6 +23438,20 @@ mod tests {
                 res.frequencies[k]
             );
         }
+    }
+
+    #[test]
+    fn coherence_rejects_non_finite_samples() {
+        let x = [0.0, 1.0, 0.0, -1.0, 0.5, -0.5, 0.25, -0.25];
+        let y = [0.0, 1.0, f64::NAN, -1.0, 0.5, -0.5, 0.25, -0.25];
+        let err = coherence(&x, &y, 1.0, None, Some(4), Some(0))
+            .expect_err("non-finite coherence input");
+        assert_eq!(
+            err,
+            SignalError::NonFiniteInput {
+                detail: "spectral input samples must be finite".to_string()
+            }
+        );
     }
 
     #[test]
