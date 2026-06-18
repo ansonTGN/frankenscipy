@@ -5234,6 +5234,7 @@ where
     n_particles = n_particles.max(1);
     let d = lb.len();
     if d == 0
+        || max_iter == 0
         || ub.len() != d
         || lb
             .iter()
@@ -6637,6 +6638,23 @@ mod tests {
                 "particle coordinate {i} should stay in bounds [{lo}, {hi}], got {xi}"
             );
         }
+    }
+
+    #[test]
+    fn pso_rejects_zero_iteration_budget_without_sampling() {
+        let lb = [-1.0, -1.0];
+        let ub = [1.0, 1.0];
+        let (best, cost) = pso(
+            |_| -> f64 { panic!("zero-iteration pso should not sample the objective") },
+            &lb,
+            &ub,
+            4,
+            0,
+            123,
+        );
+        assert_eq!(best.len(), 2);
+        assert!(best.iter().all(|value| value.is_nan()));
+        assert!(cost.is_nan());
     }
 
     #[test]
