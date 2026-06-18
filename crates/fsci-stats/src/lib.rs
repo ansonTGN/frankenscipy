@@ -49479,6 +49479,16 @@ mod tests {
     }
 
     #[test]
+    fn logistic_pdf_match_scipy() {
+        // Exact scipy.stats.logistic(loc=1, scale=2). The Logistic suite locks the
+        // cdf (logistic_cdf_matches) and logcdf tail, but not the pdf.
+        let l = Logistic::new(1.0, 2.0);
+        assert!((l.pdf(1.0) - 0.125).abs() < 1e-12, "pdf(1) peak");
+        assert!((l.pdf(3.0) - 0.098_305_966_620_740_93).abs() < 1e-12, "pdf(3)");
+        assert!((l.cdf(3.0) - 0.731_058_578_630_004_9).abs() < 1e-12, "cdf(3)");
+    }
+
+    #[test]
     fn logistic_cdf_matches_expit_form() {
         let l = Logistic::new(2.0, 0.5);
         assert_close(l.cdf(2.0), 0.5, 1e-12, "logistic cdf at location");
