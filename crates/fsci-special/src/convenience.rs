@@ -7331,6 +7331,15 @@ mod tests {
     }
 
     #[test]
+    fn expi_match_scipy() {
+        // scipy.special.expi (exponential integral Ei).
+        assert!((expi_scalar(1.0) - 1.895_117_816_355_937).abs() < 1e-13, "expi(1)");
+        assert!((expi_scalar(2.0) - 4.954_234_356_001_891).abs() < 1e-12, "expi(2)");
+        assert!((expi_scalar(0.5) - 0.454_219_904_863_173_54).abs() < 1e-13, "expi(0.5)");
+        assert!((expi_scalar(-1.0) - -0.219_383_934_395_520_5).abs() < 1e-13, "expi(-1)=-E1(1)");
+    }
+
+    #[test]
     fn struve_match_scipy() {
         // scipy.special.struve (Struve function H_v(x)).
         assert!((struve(0.0, 1.0) - 0.568_656_627_048_288_1).abs() < 1e-13, "struve(0,1)");
