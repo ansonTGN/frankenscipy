@@ -946,6 +946,39 @@ mod tests {
     use fsci_runtime::AuditAction;
 
     #[test]
+    fn solve_ivp_harmonic_oscillator_system() {
+        // 2-equation system y' = [y1, -y0], y(0)=[1,0] -> [cos t, -sin t].
+        // Exercises the vector ODE path; scipy.integrate.solve_ivp converges to
+        // the same analytic solution at this tolerance.
+        let result = solve_ivp(
+            &mut |_t, y| vec![y[1], -y[0]],
+            &SolveIvpOptions {
+                t_span: (0.0, 2.0),
+                y0: &[1.0, 0.0],
+                method: SolverKind::Rk45,
+                rtol: 1e-9,
+                atol: ToleranceValue::Scalar(1e-12),
+                ..SolveIvpOptions::default()
+            },
+        )
+        .expect("solve_ivp should succeed");
+        assert!(result.success, "integration should succeed");
+        let yf = result.y.last().unwrap();
+        assert!(
+            (yf[0] - 2.0_f64.cos()).abs() < 1e-6,
+            "y0: {} vs {}",
+            yf[0],
+            2.0_f64.cos()
+        );
+        assert!(
+            (yf[1] + 2.0_f64.sin()).abs() < 1e-6,
+            "y1: {} vs {}",
+            yf[1],
+            -2.0_f64.sin()
+        );
+    }
+
+    #[test]
     fn solve_ivp_exponential_decay() {
         let result = solve_ivp(
             &mut |_t, y| vec![-0.5 * y[0]],
