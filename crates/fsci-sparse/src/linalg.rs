@@ -5107,6 +5107,36 @@ mod tests {
     }
 
     #[test]
+    fn sparse_matrix_ops_match_numpy() {
+        use crate::{CsrMatrix, Shape2D};
+        // CSR for [[1,0],[2,3]]. Several sparse ops were previously untested.
+        let m = CsrMatrix::from_components(
+            Shape2D::new(2, 2),
+            vec![1.0, 2.0, 3.0],
+            vec![0, 0, 1],
+            vec![0, 1, 3],
+            false,
+        )
+        .unwrap();
+        assert!((sparse_sum(&m) - 6.0).abs() < 1e-12, "sum");
+        assert_eq!(sparse_row_sums(&m), vec![1.0, 5.0]);
+        assert_eq!(sparse_col_sums(&m), vec![3.0, 3.0]);
+        assert!((sparse_density(&m) - 0.75).abs() < 1e-12, "density 3/4");
+        assert_eq!(sparse_row_max(&m), vec![1.0, 3.0]);
+        assert!((sparse_sum(&sparse_scale(&m, 2.0)) - 12.0).abs() < 1e-12, "scale");
+        // abs of [[-1,0],[2,-3]] sums to 6.
+        let n = CsrMatrix::from_components(
+            Shape2D::new(2, 2),
+            vec![-1.0, 2.0, -3.0],
+            vec![0, 0, 1],
+            vec![0, 1, 3],
+            false,
+        )
+        .unwrap();
+        assert!((sparse_sum(&sparse_abs(&n)) - 6.0).abs() < 1e-12, "abs");
+    }
+
+    #[test]
     fn spsolve_uses_native_sparse_direct_above_dense_guard() {
         let n = SPSOLVE_DENSE_MAX_N + 1;
         let a = identity_csr(n);
