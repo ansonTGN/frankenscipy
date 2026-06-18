@@ -9050,6 +9050,16 @@ pub enum SpectralScaling {
     Spectrum,
 }
 
+fn validate_sampling_frequency(fs: f64) -> Result<(), SignalError> {
+    if fs.is_finite() && fs > 0.0 {
+        Ok(())
+    } else {
+        Err(SignalError::InvalidParameter {
+            detail: "fs must be finite and positive".to_string(),
+        })
+    }
+}
+
 /// Estimate power spectral density using a periodogram.
 ///
 /// Matches `scipy.signal.periodogram(x, fs, window, scaling='density')`.
@@ -9068,6 +9078,7 @@ pub fn periodogram(
             "input must not be empty".to_string(),
         ));
     }
+    validate_sampling_frequency(fs)?;
     let n = x.len();
 
     // scipy.signal.periodogram defaults to detrend='constant': subtract the
@@ -9152,6 +9163,7 @@ pub fn welch(
             "input must not be empty".to_string(),
         ));
     }
+    validate_sampling_frequency(fs)?;
 
     let nperseg = nperseg.unwrap_or_else(|| x.len().min(256));
     if nperseg == 0 {
@@ -14291,6 +14303,7 @@ pub fn csd_with_scaling(
             "input must not be empty".to_string(),
         ));
     }
+    validate_sampling_frequency(fs)?;
 
     let nperseg = nperseg.unwrap_or_else(|| x.len().min(256));
     if nperseg == 0 || nperseg > x.len() {
@@ -19745,6 +19758,40 @@ mod tests {
     #[test]
     fn periodogram_empty_rejected() {
         assert!(periodogram(&[], 1.0, None).is_err());
+    }
+
+    #[test]
+    fn spectral_estimators_reject_invalid_sampling_frequency() {
+        fn assert_invalid_fs(err: SignalError, label: &str) {
+            assert!(
+                matches!(
+                    err,
+                    SignalError::InvalidParameter { ref detail } if detail.contains("fs")
+                ),
+                "{label} should reject invalid fs"
+            );
+        }
+
+        let x = [0.0, 1.0, 0.5, -0.25, 0.25, -0.5, 1.5, 0.75];
+        for fs in [0.0, -1.0, f64::INFINITY, f64::NAN] {
+            assert_invalid_fs(
+                periodogram(&x, fs, None).expect_err("periodogram should reject invalid fs"),
+                "periodogram",
+            );
+            assert_invalid_fs(
+                welch(&x, fs, None, Some(4), Some(2)).expect_err("welch should reject invalid fs"),
+                "welch",
+            );
+            assert_invalid_fs(
+                csd(&x, &x, fs, None, Some(4), Some(2)).expect_err("csd should reject invalid fs"),
+                "csd",
+            );
+            assert_invalid_fs(
+                coherence(&x, &x, fs, None, Some(4), Some(2))
+                    .expect_err("coherence should reject invalid fs"),
+                "coherence",
+            );
+        }
     }
 
     #[test]
