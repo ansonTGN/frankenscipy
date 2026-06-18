@@ -7760,7 +7760,9 @@ pub fn matrix_rank(
     validate_finite_matrix(a, options.mode, options.check_finite)?;
 
     if rows == 0 || cols == 0 {
-        return Ok(0);
+        return Err(LinalgError::InvalidArgument {
+            detail: "matrix_rank requires a non-empty matrix".to_string(),
+        });
     }
 
     let matrix = dmatrix_from_rows(a)?;
@@ -24045,6 +24047,19 @@ mod tests {
         let a = vec![vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0]];
         let r = matrix_rank(&a, None, DecompOptions::default()).expect("rank works");
         assert_eq!(r, 2);
+    }
+
+    #[test]
+    fn matrix_rank_rejects_empty_inputs_like_numpy() {
+        let empty: Vec<Vec<f64>> = Vec::new();
+        let err = matrix_rank(&empty, None, DecompOptions::default())
+            .expect_err("numpy rejects zero-size matrix_rank inputs");
+        assert!(matches!(err, LinalgError::InvalidArgument { .. }));
+
+        let zero_cols = vec![Vec::new(), Vec::new()];
+        let err = matrix_rank(&zero_cols, None, DecompOptions::default())
+            .expect_err("numpy rejects zero-column matrix_rank inputs");
+        assert!(matches!(err, LinalgError::InvalidArgument { .. }));
     }
 
     // ── Subspace operation tests ───────────────────────────────────
