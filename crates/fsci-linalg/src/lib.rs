@@ -12888,7 +12888,7 @@ pub fn rsf2csf(
     z: &[Vec<f64>],
 ) -> Result<(Vec<Vec<(f64, f64)>>, Vec<Vec<(f64, f64)>>), LinalgError> {
     let n = t.len();
-    if n == 0 || t.iter().any(|r| r.len() != n) || z.len() != n || z.iter().any(|r| r.len() != n) {
+    if t.iter().any(|r| r.len() != n) || z.len() != n || z.iter().any(|r| r.len() != n) {
         return Err(LinalgError::InvalidArgument {
             detail: "rsf2csf: T and Z must be square matrices of the same size".to_string(),
         });
@@ -15798,6 +15798,14 @@ mod tests {
                 assert!((zc[i][j].1 - zc_im[i][j]).abs() < 1e-9, "zc_im[{i}][{j}]");
             }
         }
+    }
+
+    #[test]
+    fn rsf2csf_accepts_empty_square_inputs_like_scipy() {
+        let empty: Vec<Vec<f64>> = Vec::new();
+        let (tc, zc) = rsf2csf(&empty, &empty).expect("scipy accepts 0x0 inputs");
+        assert!(tc.is_empty());
+        assert!(zc.is_empty());
     }
 
     #[test]
