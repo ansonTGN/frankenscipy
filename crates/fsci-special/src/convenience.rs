@@ -7331,6 +7331,30 @@ mod tests {
     }
 
     #[test]
+    fn gammaln_scalar_match_scipy() {
+        // scipy.special.gammaln = ln|Gamma(x)|; stays finite where Gamma overflows.
+        use crate::gamma::gammaln_scalar;
+        let m = RuntimeMode::Strict;
+        assert!(
+            (gammaln_scalar(0.5, m).unwrap() - 0.572_364_942_924_7).abs() < 1e-12,
+            "gammaln(0.5)=ln(sqrt pi)"
+        );
+        assert!(
+            (gammaln_scalar(10.0, m).unwrap() - 12.801_827_480_081_469).abs() < 1e-11,
+            "gammaln(10)=ln(9!)"
+        );
+        // Large arg: Gamma(100) overflows but gammaln stays finite.
+        assert!(
+            (gammaln_scalar(100.0, m).unwrap() - 359.134_205_369_575_4).abs() < 1e-9,
+            "gammaln(100)"
+        );
+        assert!(
+            (gammaln_scalar(0.1, m).unwrap() - 2.252_712_651_734_206).abs() < 1e-12,
+            "gammaln(0.1)"
+        );
+    }
+
+    #[test]
     fn zeta_zetac_match_scipy() {
         // scipy.special.zeta/zetac (Riemann zeta) at integer arguments.
         use crate::gamma::{zeta, zetac};
