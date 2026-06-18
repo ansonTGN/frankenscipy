@@ -659,6 +659,66 @@ fn e2e_002_multi_distribution_roundtrip() {
     assert!(all_pass, "scenario {scenario_id} had failures");
 }
 
+#[test]
+fn e2e_002b_gamma_beta_scipy_golden() {
+    let scenario_id = "e2e_stats_002b_gamma_beta_scipy_golden";
+    let mut steps = Vec::new();
+    let mut all_pass = true;
+
+    let gamma = GammaDist::new(3.0, 2.0);
+    let t = Instant::now();
+    let gamma_actual = [gamma.pdf(4.5), gamma.cdf(4.5), gamma.ppf(0.7)];
+    let gamma_expected = [
+        0.133_395_893_586_109_54,
+        0.390_660_733_001_721_94,
+        7.231_135_331_731_982,
+    ];
+    let gamma_diff = gamma_actual
+        .iter()
+        .zip(gamma_expected.iter())
+        .map(|(actual, expected)| (actual - expected).abs())
+        .fold(0.0_f64, f64::max);
+    let gamma_pass = gamma_diff <= TOL;
+    all_pass &= gamma_pass;
+    steps.push(make_step(
+        1,
+        "gamma_pdf_cdf_ppf",
+        "GammaDist(3,2) pdf/cdf/ppf",
+        "x=4.5, q=0.7",
+        &format!("max_diff={gamma_diff:.3e}"),
+        t.elapsed().as_nanos(),
+        if gamma_pass { "pass" } else { "FAIL" },
+    ));
+
+    let beta = BetaDist::new(2.0, 5.0);
+    let t = Instant::now();
+    let beta_actual = [beta.pdf(0.4), beta.cdf(0.4), beta.ppf(0.7)];
+    let beta_expected = [
+        1.555_200_000_000_000_6,
+        0.766_720_000_000_000_1,
+        0.360_357_690_380_020_13,
+    ];
+    let beta_diff = beta_actual
+        .iter()
+        .zip(beta_expected.iter())
+        .map(|(actual, expected)| (actual - expected).abs())
+        .fold(0.0_f64, f64::max);
+    let beta_pass = beta_diff <= TOL;
+    all_pass &= beta_pass;
+    steps.push(make_step(
+        2,
+        "beta_pdf_cdf_ppf",
+        "BetaDist(2,5) pdf/cdf/ppf",
+        "x=0.4, q=0.7",
+        &format!("max_diff={beta_diff:.3e}"),
+        t.elapsed().as_nanos(),
+        if beta_pass { "pass" } else { "FAIL" },
+    ));
+
+    assert_artifacts_written(scenario_id, &steps, all_pass);
+    assert!(all_pass, "scenario {scenario_id} had failures");
+}
+
 /// Scenario 3: Distribution moments verification.
 /// mean and var should match known analytical values.
 #[test]
