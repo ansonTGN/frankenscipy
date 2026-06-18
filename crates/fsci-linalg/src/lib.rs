@@ -24197,6 +24197,19 @@ mod tests {
     }
 
     #[test]
+    fn polar_empty_shapes_match_representable_scipy_cases() {
+        let empty: Vec<Vec<f64>> = Vec::new();
+        let result = polar(&empty, DecompOptions::default()).expect("scipy accepts 0x0 input");
+        assert!(result.u.is_empty());
+        assert!(result.p.is_empty());
+
+        let zero_col = vec![Vec::new(), Vec::new(), Vec::new()];
+        let result = polar(&zero_col, DecompOptions::default()).expect("scipy accepts Mx0 input");
+        assert_eq!(result.u, zero_col);
+        assert!(result.p.is_empty());
+    }
+
+    #[test]
     fn polar_reconstruction() {
         // A = U * P, verify the reconstruction
         let a = vec![vec![3.0, 1.0], vec![1.0, 4.0]];
