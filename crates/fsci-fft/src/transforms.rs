@@ -4261,6 +4261,16 @@ mod tests {
     }
 
     #[test]
+    fn hfft_match_scipy() {
+        // scipy.fft.hfft of a Hermitian half-spectrum -> real output.
+        let input: Vec<Complex64> = vec![(1.0, 0.0), (2.0, 1.0), (3.0, 0.0)];
+        let r = hfft(&input, Some(4), &FftOptions::default()).expect("hfft");
+        for (g, ex) in r.iter().zip(&[8.0, 0.0, 0.0, -4.0]) {
+            assert!((g - ex).abs() < 1e-12, "hfft: {g} vs {ex}");
+        }
+    }
+
+    #[test]
     fn ifft2_match_scipy() {
         // scipy.fft.ifft2([[10,-2],[-4,0]]) = [[1,2],[3,4]] (inverse of fft2).
         let x: Vec<Complex64> = [10.0, -2.0, -4.0, 0.0].iter().map(|&r| (r, 0.0)).collect();
