@@ -64372,6 +64372,16 @@ mod tests {
     }
 
     #[test]
+    fn folded_normal_pdf_cdf_match_scipy() {
+        // Exact scipy.stats.foldnorm(c=1.5). The FoldedNormal suite covers skew/kurt
+        // and entropy but no exact pdf/cdf at a point.
+        let d = FoldedNormal::new(1.5);
+        assert!((d.pdf(0.5) - 0.295_961_691_032_331_44).abs() < 1e-12, "pdf(0.5)");
+        assert!((d.pdf(2.0) - 0.352_938_009_459_345_3).abs() < 1e-12, "pdf(2)");
+        assert!((d.cdf(1.0) - 0.302_327_873_400_210_8).abs() < 1e-12, "cdf(1)");
+    }
+
+    #[test]
     fn folded_normal_skewness_and_kurtosis_match_scipy_reference_values() {
         // scipy.stats.foldnorm(c).stats(moments='sk'). At c = 0 the
         // distribution collapses to half-normal; large c approaches
