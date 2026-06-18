@@ -16756,6 +16756,19 @@ mod tests {
     }
 
     #[test]
+    fn logm_sqrtm_match_scipy() {
+        // scipy.linalg.logm/sqrtm of A=[[4,1],[1,4]] (symmetric, eigenvalues 5,3).
+        let a = vec![vec![4.0, 1.0], vec![1.0, 4.0]];
+        let l = logm(&a, DecompOptions::default()).expect("logm");
+        assert!((l[0][0] - 1.354_025_100_551_104_8).abs() < 1e-10, "logm diag: {}", l[0][0]);
+        assert!((l[0][1] - 0.255_412_811_882_995_25).abs() < 1e-10, "logm off: {}", l[0][1]);
+        assert!((l[0][1] - l[1][0]).abs() < 1e-12, "logm symmetric");
+        let s = sqrtm(&a, DecompOptions::default()).expect("sqrtm");
+        assert!((s[0][0] - 1.984_059_392_534_333_3).abs() < 1e-10, "sqrtm diag: {}", s[0][0]);
+        assert!((s[0][1] - 0.252_008_584_965_456_2).abs() < 1e-10, "sqrtm off: {}", s[0][1]);
+    }
+
+    #[test]
     fn expm_match_scipy() {
         // scipy.linalg.expm: rotation generator -> rotation matrix; diagonal ->
         // diag(exp).
