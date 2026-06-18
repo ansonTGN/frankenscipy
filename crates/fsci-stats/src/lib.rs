@@ -64000,6 +64000,16 @@ mod tests {
     }
 
     #[test]
+    fn half_logistic_pdf_cdf_interior_match_scipy() {
+        // Exact scipy.stats.halflogistic at interior points. half_logistic_pdf_cdf_
+        // ppf_roundtrip pins pdf(0) and a cdf/ppf roundtrip but not pdf/cdf at x>0.
+        let d = HalfLogistic;
+        assert!((d.pdf(1.0) - 0.393_223_866_482_963_65).abs() < 1e-12, "pdf(1)");
+        assert!((d.pdf(2.0) - 0.209_987_170_807_013_07).abs() < 1e-12, "pdf(2)");
+        assert!((d.cdf(2.0) - 0.761_594_155_955_764_9).abs() < 1e-12, "cdf(2)");
+    }
+
+    #[test]
     fn half_logistic_pdf_cdf_ppf_roundtrip() {
         let hl = HalfLogistic;
         assert_close(hl.pdf(0.0), 0.5, 1e-12, "HalfLogistic pdf(0)");
