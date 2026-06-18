@@ -206,8 +206,11 @@ pub fn random(shape: Shape2D, density: f64, seed: u64) -> SparseResult<CooMatrix
     // O(nnz) path everywhere else.
     let expected_nnz_f = density * total as f64;
     let expected_nnz = expected_nnz_f.round().max(0.0).min(total as f64) as usize;
+    if expected_nnz == 0 {
+        return CooMatrix::from_triplets(shape, Vec::new(), Vec::new(), Vec::new(), true);
+    }
 
-    if expected_nnz > 0 && expected_nnz <= total / 8 {
+    if expected_nnz <= total / 8 {
         // O(nnz) path via flat-index sampling with dedupe.
         let mut seen: HashSet<usize> = HashSet::with_capacity(expected_nnz);
         rows = Vec::with_capacity(expected_nnz);
@@ -996,6 +999,14 @@ mod tests {
             assert!(col < 1_000_000);
             assert!(coordinates.insert((row, col)));
         }
+    }
+
+    #[test]
+    fn random_tiny_density_rounds_to_empty_without_dense_scan() {
+        let shape = Shape2D::new(1_000_000_000, 1_000_000_000);
+        let coo = random(shape, 1e-19, 42).expect("random");
+        assert_eq!(coo.shape(), shape);
+        assert_eq!(coo.nnz(), 0);
     }
 
     #[test]

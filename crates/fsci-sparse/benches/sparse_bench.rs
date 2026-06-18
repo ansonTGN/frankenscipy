@@ -12,6 +12,10 @@ const CONFIGS: &[(usize, f64)] = &[
     (1_000, 0.01),   // 1000×1000, 1%
     (10_000, 0.001), // 10000×10000, 0.1%
 ];
+const TINY_DENSITY_CASES: &[(usize, f64)] = &[
+    (1_000_000_000, 1e-19),
+    (2_000_000_000, 1e-20),
+];
 
 const SEED: u64 = 0xBEEF_CAFE;
 
@@ -246,6 +250,28 @@ fn bench_spilu(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_random_tiny_density(c: &mut Criterion) {
+    let mut group = c.benchmark_group("sparse_random_tiny_density");
+    for &(n, density) in TINY_DENSITY_CASES {
+        group.bench_with_input(
+            BenchmarkId::new(format!("{n}x{n}_d{density:.0e}"), n),
+            &(n, density),
+            |b, &(n, density)| {
+                b.iter(|| {
+                    let coo = random(
+                        Shape2D::new(black_box(n), black_box(n)),
+                        black_box(density),
+                        black_box(SEED),
+                    )
+                    .expect("random tiny density");
+                    black_box(coo.nnz());
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_csr_construction,
@@ -255,6 +281,7 @@ criterion_group!(
     bench_eye,
     bench_diags,
     bench_spmm,
-    bench_spilu
+    bench_spilu,
+    bench_random_tiny_density
 );
 criterion_main!(benches);
