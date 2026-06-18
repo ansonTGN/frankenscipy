@@ -1,4 +1,4 @@
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use fsci_spatial::{RigidTransform, Rotation};
 
 /// Batch point-cloud transform vs mapping the scalar apply (the "original").
@@ -34,5 +34,44 @@ fn bench_transform_batch(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_transform_batch);
+/// All-pairs distance matrix — the dominant O(n²·d) spatial workload. Cosine/
+/// Correlation exercise the per-vector precompute path; Euclidean the SIMD
+/// partial-distance path. Both are parallel above a work threshold.
+fn bench_pdist(c: &mut Criterion) {
+    use fsci_spatial::{DistanceMetric, pdist};
+    let mut group = c.benchmark_group("pdist");
+    for &n in &[256usize, 512] {
+        let data: Vec<Vec<f64>> = (0..n)
+            .map(|i| {
+                let t = i as f64;
+                vec![(t * 0.1).sin(), (t * 0.2).cos(), t * 0.001, (t * 0.05).sin()]
+            })
+            .collect();
+        group.bench_function(BenchmarkId::new("euclidean", n), |b| {
+            b.iter(|| pdist(&data, DistanceMetric::Euclidean))
+        });
+        group.bench_function(BenchmarkId::new("cosine", n), |b| {
+            b.iter(|| pdist(&data, DistanceMetric::Cosine))
+        });
+    }
+    group.finish();
+}
+
+/// KDTree build (O(n) median via select_nth) and nearest-neighbour query sweep.
+fn bench_kdtree(c: &mut Criterion) {
+    use fsci_spatial::KDTree;
+    let n = 4096usize;
+    let pt = |t: f64| vec![(t * 0.1).sin(), (t * 0.2).cos(), (t * 0.05).sin()];
+    let data: Vec<Vec<f64>> = (0..n).map(|i| pt(i as f64)).collect();
+    let mut group = c.benchmark_group("kdtree");
+    group.bench_function("build/4096", |b| b.iter(|| KDTree::new(&data)));
+    let tree = KDTree::new(&data).expect("kdtree");
+    let queries: Vec<Vec<f64>> = (0..n).map(|i| pt(i as f64 + 0.5)).collect();
+    group.bench_function("query/4096", |b| {
+        b.iter(|| queries.iter().map(|q| tree.query(q)).collect::<Vec<_>>())
+    });
+    group.finish();
+}
+
+criterion_group!(benches, bench_transform_batch, bench_pdist, bench_kdtree);
 criterion_main!(benches);
