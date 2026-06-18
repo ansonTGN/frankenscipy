@@ -168,6 +168,33 @@ fn validate_t_eval_with_audit(
     Ok(())
 }
 
+fn validate_events_with_audit(
+    events: Option<&[EventSpec]>,
+    audit_ledger: Option<&SyncSharedAuditLedger>,
+) -> Result<(), IntegrateValidationError> {
+    let Some(events) = events else {
+        return Ok(());
+    };
+
+    for (index, event) in events.iter().enumerate() {
+        if !event.direction.is_finite() {
+            let fingerprint = audit_fingerprint(
+                "validate_events",
+                format!("event_index={index};direction={}", event.direction),
+            );
+            record_fail_closed(
+                audit_ledger,
+                &fingerprint,
+                "event_direction_must_be_finite",
+                "rejected",
+            );
+            return Err(IntegrateValidationError::NonFiniteEventDirection { index });
+        }
+    }
+
+    Ok(())
+}
+
 fn interpolate_state(
     y_old: &[f64],
     y_new: &[f64],
@@ -877,6 +904,7 @@ where
     resolved_options.atol = atol.clone();
     resolved_options.first_step = first_step;
     resolved_options.max_step = max_step;
+    validate_events_with_audit(resolved_options.events.as_deref(), audit_ledger)?;
 
     if let Some(t_eval) = resolved_options.t_eval {
         validate_t_eval_with_audit(t_eval, t0, tf, audit_ledger)?;
@@ -1299,6 +1327,39 @@ mod tests {
             (downward.t_events.as_ref().unwrap()[0][0] - 0.5).abs() < 1e-6,
             "expected event near t=0.5"
         );
+    }
+
+    #[test]
+    fn solve_ivp_rejects_non_finite_event_direction_before_stepping() {
+        fn event_at_half(_t: f64, y: &[f64]) -> f64 {
+            y[0] - 0.5
+        }
+
+        for bad_direction in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let mut rhs_calls = 0usize;
+            let mut rhs = |_t: f64, _y: &[f64]| {
+                rhs_calls += 1;
+                vec![1.0]
+            };
+            let err = solve_ivp(
+                &mut rhs,
+                &SolveIvpOptions {
+                    t_span: (0.0, 1.0),
+                    y0: &[0.0],
+                    method: SolverKind::Rk45,
+                    events: Some(vec![
+                        EventSpec::terminal(event_at_half).with_direction(bad_direction),
+                    ]),
+                    ..SolveIvpOptions::default()
+                },
+            )
+            .expect_err("non-finite event direction should fail before stepping");
+            assert_eq!(
+                err,
+                IntegrateValidationError::NonFiniteEventDirection { index: 0 }
+            );
+            assert_eq!(rhs_calls, 0, "invalid metadata must fail before RHS calls");
+        }
     }
 
     #[test]
