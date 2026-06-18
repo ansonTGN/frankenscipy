@@ -72646,6 +72646,26 @@ mod tests {
     }
 
     #[test]
+    fn correlation_ratio_and_cv_match_analytic() {
+        // correlation_ratio/coefficient_of_variation were previously untested.
+        // eta = 1 for perfectly separated groups, 0 for identical groups.
+        assert!(
+            (correlation_ratio(&[&[1.0, 1.0, 1.0][..], &[5.0, 5.0, 5.0][..]]) - 1.0).abs() < 1e-12,
+            "eta separated"
+        );
+        assert!(
+            correlation_ratio(&[&[1.0, 2.0, 3.0][..], &[1.0, 2.0, 3.0][..]]).abs() < 1e-12,
+            "eta identical"
+        );
+        // cv = sample std (ddof=1) / |mean|; [1..5] -> sqrt(2.5)/3.
+        assert!(
+            (coefficient_of_variation(&[1.0, 2.0, 3.0, 4.0, 5.0]) - (2.5_f64.sqrt() / 3.0)).abs()
+                < 1e-12,
+            "cv ddof=1"
+        );
+    }
+
+    #[test]
     fn power_divergence_tests_match_scipy() {
         // cressie_read_test/freeman_tukey_test/expected_freq_uniform were untested.
         let f = [10.0, 20.0, 30.0, 40.0];
