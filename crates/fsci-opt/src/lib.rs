@@ -2898,6 +2898,10 @@ pub fn golden<F>(f: F, a: f64, b: f64, tol: f64, maxiter: usize) -> (f64, f64)
 where
     F: Fn(f64) -> f64,
 {
+    if invalid_scalar_minimize_controls(a, b, tol, maxiter) {
+        return (f64::NAN, f64::NAN);
+    }
+
     let gr = (5.0_f64.sqrt() - 1.0) / 2.0; // golden ratio conjugate
     let mut lo = a;
     let mut hi = b;
@@ -2936,6 +2940,10 @@ pub fn brent_minimize<F>(f: F, a: f64, b: f64, tol: f64, maxiter: usize) -> (f64
 where
     F: Fn(f64) -> f64,
 {
+    if invalid_scalar_minimize_controls(a, b, tol, maxiter) {
+        return (f64::NAN, f64::NAN);
+    }
+
     let golden = 0.381_966_011_250_105; // 1 - golden ratio conjugate
 
     let mut x = a + golden * (b - a);
@@ -3021,6 +3029,10 @@ where
     }
 
     (x, fx)
+}
+
+fn invalid_scalar_minimize_controls(a: f64, b: f64, tol: f64, maxiter: usize) -> bool {
+    !a.is_finite() || !b.is_finite() || !tol.is_finite() || tol <= 0.0 || maxiter == 0
 }
 
 /// Find a minimum bracket for a 1D function.
@@ -6949,6 +6961,27 @@ mod tests {
     }
 
     #[test]
+    fn golden_rejects_invalid_controls_without_sampling() {
+        for (a, b, tol, maxiter) in [
+            (f64::NAN, 1.0, 1e-10, 100),
+            (0.0, f64::INFINITY, 1e-10, 100),
+            (0.0, 1.0, f64::NAN, 100),
+            (0.0, 1.0, 0.0, 100),
+            (0.0, 1.0, 1e-10, 0),
+        ] {
+            let (x_opt, f_opt) = golden(
+                |_| -> f64 { panic!("invalid golden controls should not sample the objective") },
+                a,
+                b,
+                tol,
+                maxiter,
+            );
+            assert!(x_opt.is_nan());
+            assert!(f_opt.is_nan());
+        }
+    }
+
+    #[test]
     fn brent_minimize_matches_scipy_reference_values() {
         // scipy.optimize.brent(lambda x: (x-2)**2, brack=(0, 4)) ≈ 2
         let (x_opt, _f_opt) = brent_minimize(|x| (x - 2.0).powi(2), 0.0, 4.0, 1e-10, 1000);
@@ -6956,6 +6989,40 @@ mod tests {
             (x_opt - 2.0).abs() < 1e-8,
             "brent (x-2)^2 minimum at {x_opt}, expected ~2"
         );
+    }
+
+    #[test]
+    fn brent_minimize_rejects_invalid_controls_without_sampling() {
+        for (a, b, tol, maxiter) in [
+            (f64::NEG_INFINITY, 1.0, 1e-10, 100),
+            (0.0, f64::NAN, 1e-10, 100),
+            (0.0, 1.0, f64::INFINITY, 100),
+            (0.0, 1.0, -1e-10, 100),
+            (0.0, 1.0, 1e-10, 0),
+        ] {
+            let (x_opt, f_opt) = brent_minimize(
+                |_| -> f64 {
+                    panic!("invalid brent_minimize controls should not sample the objective")
+                },
+                a,
+                b,
+                tol,
+                maxiter,
+            );
+            assert!(x_opt.is_nan());
+            assert!(f_opt.is_nan());
+        }
+
+        let (bounded_x, bounded_f) = minimize_scalar_bounded(
+            |_| -> f64 {
+                panic!("invalid minimize_scalar_bounded controls should not sample the objective")
+            },
+            (0.0, 1.0),
+            0.0,
+            100,
+        );
+        assert!(bounded_x.is_nan());
+        assert!(bounded_f.is_nan());
     }
 
     #[test]
