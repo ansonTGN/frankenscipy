@@ -6214,6 +6214,19 @@ impl ContinuousDistribution for Logistic {
         1.0 / (1.0 + (-z).exp())
     }
 
+    fn logcdf(&self, x: f64) -> f64 {
+        // logcdf = ln(expit(z)) = -softplus(-z). The default ln(cdf) underflows
+        // for z << 0 (cdf -> 0, logcdf(-1000)=-inf vs scipy -1000). Reuse the
+        // same stable softplus the logpdf/sf use.
+        let z = (x - self.loc) / self.scale;
+        let softplus_neg_z = if z <= 0.0 {
+            -z + z.exp().ln_1p()
+        } else {
+            (-z).exp().ln_1p()
+        };
+        -softplus_neg_z
+    }
+
     fn sf(&self, x: f64) -> f64 {
         // Closed-form survival for [frankenscipy-h36zm]:
         //   sf = 1/(1 + exp(z))  vs.  the imprecise default 1 - cdf.
@@ -71644,6 +71657,21 @@ mod tests {
         let hm = hmean(&data);
         let expected_hm = 5.0 / (1.0 + 0.5 + 1.0 / 3.0 + 0.25 + 0.2);
         assert!((hm - expected_hm).abs() < 1e-10, "hmean, got {}", hm);
+    }
+
+    #[test]
+    fn logistic_logcdf_left_tail_match_scipy() {
+        // scipy.stats.logistic logcdf. Default ln(cdf) underflows to -inf in the
+        // left tail (cdf=expit(z)->0); the -softplus(-z) form stays finite.
+        let d = Logistic {
+            loc: 0.0,
+            scale: 1.0,
+        };
+        assert!((d.logcdf(0.0) - -0.693_147_180_559_945_3).abs() < 1e-12, "logcdf(0)");
+        assert!((d.logcdf(2.0) - -0.126_928_011_042_972_5).abs() < 1e-12, "logcdf(2)");
+        // cdf(-1000) underflows to 0 -> default would be -inf; scipy = -1000.
+        assert!((d.logcdf(-1000.0) - -1000.0).abs() < 1e-9, "logcdf(-1000): {}", d.logcdf(-1000.0));
+        assert!(d.cdf(-1000.0) == 0.0, "cdf(-1000) underflows as expected");
     }
 
     #[test]
