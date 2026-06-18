@@ -65,6 +65,7 @@ where
 
     let initial_dyc = fun(t_span.0, y0);
     validate_rhs_shape(initial_dyc.len(), n)?;
+    validate_complex_rhs_finite(&initial_dyc)?;
 
     // Pack the complex initial state into [Re.., Im..].
     let mut real_y0 = Vec::with_capacity(2 * n);
@@ -75,6 +76,7 @@ where
     let initial_real_y0 = real_y0.clone();
     let mut cached_initial_dyc = Some(initial_dyc);
     let mut rhs_shape_error = None;
+    let mut rhs_value_error = false;
     let mut real_fun = |t: f64, u: &[f64]| -> Vec<f64> {
         let yc: Vec<Complex64> = (0..n).map(|j| (u[j], u[n + j])).collect();
         let dyc = if cached_initial_dyc.is_some()
@@ -89,6 +91,10 @@ where
         };
         if dyc.len() != n {
             rhs_shape_error = Some((n, dyc.len()));
+            return vec![f64::NAN; 2 * n];
+        }
+        if complex_rhs_has_non_finite(&dyc) {
+            rhs_value_error = true;
             return vec![f64::NAN; 2 * n];
         }
         let mut out = vec![0.0; 2 * n];
@@ -112,6 +118,9 @@ where
     let res = solve_ivp(&mut real_fun, &opts);
     if let Some((expected, actual)) = rhs_shape_error {
         return Err(IntegrateValidationError::RhsWrongShape { expected, actual });
+    }
+    if rhs_value_error {
+        return Err(IntegrateValidationError::NonFiniteF0);
     }
     let res = res?;
 
@@ -157,6 +166,19 @@ fn validate_complex_ode_inputs(
         validate_complex_t_eval(t_eval, t_span.0, t_span.1)?;
     }
     Ok(())
+}
+
+fn validate_complex_rhs_finite(values: &[Complex64]) -> Result<(), IntegrateValidationError> {
+    if complex_rhs_has_non_finite(values) {
+        return Err(IntegrateValidationError::NonFiniteF0);
+    }
+    Ok(())
+}
+
+fn complex_rhs_has_non_finite(values: &[Complex64]) -> bool {
+    values
+        .iter()
+        .any(|value| !value.0.is_finite() || !value.1.is_finite())
 }
 
 fn validate_complex_t_eval(
@@ -263,5 +285,19 @@ mod tests {
                 actual: 2
             }
         );
+    }
+
+    #[test]
+    fn complex_ode_rejects_non_finite_rhs_values() {
+        let err = complex_ode(
+            |_t, _y| vec![(f64::NAN, 0.0)],
+            &[(1.0, 0.0)],
+            (0.0, 1.0),
+            Some(&[1.0]),
+            1e-6,
+            1e-9,
+        )
+        .expect_err("non-finite complex RHS output");
+        assert_eq!(err, IntegrateValidationError::NonFiniteF0);
     }
 }
