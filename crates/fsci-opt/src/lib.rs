@@ -2326,7 +2326,14 @@ where
         }
     }
 
-    let total_points = ns.pow(ndim as u32);
+    let exponent = u32::try_from(ndim).map_err(|_| OptError::InvalidArgument {
+        detail: format!("number of dimensions {ndim} exceeds supported grid exponent"),
+    })?;
+    let total_points = ns
+        .checked_pow(exponent)
+        .ok_or_else(|| OptError::InvalidArgument {
+            detail: format!("grid size {ns}^{ndim} overflows usize"),
+        })?;
     let nfev = total_points;
 
     // Grid point for a flattened index (column-major over the per-dim steps).
@@ -6440,6 +6447,12 @@ mod tests {
             result.fun
         );
         assert_eq!(result.x, vec![0.0, 0.0]);
+    }
+
+    #[test]
+    fn brute_rejects_overflowing_grid_size() {
+        let result = crate::brute(|_| 0.0, &[(0.0, 1.0), (0.0, 1.0)], usize::MAX);
+        assert!(matches!(result, Err(crate::OptError::InvalidArgument { .. })));
     }
 
     #[test]
