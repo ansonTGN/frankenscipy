@@ -7331,6 +7331,17 @@ mod tests {
     }
 
     #[test]
+    fn exp2_exp10_cosdg_sindg_match_scipy() {
+        // scipy.special exp2/exp10 and degree trig (exact zeros at the axes).
+        assert_eq!(exp2(3.0), 8.0);
+        assert_eq!(exp10(2.0), 100.0);
+        assert_eq!(cosdg(0.0), 1.0);
+        assert!(cosdg(90.0).abs() < 1e-15, "cosdg(90)~0: {}", cosdg(90.0));
+        assert!(sindg(180.0).abs() < 1e-15, "sindg(180)~0: {}", sindg(180.0));
+        assert!((sindg(30.0) - 0.5).abs() < 1e-15, "sindg(30)");
+    }
+
+    #[test]
     fn gdtr_pdtr_match_scipy() {
         // scipy.special gamma CDF (gdtr) and Poisson CDF/inverse (pdtr/pdtri).
         use crate::gamma::{gdtr, pdtr, pdtri};
