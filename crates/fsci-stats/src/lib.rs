@@ -71496,6 +71496,15 @@ mod tests {
     }
 
     #[test]
+    fn binomial_pmf_cdf_sf_match_scipy() {
+        // scipy.stats.binom(10, 0.3) pmf/cdf/sf at sample points.
+        let b = Binomial::new(10, 0.3);
+        assert!((b.pmf(3) - 0.266_827_931_999_999_8).abs() < 1e-12, "pmf(3)");
+        assert!((b.cdf(3) - 0.649_610_718_400_000_2).abs() < 1e-12, "cdf(3)");
+        assert!((b.sf(7) - 0.001_590_386_399_999_999_5).abs() < 1e-12, "sf(7)");
+    }
+
+    #[test]
     fn gamma_beta_dist_match_scipy() {
         // scipy.stats.gamma(a=2, scale=1.5) and scipy.stats.beta(2, 3), 1.17.1.
         let g = GammaDist::new(2.0, 1.5);
