@@ -8405,6 +8405,24 @@ impl Poisson {
         Self { mu }
     }
 
+    /// Probability mass at many outcomes (full-support / count-data workload),
+    /// hoisting `ln(μ)` out of the per-`k` loop (the `lnΓ(k+1)` term varies with `k`
+    /// and stays). Byte-identical to mapping `pmf`: same `k·ln_mu − μ − lnΓ(k+1)`
+    /// order and the same μ==0 special case.
+    #[must_use]
+    pub fn pmf_many(&self, ks: &[u64]) -> Vec<f64> {
+        let ln_mu = self.mu.ln();
+        ks.iter()
+            .map(|&k| {
+                if self.mu == 0.0 {
+                    return if k == 0 { 1.0 } else { 0.0 };
+                }
+                let ln_pmf = k as f64 * ln_mu - self.mu - ln_gamma(k as f64 + 1.0);
+                ln_pmf.exp()
+            })
+            .collect()
+    }
+
     /// Probability mass function.
     pub fn pmf(&self, k: u64) -> f64 {
         if self.mu == 0.0 {
@@ -55963,6 +55981,17 @@ mod tests {
         assert_close(h.pmf(4), 0.0, 1e-15, "k > n");
         // k > N=5 is impossible
         assert_close(h.pmf(6), 0.0, 1e-15, "k > N");
+    }
+
+    #[test]
+    fn poisson_pmf_many_matches_pmf() {
+        // Batch pmf_many (ln(mu) hoisted) byte-identical to per-k pmf.
+        let p = Poisson::new(3.7);
+        let ks: Vec<u64> = (0..=15).collect();
+        let pm = p.pmf_many(&ks);
+        for (i, &k) in ks.iter().enumerate() {
+            assert_eq!(pm[i], p.pmf(k), "pmf_many != pmf at k={k}");
+        }
     }
 
     #[test]
