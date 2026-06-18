@@ -4629,6 +4629,8 @@ pub fn lp2bs_zpk(
     bw: f64,
 ) -> Result<(Vec<fsci_fft::Complex64>, Vec<fsci_fft::Complex64>, f64), SignalError> {
     check_proper_prototype("lp2bs_zpk", z, p)?;
+    validate_positive_finite_signal_parameter("wo", wo)?;
+    validate_positive_finite_signal_parameter("bw", bw)?;
     let half_bw = 0.5 * bw;
     // First invert to highpass.
     let cinv = |c: fsci_fft::Complex64| -> fsci_fft::Complex64 {
@@ -4703,6 +4705,8 @@ pub fn lp2bp_zpk(
     bw: f64,
 ) -> Result<(Vec<fsci_fft::Complex64>, Vec<fsci_fft::Complex64>, f64), SignalError> {
     check_proper_prototype("lp2bp_zpk", z, p)?;
+    validate_positive_finite_signal_parameter("wo", wo)?;
+    validate_positive_finite_signal_parameter("bw", bw)?;
     let scale = 0.5 * bw;
     let split = |c: fsci_fft::Complex64| -> (fsci_fft::Complex64, fsci_fft::Complex64) {
         // z_lp = c · scale; root_arg = z_lp² − wo²; sqrt of complex.
@@ -4777,6 +4781,7 @@ pub fn lp2hp_zpk(
     wo: f64,
 ) -> Result<(Vec<fsci_fft::Complex64>, Vec<fsci_fft::Complex64>, f64), SignalError> {
     check_proper_prototype("lp2hp_zpk", z, p)?;
+    validate_positive_finite_signal_parameter("wo", wo)?;
     let cinv = |c: fsci_fft::Complex64| -> fsci_fft::Complex64 {
         let (re, im) = c;
         let denom = re * re + im * im;
@@ -4831,11 +4836,21 @@ pub fn lp2lp_zpk(
     wo: f64,
 ) -> Result<(Vec<fsci_fft::Complex64>, Vec<fsci_fft::Complex64>, f64), SignalError> {
     check_proper_prototype("lp2lp_zpk", z, p)?;
+    validate_positive_finite_signal_parameter("wo", wo)?;
     let z_new: Vec<_> = z.iter().map(|&(re, im)| (wo * re, wo * im)).collect();
     let p_new: Vec<_> = p.iter().map(|&(re, im)| (wo * re, wo * im)).collect();
     let degree_diff = p.len() as i32 - z.len() as i32;
     let k_new = k * wo.powi(degree_diff);
     Ok((z_new, p_new, k_new))
+}
+
+fn validate_positive_finite_signal_parameter(name: &str, value: f64) -> Result<(), SignalError> {
+    if value.is_finite() && value > 0.0 {
+        return Ok(());
+    }
+    Err(SignalError::InvalidParameter {
+        detail: format!("{name} must be finite and positive"),
+    })
 }
 
 /// Transform a lowpass filter prototype to a different cutoff frequency,
@@ -26380,6 +26395,40 @@ mod tests {
             bilinear_zpk(&z_improper, &p_improper, 1.0, 100.0).is_err(),
             "bilinear_zpk must reject improper prototype"
         );
+    }
+
+    #[test]
+    fn zpk_transforms_reject_invalid_frequency_controls() {
+        let z: Vec<fsci_fft::Complex64> = Vec::new();
+        let p: Vec<fsci_fft::Complex64> = vec![(-1.0, 0.0)];
+        let invalid = [0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY];
+
+        for value in invalid {
+            assert!(matches!(
+                lp2lp_zpk(&z, &p, 1.0, value),
+                Err(SignalError::InvalidParameter { .. })
+            ));
+            assert!(matches!(
+                lp2hp_zpk(&z, &p, 1.0, value),
+                Err(SignalError::InvalidParameter { .. })
+            ));
+            assert!(matches!(
+                lp2bp_zpk(&z, &p, 1.0, value, 1.0),
+                Err(SignalError::InvalidParameter { .. })
+            ));
+            assert!(matches!(
+                lp2bp_zpk(&z, &p, 1.0, 1.0, value),
+                Err(SignalError::InvalidParameter { .. })
+            ));
+            assert!(matches!(
+                lp2bs_zpk(&z, &p, 1.0, value, 1.0),
+                Err(SignalError::InvalidParameter { .. })
+            ));
+            assert!(matches!(
+                lp2bs_zpk(&z, &p, 1.0, 1.0, value),
+                Err(SignalError::InvalidParameter { .. })
+            ));
+        }
     }
 
     #[test]
