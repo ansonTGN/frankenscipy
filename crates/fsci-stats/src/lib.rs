@@ -71583,6 +71583,16 @@ mod tests {
     }
 
     #[test]
+    fn negbinomial_pmf_cdf_sf_match_scipy() {
+        // scipy.stats.nbinom(5, 0.4). sf uses NegBinomial's override (not 1-cdf).
+        let d = NegBinomial::new(5.0, 0.4);
+        assert!((d.pmf(3) - 0.0774144).abs() < 1e-12, "pmf(3)");
+        assert!((d.cdf(3) - 0.173_670_400_000_000_03).abs() < 1e-12, "cdf(3)");
+        let rel = |g: f64, e: f64| (g - e).abs() / e < 1e-9;
+        assert!(rel(d.sf(30), 0.000_216_100_145_617_115_42), "sf(30): {}", d.sf(30));
+    }
+
+    #[test]
     fn rice_pdf_cdf_sf_match_scipy() {
         // scipy.stats.rice(0.7). Infinite right support; probed CLEAN in the
         // sf-override-gap scan (no >1e-9 1-cdf cancellation) — lock the values.
