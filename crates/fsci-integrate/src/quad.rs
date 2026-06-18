@@ -3516,6 +3516,19 @@ mod tests {
     }
 
     #[test]
+    fn cumulative_trapezoid_match_scipy() {
+        // scipy.integrate.cumulative_trapezoid (no initial): length n-1.
+        let r = cumulative_trapezoid(&[1.0, 2.0, 3.0, 4.0], &[0.0, 1.0, 2.0, 3.0]).expect("cumtrapz");
+        for (g, e) in r.iter().zip(&[1.5, 4.0, 7.5]) {
+            assert!((g - e).abs() < 1e-12, "cumtrapz: {g} vs {e}");
+        }
+        let r2 = cumulative_trapezoid(&[1.0, 4.0, 9.0], &[0.0, 1.0, 2.0]).expect("cumtrapz2");
+        for (g, e) in r2.iter().zip(&[2.5, 9.0]) {
+            assert!((g - e).abs() < 1e-12, "cumtrapz2: {g} vs {e}");
+        }
+    }
+
+    #[test]
     fn simpson_odd_interval_cartwright_match_scipy() {
         // scipy.integrate.simpson on x^4 (degree 4 -> Simpson NOT exact, so the
         // odd-interval Cartwright correction actually matters; a trapezoid
