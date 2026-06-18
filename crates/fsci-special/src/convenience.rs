@@ -7340,6 +7340,20 @@ mod tests {
     }
 
     #[test]
+    fn special_scalar_helpers_match_analytic() {
+        // Previously-untested scalar helpers vs analytic/numpy values.
+        assert!((arcsinh(1.0) - (1.0 + 2.0_f64.sqrt()).ln()).abs() < 1e-12, "arcsinh(1)");
+        assert!((arctanh(0.5) - 0.549_306_144_334_054_9).abs() < 1e-12, "arctanh(0.5)");
+        assert!((log_comb(5.0, 2.0) - 10.0_f64.ln()).abs() < 1e-12, "log C(5,2)=ln10");
+        assert!((sinc_squared(0.0) - 1.0).abs() < 1e-12, "sinc^2(0)=1");
+        // central_diff of x^2 at x=2 is exactly 2x=4 (quadratic -> O(h^2) error vanishes).
+        assert!(
+            (central_diff(|x: f64| x * x, 2.0, 0.1) - 4.0).abs() < 1e-12,
+            "central_diff x^2"
+        );
+    }
+
+    #[test]
     fn struve_match_scipy() {
         // scipy.special.struve (Struve function H_v(x)).
         assert!((struve(0.0, 1.0) - 0.568_656_627_048_288_1).abs() < 1e-13, "struve(0,1)");
