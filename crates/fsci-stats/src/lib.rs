@@ -72011,6 +72011,15 @@ mod tests {
     }
 
     #[test]
+    fn combine_pvalues_fisher_match_scipy() {
+        // scipy.stats.combine_pvalues Fisher's method: stat = -2*sum(ln p), chi2
+        // sf with 2k dof.
+        let r = combine_pvalues(&[0.1, 0.2, 0.3], Some("fisher"), None).expect("combine");
+        assert!((r.statistic - 10.231_991_619_508_163).abs() < 1e-11, "stat: {}", r.statistic);
+        assert!((r.pvalue - 0.115_216_214_234_788_5).abs() < 1e-12, "p: {}", r.pvalue);
+    }
+
+    #[test]
     fn kruskal_match_scipy() {
         // scipy.stats.kruskal (Kruskal-Wallis H test) with tied ranks.
         let g1 = [1.0, 2.0, 3.0, 4.0];
