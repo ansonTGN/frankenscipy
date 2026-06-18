@@ -13478,6 +13478,7 @@ fn overlap_add_binsums(
             "window must have length of nperseg ({nperseg})"
         )));
     }
+    validate_real_values_finite(window, "COLA/NOLA window samples must be finite")?;
     let step = nperseg - noverlap;
     let mut binsums = vec![0.0_f64; step];
     for ii in 0..(nperseg / step) {
@@ -17466,6 +17467,22 @@ mod tests {
         // Validation: noverlap >= nperseg and wrong window length are errors.
         assert!(check_COLA(&rect, 8, 8).is_err());
         assert!(check_NOLA(&rect, 4, 2).is_err());
+
+        let mut non_finite = rect;
+        non_finite[3] = f64::NAN;
+        assert_eq!(
+            check_COLA(&non_finite, 8, 4),
+            Err(SignalError::NonFiniteInput {
+                detail: "COLA/NOLA window samples must be finite".to_string(),
+            })
+        );
+        non_finite[3] = f64::INFINITY;
+        assert_eq!(
+            check_NOLA(&non_finite, 8, 4),
+            Err(SignalError::NonFiniteInput {
+                detail: "COLA/NOLA window samples must be finite".to_string(),
+            })
+        );
     }
 
     #[test]
