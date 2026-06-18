@@ -5409,7 +5409,11 @@ pub fn upsample(x: &[f64], factor: usize) -> Vec<f64> {
     if factor <= 1 {
         return x.to_vec();
     }
-    let mut result = vec![0.0; x.len() * factor];
+    let output_len = x
+        .len()
+        .checked_mul(factor)
+        .expect("upsample output length overflows usize");
+    let mut result = vec![0.0; output_len];
     for (i, &v) in x.iter().enumerate() {
         result[i * factor] = v;
     }
@@ -22466,6 +22470,20 @@ mod tests {
     #[should_panic(expected = "downsample factor must be > 0")]
     fn downsample_rejects_zero_factor() {
         let _ = downsample(&[1.0, 2.0, 3.0], 0);
+    }
+
+    #[test]
+    fn upsample_inserts_zeros_between_samples() {
+        assert_eq!(
+            upsample(&[2.0, -1.0, 4.0], 3),
+            vec![2.0, 0.0, 0.0, -1.0, 0.0, 0.0, 4.0, 0.0, 0.0]
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "upsample output length overflows usize")]
+    fn upsample_rejects_overflowing_output_length() {
+        let _ = upsample(&[1.0, 2.0], usize::MAX);
     }
 
     // ── Resample tests ─────────────────────────────────────────────
