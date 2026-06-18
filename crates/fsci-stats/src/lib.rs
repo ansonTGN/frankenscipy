@@ -70288,6 +70288,18 @@ mod tests {
     }
 
     #[test]
+    fn gen_gamma_pdf_cdf_match_scipy() {
+        // Exact scipy.stats.gengamma(2,1.5). test_gen_gamma only checks positivity,
+        // bounds, and finiteness. Cross-read: fsci pdf |c|x^(ca-1)exp(-x^c)/Gamma(a)
+        // matches scipy's parameterization.
+        let gg = GenGamma::new(2.0, 1.5);
+        assert!((gg.pdf(1.0) - 0.551_819_161_757_163_5).abs() < 1e-12, "pdf(1)");
+        assert!((gg.pdf(2.0) - 0.354_634_479_371_737_37).abs() < 1e-12, "pdf(2)");
+        assert!((gg.cdf(1.0) - 0.264_241_117_657_115_3).abs() < 1e-10, "cdf(1)");
+        assert!((gg.mean() - 1.504_575_488_251_556).abs() < 1e-10, "mean");
+    }
+
+    #[test]
     fn test_gen_gamma() {
         let gg = GenGamma::new(2.0, 1.5);
         assert_eq!(gg.pdf(0.0), 0.0);
