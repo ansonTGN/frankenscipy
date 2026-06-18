@@ -72646,6 +72646,20 @@ mod tests {
     }
 
     #[test]
+    fn power_divergence_tests_match_scipy() {
+        // cressie_read_test/freeman_tukey_test/expected_freq_uniform were untested.
+        let f = [10.0, 20.0, 30.0, 40.0];
+        let (cr, crp) = cressie_read_test(&f, None);
+        assert!((cr - 20.269_512_156_269_187).abs() < 1e-9, "cressie-read stat");
+        assert!((crp - 0.000_149_252_056_597_614_91).abs() < 1e-12, "cressie-read p");
+        let (ft, ftp) = freeman_tukey_test(&f, None);
+        assert!((ft - 22.552_219_577_744_88).abs() < 1e-9, "freeman-tukey stat");
+        assert!((ftp - 5.006_069_088_393_761_6e-5).abs() < 1e-15, "freeman-tukey p");
+        // uniform expected = sum/n in each bin.
+        assert_eq!(expected_freq_uniform(&f), vec![25.0, 25.0, 25.0, 25.0]);
+    }
+
+    #[test]
     fn exp_regression_and_biweight_match_analytic() {
         // exponential_regression/biweight_midcorrelation were previously untested.
         // exponential_regression recovers (a,b) from y=a*exp(b*x) exactly.
