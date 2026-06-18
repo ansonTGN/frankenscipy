@@ -3422,6 +3422,21 @@ pub fn fixed_point<F>(f: F, x0: f64, tol: f64, maxiter: usize) -> Result<f64, Op
 where
     F: Fn(f64) -> f64,
 {
+    if !x0.is_finite() {
+        return Err(OptError::InvalidArgument {
+            detail: "x0 must be finite".to_string(),
+        });
+    }
+    if !tol.is_finite() || tol <= 0.0 {
+        return Err(OptError::InvalidArgument {
+            detail: "tol must be a positive finite value".to_string(),
+        });
+    }
+    if maxiter == 0 {
+        return Err(OptError::InvalidArgument {
+            detail: "maxiter must be greater than zero".to_string(),
+        });
+    }
     let mut x = x0;
     for _iter in 0..maxiter {
         let x_new = f(x);
@@ -6793,6 +6808,26 @@ mod tests {
             (result - 0.7390851332151607).abs() < 1e-8,
             "fixed_point got {result}, expected 0.7390851332151607"
         );
+    }
+
+    #[test]
+    fn fixed_point_rejects_invalid_controls() {
+        assert!(matches!(
+            fixed_point(|x| x, f64::NAN, 1e-10, 100),
+            Err(OptError::InvalidArgument { .. })
+        ));
+        assert!(matches!(
+            fixed_point(|x| x, 0.5, 0.0, 100),
+            Err(OptError::InvalidArgument { .. })
+        ));
+        assert!(matches!(
+            fixed_point(|x| x, 0.5, f64::INFINITY, 100),
+            Err(OptError::InvalidArgument { .. })
+        ));
+        assert!(matches!(
+            fixed_point(|x| x, 0.5, 1e-10, 0),
+            Err(OptError::InvalidArgument { .. })
+        ));
     }
 
     #[test]
