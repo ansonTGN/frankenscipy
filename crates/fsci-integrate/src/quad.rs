@@ -2892,6 +2892,12 @@ pub fn quad_inf<F>(
 where
     F: Fn(f64) -> f64,
 {
+    if !a.is_finite() {
+        return Err(IntegrateValidationError::QuadInvalidBounds {
+            detail: "quad_inf: finite endpoint must be finite".to_string(),
+        });
+    }
+
     // Substitution: x = a + t/(1-t), dx = 1/(1-t)² dt, t ∈ [0, 1)
     let g = |t: f64| {
         if t >= 1.0 - 1e-15 {
@@ -2916,6 +2922,12 @@ pub fn quad_neg_inf<F>(
 where
     F: Fn(f64) -> f64,
 {
+    if !b.is_finite() {
+        return Err(IntegrateValidationError::QuadInvalidBounds {
+            detail: "quad_neg_inf: finite endpoint must be finite".to_string(),
+        });
+    }
+
     // Substitution: x = b - t/(1-t), dx = -1/(1-t)² dt, t ∈ [0, 1)
     let g = |t: f64| {
         if t >= 1.0 - 1e-15 {
@@ -3880,6 +3892,33 @@ mod tests {
             err,
             IntegrateValidationError::QuadInvalidBounds { .. }
         ));
+    }
+
+    #[test]
+    fn infinite_quad_helpers_reject_non_finite_anchors() {
+        for anchor in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let err = quad_inf(
+                |_| -> f64 { panic!("invalid anchor should not be sampled") },
+                anchor,
+                QuadOptions::default(),
+            )
+            .expect_err("quad_inf anchor should fail");
+            assert!(matches!(
+                err,
+                IntegrateValidationError::QuadInvalidBounds { .. }
+            ));
+
+            let err = quad_neg_inf(
+                |_| -> f64 { panic!("invalid anchor should not be sampled") },
+                anchor,
+                QuadOptions::default(),
+            )
+            .expect_err("quad_neg_inf anchor should fail");
+            assert!(matches!(
+                err,
+                IntegrateValidationError::QuadInvalidBounds { .. }
+            ));
+        }
     }
 
     #[test]
