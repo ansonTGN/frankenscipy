@@ -70271,6 +70271,18 @@ mod tests {
     }
 
     #[test]
+    fn norm_inv_gauss_pdf_mean_match_scipy() {
+        // Exact scipy.stats.norminvgauss(1.5,0.5). test_norm_inv_gauss only checks
+        // positivity and finiteness. Cross-read: fsci pdf (a/pi)K1(a*sqrt(1+x^2))
+        // *exp(sqrt(a^2-b^2)+bx)/sqrt(1+x^2) matches scipy (mean=b/sqrt(a^2-b^2)).
+        let nig = NormInvGauss::new(1.5, 0.5);
+        assert!((nig.pdf(0.0) - 0.544_770_885_873_029_7).abs() < 1e-12, "pdf(0)");
+        assert!((nig.pdf(1.0) - 0.273_383_094_844_873_66).abs() < 1e-12, "pdf(1)");
+        assert!((nig.pdf(-1.0) - 0.100_572_020_157_251_53).abs() < 1e-12, "pdf(-1)");
+        assert!((nig.mean() - 0.353_553_390_593_273_73).abs() < 1e-12, "mean");
+    }
+
+    #[test]
     fn test_norm_inv_gauss() {
         let nig = NormInvGauss::new(1.5, 0.5);
         assert!(nig.pdf(0.0) > 0.0);
