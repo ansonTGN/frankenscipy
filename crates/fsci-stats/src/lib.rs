@@ -47874,6 +47874,16 @@ mod tests {
         assert!(small.kurtosis().is_nan());
     }
 
+    #[test]
+    fn pareto_pdf_match_scipy() {
+        // Exact scipy.stats.pareto(b=2.5) [scale=1]. The Pareto suite has a cdf
+        // golden, kurtosis, and entropy but no exact pdf lock.
+        let p = Pareto::new(2.5, 1.0);
+        assert!((p.pdf(1.0) - 2.5).abs() < 1e-12, "pdf(1)=b at left edge");
+        assert!((p.pdf(2.0) - 0.220_970_869_120_796_1).abs() < 1e-12, "pdf(2)");
+        assert!((p.cdf(2.0) - 0.823_223_304_703_363_1).abs() < 1e-12, "cdf(2)");
+    }
+
     /// Pareto kurtosis closed form — frankenscipy-026b5.
     #[test]
     fn pareto_kurtosis_matches_scipy() {
