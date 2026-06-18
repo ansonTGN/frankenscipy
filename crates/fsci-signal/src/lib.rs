@@ -13409,6 +13409,7 @@ pub fn stft(
         ));
     }
     validate_sampling_frequency(fs)?;
+    validate_spectral_samples(x)?;
 
     let nperseg = nperseg.unwrap_or_else(|| x.len().min(256));
     if nperseg == 0 {
@@ -20421,6 +20422,30 @@ mod tests {
                 "spectrogram",
             );
         }
+    }
+
+    #[test]
+    fn stft_spectrogram_reject_non_finite_samples() {
+        let mut x = [0.0, 1.0, 0.5, -0.25, 0.25, -0.5, 1.5, 0.75];
+        x[2] = f64::NAN;
+        let err = stft(&x, 1.0, None, Some(4), Some(2)).expect_err("non-finite stft input");
+        assert_eq!(
+            err,
+            SignalError::NonFiniteInput {
+                detail: "spectral input samples must be finite".to_string()
+            }
+        );
+
+        x[2] = 0.5;
+        x[7] = f64::INFINITY;
+        let err = spectrogram(&x, 1.0, None, Some(4), Some(2))
+            .expect_err("non-finite spectrogram input");
+        assert_eq!(
+            err,
+            SignalError::NonFiniteInput {
+                detail: "spectral input samples must be finite".to_string()
+            }
+        );
     }
 
     #[test]
