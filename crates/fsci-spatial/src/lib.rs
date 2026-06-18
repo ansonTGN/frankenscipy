@@ -5693,6 +5693,14 @@ mod tests {
     }
 
     #[test]
+    fn mahalanobis_match_scipy() {
+        // scipy.spatial.distance.mahalanobis(u, v, VI): sqrt((u-v)^T VI (u-v)).
+        let vi = vec![vec![2.0, 0.5], vec![0.5, 2.0]];
+        let d = mahalanobis(&[1.0, 0.0], &[0.0, 1.0], &vi);
+        assert!((d - 3.0_f64.sqrt()).abs() < 1e-12, "mahalanobis: {d}");
+    }
+
+    #[test]
     fn pdist_extra_metrics_match_scipy() {
         // scipy.spatial.distance.pdist cosine/canberra/braycurtis/correlation.
         let x = vec![vec![1.0, 2.0, 3.0], vec![4.0, 6.0, 8.0]];
