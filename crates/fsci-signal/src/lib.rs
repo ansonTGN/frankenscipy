@@ -5469,6 +5469,13 @@ pub fn upsample(x: &[f64], factor: usize) -> Vec<f64> {
 
 /// Compute the signal-to-noise ratio in dB.
 pub fn snr(signal: &[f64], noise: &[f64]) -> f64 {
+    if signal
+        .iter()
+        .chain(noise.iter())
+        .any(|value| !value.is_finite())
+    {
+        return f64::NAN;
+    }
     let sig_power: f64 = signal.iter().map(|&v| v * v).sum::<f64>() / signal.len().max(1) as f64;
     let noise_power: f64 = noise.iter().map(|&v| v * v).sum::<f64>() / noise.len().max(1) as f64;
     if noise_power == 0.0 {
@@ -19696,6 +19703,13 @@ mod tests {
         }
 
         assert_eq!(spectral_entropy(&[0.0, 0.0]), 0.0);
+    }
+
+    #[test]
+    fn snr_rejects_non_finite_samples() {
+        assert!(snr(&[1.0, f64::NAN], &[0.1, 0.2]).is_nan());
+        assert!(snr(&[1.0, 2.0], &[0.1, f64::INFINITY]).is_nan());
+        assert!(snr(&[1.0, 2.0], &[0.0, 0.0]).is_infinite());
     }
 
     #[test]
