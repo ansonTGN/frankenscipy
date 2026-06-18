@@ -92,3 +92,25 @@ condition so dead ends are not repeated casually.
   reject this exact full-square arena formulation and do not retry without a
   profile showing `agglomerate_nnarray` row traversal or allocation is again a
   top-5 cluster hotspot.
+## 2026-06-18 - frankenscipy-8l8r1.119 - BDF Newton streamed scaled RMS norm
+
+- Agent: cod-a / MistyBirch
+- Lever: replace `newton_bdf`'s per-Newton-iteration temporary
+  `collect::<Vec<_>>()` for `dy[j] / scale[j]` with an allocation-free streamed
+  scaled RMS helper over the LU solve vector and scale slice.
+- Status: pending batch-test. This is a code-first commit per campaign
+  instruction; only local `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a
+  cargo check -p fsci-integrate` is expected before commit.
+- Correctness guard: `rms_norm_scaled_matches_collected_reference` proves the
+  streamed helper is bit-identical to the old collect-then-`rms_norm` path for
+  the same scaled values, while existing BDF tests cover solver convergence and
+  validation semantics.
+- Benchmark guard: compare focused stiff `solve_ivp(method=BDF)` workloads
+  against the pre-change commit on the same worker/target dir, especially
+  medium/high-dimensional states where Newton iterations dominate allocation
+  churn.
+- Retry condition: keep only if same-worker focused BDF timings improve without
+  step-count, final-state, tolerance, or failure-mode drift; if the streamed
+  helper is neutral/slower, reject this exact norm helper and do not retry
+  unless allocation profiles show BDF Newton scaled-vector churn is again a
+  top-5 integrate hotspot.

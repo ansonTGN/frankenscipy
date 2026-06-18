@@ -59,6 +59,19 @@ fn rms_norm(x: &[f64]) -> f64 {
     (s / x.len() as f64).sqrt()
 }
 
+/// RMS norm of `values[j] / scale[j]`, streamed without materializing the scaled vector.
+fn rms_norm_scaled(values: impl Iterator<Item = f64>, scale: &[f64]) -> f64 {
+    if scale.is_empty() {
+        return 0.0;
+    }
+    let mut s = 0.0;
+    for (value, &scale_j) in values.zip(scale.iter()) {
+        let scaled = value / scale_j;
+        s += scaled * scaled;
+    }
+    (s / scale.len() as f64).sqrt()
+}
+
 /// scipy `compute_R(order, factor)` — the `(order+1)×(order+1)` step-change
 /// matrix whose columns are cumulative products down the rows.
 fn compute_r(order: usize, factor: f64) -> DMatrix<f64> {
@@ -578,7 +591,7 @@ impl BdfSolver {
             }
             let rhs = DVector::from_iterator(n, (0..n).map(|j| c * f[j] - psi[j] - d[j]));
             let dy = lu.solve(&rhs)?;
-            let dy_norm = rms_norm(&(0..n).map(|j| dy[j] / scale[j]).collect::<Vec<_>>());
+            let dy_norm = rms_norm_scaled(dy.iter().copied(), scale);
 
             let rate = dy_norm_old.map(|old| if old > 0.0 { dy_norm / old } else { 0.0 });
             if let Some(r) = rate
@@ -703,6 +716,23 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rms_norm_scaled_matches_collected_reference() {
+        let dy = [2.0, -3.0, 0.25, 10.0, -1.5];
+        let scale = [0.5, 2.0, 0.25, 4.0, 3.0];
+        let collected: Vec<f64> = dy
+            .iter()
+            .zip(scale.iter())
+            .map(|(&value, &scale_j)| value / scale_j)
+            .collect();
+        let streamed = rms_norm_scaled(dy.iter().copied(), &scale);
+        assert_eq!(streamed.to_bits(), rms_norm(&collected).to_bits());
+        assert_eq!(
+            rms_norm_scaled(std::iter::empty::<f64>(), &[]).to_bits(),
+            0.0f64.to_bits()
+        );
+    }
 
     #[test]
     fn bdf_exponential_decay() {
