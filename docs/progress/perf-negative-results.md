@@ -23,3 +23,26 @@ condition so dead ends are not repeated casually.
   arena copy cost erases the allocation savings or regresses any row, reject this
   exact arena/scratch formulation and do not retry without allocator/profile
   evidence showing per-step basis allocation is again a top-5 sparse hotspot.
+
+## 2026-06-18 - frankenscipy-bpzha - RK step scratch double-buffer
+
+- Agent: cod-b / MistyBirch
+- Lever: move `rk_step` rejected-attempt storage into solver-owned reusable
+  buffers for `dy`, `y_stage`, `y_new`, and `f_new`; accepted steps swap the
+  buffers into live state, while rejected attempts overwrite the same scratch on
+  retry.
+- Status: pending batch-test. This is a code-first commit per campaign
+  instruction; local `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b
+  cargo check -p fsci-integrate` passed before commit.
+- Correctness guard: existing RK45/RK23 step unit coverage now exercises the
+  scratch-buffer API, including wrong-size RHS rejection; solver accept/reject
+  semantics still preserve `y_old`, `f_old`, boundary clamping, and FSAL storage.
+- Benchmark guard: compare focused `solve_ivp` RK45/RK23 workloads against the
+  pre-change commit on the same worker/target dir, especially high-dimensional
+  adaptive problems with rejected steps where per-attempt vector allocation was
+  visible in profiles.
+- Retry condition: keep only if focused same-worker integrate timings improve
+  without changing step counts, `nfev`, or final tolerances; if the swap/copy
+  path costs more than the allocation removal, reject this scratch formulation
+  and do not retry without allocator-profile evidence showing RK temporary Vec
+  churn is again a top-5 integrate hotspot.

@@ -316,7 +316,7 @@ pub static DOP853_TABLEAU: ButcherTableau = ButcherTableau {
 
 /// Perform a single explicit Runge-Kutta step.
 ///
-/// Returns `(y_new, f_new)` where `f_new = fun(t + h, y_new)`.
+/// Writes `y_new` and `f_new` where `f_new = fun(t + h, y_new)`.
 /// `k` is filled with the stage derivatives (k[0] = f, k[n_stages] = f_new).
 fn rk_step<F>(
     fun: &mut F,
@@ -326,18 +326,27 @@ fn rk_step<F>(
     h: f64,
     tableau: &ButcherTableau,
     k: &mut [Vec<f64>],
-) -> Result<(Vec<f64>, Vec<f64>), StepFailure>
+    y_new: &mut [f64],
+    f_new: &mut [f64],
+    dy: &mut [f64],
+    y_stage: &mut [f64],
+) -> Result<(), StepFailure>
 where
     F: FnMut(f64, &[f64]) -> Vec<f64> + ?Sized,
 {
     let n = y.len();
     validate_stage_rhs_shape(f.len(), n)?;
-    k[0] = f.to_vec();
+    debug_assert_eq!(k.len(), tableau.n_stages + 1);
+    debug_assert_eq!(y_new.len(), n);
+    debug_assert_eq!(f_new.len(), n);
+    debug_assert_eq!(dy.len(), n);
+    debug_assert_eq!(y_stage.len(), n);
+    k[0].copy_from_slice(f);
 
     for s in 1..tableau.n_stages {
         let a_row = tableau.a[s];
         let c_s = tableau.c[s];
-        let mut dy = vec![0.0; n];
+        dy.fill(0.0);
         for (j, &a_sj) in a_row.iter().enumerate() {
             if a_sj != 0.0 {
                 for i in 0..n {
@@ -345,18 +354,16 @@ where
                 }
             }
         }
-        let y_stage: Vec<f64> = y
-            .iter()
-            .zip(dy.iter())
-            .map(|(yi, di)| yi + h * di)
-            .collect();
-        let stage = fun(t + c_s * h, &y_stage);
+        for i in 0..n {
+            y_stage[i] = y[i] + h * dy[i];
+        }
+        let stage = fun(t + c_s * h, y_stage);
         validate_stage_rhs_shape(stage.len(), n)?;
-        k[s] = stage;
+        k[s].copy_from_slice(&stage);
     }
 
     // y_new = y + h * sum(B[s] * K[s])
-    let mut y_new = y.to_vec();
+    y_new.copy_from_slice(y);
     for (s, &b_s) in tableau.b.iter().enumerate() {
         if b_s != 0.0 {
             for i in 0..n {
@@ -368,10 +375,10 @@ where
     // FSAL (First Same As Last) property: for methods like Dormand-Prince RK45
     // and Bogacki-Shampine RK23, the last stage k[n_stages-1] is the derivative
     // at (t+h, y_new).
-    let f_new = k[tableau.n_stages - 1].clone();
-    k[tableau.n_stages] = f_new.clone(); // store for next step if needed
+    f_new.copy_from_slice(&k[tableau.n_stages - 1]);
+    k[tableau.n_stages].copy_from_slice(f_new); // store for next step if needed
 
-    Ok((y_new, f_new))
+    Ok(())
 }
 
 fn validate_stage_rhs_shape(actual: usize, expected: usize) -> Result<(), StepFailure> {
@@ -443,6 +450,10 @@ pub struct RkSolver {
     h_abs: f64,
     error_exponent: f64,
     k: Vec<Vec<f64>>,
+    y_new: Vec<f64>,
+    f_new: Vec<f64>,
+    dy: Vec<f64>,
+    y_stage: Vec<f64>,
     // Statistics
     nfev: usize,
     // Stored ODE function for trait-object stepping (Some if created with new_owned)
@@ -521,6 +532,10 @@ impl RkSolver {
 
         // Allocate K storage: n_stages + 1 vectors of length n
         let k = vec![vec![0.0; n]; config.tableau.n_stages + 1];
+        let y_new = vec![0.0; n];
+        let f_new = vec![0.0; n];
+        let dy = vec![0.0; n];
+        let y_stage = vec![0.0; n];
 
         Ok(Self {
             mode: config.mode,
@@ -541,6 +556,10 @@ impl RkSolver {
             h_abs,
             error_exponent,
             k,
+            y_new,
+            f_new,
+            dy,
+            y_stage,
             nfev,
             fun: None,
         })
@@ -623,6 +642,10 @@ impl RkSolver {
 
         // Allocate K storage: n_stages + 1 vectors of length n
         let k = vec![vec![0.0; n]; config.tableau.n_stages + 1];
+        let y_new = vec![0.0; n];
+        let f_new = vec![0.0; n];
+        let dy = vec![0.0; n];
+        let y_stage = vec![0.0; n];
 
         Ok(Self {
             mode: config.mode,
@@ -643,6 +666,10 @@ impl RkSolver {
             h_abs,
             error_exponent,
             k,
+            y_new,
+            f_new,
+            dy,
+            y_stage,
             nfev,
             fun: Some(fun_box),
         })
@@ -751,12 +778,23 @@ impl RkSolver {
             let h = t_new - t;
             h_abs = h.abs();
 
-            // Perform the RK step
-            let (y_new, f_new) =
-                rk_step(fun, t, &self.y, &self.f, h, self.tableau, &mut self.k)?;
+            // Perform the RK step into reusable buffers owned by the solver.
+            rk_step(
+                fun,
+                t,
+                &self.y,
+                &self.f,
+                h,
+                self.tableau,
+                &mut self.k,
+                &mut self.y_new,
+                &mut self.f_new,
+                &mut self.dy,
+                &mut self.y_stage,
+            )?;
             self.nfev += self.tableau.n_stages - 1; // leverage FSAL: exactly n_stages - 1 new evals per step
 
-            let err_norm = self.estimate_error_norm(h, &y_new);
+            let err_norm = self.estimate_error_norm(h, &self.y_new);
 
             if !err_norm.is_finite() {
                 self.state = OdeSolverState::Failed;
@@ -784,9 +822,9 @@ impl RkSolver {
                 self.t_old = Some(t);
                 self.f_old = Some(self.f.clone());
                 self.t = t_new;
-                self.y = y_new;
+                std::mem::swap(&mut self.y, &mut self.y_new);
                 self.h_abs = h_abs;
-                self.f = f_new;
+                std::mem::swap(&mut self.f, &mut self.f_new);
             } else {
                 // Step rejected: decrease step size
                 h_abs *= MIN_FACTOR.max(SAFETY * err_norm.powf(self.error_exponent));
@@ -910,8 +948,8 @@ impl RkSolver {
             let h = t_new - t;
             h_abs = h.abs();
 
-            // Perform the RK step using stored function (borrow only for this call)
-            let (y_new, f_new) = {
+            // Perform the RK step using stored function (borrow only for this call).
+            {
                 let Some(fun) = self.fun.as_mut() else {
                     return Err(StepFailure::NotYetImplemented(
                         "OdeSolver::step requires solver created with new_owned; use step_with instead",
@@ -925,11 +963,15 @@ impl RkSolver {
                     h,
                     self.tableau,
                     &mut self.k,
-                )?
+                    &mut self.y_new,
+                    &mut self.f_new,
+                    &mut self.dy,
+                    &mut self.y_stage,
+                )?;
             };
             self.nfev += self.tableau.n_stages - 1;
 
-            let err_norm = self.estimate_error_norm(h, &y_new);
+            let err_norm = self.estimate_error_norm(h, &self.y_new);
 
             if !err_norm.is_finite() {
                 self.state = OdeSolverState::Failed;
@@ -957,9 +999,9 @@ impl RkSolver {
                 self.t_old = Some(t);
                 self.f_old = Some(self.f.clone());
                 self.t = t_new;
-                self.y = y_new;
+                std::mem::swap(&mut self.y, &mut self.y_new);
                 self.h_abs = h_abs;
-                self.f = f_new;
+                std::mem::swap(&mut self.f, &mut self.f_new);
             } else {
                 // Step rejected: decrease step size
                 h_abs *= MIN_FACTOR.max(SAFETY * err_norm.powf(self.error_exponent));
@@ -1019,13 +1061,26 @@ impl OdeSolver for RkSolver {
 mod tests {
     use super::*;
 
+    fn rk_scratch(
+        n: usize,
+        tableau: &ButcherTableau,
+    ) -> (Vec<Vec<f64>>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
+        (
+            vec![vec![0.0; n]; tableau.n_stages + 1],
+            vec![0.0; n],
+            vec![0.0; n],
+            vec![0.0; n],
+            vec![0.0; n],
+        )
+    }
+
     #[test]
     fn rk_step_single_euler_like() {
         // Trivial test: single stage with A=[], B=[1], C=[0] would be Euler
         // But we test with the actual RK45 tableau on a simple system
         let n = 1;
-        let mut k = vec![vec![0.0; n]; RK45_TABLEAU.n_stages + 1];
-        let (y_new, _f_new) = rk_step(
+        let (mut k, mut y_new, mut f_new, mut dy, mut y_stage) = rk_scratch(n, &RK45_TABLEAU);
+        rk_step(
             &mut |_t, y| vec![-0.5 * y[0]],
             0.0,
             &[2.0],
@@ -1033,6 +1088,10 @@ mod tests {
             0.1,
             &RK45_TABLEAU,
             &mut k,
+            &mut y_new,
+            &mut f_new,
+            &mut dy,
+            &mut y_stage,
         )
         .expect("rk step");
         // y_new should be close to 2 * exp(-0.5 * 0.1) ≈ 1.90245
@@ -1046,8 +1105,8 @@ mod tests {
     #[test]
     fn rk23_step_exponential() {
         let n = 1;
-        let mut k = vec![vec![0.0; n]; RK23_TABLEAU.n_stages + 1];
-        let (y_new, _f_new) = rk_step(
+        let (mut k, mut y_new, mut f_new, mut dy, mut y_stage) = rk_scratch(n, &RK23_TABLEAU);
+        rk_step(
             &mut |_t, y| vec![-0.5 * y[0]],
             0.0,
             &[2.0],
@@ -1055,6 +1114,10 @@ mod tests {
             0.1,
             &RK23_TABLEAU,
             &mut k,
+            &mut y_new,
+            &mut f_new,
+            &mut dy,
+            &mut y_stage,
         )
         .expect("rk step");
         // RK23 is order 3, so the error should be O(h^4) ≈ 1e-4
@@ -1068,7 +1131,7 @@ mod tests {
     #[test]
     fn rk_step_rejects_wrong_size_stage_rhs() {
         let n = 1;
-        let mut k = vec![vec![0.0; n]; RK45_TABLEAU.n_stages + 1];
+        let (mut k, mut y_new, mut f_new, mut dy, mut y_stage) = rk_scratch(n, &RK45_TABLEAU);
         let err = rk_step(
             &mut |_t, _y| Vec::new(),
             0.0,
@@ -1077,6 +1140,10 @@ mod tests {
             0.1,
             &RK45_TABLEAU,
             &mut k,
+            &mut y_new,
+            &mut f_new,
+            &mut dy,
+            &mut y_stage,
         )
         .expect_err("wrong-size stage derivative");
         assert_eq!(
