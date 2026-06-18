@@ -1052,6 +1052,29 @@ impl StudentT {
         assert!(df > 0.0, "df must be positive, got {df}");
         Self { df }
     }
+
+    /// Density at many points, hoisting the `gamma_ratio_t(df)` coefficient (a
+    /// gamma-ratio) out of the per-point loop. Byte-identical to mapping `pdf`
+    /// (same `coeff * (...).powf(...)`, coefficient computed once).
+    #[must_use]
+    pub fn pdf_many(&self, xs: &[f64]) -> Vec<f64> {
+        let v = self.df;
+        let coeff = gamma_ratio_t(v);
+        xs.iter()
+            .map(|&x| coeff * (1.0 + x * x / v).powf(-0.5 * (v + 1.0)))
+            .collect()
+    }
+
+    /// Log-density at many points; hoists `gamma_ratio_t(df).ln()` like
+    /// [`pdf_many`](Self::pdf_many). Byte-identical to mapping `logpdf`.
+    #[must_use]
+    pub fn logpdf_many(&self, xs: &[f64]) -> Vec<f64> {
+        let v = self.df;
+        let log_coeff = gamma_ratio_t(v).ln();
+        xs.iter()
+            .map(|&x| log_coeff - 0.5 * (v + 1.0) * (1.0 + x * x / v).ln())
+            .collect()
+    }
 }
 
 impl ContinuousDistribution for StudentT {
@@ -47822,6 +47845,20 @@ mod tests {
         // ppf(0.5) should be 0 (symmetric distribution)
         let x = t.ppf(0.5);
         assert!(x.abs() < 0.01, "t ppf(0.5) = {x}, expected ~0");
+    }
+
+    #[test]
+    fn student_t_pdf_many_matches_pdf() {
+        // Batch pdf_many/logpdf_many (gamma_ratio_t coeff hoisted) must be
+        // byte-identical to per-point pdf/logpdf.
+        let t = StudentT::new(4.5);
+        let xs = [-3.0, -0.5, 0.0, 0.75, 2.0, 8.0];
+        let pm = t.pdf_many(&xs);
+        let lpm = t.logpdf_many(&xs);
+        for (i, &x) in xs.iter().enumerate() {
+            assert_eq!(pm[i], t.pdf(x), "pdf_many != pdf at {x}");
+            assert_eq!(lpm[i], t.logpdf(x), "logpdf_many != logpdf at {x}");
+        }
     }
 
     #[test]
