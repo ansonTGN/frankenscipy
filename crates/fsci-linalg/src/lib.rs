@@ -7513,20 +7513,14 @@ pub fn solve_circulant(c: &[f64], b: &[f64]) -> Result<Vec<f64>, LinalgError> {
         .fold(0.0_f64, f64::max);
     let tol_sq = 1e-28 * max_lambda_sq.max(1.0);
 
-    // Element-wise division: fft_b / fft_c. A singular mode (|λ_k| ≈ 0)
-    // with non-zero b̂_k is fail-closed — returning x=0 for that mode
-    // silently produces a wrong answer that fails Cx = b.
+    // Element-wise division: fft_b / fft_c. SciPy's default
+    // `singular="raise"` rejects any singular circulant mode, even when the
+    // RHS has no energy in that mode.
     let mut fft_x: Vec<(f64, f64)> = Vec::with_capacity(fft_b.len());
     for (&(br, bi), &(cr, ci)) in fft_b.iter().zip(fft_c.iter()) {
         let denom = cr * cr + ci * ci;
         if denom < tol_sq {
-            let b_mag_sq = br * br + bi * bi;
-            // Only reject when the RHS has meaningful energy in the
-            // singular mode; if b̂_k = 0 the zero solution is exact.
-            if b_mag_sq > tol_sq {
-                return Err(LinalgError::SingularMatrix);
-            }
-            fft_x.push((0.0, 0.0));
+            return Err(LinalgError::SingularMatrix);
         } else {
             fft_x.push(((br * cr + bi * ci) / denom, (bi * cr - br * ci) / denom));
         }
@@ -26786,14 +26780,16 @@ mod proptest_tests {
     }
 
     #[test]
-    fn solve_circulant_accepts_singular_with_compatible_rhs() {
-        // Circulant of [1, 1] has eigenvalues [2, 0]; b=[0, 0] projects
-        // entirely onto the non-null mode. A consistent singular system
-        // should still succeed.
+    fn solve_circulant_rejects_singular_with_zero_rhs_like_scipy() {
+        // scipy.linalg.solve_circulant([0, 0], [0, 0]) raises LinAlgError
+        // with the default singular="raise" policy.
         let c = [0.0_f64, 0.0_f64];
         let b = [0.0_f64, 0.0_f64];
-        let x = solve_circulant(&c, &b).expect("consistent singular system");
-        assert_eq!(x.len(), 2);
+        let err = solve_circulant(&c, &b).expect_err("singular circulant");
+        assert!(
+            matches!(err, LinalgError::SingularMatrix),
+            "expected SingularMatrix, got {err:?}"
+        );
     }
 
     #[test]
