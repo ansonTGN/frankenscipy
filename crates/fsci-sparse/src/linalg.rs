@@ -5107,6 +5107,28 @@ mod tests {
     }
 
     #[test]
+    fn graph_metrics_on_path_graph() {
+        use crate::{CsrMatrix, Shape2D};
+        // Undirected path graph 0-1-2: adjacency [[0,1,0],[1,0,1],[0,1,0]].
+        // These graph metrics were previously untested.
+        let g = CsrMatrix::from_components(
+            Shape2D::new(3, 3),
+            vec![1.0, 1.0, 1.0, 1.0],
+            vec![1, 0, 2, 1],
+            vec![0, 1, 3, 4],
+            false,
+        )
+        .unwrap();
+        assert!(is_connected(&g), "connected");
+        assert!((graph_diameter(&g) - 2.0).abs() < 1e-12, "diameter");
+        assert_eq!(eccentricity(&g), vec![2.0, 1.0, 2.0]);
+        assert!(average_clustering(&g).abs() < 1e-12, "no triangles -> 0");
+        let mut deg = degree_sequence(&g);
+        deg.sort_unstable_by(|a, b| b.cmp(a));
+        assert_eq!(deg, vec![2, 1, 1]);
+    }
+
+    #[test]
     fn sparse_matrix_ops_match_numpy() {
         use crate::{CsrMatrix, Shape2D};
         // CSR for [[1,0],[2,3]]. Several sparse ops were previously untested.
