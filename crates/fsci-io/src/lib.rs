@@ -2294,22 +2294,27 @@ fn loadtxt_serial(content: &str) -> Result<(usize, usize, Vec<f64>), IoError> {
             continue;
         }
 
-        let vals: Result<Vec<f64>, _> = trimmed
-            .split_whitespace()
-            .map(|s| s.parse::<f64>())
-            .collect();
-        let vals = vals.map_err(|e| IoError::InvalidFormat(format!("parse error: {e}")))?;
+        // Parse fields straight into `data` (no per-line Vec<f64>); the row's column
+        // count is the length delta. Matches the parallel loadtxt parse_chunk path —
+        // byte-identical output (same deterministic parse order, same first-error
+        // message, same column-consistency check).
+        let start = data.len();
+        for s in trimmed.split_whitespace() {
+            let v = s
+                .parse::<f64>()
+                .map_err(|e| IoError::InvalidFormat(format!("parse error: {e}")))?;
+            data.push(v);
+        }
+        let row_cols = data.len() - start;
 
         if rows == 0 {
-            cols = vals.len();
-        } else if vals.len() != cols {
+            cols = row_cols;
+        } else if row_cols != cols {
             return Err(IoError::InvalidFormat(format!(
-                "row {rows} has {} columns, expected {cols}",
-                vals.len()
+                "row {rows} has {row_cols} columns, expected {cols}"
             )));
         }
 
-        data.extend_from_slice(&vals);
         rows += 1;
     }
 
