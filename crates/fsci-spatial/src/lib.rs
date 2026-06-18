@@ -2851,7 +2851,9 @@ impl Voronoi {
         let mut point_region = vec![0usize; n];
         for point_idx in 0..n {
             let point = points[point_idx];
-            let mut incident = point_to_triangles[point_idx].clone();
+            // Each point's incident-triangle list is read exactly once here and
+            // never reused, so MOVE it out instead of cloning. Byte-identical.
+            let mut incident = std::mem::take(&mut point_to_triangles[point_idx]);
             incident.sort_by(|&lhs, &rhs| {
                 let a = vertices[lhs];
                 let b = vertices[rhs];
