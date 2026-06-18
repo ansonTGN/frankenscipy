@@ -5657,6 +5657,18 @@ mod tests {
     }
 
     #[test]
+    fn convex_hull_2d_match_scipy() {
+        // Unit square + interior point. scipy: area(=perimeter)=4, volume(=2D
+        // area)=1, 4 hull vertices (interior point excluded). fsci swaps the
+        // area/perimeter names (documented): area=2D area, perimeter=scipy area.
+        let pts = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.5, 0.5)];
+        let h = ConvexHull::new(&pts).expect("hull");
+        assert_eq!(h.vertices.len(), 4, "interior point excluded");
+        assert!((h.area - 1.0).abs() < 1e-12, "area (scipy volume): {}", h.area);
+        assert!((h.perimeter - 4.0).abs() < 1e-12, "perimeter (scipy area): {}", h.perimeter);
+    }
+
+    #[test]
     fn kdtree_query_match_scipy() {
         // scipy.spatial.KDTree query / query(k=2) / query_ball_point.
         let pts = vec![
