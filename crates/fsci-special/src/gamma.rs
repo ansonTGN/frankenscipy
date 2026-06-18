@@ -3127,6 +3127,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn digamma_scalar_match_scipy() {
+        // scipy.special.digamma (psi): digamma(1) = -gamma (Euler-Mascheroni),
+        // digamma(2) = 1 - gamma, digamma(0.5) = -gamma - 2 ln 2.
+        let m = RuntimeMode::Strict;
+        assert!(
+            (digamma_scalar(1.0, m).unwrap() - -0.577_215_664_901_532_9).abs() < 1e-13,
+            "digamma(1)=-gamma"
+        );
+        assert!(
+            (digamma_scalar(2.0, m).unwrap() - 0.422_784_335_098_467_13).abs() < 1e-13,
+            "digamma(2)"
+        );
+        assert!(
+            (digamma_scalar(0.5, m).unwrap() - -1.963_510_026_021_423_5).abs() < 1e-13,
+            "digamma(0.5)"
+        );
+    }
+
+    #[test]
     fn log_gammainc_matches_gammainc_where_representable() {
         // exp(log P) == P wherever P is representable (gammainc_scalar is the
         // scipy-validated reference). Covers both branches (x<a+1 and x>=a+1).
