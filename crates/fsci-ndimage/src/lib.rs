@@ -9368,6 +9368,45 @@ mod tests {
     }
 
     #[test]
+    fn ndimage_array_helpers2_match_numpy() {
+        // More previously-untested numpy-equivalent array helpers.
+        let a = NdArray::new(vec![1.0, 2.0], vec![2]).unwrap();
+        let b = NdArray::new(vec![3.0, 4.0], vec![2]).unwrap();
+        assert_eq!(add_arrays(&a, &b).unwrap().data, vec![4.0, 6.0]);
+        let e = exp_array(&NdArray::new(vec![0.0, 1.0], vec![2]).unwrap());
+        assert!(
+            (e.data[0] - 1.0).abs() < 1e-12 && (e.data[1] - std::f64::consts::E).abs() < 1e-12,
+            "exp"
+        );
+        let lg = log_array(&NdArray::new(vec![1.0, std::f64::consts::E], vec![2]).unwrap());
+        assert!(lg.data[0].abs() < 1e-12 && (lg.data[1] - 1.0).abs() < 1e-12, "log");
+        assert_eq!(
+            cumprod_array(&NdArray::new(vec![1.0, 2.0, 3.0, 4.0], vec![4]).unwrap()).data,
+            vec![1.0, 2.0, 6.0, 24.0]
+        );
+        // flatten 2x2 row-major.
+        assert_eq!(
+            flatten(&NdArray::new(vec![1.0, 2.0, 3.0, 4.0], vec![2, 2]).unwrap()).data,
+            vec![1.0, 2.0, 3.0, 4.0]
+        );
+        // greater_than -> 1.0/0.0 mask.
+        let g = greater_than(
+            &NdArray::new(vec![1.0, 5.0, 3.0], vec![3]).unwrap(),
+            &NdArray::new(vec![2.0, 2.0, 2.0], vec![3]).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(g.data, vec![0.0, 1.0, 1.0]);
+        // equal_within tolerance -> 1.0/0.0 mask.
+        let eq = equal_within(
+            &NdArray::new(vec![1.0, 2.0], vec![2]).unwrap(),
+            &NdArray::new(vec![1.0005, 2.5], vec![2]).unwrap(),
+            0.001,
+        )
+        .unwrap();
+        assert_eq!(eq.data, vec![1.0, 0.0]);
+    }
+
+    #[test]
     fn ndimage_array_helpers_match_numpy() {
         // Several previously-untested numpy-equivalent array helpers.
         let a = NdArray::new(vec![3.0, 1.0, 4.0, 1.0, 5.0], vec![5]).unwrap();
