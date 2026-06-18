@@ -4261,6 +4261,20 @@ mod tests {
     }
 
     #[test]
+    fn fft2_match_scipy() {
+        // scipy.fft.fft2([[1,2],[3,4]]) = [[10,-2],[-4,0]] (row-major flat).
+        let x: Vec<Complex64> = [1.0, 2.0, 3.0, 4.0].iter().map(|&r| (r, 0.0)).collect();
+        let r = fft2(&x, (2, 2), &FftOptions::default()).expect("fft2");
+        let expect = [(10.0, 0.0), (-2.0, 0.0), (-4.0, 0.0), (0.0, 0.0)];
+        for (g, e) in r.iter().zip(&expect) {
+            assert!(
+                (g.0 - e.0).abs() < 1e-12 && (g.1 - e.1).abs() < 1e-12,
+                "fft2: {g:?} vs {e:?}"
+            );
+        }
+    }
+
+    #[test]
     fn dst_ii_match_scipy() {
         // scipy.fft.dst([1,2,3,4], type=2). Backward == norm=None; Ortho == 'ortho'.
         let x = [1.0, 2.0, 3.0, 4.0];
