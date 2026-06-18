@@ -1236,6 +1236,57 @@ mod tests {
     }
 
     #[test]
+    fn odr_matches_scipy_odr_on_noisy_data() -> Result<(), OdrError> {
+        // Golden values from scipy.odr.ODR(Data(x,y), unilinear, beta0).run()
+        // (SciPy 1.17.1, ODRPACK) on data where x and y both carry error, so the
+        // orthogonal-distance fit genuinely differs from OLS. Independent Rust
+        // and Fortran ODRPACK implementations agree to convergence tolerance.
+        struct Case {
+            x: Vec<f64>,
+            y: Vec<f64>,
+            beta0: Vec<f64>,
+            beta: [f64; 2],
+            sd_beta: [f64; 2],
+            res_var: f64,
+            sum_square: f64,
+        }
+        let cases = [
+            Case {
+                x: vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+                y: vec![1.1, 2.9, 5.2, 6.8, 9.1, 10.9],
+                beta0: vec![1.0, 0.0],
+                beta: [1.979694827136702e0, 1.050762934064172e0],
+                sd_beta: [3.983626321501051e-2, 1.205905103654928e-1],
+                res_var: 5.639702685253586e-3,
+                sum_square: 2.255881074101434e-2,
+            },
+            Case {
+                x: vec![-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0],
+                y: vec![-8.5, -5.1, -3.2, 0.3, 2.7, 5.4, 8.9],
+                beta0: vec![1.0, 0.0],
+                beta: [2.833504940851501e0, 7.142907832097929e-2],
+                sd_beta: [7.371963337556588e-2, 1.472423725008963e-1],
+                res_var: 1.680877299337602e-2,
+                sum_square: 8.404386496688011e-2,
+            },
+        ];
+        for c in cases {
+            let out = ODR::new(Data::new(c.x, c.y)?, unilinear(), c.beta0)?.run()?;
+            assert!(out.success);
+            // Parameters agree to ODR convergence tolerance (~1e-5).
+            assert_close(out.beta[0], c.beta[0], 1.0e-5);
+            assert_close(out.beta[1], c.beta[1], 1.0e-5);
+            assert_close(out.sd_beta[0], c.sd_beta[0], 1.0e-5);
+            assert_close(out.sd_beta[1], c.sd_beta[1], 1.0e-5);
+            // The achieved objective matches much more tightly (both find the
+            // same minimum even where the flat objective loosely pins beta).
+            assert_close(out.res_var, c.res_var, 1.0e-8);
+            assert_close(out.sum_square, c.sum_square, 1.0e-8);
+        }
+        Ok(())
+    }
+
+    #[test]
     fn odr_ols_mode_reduces_to_response_residual_fit() -> Result<(), OdrError> {
         let x = vec![0.0, 1.0, 2.0, 3.0];
         let y = vec![1.0, 3.0, 5.0, 7.0];
