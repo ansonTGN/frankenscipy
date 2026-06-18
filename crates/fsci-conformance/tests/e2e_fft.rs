@@ -416,6 +416,84 @@ fn e2e_002b_basic_fft_rfft_numpy_goldens() {
     );
 }
 
+/// Scenario 2c: exact NumPy inverse-DFT goldens for ifft/irfft.
+#[test]
+fn e2e_002c_basic_ifft_irfft_numpy_goldens() {
+    let scenario_id = "e2e_002c_basic_ifft_irfft_numpy_goldens";
+    let overall_start = Instant::now();
+    let mut steps = Vec::new();
+
+    let ifft_input: Vec<Complex64> = vec![
+        (1.0, 2.0),
+        (-3.0, 0.5),
+        (0.0, -1.0),
+        (4.0, 3.0),
+        (-2.0, 0.0),
+    ];
+    let ifft_expected: Vec<Complex64> = vec![
+        (0.0, 0.9),
+        (-0.381_108_039_670_442_27, -0.553_144_603_405_493_5),
+        (0.436_606_851_609_535_4, 1.085_993_260_890_112_6),
+        (2.075_854_328_140_275_5, -0.200_583_064_265_144_02),
+        (-1.131_353_140_079_368_6, 0.767_734_406_780_525_1),
+    ];
+    let t_start = Instant::now();
+    let ifft_result = ifft(&ifft_input, &FftOptions::default()).expect("ifft numpy golden");
+    let ifft_diff = max_abs_diff_complex(&ifft_result, &ifft_expected);
+    let ifft_pass = ifft_diff <= TOL;
+    steps.push(make_step(
+        1,
+        "ifft_exact_numpy_inverse_dft",
+        "ifft",
+        "complex length-5 spectrum",
+        &format!("max_abs_diff={ifft_diff:.3e}"),
+        t_start.elapsed().as_nanos(),
+        if ifft_pass { "ok" } else { "fail" },
+    ));
+
+    let irfft_input: Vec<Complex64> = vec![(2.0, 0.0), (-1.0, 2.0), (0.5, -0.75)];
+    let irfft_expected = vec![
+        0.2,
+        -0.469_919_833_973_349_4,
+        0.029_865_039_902_443_87,
+        1.540_955_353_347_493_1,
+        0.699_099_440_723_412_5,
+    ];
+    let t_start = Instant::now();
+    let irfft_result =
+        irfft(&irfft_input, Some(5), &FftOptions::default()).expect("irfft numpy golden");
+    let irfft_diff = max_abs_diff_real(&irfft_result, &irfft_expected);
+    let irfft_pass = irfft_diff <= TOL;
+    steps.push(make_step(
+        2,
+        "irfft_exact_numpy_inverse_dft",
+        "irfft",
+        "half-complex length-3 spectrum, n=5",
+        &format!("max_abs_diff={irfft_diff:.3e}"),
+        t_start.elapsed().as_nanos(),
+        if irfft_pass { "ok" } else { "fail" },
+    ));
+
+    let all_pass = ifft_pass && irfft_pass;
+    let bundle = ForensicLogBundle {
+        scenario_id: scenario_id.to_string(),
+        steps,
+        artifacts: vec![],
+        environment: make_env(),
+        overall: OverallResult {
+            status: if all_pass { "pass" } else { "fail" }.to_string(),
+            total_duration_ns: overall_start.elapsed().as_nanos(),
+            replay_command: replay_cmd(scenario_id),
+            error_chain: None,
+        },
+    };
+    write_bundle(scenario_id, &bundle);
+    assert!(
+        all_pass,
+        "ifft/irfft numpy goldens failed: ifft_diff={ifft_diff:.4e}, irfft_diff={irfft_diff:.4e}"
+    );
+}
+
 /// Scenario 3: 2D FFT → filter → IFFT2 → verify spatial domain
 #[test]
 fn e2e_003_fft2_spectral_filter() {
