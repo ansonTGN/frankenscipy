@@ -10991,6 +10991,16 @@ mod tests {
     }
 
     #[test]
+    fn polyint_definite_matches_numpy() {
+        // polyint_definite(descending coeffs, a, b) = integral_a^b p(x) dx. Untested.
+        // integral_0^2 (3x^2+2x+1) dx = [x^3+x^2+x]_0^2 = 14.
+        let v = polyint_definite(&[3.0, 2.0, 1.0], 0.0, 2.0);
+        assert!((v - 14.0).abs() < 1e-12, "integral = {v}");
+        // integral_1^3 (2x) dx = [x^2]_1^3 = 8.
+        assert!((polyint_definite(&[2.0, 0.0], 1.0, 3.0) - 8.0).abs() < 1e-12, "linear integral");
+    }
+
+    #[test]
     fn polyval_der_matches_numpy() {
         // polyval_der(descending coeffs, x, der) returns [p(x), p'(x), ..., p^(der)].
         // Was untested. p = x^2-3x+2 at x=2: p=0, p'=2x-3=1, p''=2.
