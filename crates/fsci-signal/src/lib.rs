@@ -18345,6 +18345,26 @@ mod tests {
     }
 
     #[test]
+    fn savgol_filter_match_scipy() {
+        // scipy.signal.savgol_filter(x, 5, 2) default (interp edge mode). The
+        // first/last samples exercise the polynomial edge fit, the middle the SG
+        // coefficients.
+        let y = savgol_filter(&[2.0, 8.0, 4.0, 9.0, 3.0, 7.0, 5.0], 5, 2).expect("savgol");
+        let e = [
+            2.457_142_857_142_849_7,
+            5.971_428_571_428_566,
+            7.342_857_142_857_14,
+            5.485_714_285_714_282,
+            6.171_428_571_428_568,
+            5.885_714_285_714_284,
+            5.028_571_428_571_428_5,
+        ];
+        for (g, ex) in y.iter().zip(&e) {
+            assert!((g - ex).abs() < 1e-10, "savgol: {g} vs {ex}");
+        }
+    }
+
+    #[test]
     fn detrend_match_scipy() {
         // scipy.signal.detrend linear (remove best-fit line) and constant (mean).
         let lin = detrend(&[2.0, 4.0, 6.0, 9.0, 10.0], DetrendType::Linear).expect("linear");
