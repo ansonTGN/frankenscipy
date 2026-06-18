@@ -52786,6 +52786,18 @@ mod tests {
     // ── Triangular distribution ───────────────────────────────────
 
     #[test]
+    fn triangular_pdf_cdf_segments_match_scipy() {
+        // Exact scipy.stats.triang(c=0.3, loc=0, scale=4) = support [0,4], mode 1.2.
+        // triangular_pdf_at_mode only checks the peak; this pins the rising and
+        // falling pdf/cdf segments.
+        let t = Triangular::new(0.0, 1.2, 4.0);
+        assert!((t.pdf(0.5) - 0.208_333_333_333_333_34).abs() < 1e-12, "pdf(0.5) rising");
+        assert!((t.pdf(3.0) - 0.178_571_428_571_428_58).abs() < 1e-12, "pdf(3) falling");
+        assert!((t.cdf(0.5) - 0.052_083_333_333_333_336).abs() < 1e-12, "cdf(0.5)");
+        assert!((t.cdf(3.0) - 0.910_714_285_714_285_7).abs() < 1e-12, "cdf(3)");
+    }
+
+    #[test]
     fn triangular_pdf_at_mode() {
         let t = Triangular::new(0.0, 0.5, 1.0);
         assert_close(t.pdf(0.5), 2.0, 1e-12, "Triangular pdf at mode");
