@@ -11231,6 +11231,11 @@ pub static DISABLE_TALL_PINV_ROW_MAJOR_CERT: std::sync::atomic::AtomicBool =
 #[doc(hidden)]
 pub static DISABLE_TALL_PINV_ROW_MAJOR_SOLVE: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
+/// Runtime switch to force the tall `pinv` TRSM route to copy RHS values from
+/// the materialized `Aᵀ` matrix. Defaults off. `#[doc(hidden)]`; internal.
+#[doc(hidden)]
+pub static DISABLE_TALL_PINV_TRANSPOSE_RHS_COPY: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 /// Loose conditioning sanity floor for the solve-only normal-equations lstsq
 /// route: spectra below this rcond are hopeless even with refinement, so we
 /// fall back to the public thin-SVD route. Real acceptance is governed by the
@@ -11285,6 +11290,14 @@ fn tall_pinv_row_major_solve_disabled() -> bool {
     }
     static ENV: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ENV.get_or_init(|| std::env::var_os("FSCI_DISABLE_TALL_PINV_ROW_MAJOR_SOLVE").is_some())
+}
+
+fn tall_pinv_transpose_rhs_copy_disabled() -> bool {
+    if DISABLE_TALL_PINV_TRANSPOSE_RHS_COPY.load(std::sync::atomic::Ordering::Relaxed) {
+        return true;
+    }
+    static ENV: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENV.get_or_init(|| std::env::var_os("FSCI_DISABLE_TALL_PINV_TRANSPOSE_RHS_COPY").is_some())
 }
 
 fn pinv_full_rank_tall_cholesky(
@@ -11346,8 +11359,18 @@ fn pinv_full_rank_tall_cholesky_with_min_cols(
             return None;
         }
         rows_from_dmatrix(&pinv)
-    } else {
+    } else if tall_pinv_transpose_rhs_copy_disabled() {
         let rows = cholesky_solve_matrix_rhs_rows_batched(&chol, &a_t)?;
+        if rows
+            .iter()
+            .flat_map(|row| row.iter())
+            .any(|value| !value.is_finite())
+        {
+            return None;
+        }
+        rows
+    } else {
+        let rows = cholesky_solve_transpose_rhs_rows_batched(&chol, matrix)?;
         if rows
             .iter()
             .flat_map(|row| row.iter())
@@ -15981,6 +16004,68 @@ fn cholesky_solve_matrix_rhs_rows_batched(
     Some(out)
 }
 
+/// Same solve as [`cholesky_solve_matrix_rhs_rows_batched`] for the hot tall
+/// `pinv` case where `RHS == Aᵀ`, but copy the RHS directly from the original
+/// column-major `A`. For fixed output row `i`, `A[:, i]` is contiguous, while
+/// row-wise reads from materialized `Aᵀ` are strided by the factor dimension.
+#[allow(clippy::needless_range_loop)]
+fn cholesky_solve_transpose_rhs_rows_batched(
+    chol: &Cholesky<f64, Dyn>,
+    matrix: &DMatrix<f64>,
+) -> Option<Vec<Vec<f64>>> {
+    let l = chol.l_dirty();
+    let n = l.nrows();
+    let w = matrix.nrows();
+    if l.ncols() != n || matrix.ncols() != n {
+        return None;
+    }
+    if n == 0 {
+        return Some(Vec::new());
+    }
+    if w == 0 {
+        return Some(vec![Vec::new(); n]);
+    }
+
+    let nthreads = if tall_pinv_trsm_threads_disabled() {
+        1
+    } else {
+        matmul_thread_count(n, n, w).min(w.div_ceil(64)).max(1)
+    };
+    if nthreads <= 1 {
+        let flat = cholesky_solve_transpose_rhs_columns_flat(chol, matrix, 0, w)?;
+        return Some(cholesky_rhs_flat_to_rows(n, w, &flat));
+    }
+
+    let chunk = w.div_ceil(nthreads);
+    let blocks: Vec<Option<(usize, Vec<f64>)>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..nthreads)
+            .filter_map(|thread_idx| {
+                let c0 = thread_idx * chunk;
+                if c0 >= w {
+                    return None;
+                }
+                let c1 = (c0 + chunk).min(w);
+                Some(scope.spawn(move || {
+                    cholesky_solve_transpose_rhs_columns_flat(chol, matrix, c0, c1)
+                        .map(|block| (c0, block))
+                }))
+            })
+            .collect();
+        handles.into_iter().map(|handle| handle.join().unwrap()).collect()
+    });
+
+    let mut out = vec![vec![0.0; w]; n];
+    for block in blocks {
+        let (c0, block) = block?;
+        let block_w = block.len() / n;
+        for row in 0..n {
+            let src = row * block_w;
+            out[row][c0..c0 + block_w].copy_from_slice(&block[src..src + block_w]);
+        }
+    }
+    Some(out)
+}
+
 #[allow(clippy::needless_range_loop)]
 fn cholesky_solve_matrix_rhs_columns(
     chol: &Cholesky<f64, Dyn>,
@@ -15994,26 +16079,10 @@ fn cholesky_solve_matrix_rhs_columns(
     Some(DMatrix::from_fn(n, w, |row, col| b[row * w + col]))
 }
 
-#[allow(clippy::needless_range_loop)]
-fn cholesky_solve_matrix_rhs_columns_flat(
-    chol: &Cholesky<f64, Dyn>,
-    rhs: &DMatrix<f64>,
-    c0: usize,
-    c1: usize,
-) -> Option<Vec<f64>> {
-    let l = chol.l_dirty();
+fn cholesky_solve_lower_flat(l: &DMatrix<f64>, mut b: Vec<f64>, w: usize) -> Option<Vec<f64>> {
     let n = l.nrows();
-    let w = c1.checked_sub(c0)?;
-    if l.ncols() != n || rhs.nrows() != n || c1 > rhs.ncols() {
+    if l.ncols() != n || b.len() != n.checked_mul(w)? {
         return None;
-    }
-
-    let mut b = vec![0.0f64; n * w];
-    for i in 0..n {
-        let bi = i * w;
-        for col in 0..w {
-            b[bi + col] = rhs[(i, c0 + col)];
-        }
     }
 
     // Forward solve L·Y = RHS.
@@ -16063,6 +16132,56 @@ fn cholesky_solve_matrix_rhs_columns_flat(
     }
 
     Some(b)
+}
+
+#[allow(clippy::needless_range_loop)]
+fn cholesky_solve_matrix_rhs_columns_flat(
+    chol: &Cholesky<f64, Dyn>,
+    rhs: &DMatrix<f64>,
+    c0: usize,
+    c1: usize,
+) -> Option<Vec<f64>> {
+    let l = chol.l_dirty();
+    let n = l.nrows();
+    let w = c1.checked_sub(c0)?;
+    if l.ncols() != n || rhs.nrows() != n || c1 > rhs.ncols() {
+        return None;
+    }
+
+    let mut b = vec![0.0f64; n * w];
+    for i in 0..n {
+        let bi = i * w;
+        for col in 0..w {
+            b[bi + col] = rhs[(i, c0 + col)];
+        }
+    }
+
+    cholesky_solve_lower_flat(&l, b, w)
+}
+
+#[allow(clippy::needless_range_loop)]
+fn cholesky_solve_transpose_rhs_columns_flat(
+    chol: &Cholesky<f64, Dyn>,
+    matrix: &DMatrix<f64>,
+    c0: usize,
+    c1: usize,
+) -> Option<Vec<f64>> {
+    let l = chol.l_dirty();
+    let n = l.nrows();
+    let w = c1.checked_sub(c0)?;
+    if l.ncols() != n || matrix.ncols() != n || c1 > matrix.nrows() {
+        return None;
+    }
+
+    let mut b = vec![0.0f64; n * w];
+    for i in 0..n {
+        let bi = i * w;
+        for col in 0..w {
+            b[bi + col] = matrix[(c0 + col, i)];
+        }
+    }
+
+    cholesky_solve_lower_flat(&l, b, w)
 }
 
 fn cholesky_rhs_flat_to_rows(n: usize, w: usize, flat: &[f64]) -> Vec<Vec<f64>> {
@@ -19033,10 +19152,18 @@ mod tests {
         let actual = cholesky_solve_matrix_rhs_batched(&chol, &a_t).expect("batched solve");
         let actual_rows =
             cholesky_solve_matrix_rhs_rows_batched(&chol, &a_t).expect("row-major batched solve");
+        let transposed_rows = cholesky_solve_transpose_rhs_rows_batched(&chol, &matrix)
+            .expect("transposed-RHS row-major batched solve");
 
         assert!(max_abs_dmatrix_diff(&actual, &expected) <= 1e-12);
         assert_close_matrix(
             &actual_rows,
+            &rows_from_dmatrix(&expected),
+            1e-12,
+            1e-12,
+        );
+        assert_close_matrix(
+            &transposed_rows,
             &rows_from_dmatrix(&expected),
             1e-12,
             1e-12,
@@ -19098,6 +19225,15 @@ mod tests {
         let left = cholesky_solve_matrix_rhs_columns(&chol, &a_t, 0, rows / 2).expect("left block");
         let right = cholesky_solve_matrix_rhs_columns(&chol, &a_t, rows / 2, rows).expect("right block");
         let full = cholesky_solve_matrix_rhs_columns(&chol, &a_t, 0, rows).expect("full block");
+        let transpose_left =
+            cholesky_solve_transpose_rhs_columns_flat(&chol, &matrix, 0, rows / 2)
+                .expect("left transposed block");
+        let transpose_right =
+            cholesky_solve_transpose_rhs_columns_flat(&chol, &matrix, rows / 2, rows)
+                .expect("right transposed block");
+        let transpose_full =
+            cholesky_solve_transpose_rhs_columns_flat(&chol, &matrix, 0, rows)
+                .expect("full transposed block");
 
         let mut reassembled = DMatrix::<f64>::zeros(cols, rows);
         for row in 0..cols {
@@ -19110,6 +19246,26 @@ mod tests {
         }
 
         assert!(max_abs_dmatrix_diff(&reassembled, &full) <= 0.0);
+
+        let mut transpose_reassembled = vec![0.0; cols * rows];
+        let left_w = rows / 2;
+        for row in 0..cols {
+            let dst = row * rows;
+            let src = row * left_w;
+            transpose_reassembled[dst..dst + left_w]
+                .copy_from_slice(&transpose_left[src..src + left_w]);
+            let right_w = rows - left_w;
+            let src = row * right_w;
+            transpose_reassembled[dst + left_w..dst + rows]
+                .copy_from_slice(&transpose_right[src..src + right_w]);
+        }
+        assert_eq!(transpose_reassembled, transpose_full);
+        assert_close_matrix(
+            &cholesky_rhs_flat_to_rows(cols, rows, &transpose_full),
+            &rows_from_dmatrix(&full),
+            1e-12,
+            1e-12,
+        );
     }
 
     #[test]
