@@ -5676,6 +5676,33 @@ mod tests {
         assert_eq!(yule(&[true, true], &[true, true]), 0.0);
     }
 
+    #[test]
+    fn float_metrics_match_scipy_1_17() {
+        // Golden values from scipy.spatial.distance (1.17.1) for
+        // a=[1,2,3], b=[4,0,-1].
+        let a = [1.0, 2.0, 3.0];
+        let b = [4.0, 0.0, -1.0];
+        let close = |got: f64, want: f64, name: &str| {
+            assert!((got - want).abs() < 1e-12, "{name}: {got} != {want}");
+        };
+        close(cityblock(&a, &b), 9.0, "cityblock");
+        close(chebyshev(&a, &b), 4.0, "chebyshev");
+        close(minkowski(&a, &b, 2.0), 5.385_164_807_134_504, "euclidean");
+        close(minkowski(&a, &b, 3.0), 4.626_065_009_182_741, "minkowski p3");
+        close(cosine(&a, &b), 0.935_179_627_644_783_6, "cosine");
+        close(correlation(&a, &b), 1.944_911_182_523_068, "correlation");
+        close(canberra(&a, &b), 2.6, "canberra");
+        close(braycurtis(&a, &b), 1.0, "braycurtis");
+        // Jensen-Shannon over probability vectors (base=None ⇒ natural log).
+        let p = [0.1, 0.4, 0.5];
+        let q = [0.3, 0.3, 0.4];
+        close(
+            jensenshannon(&p, &q, None),
+            0.180_359_656_027_125_61,
+            "jensenshannon",
+        );
+    }
+
     /// The multithreaded `pdist` must be BIT-IDENTICAL to the sequential condensed
     /// i<j push order; pair-balanced row boundaries must tile the output exactly.
     #[test]
