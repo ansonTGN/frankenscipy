@@ -71442,6 +71442,24 @@ mod tests {
     }
 
     #[test]
+    fn descriptive_stats_match_scipy_with_outlier() {
+        // Golden values from scipy.stats (1.17.1) for an asymmetric, outlier-heavy
+        // sample [1,2,3,4,5,100]. Locks gstd/sem/variation/iqr/median_abs_deviation
+        // (default ddof/scale conventions), which had no combined golden test.
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0, 100.0];
+        let close = |got: f64, want: f64, name: &str| {
+            assert!((got - want).abs() < 1e-9, "{name}: {got} != {want}");
+        };
+        close(gmean(&a), 4.784_797_263_319_173, "gmean");
+        close(hmean(&a), 2.616_279_069_767_442, "hmean");
+        close(gstd(&a), 4.923_166_566_484_077, "gstd (ddof=1)");
+        close(sem(&a), 16.176_972_660_063_576, "sem (ddof=1)");
+        close(variation(&a), 1.887_277_071_550_839_1, "variation (ddof=0)");
+        close(iqr(&a), 2.5, "iqr");
+        close(median_abs_deviation(&a, 1.0), 1.5, "median_abs_deviation");
+    }
+
+    #[test]
     fn zscore_matches_scipy_reference() {
         // scipy.stats.zscore([1,2,3,4,5]) normalizes to mean=0, std=1
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
