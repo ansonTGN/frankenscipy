@@ -64282,6 +64282,16 @@ mod tests {
     }
 
     #[test]
+    fn loguniform_pdf_cdf_match_scipy() {
+        // Exact scipy.stats.loguniform(1,10). loguniform_cdf_ppf only checks cdf
+        // boundaries and ppf(0.5); this pins the pdf and an interior cdf point.
+        let lu = Loguniform::new(1.0, 10.0);
+        assert!((lu.pdf(2.0) - 0.217_147_240_951_625_85).abs() < 1e-12, "pdf(2)");
+        assert!((lu.pdf(5.0) - 0.086_858_896_380_650_38).abs() < 1e-12, "pdf(5)");
+        assert!((lu.cdf(5.0) - 0.698_970_004_336_018_7).abs() < 1e-12, "cdf(5)");
+    }
+
+    #[test]
     fn loguniform_cdf_ppf() {
         let lu = Loguniform::new(1.0, 10.0);
         assert!((lu.cdf(1.0) - 0.0).abs() < 1e-10);
