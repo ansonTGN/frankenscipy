@@ -16727,6 +16727,42 @@ mod tests {
     }
 
     #[test]
+    fn det_solve_eigvalsh_match_scipy() {
+        // A = [[4,1,2],[1,3,0],[2,0,5]] (symmetric). Golden from scipy.linalg /
+        // numpy 1.17.1: det=43, solve(A,[1,2,3]), eigvalsh ascending.
+        let a = vec![
+            vec![4.0, 1.0, 2.0],
+            vec![1.0, 3.0, 0.0],
+            vec![2.0, 0.0, 5.0],
+        ];
+        let d = det(&a, RuntimeMode::Strict, true).expect("det");
+        assert!((d - 43.0).abs() < 1e-9, "det: {d}");
+        let s = solve(&a, &[1.0, 2.0, 3.0], SolveOptions::default()).expect("solve");
+        assert_close_slice(
+            &s.x,
+            &[
+                -0.302_325_581_395_348_93,
+                0.767_441_860_465_116_3,
+                0.720_930_232_558_139_7,
+            ],
+            1e-10,
+            1e-10,
+        );
+        let mut ev = eigvalsh(&a, DecompOptions::default()).expect("eigvalsh");
+        ev.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        assert_close_slice(
+            &ev,
+            &[
+                1.854_897_308_799_577_5,
+                3.476_023_602_918_134,
+                6.669_079_088_282_287,
+            ],
+            1e-9,
+            1e-9,
+        );
+    }
+
+    #[test]
     fn solve_triangular_lower_path() {
         let a = vec![vec![2.0, 0.0], vec![3.0, 4.0]];
         let b = vec![4.0, 11.0];
