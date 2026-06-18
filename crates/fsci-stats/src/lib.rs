@@ -31555,13 +31555,13 @@ pub fn sigmaclip(data: &[f64], low: f64, high: f64) -> SigmaClipResult {
         let lower = mean_val - low * std_val;
         let upper = mean_val + high * std_val;
 
-        let new_clipped: Vec<f64> = clipped
-            .iter()
-            .copied()
-            .filter(|&x| x >= lower && x <= upper)
-            .collect();
+        // Clip in place rather than allocating a fresh Vec each iteration. retain
+        // keeps the same elements in the same order as filter().collect(), so the
+        // result is byte-identical; the length delta drives the convergence check.
+        let before = clipped.len();
+        clipped.retain(|&x| x >= lower && x <= upper);
 
-        if new_clipped.len() == clipped.len() {
+        if clipped.len() == before {
             return SigmaClipResult {
                 clipped,
                 lower,
@@ -31569,15 +31569,13 @@ pub fn sigmaclip(data: &[f64], low: f64, high: f64) -> SigmaClipResult {
             };
         }
 
-        if new_clipped.is_empty() {
+        if clipped.is_empty() {
             return SigmaClipResult {
                 clipped: vec![],
                 lower: f64::NAN,
                 upper: f64::NAN,
             };
         }
-
-        clipped = new_clipped;
     }
 }
 
