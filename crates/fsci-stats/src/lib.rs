@@ -71735,6 +71735,21 @@ mod tests {
     }
 
     #[test]
+    fn gumbel_left_lomax_logsf_tail_guard() {
+        // GumbelLeft logsf=-exp(z) (double-exp tail) and Lomax logsf=-c*ln(1+x)
+        // already override logsf (zghyi); regression guard for those tail forms.
+        let g = GumbelLeft {
+            loc: 0.0,
+            scale: 1.0,
+        };
+        assert!((g.logsf(2.0) - -7.389_056_098_930_65).abs() < 1e-12, "gumbel_l logsf(2)");
+        assert!(g.sf(100.0) == 0.0 && g.logsf(100.0).is_finite(), "gumbel_l tail finite");
+        let l = Lomax { c: 2.5 };
+        assert!((l.logsf(2.0) - -2.746_530_721_670_274_6).abs() < 1e-12, "lomax logsf(2)");
+        assert!(l.sf(1e150) == 0.0 && l.logsf(1e150).is_finite(), "lomax extreme tail finite");
+    }
+
+    #[test]
     fn rayleigh_logsf_tail_match_scipy() {
         // scipy.stats.rayleigh logsf = -x^2/2; default ln(sf) underflows by x~38.
         let d = Rayleigh { scale: 1.0 };
