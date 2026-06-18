@@ -1276,7 +1276,9 @@ where
     F: Fn(f64) -> f64,
 {
     if n == 0 {
-        return Ok((0.0, 0));
+        return Err(IntegrateValidationError::QuadInvalidBounds {
+            detail: "fixed_quad order n must be positive".to_string(),
+        });
     }
     if !a.is_finite() || !b.is_finite() {
         return Err(IntegrateValidationError::QuadInvalidBounds {
@@ -4902,6 +4904,15 @@ mod tests {
             "fixed_quad vs quad: {fq} vs {}",
             aq.integral
         );
+    }
+
+    #[test]
+    fn fixed_quad_rejects_zero_order() {
+        let err = fixed_quad(|x| x, 0.0, 1.0, 0).expect_err("zero fixed_quad order");
+        assert!(matches!(
+            err,
+            IntegrateValidationError::QuadInvalidBounds { .. }
+        ));
     }
 
     #[test]
