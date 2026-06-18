@@ -71750,6 +71750,16 @@ mod tests {
     }
 
     #[test]
+    fn cauchy_pdf_cdf_sf_ppf_match_scipy() {
+        // scipy.stats.cauchy(loc=1, scale=2): closed-form atan-based dist.
+        let d = Cauchy::new(1.0, 2.0);
+        assert!((d.pdf(3.0) - 0.079_577_471_545_947_67).abs() < 1e-15, "pdf(3)");
+        assert!((d.cdf(3.0) - 0.75).abs() < 1e-12, "cdf(3)");
+        assert!((d.sf(3.0) - 0.25).abs() < 1e-12, "sf(3)");
+        assert!((d.ppf(0.75) - 3.0).abs() < 1e-10, "ppf(0.75)");
+    }
+
+    #[test]
     fn rayleigh_logsf_tail_match_scipy() {
         // scipy.stats.rayleigh logsf = -x^2/2; default ln(sf) underflows by x~38.
         let d = Rayleigh { scale: 1.0 };
