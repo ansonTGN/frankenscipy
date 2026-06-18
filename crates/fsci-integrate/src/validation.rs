@@ -137,6 +137,7 @@ pub enum IntegrateValidationError {
     NonFiniteF0,
     RhsWrongShape { expected: usize, actual: usize },
     NonFiniteEventDirection { index: usize },
+    EventMaxEventsMustBePositive { index: usize },
     NonFiniteEventValue { index: usize },
     TEvalOutOfSpan,
     TEvalNotSorted,
@@ -168,6 +169,9 @@ impl std::fmt::Display for IntegrateValidationError {
             ),
             Self::NonFiniteEventDirection { index } => {
                 write!(f, "event {index} has a non-finite direction.")
+            }
+            Self::EventMaxEventsMustBePositive { index } => {
+                write!(f, "event {index} max_events must be positive.")
             }
             Self::NonFiniteEventValue { index } => {
                 write!(f, "event {index} returned a non-finite value.")

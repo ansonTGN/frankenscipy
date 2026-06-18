@@ -190,6 +190,19 @@ fn validate_events_with_audit(
             );
             return Err(IntegrateValidationError::NonFiniteEventDirection { index });
         }
+        if event.max_events == Some(0) {
+            let fingerprint = audit_fingerprint(
+                "validate_events",
+                format!("event_index={index};max_events=0"),
+            );
+            record_fail_closed(
+                audit_ledger,
+                &fingerprint,
+                "event_max_events_must_be_positive",
+                "rejected",
+            );
+            return Err(IntegrateValidationError::EventMaxEventsMustBePositive { index });
+        }
     }
 
     Ok(())
@@ -1386,6 +1399,39 @@ mod tests {
             );
             assert_eq!(rhs_calls, 0, "invalid metadata must fail before RHS calls");
         }
+    }
+
+    #[test]
+    fn solve_ivp_rejects_zero_event_max_events_before_stepping() {
+        fn event_at_half(_t: f64, y: &[f64]) -> f64 {
+            y[0] - 0.5
+        }
+
+        let mut rhs_calls = 0usize;
+        let mut rhs = |_t: f64, _y: &[f64]| {
+            rhs_calls += 1;
+            vec![1.0]
+        };
+        let err = solve_ivp(
+            &mut rhs,
+            &SolveIvpOptions {
+                t_span: (0.0, 1.0),
+                y0: &[0.0],
+                method: SolverKind::Rk45,
+                events: Some(vec![EventSpec {
+                    func: event_at_half,
+                    direction: 0.0,
+                    max_events: Some(0),
+                }]),
+                ..SolveIvpOptions::default()
+            },
+        )
+        .expect_err("zero max_events should fail before stepping");
+        assert_eq!(
+            err,
+            IntegrateValidationError::EventMaxEventsMustBePositive { index: 0 }
+        );
+        assert_eq!(rhs_calls, 0, "invalid event metadata must fail before RHS calls");
     }
 
     #[test]
