@@ -18315,6 +18315,28 @@ mod tests {
     }
 
     #[test]
+    fn periodogram_match_scipy() {
+        // scipy.signal.periodogram (density, detrend='constant', one-sided), fs=1.
+        // psd[0]=0 confirms the mean is removed before the FFT.
+        let x = [1.0, 2.0, 3.0, 4.0, 5.0, 4.0, 3.0, 2.0];
+        let r = periodogram(&x, 1.0, None).expect("periodogram");
+        let ef = [0.0, 0.125, 0.25, 0.375, 0.5];
+        let ep = [
+            0.0,
+            11.656_854_249_492_38,
+            0.0,
+            0.343_145_750_507_619_8,
+            0.0,
+        ];
+        for (g, e) in r.frequencies.iter().zip(&ef) {
+            assert!((g - e).abs() < 1e-12, "freq: {g} vs {e}");
+        }
+        for (g, e) in r.psd.iter().zip(&ep) {
+            assert!((g - e).abs() < 1e-11, "psd: {g} vs {e}");
+        }
+    }
+
+    #[test]
     fn lfilter_fir_iir_match_scipy() {
         // scipy.signal.lfilter: FIR moving-average and IIR one-pole responses.
         let fir = lfilter(&[0.5, 0.5], &[1.0], &[1.0, 2.0, 3.0, 4.0], None).expect("fir");
