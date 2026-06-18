@@ -361,12 +361,9 @@ print(json.dumps({"points": points}))
 fn fsci_eval(case: &PointCase) -> Option<Vec<f64>> {
     match case.op.as_str() {
         "fiedler" => Some(fiedler(&case.vec1d).into_iter().flatten().collect()),
-        "fiedler_companion" => Some(
-            fiedler_companion(&case.vec1d)
-                .into_iter()
-                .flatten()
-                .collect(),
-        ),
+        "fiedler_companion" => fiedler_companion(&case.vec1d)
+            .ok()
+            .map(|m| m.into_iter().flatten().collect()),
         "dft_matrix" => {
             let m = dft_matrix(case.n);
             let mut out = Vec::with_capacity(case.n * case.n * 2);

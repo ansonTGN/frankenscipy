@@ -37,7 +37,7 @@ fn main() {
     dump("fiedler", &fiedler(&[1.0, 4.0, 12.0, 45.0]));
     dump(
         "fiedler_companion",
-        &fiedler_companion(&[1.0, -3.0, 2.0, -5.0, 7.0]),
+        &fiedler_companion(&[1.0, -3.0, 2.0, -5.0, 7.0]).unwrap(),
     );
     if let Ok(m) = hadamard(8) {
         dump("hadamard8", &m);

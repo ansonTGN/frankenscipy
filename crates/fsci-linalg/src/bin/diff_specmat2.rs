@@ -35,7 +35,7 @@ fn main() {
     dump("fiedler", &la::fiedler(&[1.0, 2.0, 3.0, 4.0]));
     dump(
         "fiedler_companion",
-        &la::fiedler_companion(&[1.0, -3.0, 2.0, 5.0, 1.0]),
+        &la::fiedler_companion(&[1.0, -3.0, 2.0, 5.0, 1.0]).unwrap(),
     );
     dump(
         "companion",

@@ -13579,20 +13579,25 @@ pub fn fiedler(a: &[f64]) -> Vec<Vec<f64>> {
 /// polynomial.
 ///
 /// Edge cases match `scipy.linalg.fiedler_companion`: fewer than two
-/// coefficients yields an empty matrix; exactly two yields the `1×1` matrix
-/// `[[-a₁/a₀]]`.
+/// coefficients yields an empty matrix, a zero leading coefficient is rejected,
+/// and exactly two yields the `1×1` matrix `[[-a₁/a₀]]`.
 ///
 /// Matches `scipy.linalg.fiedler_companion`.
-pub fn fiedler_companion(a: &[f64]) -> Vec<Vec<f64>> {
+pub fn fiedler_companion(a: &[f64]) -> Result<Vec<Vec<f64>>, LinalgError> {
     if a.len() < 2 {
-        return Vec::new();
+        return Ok(Vec::new());
     }
     // Rescale to a monic polynomial: a ← a / a[0].
     let lead = a[0];
+    if lead == 0.0 {
+        return Err(LinalgError::InvalidArgument {
+            detail: "leading coefficient must be nonzero".to_string(),
+        });
+    }
     let a: Vec<f64> = a.iter().map(|&coeff| coeff / lead).collect();
 
     if a.len() == 2 {
-        return vec![vec![-a[1]]];
+        return Ok(vec![vec![-a[1]]]);
     }
 
     let n = a.len() - 1;
@@ -13626,7 +13631,7 @@ pub fn fiedler_companion(a: &[f64]) -> Vec<Vec<f64>> {
     c[0][0] = -a[1];
     c[1][0] = 1.0;
 
-    c
+    Ok(c)
 }
 
 /// Leslie population matrix.
@@ -24859,7 +24864,7 @@ mod tests {
     #[test]
     fn fiedler_companion_pentadiagonal() {
         // p(x) = x^4 - 3x^3 + 2x^2 + 5x - 1 — matches scipy.linalg.fiedler_companion.
-        let c = fiedler_companion(&[1.0, -3.0, 2.0, 5.0, -1.0]);
+        let c = fiedler_companion(&[1.0, -3.0, 2.0, 5.0, -1.0]).unwrap();
         assert_eq!(
             c,
             vec![
@@ -24875,7 +24880,7 @@ mod tests {
     fn fiedler_companion_non_monic_rescales() {
         // Non-monic leading coefficient is normalized before construction:
         // [2, -4, 6, -8] ≡ monic [1, -2, 3, -4].
-        let c = fiedler_companion(&[2.0, -4.0, 6.0, -8.0]);
+        let c = fiedler_companion(&[2.0, -4.0, 6.0, -8.0]).unwrap();
         assert_eq!(
             c,
             vec![
@@ -24889,10 +24894,13 @@ mod tests {
     #[test]
     fn fiedler_companion_edge_cases() {
         // Fewer than two coefficients → empty matrix.
-        assert!(fiedler_companion(&[]).is_empty());
-        assert!(fiedler_companion(&[3.0]).is_empty());
+        assert!(fiedler_companion(&[]).unwrap().is_empty());
+        assert!(fiedler_companion(&[3.0]).unwrap().is_empty());
         // Exactly two coefficients → 1×1 matrix [[-a₁/a₀]].
-        assert_eq!(fiedler_companion(&[2.0, 6.0]), vec![vec![-3.0]]);
+        assert_eq!(fiedler_companion(&[2.0, 6.0]).unwrap(), vec![vec![-3.0]]);
+        let err = fiedler_companion(&[0.0, 1.0, 2.0])
+            .expect_err("scipy rejects zero leading coefficient");
+        assert!(matches!(err, LinalgError::InvalidArgument { .. }));
     }
 
     #[test]
