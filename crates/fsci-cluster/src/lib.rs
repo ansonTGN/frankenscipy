@@ -4082,8 +4082,10 @@ pub fn cophenet(z: &[[f64; 4]]) -> Vec<f64> {
             }
         }
 
-        // Merge membership lists
-        let mut merged = membership[ci].clone();
+        // Merge membership lists. ci/cj are subsumed by new_id and never referenced
+        // again, so MOVE ci's list (reusing its buffer) instead of cloning it, then
+        // append cj's. Byte-identical contents (ci's members then cj's, same order).
+        let mut merged = std::mem::take(&mut membership[ci]);
         merged.extend_from_slice(&membership[cj]);
         membership[new_id] = merged;
     }
