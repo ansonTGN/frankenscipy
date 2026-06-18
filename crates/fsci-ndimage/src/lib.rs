@@ -9368,6 +9368,19 @@ mod tests {
     }
 
     #[test]
+    fn binary_dilation_erosion_box_match_scipy() {
+        // fsci structure_size=3 = full 3x3 box (= scipy structure=ones((3,3))).
+        // Dilation of a single center pixel -> all ones.
+        let center = NdArray::new(vec![0., 0., 0., 0., 1., 0., 0., 0., 0.], vec![3, 3]).unwrap();
+        let dil = binary_dilation(&center, 3, 1).expect("dilation");
+        assert_eq!(dil.data, vec![1.0; 9]);
+        // Erosion of an all-ones 3x3 (default border 0) -> only center survives.
+        let ones = NdArray::new(vec![1.0; 9], vec![3, 3]).unwrap();
+        let ero = binary_erosion(&ones, 3, 1).expect("erosion");
+        assert_eq!(ero.data, vec![0., 0., 0., 0., 1., 0., 0., 0., 0.]);
+    }
+
+    #[test]
     fn center_of_mass_match_scipy() {
         // scipy.ndimage.center_of_mass of the whole array (single all-ones label):
         // a symmetric plus -> (1,1); the weighted case [[1,0],[0,3]] -> (0.75,0.75).
