@@ -60,10 +60,10 @@ pub const SPEED_OF_LIGHT: f64 = 299_792_458.0;
 pub const C: f64 = SPEED_OF_LIGHT;
 
 /// Magnetic constant (vacuum permeability) μ₀ [N/A²]
-pub const MU_0: f64 = 1.256_637_062_12e-6;
+pub const MU_0: f64 = 1.256_637_061_27e-6;
 
 /// Electric constant (vacuum permittivity) ε₀ [F/m]
-pub const EPSILON_0: f64 = 8.854_187_812_8e-12;
+pub const EPSILON_0: f64 = 8.854_187_818_8e-12;
 
 /// Planck constant `J·s`
 pub const PLANCK: f64 = 6.626_070_15e-34;
@@ -107,37 +107,37 @@ pub const BOLTZMANN: f64 = 1.380_649e-23;
 pub const K_B: f64 = BOLTZMANN;
 
 /// Stefan-Boltzmann constant [W/(m²·K⁴)]
-pub const STEFAN_BOLTZMANN: f64 = 5.670_374_419e-8;
+pub const STEFAN_BOLTZMANN: f64 = 5.670_374_419_184_431_4e-8;
 /// Shorthand alias
 pub const SIGMA: f64 = STEFAN_BOLTZMANN;
 
 /// Wien displacement law constant `m·K`
-pub const WIEN: f64 = 2.897_771_955e-3;
+pub const WIEN: f64 = 2.897_771_955_185_172_7e-3;
 
 /// Rydberg constant [1/m]
-pub const RYDBERG: f64 = 1.097_373_156_816_0e7;
+pub const RYDBERG: f64 = 1.097_373_156_815_7e7;
 
 // ══════════════════════════════════════════════════════════════════════
 // Particle Masses
 // ══════════════════════════════════════════════════════════════════════
 
 /// Electron mass `kg`
-pub const ELECTRON_MASS: f64 = 9.109_383_701_5e-31;
+pub const ELECTRON_MASS: f64 = 9.109_383_713_9e-31;
 /// Shorthand alias
 pub const M_E: f64 = ELECTRON_MASS;
 
 /// Proton mass `kg`
-pub const PROTON_MASS: f64 = 1.672_621_923_69e-27;
+pub const PROTON_MASS: f64 = 1.672_621_925_95e-27;
 /// Shorthand alias
 pub const M_P: f64 = PROTON_MASS;
 
 /// Neutron mass `kg`
-pub const NEUTRON_MASS: f64 = 1.674_927_498_04e-27;
+pub const NEUTRON_MASS: f64 = 1.674_927_500_56e-27;
 /// Shorthand alias
 pub const M_N: f64 = NEUTRON_MASS;
 
 /// Atomic mass constant (1/12 of ¹²C mass) `kg`
-pub const ATOMIC_MASS: f64 = 1.660_539_066_60e-27;
+pub const ATOMIC_MASS: f64 = 1.660_539_068_92e-27;
 /// Shorthand alias
 pub const U: f64 = ATOMIC_MASS;
 
@@ -146,13 +146,13 @@ pub const U: f64 = ATOMIC_MASS;
 // ══════════════════════════════════════════════════════════════════════
 
 /// Bohr magneton [J/T]
-pub const BOHR_MAGNETON: f64 = 9.274_010_078_3e-24;
+pub const BOHR_MAGNETON: f64 = 9.274_010_065_7e-24;
 
 /// Nuclear magneton [J/T]
-pub const NUCLEAR_MAGNETON: f64 = 5.050_783_746_1e-27;
+pub const NUCLEAR_MAGNETON: f64 = 5.050_783_739_3e-27;
 
 /// Magnetic flux quantum Φ₀ = h/(2e) `Wb`
-pub const MAGNETIC_FLUX_QUANTUM: f64 = 2.067_833_848e-15;
+pub const MAGNETIC_FLUX_QUANTUM: f64 = 2.067_833_848_461_929_5e-15;
 
 /// Conductance quantum G₀ = 2e²/h `S`
 ///
@@ -161,28 +161,28 @@ pub const MAGNETIC_FLUX_QUANTUM: f64 = 2.067_833_848e-15;
 pub const CONDUCTANCE_QUANTUM: f64 = 2.0 * ELEMENTARY_CHARGE * ELEMENTARY_CHARGE / PLANCK;
 
 /// Josephson constant K_J = 2e/h [Hz/V]
-pub const JOSEPHSON: f64 = 4.835_978_484e14;
+pub const JOSEPHSON: f64 = 4.835_978_484_169_836e14;
 
 /// Von Klitzing constant R_K = h/e² `Ω`
-pub const VON_KLITZING: f64 = 2.581_280_745e4;
+pub const VON_KLITZING: f64 = 2.581_280_745_930_451_3e4;
 
 // ══════════════════════════════════════════════════════════════════════
 // Atomic & Nuclear Constants
 // ══════════════════════════════════════════════════════════════════════
 
 /// Fine-structure constant α
-pub const FINE_STRUCTURE: f64 = 7.297_352_569_3e-3;
+pub const FINE_STRUCTURE: f64 = 7.297_352_564_3e-3;
 /// Shorthand alias
 pub const ALPHA: f64 = FINE_STRUCTURE;
 
 /// Bohr radius `m`
-pub const BOHR_RADIUS: f64 = 5.291_772_109_03e-11;
+pub const BOHR_RADIUS: f64 = 5.291_772_105_44e-11;
 
 /// Hartree energy `J`
-pub const HARTREE: f64 = 4.359_744_722_207_1e-18;
+pub const HARTREE: f64 = 4.359_744_722_206e-18;
 
 /// Classical electron radius `m`
-pub const CLASSICAL_ELECTRON_RADIUS: f64 = 2.817_940_326_2e-15;
+pub const CLASSICAL_ELECTRON_RADIUS: f64 = 2.817_940_320_5e-15;
 
 /// Compton wavelength of electron `m`
 pub const COMPTON_WAVELENGTH: f64 = 2.426_310_235_38e-12;
@@ -1044,7 +1044,7 @@ mod tests {
 
     #[test]
     fn physical_constants_match_scipy_reference_values() {
-        // scipy.constants values (CODATA 2018)
+        // scipy.constants values (CODATA 2022, SciPy 1.17.1)
         // Use relative tolerances for physical constants since different CODATA years may differ slightly
         assert_eq!(
             SPEED_OF_LIGHT, 299792458.0,
@@ -1089,6 +1089,35 @@ mod tests {
             1e-15,
             "golden_ratio vs scipy.constants.golden_ratio",
         );
+    }
+
+    #[test]
+    fn measured_constants_match_scipy_codata_2022_exactly() {
+        // The core measured/derived constants must equal scipy.constants
+        // (CODATA 2022, SciPy 1.17.1) bit-for-bit. These were previously CODATA
+        // 2018 values, inconsistent with the already-2022 additions (e.g.
+        // FINE_STRUCTURE vs INVERSE_FINE_STRUCTURE). frankenscipy-i5rk3.
+        assert_eq!(MU_0, 1.256_637_061_27e-6);
+        assert_eq!(EPSILON_0, 8.854_187_818_8e-12);
+        assert_eq!(RYDBERG, 1.097_373_156_815_7e7);
+        assert_eq!(ELECTRON_MASS, 9.109_383_713_9e-31);
+        assert_eq!(PROTON_MASS, 1.672_621_925_95e-27);
+        assert_eq!(NEUTRON_MASS, 1.674_927_500_56e-27);
+        assert_eq!(ATOMIC_MASS, 1.660_539_068_92e-27);
+        assert_eq!(BOHR_MAGNETON, 9.274_010_065_7e-24);
+        assert_eq!(NUCLEAR_MAGNETON, 5.050_783_739_3e-27);
+        assert_eq!(MAGNETIC_FLUX_QUANTUM, 2.067_833_848_461_929_5e-15);
+        assert_eq!(JOSEPHSON, 4.835_978_484_169_836e14);
+        assert_eq!(VON_KLITZING, 2.581_280_745_930_451_3e4);
+        assert_eq!(FINE_STRUCTURE, 7.297_352_564_3e-3);
+        assert_eq!(BOHR_RADIUS, 5.291_772_105_44e-11);
+        assert_eq!(HARTREE, 4.359_744_722_206e-18);
+        assert_eq!(CLASSICAL_ELECTRON_RADIUS, 2.817_940_320_5e-15);
+        assert_eq!(WIEN, 2.897_771_955_185_172_7e-3);
+        assert_eq!(STEFAN_BOLTZMANN, 5.670_374_419_184_431_4e-8);
+        // Internal consistency: 1/alpha agrees with the independent inverse
+        // constant to CODATA rounding (scipy itself differs by ~4e-12).
+        assert!((1.0 / FINE_STRUCTURE - INVERSE_FINE_STRUCTURE).abs() / INVERSE_FINE_STRUCTURE < 1e-11);
     }
 
     #[test]
