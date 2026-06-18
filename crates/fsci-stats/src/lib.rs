@@ -71455,6 +71455,34 @@ mod tests {
     }
 
     #[test]
+    fn anova_chi2_contingency_match_scipy() {
+        // scipy.stats.f_oneway and chi2_contingency (Yates correction), 1.17.1.
+        let g1 = [1.0, 2.0, 3.0, 4.0];
+        let g2 = [2.0, 3.0, 4.0, 5.0];
+        let g3 = [5.0, 6.0, 7.0, 8.0];
+        let f = f_oneway(&[&g1, &g2, &g3]);
+        assert!((f.statistic - 10.4).abs() < 1e-9, "f stat: {}", f.statistic);
+        assert!(
+            (f.pvalue - 0.004_572_125_092_826_608).abs() < 1e-10,
+            "f p: {}",
+            f.pvalue
+        );
+        let obs = vec![vec![10.0, 20.0], vec![30.0, 40.0]];
+        let c = chi2_contingency(&obs, true);
+        assert!(
+            (c.statistic - 0.446_428_571_428_571_4).abs() < 1e-10,
+            "chi2 stat: {}",
+            c.statistic
+        );
+        assert!(
+            (c.pvalue - 0.504_035_866_452_504_6).abs() < 1e-10,
+            "chi2 p: {}",
+            c.pvalue
+        );
+        assert_eq!(c.dof, 1);
+    }
+
+    #[test]
     fn ttest_ks_match_scipy() {
         // scipy.stats 1.17.1 for a=[1,2,3,4,5], b=[3,4,5,6,7].
         let a = [1.0, 2.0, 3.0, 4.0, 5.0];
