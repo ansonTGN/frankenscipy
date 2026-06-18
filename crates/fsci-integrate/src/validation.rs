@@ -137,6 +137,7 @@ pub enum IntegrateValidationError {
     NonFiniteF0,
     RhsWrongShape { expected: usize, actual: usize },
     NonFiniteEventDirection { index: usize },
+    NonFiniteEventValue { index: usize },
     TEvalOutOfSpan,
     TEvalNotSorted,
     NotYetImplemented { function: &'static str },
@@ -167,6 +168,9 @@ impl std::fmt::Display for IntegrateValidationError {
             ),
             Self::NonFiniteEventDirection { index } => {
                 write!(f, "event {index} has a non-finite direction.")
+            }
+            Self::NonFiniteEventValue { index } => {
+                write!(f, "event {index} returned a non-finite value.")
             }
             Self::TEvalOutOfSpan => write!(f, "Values in `t_eval` are not within `t_span`."),
             Self::TEvalNotSorted => write!(f, "Values in `t_eval` are not properly sorted."),

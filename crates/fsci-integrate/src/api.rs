@@ -195,6 +195,14 @@ fn validate_events_with_audit(
     Ok(())
 }
 
+fn validate_event_value(index: usize, value: f64) -> Result<f64, IntegrateValidationError> {
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(IntegrateValidationError::NonFiniteEventValue { index })
+    }
+}
+
 fn interpolate_state(
     y_old: &[f64],
     y_new: &[f64],
@@ -657,11 +665,15 @@ where
         .map(|evs| vec![Vec::new(); evs.len()]);
     let mut event_counts: Option<Vec<usize>> =
         options.events.as_ref().map(|evs| vec![0; evs.len()]);
-    let mut event_vals = options.events.as_ref().map(|evs| {
-        evs.iter()
-            .map(|ev| (ev.func)(t0, options.y0))
-            .collect::<Vec<_>>()
-    });
+    let mut event_vals = if let Some(evs) = options.events.as_ref() {
+        let mut vals = Vec::with_capacity(evs.len());
+        for (i, ev) in evs.iter().enumerate() {
+            vals.push(validate_event_value(i, (ev.func)(t0, options.y0))?);
+        }
+        Some(vals)
+    } else {
+        None
+    };
 
     if let Some(t_eval) = options.t_eval {
         if matches!(t_eval.first(), Some(&first) if (first - t0).abs() < 1e-14) {
@@ -694,7 +706,7 @@ where
                     event_counts.as_mut(),
                 ) {
                     for (i, ev_spec) in evs.iter().enumerate() {
-                        let val = (ev_spec.func)(t, &y);
+                        let val = validate_event_value(i, (ev_spec.func)(t, &y))?;
                         if event_active(old_vals[i], val, ev_spec.direction) {
                             let t_ev = solve_event_equation(
                                 ev_spec.func,
@@ -1360,6 +1372,59 @@ mod tests {
             );
             assert_eq!(rhs_calls, 0, "invalid metadata must fail before RHS calls");
         }
+    }
+
+    #[test]
+    fn solve_ivp_rejects_non_finite_initial_event_value() {
+        fn bad_event(_t: f64, _y: &[f64]) -> f64 {
+            f64::NAN
+        }
+
+        let mut rhs_calls = 0usize;
+        let mut rhs = |_t: f64, _y: &[f64]| {
+            rhs_calls += 1;
+            vec![1.0]
+        };
+        let err = solve_ivp(
+            &mut rhs,
+            &SolveIvpOptions {
+                t_span: (0.0, 1.0),
+                y0: &[0.0],
+                method: SolverKind::Rk45,
+                events: Some(vec![EventSpec::new(bad_event)]),
+                ..SolveIvpOptions::default()
+            },
+        )
+        .expect_err("non-finite initial event value");
+        assert_eq!(
+            err,
+            IntegrateValidationError::NonFiniteEventValue { index: 0 }
+        );
+        assert_eq!(rhs_calls, 0, "initial event validation must run before stepping");
+    }
+
+    #[test]
+    fn solve_ivp_rejects_non_finite_stepped_event_value() {
+        fn bad_after_start(t: f64, y: &[f64]) -> f64 {
+            if t == 0.0 { y[0] - 0.5 } else { f64::INFINITY }
+        }
+
+        let err = solve_ivp(
+            &mut |_t, _y| vec![1.0],
+            &SolveIvpOptions {
+                t_span: (0.0, 1.0),
+                y0: &[0.0],
+                method: SolverKind::Rk45,
+                first_step: Some(0.1),
+                events: Some(vec![EventSpec::new(bad_after_start)]),
+                ..SolveIvpOptions::default()
+            },
+        )
+        .expect_err("non-finite stepped event value");
+        assert_eq!(
+            err,
+            IntegrateValidationError::NonFiniteEventValue { index: 0 }
+        );
     }
 
     #[test]
