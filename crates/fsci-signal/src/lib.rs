@@ -845,6 +845,8 @@ pub fn convolve(a: &[f64], b: &[f64], mode: ConvolveMode) -> Result<Vec<f64>, Si
             "inputs must be non-empty".to_string(),
         ));
     }
+    validate_real_values_finite(a, "convolve first input samples must be finite")?;
+    validate_real_values_finite(b, "convolve second input samples must be finite")?;
 
     let na = a.len();
     let nb = b.len();
@@ -959,6 +961,8 @@ pub fn deconvolve(signal: &[f64], divisor: &[f64]) -> Result<(Vec<f64>, Vec<f64>
             "divisor[0] must not be zero".to_string(),
         ));
     }
+    validate_real_values_finite(signal, "deconvolve signal samples must be finite")?;
+    validate_real_values_finite(divisor, "deconvolve divisor samples must be finite")?;
     if divisor.len() > signal.len() {
         return Ok((Vec::new(), signal.to_vec()));
     }
@@ -987,6 +991,8 @@ pub fn fftconvolve(a: &[f64], b: &[f64], mode: ConvolveMode) -> Result<Vec<f64>,
             "inputs must be non-empty".to_string(),
         ));
     }
+    validate_real_values_finite(a, "fftconvolve first input samples must be finite")?;
+    validate_real_values_finite(b, "fftconvolve second input samples must be finite")?;
 
     let na = a.len();
     let nb = b.len();
@@ -1052,6 +1058,8 @@ pub fn oaconvolve(a: &[f64], b: &[f64], mode: ConvolveMode) -> Result<Vec<f64>, 
             "inputs must be non-empty".to_string(),
         ));
     }
+    validate_real_values_finite(a, "oaconvolve first input samples must be finite")?;
+    validate_real_values_finite(b, "oaconvolve second input samples must be finite")?;
     let na = a.len();
     let nb = b.len();
     let full_len = na + nb - 1;
@@ -1130,6 +1138,8 @@ pub fn correlate(a: &[f64], v: &[f64], mode: ConvolveMode) -> Result<Vec<f64>, S
             "inputs must be non-empty".to_string(),
         ));
     }
+    validate_real_values_finite(a, "correlate first input samples must be finite")?;
+    validate_real_values_finite(v, "correlate second input samples must be finite")?;
     // Correlate = convolve with reversed kernel
     let v_rev: Vec<f64> = v.iter().rev().copied().collect();
     convolve(a, &v_rev, mode)
@@ -18485,6 +18495,34 @@ mod tests {
     }
 
     #[test]
+    fn convolution_paths_reject_non_finite_inputs() {
+        assert_eq!(
+            convolve(&[1.0, f64::NAN], &[1.0], ConvolveMode::Full),
+            Err(SignalError::NonFiniteInput {
+                detail: "convolve first input samples must be finite".to_string(),
+            })
+        );
+        assert_eq!(
+            fftconvolve(&[1.0], &[f64::INFINITY], ConvolveMode::Full),
+            Err(SignalError::NonFiniteInput {
+                detail: "fftconvolve second input samples must be finite".to_string(),
+            })
+        );
+        assert_eq!(
+            oaconvolve(&[f64::NEG_INFINITY], &[1.0], ConvolveMode::Full),
+            Err(SignalError::NonFiniteInput {
+                detail: "oaconvolve first input samples must be finite".to_string(),
+            })
+        );
+        assert_eq!(
+            correlate(&[1.0], &[f64::NAN], ConvolveMode::Full),
+            Err(SignalError::NonFiniteInput {
+                detail: "correlate second input samples must be finite".to_string(),
+            })
+        );
+    }
+
+    #[test]
     fn deconvolve_recovers_original_signal() {
         let original = vec![0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0];
         let impulse_response = vec![2.0, 1.0];
@@ -18532,6 +18570,22 @@ mod tests {
     fn deconvolve_zero_leading_divisor_rejected() {
         let err = deconvolve(&[1.0, 2.0, 3.0], &[0.0, 1.0]).expect_err("zero leading divisor");
         assert!(err.is_argument_error());
+    }
+
+    #[test]
+    fn deconvolve_rejects_non_finite_inputs() {
+        assert_eq!(
+            deconvolve(&[1.0, f64::INFINITY], &[1.0]),
+            Err(SignalError::NonFiniteInput {
+                detail: "deconvolve signal samples must be finite".to_string(),
+            })
+        );
+        assert_eq!(
+            deconvolve(&[1.0, 2.0], &[1.0, f64::NAN]),
+            Err(SignalError::NonFiniteInput {
+                detail: "deconvolve divisor samples must be finite".to_string(),
+            })
+        );
     }
 
     // ── find_peaks tests ────────────────────────────────────────────
