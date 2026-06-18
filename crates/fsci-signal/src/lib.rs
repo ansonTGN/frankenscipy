@@ -5485,6 +5485,9 @@ pub fn thd(magnitudes: &[f64], fundamental_bin: usize) -> f64 {
     {
         return f64::NAN;
     }
+    if magnitudes.iter().any(|&m| !m.is_finite() || m < 0.0) {
+        return f64::NAN;
+    }
 
     let fund_power = magnitudes[fundamental_bin].powi(2);
     let mut harmonic_power = 0.0;
@@ -19653,6 +19656,20 @@ mod tests {
     #[test]
     fn thd_rejects_zero_fundamental_bin_without_hanging() {
         assert!(thd(&[1.0, 0.25, 0.5], 0).is_nan());
+    }
+
+    #[test]
+    fn thd_rejects_invalid_magnitudes() {
+        for magnitudes in [
+            [1.0, -0.25, 0.5],
+            [1.0, f64::NAN, 0.5],
+            [1.0, 0.25, f64::INFINITY],
+        ] {
+            assert!(
+                thd(&magnitudes, 1).is_nan(),
+                "invalid magnitudes should produce NaN THD: {magnitudes:?}"
+            );
+        }
     }
 
     // ── lfilter tests ──────────────────────────────────────────────
