@@ -5479,7 +5479,10 @@ pub fn snr(signal: &[f64], noise: &[f64]) -> f64 {
 /// Given a signal and its fundamental frequency bin index, computes
 /// THD = sqrt(sum of harmonic powers / fundamental power).
 pub fn thd(magnitudes: &[f64], fundamental_bin: usize) -> f64 {
-    if fundamental_bin >= magnitudes.len() || magnitudes[fundamental_bin] == 0.0 {
+    if fundamental_bin == 0
+        || fundamental_bin >= magnitudes.len()
+        || magnitudes[fundamental_bin] == 0.0
+    {
         return f64::NAN;
     }
 
@@ -19642,6 +19645,11 @@ mod tests {
         }
 
         assert_eq!(spectral_flatness(&[0.0, 0.0]), 0.0);
+    }
+
+    #[test]
+    fn thd_rejects_zero_fundamental_bin_without_hanging() {
+        assert!(thd(&[1.0, 0.25, 0.5], 0).is_nan());
     }
 
     // ── lfilter tests ──────────────────────────────────────────────
