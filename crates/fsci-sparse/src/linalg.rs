@@ -5107,6 +5107,34 @@ mod tests {
     }
 
     #[test]
+    fn sparse_ops2_match_numpy() {
+        use crate::{CsrMatrix, Shape2D};
+        // A=[[1,0],[2,3]], B=[[1,1],[0,1]]. These ops were previously untested.
+        let a = CsrMatrix::from_components(
+            Shape2D::new(2, 2),
+            vec![1.0, 2.0, 3.0],
+            vec![0, 0, 1],
+            vec![0, 1, 3],
+            false,
+        )
+        .unwrap();
+        let b = CsrMatrix::from_components(
+            Shape2D::new(2, 2),
+            vec![1.0, 1.0, 1.0],
+            vec![0, 1, 1],
+            vec![0, 2, 3],
+            false,
+        )
+        .unwrap();
+        // add -> [[2,1],[2,4]], sum 9.
+        assert!((sparse_sum(&sparse_add(&a, &b)) - 9.0).abs() < 1e-12, "add");
+        // element-wise power 2 -> [1,4,9], sum 14.
+        assert!((sparse_sum(&sparse_power(&a, 2.0)) - 14.0).abs() < 1e-12, "power");
+        // frobenius inner = sum(a_ij*b_ij) = 1*1 + 3*1 = 4.
+        assert!((sparse_frobenius_inner(&a, &b) - 4.0).abs() < 1e-12, "frobenius inner");
+    }
+
+    #[test]
     fn graph_metrics_on_path_graph() {
         use crate::{CsrMatrix, Shape2D};
         // Undirected path graph 0-1-2: adjacency [[0,1,0],[1,0,1],[0,1,0]].
