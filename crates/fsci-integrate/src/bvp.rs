@@ -105,6 +105,16 @@ where
             "y_guess must be non-empty".to_string(),
         ));
     }
+    if !t_span.0.is_finite() || !t_span.1.is_finite() {
+        return Err(BvpError::InvalidArgument(
+            "t_span endpoints must be finite".to_string(),
+        ));
+    }
+    if y_guess.iter().any(|value| !value.is_finite()) {
+        return Err(BvpError::InvalidArgument(
+            "y_guess values must be finite".to_string(),
+        ));
+    }
     validate_bvp_options(&options)?;
 
     let mut y0 = y_guess.to_vec();
@@ -391,6 +401,36 @@ mod tests {
         let err = solve_bvp(&mut f, &bc, (0.0, 1.0), &[], BvpOptions::default())
             .expect_err("empty guess");
         assert!(matches!(err, BvpError::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn bvp_rejects_non_finite_span_and_initial_guess() {
+        for span in [
+            (f64::NAN, 1.0),
+            (0.0, f64::NAN),
+            (f64::NEG_INFINITY, 1.0),
+            (0.0, f64::INFINITY),
+        ] {
+            let mut f = |_t: f64, _y: &[f64]| vec![0.0];
+            let bc = |ya: &[f64], _yb: &[f64]| vec![ya[0]];
+            let err = solve_bvp(&mut f, &bc, span, &[0.0], BvpOptions::default())
+                .expect_err("non-finite span");
+            assert!(matches!(err, BvpError::InvalidArgument(msg) if msg.contains("t_span")));
+        }
+
+        for bad_y0 in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let mut f = |_t: f64, _y: &[f64]| vec![0.0];
+            let bc = |ya: &[f64], _yb: &[f64]| vec![ya[0]];
+            let err = solve_bvp(
+                &mut f,
+                &bc,
+                (0.0, 1.0),
+                &[bad_y0],
+                BvpOptions::default(),
+            )
+            .expect_err("non-finite y_guess");
+            assert!(matches!(err, BvpError::InvalidArgument(msg) if msg.contains("y_guess")));
+        }
     }
 
     #[test]
