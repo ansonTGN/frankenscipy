@@ -51,6 +51,7 @@ const ERR_C: [f64; 6] = [
 ];
 
 /// RMS norm `sqrt(mean(x²))` (scipy `norm`).
+#[cfg(test)]
 fn rms_norm(x: &[f64]) -> f64 {
     if x.is_empty() {
         return 0.0;
@@ -468,10 +469,8 @@ impl BdfSolver {
             for j in 0..n {
                 scale[j] = self.atol[j] + self.rtol * y_new[j].abs();
             }
-            let error: Vec<f64> = (0..n)
-                .map(|j| ERR_C[order] * d_corr[j] / scale[j])
-                .collect();
-            let error_norm = rms_norm(&error);
+            let error_norm =
+                rms_norm_scaled(d_corr.iter().map(|&value| ERR_C[order] * value), &scale);
 
             if error_norm > 1.0 {
                 let factor = MIN_FACTOR.max(safety * error_norm.powf(-1.0 / (order as f64 + 1.0)));
@@ -507,18 +506,20 @@ impl BdfSolver {
                 if self.n_equal_steps > order {
                     let safety_sel = safety;
                     let err_m = if order > 1 {
-                        let e: Vec<f64> = (0..n)
-                            .map(|j| ERR_C[order - 1] * self.d[order][j] / scale[j])
-                            .collect();
-                        rms_norm(&e)
+                        rms_norm_scaled(
+                            self.d[order].iter().map(|&value| ERR_C[order - 1] * value),
+                            &scale,
+                        )
                     } else {
                         f64::INFINITY
                     };
                     let err_p = if order < self.max_order {
-                        let e: Vec<f64> = (0..n)
-                            .map(|j| ERR_C[order + 1] * self.d[order + 2][j] / scale[j])
-                            .collect();
-                        rms_norm(&e)
+                        rms_norm_scaled(
+                            self.d[order + 2]
+                                .iter()
+                                .map(|&value| ERR_C[order + 1] * value),
+                            &scale,
+                        )
                     } else {
                         f64::INFINITY
                     };
@@ -728,6 +729,17 @@ mod tests {
             .collect();
         let streamed = rms_norm_scaled(dy.iter().copied(), &scale);
         assert_eq!(streamed.to_bits(), rms_norm(&collected).to_bits());
+        let coeff = 1.75;
+        let coeff_collected: Vec<f64> = dy
+            .iter()
+            .zip(scale.iter())
+            .map(|(&value, &scale_j)| coeff * value / scale_j)
+            .collect();
+        let coeff_streamed = rms_norm_scaled(dy.iter().map(|&value| coeff * value), &scale);
+        assert_eq!(
+            coeff_streamed.to_bits(),
+            rms_norm(&coeff_collected).to_bits()
+        );
         assert_eq!(
             rms_norm_scaled(std::iter::empty::<f64>(), &[]).to_bits(),
             0.0f64.to_bits()

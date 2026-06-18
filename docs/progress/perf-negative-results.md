@@ -162,3 +162,24 @@ condition so dead ends are not repeated casually.
   rejection-pattern drift; if streamed norms are neutral/slower, reject this
   exact formulation and do not retry unless allocation profiles show Radau
   scaled-norm Vec churn is again a top-5 integrate hotspot.
+## 2026-06-18 - frankenscipy-8l8r1.121 - BDF streamed step/order error norms
+
+- Agent: cod-a / MistyBirch
+- Lever: reuse the BDF streamed scaled RMS helper for accepted-step error norms
+  and order-minus/order-plus selection norms, removing three temporary
+  coefficient-scaled error vectors that existed only to call `rms_norm`.
+- Status: pending batch-test. This is a code-first commit per campaign
+  instruction; only local `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a
+  cargo check -p fsci-integrate` is expected before commit.
+- Correctness guard: `rms_norm_scaled_matches_collected_reference` now covers
+  both direct scaled vectors and coefficient-scaled error vectors with
+  bit-identical results to the old collect-then-`rms_norm` path; existing BDF
+  tests cover convergence, validation, and order-adaptation behavior.
+- Benchmark guard: compare focused stiff `solve_ivp(method=BDF)` workloads
+  against the pre-change commit on the same worker/target dir, emphasizing
+  variable-order adaptation at medium/high dimension.
+- Retry condition: keep only if same-worker focused BDF timings improve without
+  order-choice, step-count, final-state, tolerance, or rejection drift; if this
+  streaming order-error formulation is neutral/slower, reject it and do not
+  retry unless allocation profiles show BDF error-norm Vec churn remains a top
+  integrate hotspot.
