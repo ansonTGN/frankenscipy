@@ -9001,6 +9001,50 @@ impl BetaBinomial {
         assert!(b > 0.0, "b must be positive, got {b}");
         Self { n, a, b }
     }
+
+    /// Log-pmf at many outcomes, hoisting the FIVE parameter-only lgamma terms
+    /// (`lnΓ(n+1)`, `lnΓ(n+a+b)`, and the whole `ln_beta_den = lnΓ(a)+lnΓ(b)−lnΓ(a+b)`)
+    /// out of the per-`k` loop. Byte-identical to mapping `logpmf` (same ln_comb /
+    /// ln_beta_num operation order; k>n → −∞).
+    #[must_use]
+    pub fn logpmf_many(&self, ks: &[u64]) -> Vec<f64> {
+        let lg_n1 = ln_gamma(self.n as f64 + 1.0);
+        let lg_nab = ln_gamma(self.n as f64 + self.a + self.b);
+        let ln_beta_den = ln_gamma(self.a) + ln_gamma(self.b) - ln_gamma(self.a + self.b);
+        ks.iter()
+            .map(|&k| {
+                if k > self.n {
+                    return f64::NEG_INFINITY;
+                }
+                let kf = k as f64;
+                let ln_comb = lg_n1 - ln_gamma(kf + 1.0) - ln_gamma((self.n - k) as f64 + 1.0);
+                let ln_beta_num =
+                    ln_gamma(kf + self.a) + ln_gamma((self.n - k) as f64 + self.b) - lg_nab;
+                ln_comb + ln_beta_num - ln_beta_den
+            })
+            .collect()
+    }
+
+    /// Pmf at many outcomes; hoists the same five lgamma terms as
+    /// [`logpmf_many`](Self::logpmf_many). Byte-identical to mapping `pmf`.
+    #[must_use]
+    pub fn pmf_many(&self, ks: &[u64]) -> Vec<f64> {
+        let lg_n1 = ln_gamma(self.n as f64 + 1.0);
+        let lg_nab = ln_gamma(self.n as f64 + self.a + self.b);
+        let ln_beta_den = ln_gamma(self.a) + ln_gamma(self.b) - ln_gamma(self.a + self.b);
+        ks.iter()
+            .map(|&k| {
+                if k > self.n {
+                    return 0.0;
+                }
+                let kf = k as f64;
+                let ln_comb = lg_n1 - ln_gamma(kf + 1.0) - ln_gamma((self.n - k) as f64 + 1.0);
+                let ln_beta_num =
+                    ln_gamma(kf + self.a) + ln_gamma((self.n - k) as f64 + self.b) - lg_nab;
+                (ln_comb + ln_beta_num - ln_beta_den).exp()
+            })
+            .collect()
+    }
 }
 
 impl DiscreteDistribution for BetaBinomial {
@@ -71263,6 +71307,20 @@ mod tests {
         assert!((ps - pv.sqrt()).abs() < 1e-12);
         assert!(pooled_variance(&[&[1.0]]).is_nan());
         assert!(pooled_variance(&[]).is_nan());
+    }
+
+    #[test]
+    fn betabinomial_pmf_many_matches_pmf() {
+        // Batch pmf_many/logpmf_many (5 lgammas hoisted) byte-identical to per-k,
+        // incl. k>n.
+        let bb = BetaBinomial::new(10, 2.0, 3.0);
+        let ks: Vec<u64> = (0..=12).collect();
+        let pm = bb.pmf_many(&ks);
+        let lpm = bb.logpmf_many(&ks);
+        for (i, &k) in ks.iter().enumerate() {
+            assert_eq!(pm[i], bb.pmf(k), "pmf_many != pmf at k={k}");
+            assert_eq!(lpm[i], bb.logpmf(k), "logpmf_many != logpmf at k={k}");
+        }
     }
 
     #[test]
