@@ -50245,6 +50245,16 @@ mod tests {
     }
 
     #[test]
+    fn exponweib_pdf_cdf_interior_match_scipy() {
+        // Exact scipy.stats.exponweib(a=2, c=1.5). exponweib_pdf_boundary_matches_scipy
+        // only checks the boundary; this pins the pdf/cdf at interior points.
+        let w = ExponWeibull::new(2.0, 1.5);
+        assert!((w.pdf(1.0) - 0.697_632_473_804_488_8).abs() < 1e-12, "pdf(1)");
+        assert!((w.pdf(2.0) - 0.235_942_825_461_202_18).abs() < 1e-12, "pdf(2)");
+        assert!((w.cdf(1.0) - 0.399_576_400_893_728_03).abs() < 1e-12, "cdf(1)");
+    }
+
+    #[test]
     fn exponweib_pdf_boundary_matches_scipy() {
         // /testing-metamorphic regression for [frankenscipy-3ahgi]:
         // exponweib.pdf at x=0 is governed by c·a:
