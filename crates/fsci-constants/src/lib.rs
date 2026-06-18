@@ -1072,6 +1072,20 @@ mod tests {
     }
 
     #[test]
+    fn unit_conversions_match_scipy_constants() {
+        // These conversion helpers were previously untested.
+        assert!((celsius_to_fahrenheit(100.0) - 212.0).abs() < 1e-12, "C->F boiling");
+        assert!((celsius_to_fahrenheit(0.0) - 32.0).abs() < 1e-12, "C->F freezing");
+        assert!((kmh_to_mps(36.0) - 10.0).abs() < 1e-12, "36 km/h = 10 m/s");
+        // scipy.constants.knot = 1852/3600.
+        assert!((knots_to_mps(1.0) - 0.514_444_444_444_444_5).abs() < 1e-12, "knot");
+        // scipy.constants.mph = mile/3600.
+        assert!((mph_to_mps(1.0) - 0.44704).abs() < 1e-9, "mph");
+        // scipy.constants.psi.
+        assert!((psi_to_pa(1.0) - 6894.757_293_168_361).abs() < 1e-6, "psi");
+    }
+
+    #[test]
     fn physical_constants_match_scipy_reference_values() {
         // scipy.constants values (CODATA 2022, SciPy 1.17.1)
         // Use relative tolerances for physical constants since different CODATA years may differ slightly
