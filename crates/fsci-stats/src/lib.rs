@@ -71442,6 +71442,19 @@ mod tests {
     }
 
     #[test]
+    fn gamma_beta_dist_match_scipy() {
+        // scipy.stats.gamma(a=2, scale=1.5) and scipy.stats.beta(2, 3), 1.17.1.
+        let g = GammaDist::new(2.0, 1.5);
+        assert!((g.pdf(3.0) - 0.180_447_044_315_483_6).abs() < 1e-12, "gamma pdf");
+        assert!((g.cdf(3.0) - 0.593_994_150_290_161_6).abs() < 1e-12, "gamma cdf");
+        assert!((g.ppf(0.5) - 2.517_520_485_024_992).abs() < 1e-8, "gamma ppf");
+        let b = BetaDist::new(2.0, 3.0);
+        assert!((b.pdf(0.4) - 1.727_999_999_999_999_8).abs() < 1e-12, "beta pdf");
+        assert!((b.cdf(0.4) - 0.524_799_999_999_999_9).abs() < 1e-12, "beta cdf");
+        assert!((b.ppf(0.5) - 0.385_727_568_132_389_5).abs() < 1e-8, "beta ppf");
+    }
+
+    #[test]
     fn descriptive_stats_match_scipy_with_outlier() {
         // Golden values from scipy.stats (1.17.1) for an asymmetric, outlier-heavy
         // sample [1,2,3,4,5,100]. Locks gstd/sem/variation/iqr/median_abs_deviation
