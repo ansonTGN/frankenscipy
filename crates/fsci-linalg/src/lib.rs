@@ -16787,6 +16787,22 @@ mod tests {
     }
 
     #[test]
+    fn solve_toeplitz_match_scipy() {
+        // scipy.linalg.solve_toeplitz((c, r), b) via Levinson recursion. Non-
+        // symmetric Toeplitz (c != r): T=[[4,3,5],[1,4,3],[2,1,4]], b=[1,2,3].
+        let x = solve_toeplitz(&[4.0, 1.0, 2.0], Some(&[4.0, 3.0, 5.0]), &[1.0, 2.0, 3.0])
+            .expect("solve_toeplitz");
+        let e = [
+            -1.478_260_869_565_217_3,
+            -0.304_347_826_086_956_54,
+            1.565_217_391_304_348,
+        ];
+        for (g, ex) in x.iter().zip(&e) {
+            assert!((g - ex).abs() < 1e-11, "toeplitz: {g} vs {ex}");
+        }
+    }
+
+    #[test]
     fn lstsq_match_scipy() {
         // scipy.linalg.lstsq: overdetermined least squares. A=[[1,1],[1,2],[1,3]],
         // b=[1,2,2] -> x=[2/3, 1/2], rank 2.
