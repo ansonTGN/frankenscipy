@@ -5693,6 +5693,23 @@ mod tests {
     }
 
     #[test]
+    fn spatial_vector_helpers_match_analytic() {
+        // Previously-untested spatial vector helpers vs analytic identities.
+        assert!((dot(&[1.0, 2.0, 3.0], &[4.0, 5.0, 6.0]) - 32.0).abs() < 1e-12, "dot");
+        let u = normalize(&[3.0, 4.0]);
+        assert!((u[0] - 0.6).abs() < 1e-12 && (u[1] - 0.8).abs() < 1e-12, "normalize unit");
+        // angle between perpendicular vectors = pi/2.
+        assert!(
+            (angle_between(&[1.0, 0.0], &[0.0, 1.0]) - std::f64::consts::FRAC_PI_2).abs() < 1e-12,
+            "angle"
+        );
+        // matching = boolean Hamming = fraction differing; 2 of 4 differ. (scipy 1.17
+        // removed matching as a deprecated hamming alias, so assert the identity.)
+        let m = matching(&[true, false, true, true], &[true, true, false, true]);
+        assert!((m - 0.5).abs() < 1e-12, "matching");
+    }
+
+    #[test]
     fn mahalanobis_match_scipy() {
         // scipy.spatial.distance.mahalanobis(u, v, VI): sqrt((u-v)^T VI (u-v)).
         let vi = vec![vec![2.0, 0.5], vec![0.5, 2.0]];
