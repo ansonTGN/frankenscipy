@@ -2262,7 +2262,7 @@ pub fn tanhsinh<F>(f: F, a: f64, b: f64, atol: f64, rtol: f64, max_level: usize)
 where
     F: Fn(f64) -> f64,
 {
-    if a.is_nan() || b.is_nan() {
+    if a.is_nan() || b.is_nan() || !atol.is_finite() || !rtol.is_finite() {
         return QuadResult {
             integral: f64::NAN,
             error: f64::INFINITY,
@@ -2412,7 +2412,13 @@ where
         nfev: 0,
         converged: false,
     };
-    if a.is_nan() || !step.is_finite() || step <= 0.0 || !a.is_finite() {
+    if a.is_nan()
+        || !step.is_finite()
+        || step <= 0.0
+        || !a.is_finite()
+        || !atol.is_finite()
+        || !rtol.is_finite()
+    {
         return nan;
     }
     let atol = if atol > 0.0 { atol } else { 0.0 };
@@ -4761,6 +4767,22 @@ mod tests {
     }
 
     #[test]
+    fn nsum_rejects_nonfinite_tolerances() {
+        for (atol, rtol) in [
+            (f64::NAN, 1e-11),
+            (f64::INFINITY, 1e-11),
+            (0.0, f64::NAN),
+            (0.0, f64::INFINITY),
+        ] {
+            let result = nsum(|n| 1.0 / (n * n), 1.0, f64::INFINITY, 1.0, atol, rtol);
+            assert!(!result.converged, "atol={atol}, rtol={rtol}");
+            assert!(result.sum.is_nan(), "atol={atol}, rtol={rtol}");
+            assert_eq!(result.error, f64::INFINITY);
+            assert_eq!(result.nfev, 0);
+        }
+    }
+
+    #[test]
     fn tanhsinh_smooth_and_singular_match_scipy() {
         // Smooth integrands → machine precision.
         let smooth: &[(fn(f64) -> f64, f64, f64, f64)] = &[
@@ -4838,6 +4860,22 @@ mod tests {
             "reversed inf: {}",
             r.integral
         );
+    }
+
+    #[test]
+    fn tanhsinh_rejects_nonfinite_tolerances() {
+        for (atol, rtol) in [
+            (f64::NAN, 1e-12),
+            (f64::INFINITY, 1e-12),
+            (0.0, f64::NAN),
+            (0.0, f64::INFINITY),
+        ] {
+            let result = tanhsinh(|x| x * x, 0.0, 1.0, atol, rtol, 16);
+            assert!(!result.converged, "atol={atol}, rtol={rtol}");
+            assert!(result.integral.is_nan(), "atol={atol}, rtol={rtol}");
+            assert_eq!(result.error, f64::INFINITY);
+            assert_eq!(result.neval, 0);
+        }
     }
 
     #[test]
