@@ -4236,6 +4236,31 @@ mod tests {
     }
 
     #[test]
+    fn fft_rfft_match_numpy_small() {
+        // numpy.fft.fft([1,2,3,4]) = [10, -2+2j, -2, -2-2j];
+        // numpy.fft.rfft([1,2,3,4]) = [10, -2+2j, -2].
+        let opts = FftOptions::default();
+        let x: Vec<Complex64> = [1.0, 2.0, 3.0, 4.0].iter().map(|&v| (v, 0.0)).collect();
+        let f = fft(&x, &opts).expect("fft");
+        let ef = [(10.0, 0.0), (-2.0, 2.0), (-2.0, 0.0), (-2.0, -2.0)];
+        for (g, e) in f.iter().zip(&ef) {
+            assert!(
+                (g.0 - e.0).abs() < 1e-12 && (g.1 - e.1).abs() < 1e-12,
+                "fft: {g:?} vs {e:?}"
+            );
+        }
+        let r = rfft(&[1.0, 2.0, 3.0, 4.0], &opts).expect("rfft");
+        let er = [(10.0, 0.0), (-2.0, 2.0), (-2.0, 0.0)];
+        assert_eq!(r.len(), 3, "rfft length");
+        for (g, e) in r.iter().zip(&er) {
+            assert!(
+                (g.0 - e.0).abs() < 1e-12 && (g.1 - e.1).abs() < 1e-12,
+                "rfft: {g:?} vs {e:?}"
+            );
+        }
+    }
+
+    #[test]
     fn fft_ifft_roundtrip_identity() {
         let input = vec![(1.0, 0.0), (2.0, -1.0), (0.5, 0.25), (-3.0, 2.0)];
         let opts = FftOptions::default();
