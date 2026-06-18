@@ -5469,6 +5469,10 @@ mod tests {
         let two = fwht(&[3.0, 5.0], &opts).expect("fwht");
         assert_eq!(two, vec![8.0, -2.0]);
 
+        // scipy.linalg.hadamard(4) @ [1, -2, 3, 4].
+        let four = fwht(&[1.0, -2.0, 3.0, 4.0], &opts).expect("fwht");
+        assert_eq!(four, vec![6.0, 2.0, -8.0, 4.0]);
+
         // Match the naive H_n·x (H[k][j] = (-1)^popcount(k&j)) for random input.
         let n = 64usize;
         let mut s: u64 = 0xdead_beef_1234_5678;
