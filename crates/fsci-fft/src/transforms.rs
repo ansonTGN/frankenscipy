@@ -4261,6 +4261,31 @@ mod tests {
     }
 
     #[test]
+    fn dct_ii_match_scipy() {
+        // scipy.fft.dct([1,2,3,4], type=2). Backward == norm=None; Ortho == 'ortho'.
+        let x = [1.0, 2.0, 3.0, 4.0];
+        let back = dct(&x, &FftOptions::default()).expect("dct");
+        let eb = [20.0, -6.308_644_059_797_899, 0.0, -0.448_341_529_167_965_1];
+        for (g, e) in back.iter().zip(&eb) {
+            assert!((g - e).abs() < 1e-12, "dct backward: {g} vs {e}");
+        }
+        let ortho = dct(
+            &x,
+            &FftOptions::default().with_normalization(Normalization::Ortho),
+        )
+        .expect("dct ortho");
+        let eo = [
+            5.000_000_000_000_001,
+            -2.230_442_497_387_663_5,
+            0.0,
+            -0.158_512_667_781_107_06,
+        ];
+        for (g, e) in ortho.iter().zip(&eo) {
+            assert!((g - e).abs() < 1e-12, "dct ortho: {g} vs {e}");
+        }
+    }
+
+    #[test]
     fn fft_ifft_roundtrip_identity() {
         let input = vec![(1.0, 0.0), (2.0, -1.0), (0.5, 0.25), (-3.0, 2.0)];
         let opts = FftOptions::default();
