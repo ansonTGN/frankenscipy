@@ -2617,6 +2617,36 @@ mod tests {
     }
 
     #[test]
+    fn bracketing_root_finders_match_scipy() {
+        // All bracketing methods must converge to the root of cos(x)-x on [0,1]
+        // — the Dottie number 0.7390851332151607, to which scipy.optimize's
+        // brentq/ridder/toms748/bisect all converge.
+        let f = |x: f64| x.cos() - x;
+        let true_root = 0.739_085_133_215_160_6_f64;
+        let opts = || RootOptions {
+            xtol: 1.0e-12,
+            rtol: 1.0e-12,
+            maxiter: 100,
+            ..RootOptions::default()
+        };
+        let runs = [
+            ("brentq", brentq(f, (0.0, 1.0), opts())),
+            ("ridder", ridder(f, (0.0, 1.0), opts())),
+            ("toms748", toms748(f, (0.0, 1.0), opts())),
+            ("bisect", bisect(f, (0.0, 1.0), opts())),
+        ];
+        for (name, r) in runs {
+            let res = r.unwrap_or_else(|e| panic!("{name} errored: {e:?}"));
+            assert!(res.converged, "{name} did not converge: {}", res.message);
+            assert!(
+                (res.root - true_root).abs() < 1e-10,
+                "{name}: {} != {true_root}",
+                res.root
+            );
+        }
+    }
+
+    #[test]
     fn brentq_accepts_root_at_bracket_endpoint() {
         let options = RootOptions {
             method: Some(RootMethod::Brentq),
