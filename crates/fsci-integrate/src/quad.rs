@@ -3516,6 +3516,24 @@ mod tests {
     }
 
     #[test]
+    fn simpson_odd_interval_cartwright_match_scipy() {
+        // scipy.integrate.simpson on x^4 (degree 4 -> Simpson NOT exact, so the
+        // odd-interval Cartwright correction actually matters; a trapezoid
+        // fallback would diverge).
+        let odd = simpson(&[1.0, 16.0, 81.0, 256.0], &[1.0, 2.0, 3.0, 4.0])
+            .expect("odd")
+            .integral;
+        assert!((odd - 208.0).abs() < 1e-10, "odd 4pts: {odd}");
+        let even = simpson(
+            &[1.0, 16.0, 81.0, 256.0, 625.0],
+            &[1.0, 2.0, 3.0, 4.0, 5.0],
+        )
+        .expect("even")
+        .integral;
+        assert!((even - 625.333_333_333_333_3).abs() < 1e-10, "even 5pts: {even}");
+    }
+
+    #[test]
     fn quad_adaptive_match_closed_form() {
         // scipy.integrate.quad converges to the analytic integral; lock fsci's
         // adaptive quad to the closed forms (equal to scipy's values to ~1e-10).
