@@ -71482,6 +71482,24 @@ mod tests {
     }
 
     #[test]
+    fn skew_kurtosis_match_scipy_default_conventions() {
+        // Golden values from scipy.stats (1.17.1) for [1,2,2,3,5,8,13]. fsci's
+        // skew/kurtosis use scipy's *defaults*: skew bias=True (g1) and kurtosis
+        // fisher=True + bias=True (excess kurtosis, subtract 3).
+        let a = [1.0, 2.0, 2.0, 3.0, 5.0, 8.0, 13.0];
+        assert!(
+            (skew(&a) - 1.043_907_461_814_940_4).abs() < 1e-9,
+            "skew (bias=True): {}",
+            skew(&a)
+        );
+        assert!(
+            (kurtosis(&a) - -0.231_407_429_057_285_62).abs() < 1e-9,
+            "kurtosis (fisher,bias=True): {}",
+            kurtosis(&a)
+        );
+    }
+
+    #[test]
     fn zscore_matches_scipy_reference() {
         // scipy.stats.zscore([1,2,3,4,5]) normalizes to mean=0, std=1
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
