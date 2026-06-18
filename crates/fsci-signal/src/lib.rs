@@ -7436,6 +7436,8 @@ pub fn lfilter_with_state(
             "a[0] must not be zero".to_string(),
         ));
     }
+    validate_ba_coefficients_finite(b, a, "lfilter")?;
+    validate_real_values_finite(x, "lfilter input samples must be finite")?;
 
     let a0 = a[0];
     let nb = b.len();
@@ -7461,6 +7463,7 @@ pub fn lfilter_with_state(
                 nfilt - 1
             )));
         }
+        validate_real_values_finite(initial, "lfilter initial conditions must be finite")?;
         let mut d_init = vec![0.0; nfilt];
         d_init[..nfilt - 1].copy_from_slice(initial);
         d_init
@@ -7648,6 +7651,8 @@ pub fn filtfilt_with_padtype(
             "input must have length >= 3 for filtfilt".to_string(),
         ));
     }
+    validate_ba_coefficients_finite(b, a, "filtfilt")?;
+    validate_real_values_finite(x, "filtfilt input samples must be finite")?;
 
     let nfilt = b.len().max(a.len());
     // scipy filtfilt's default edge is 3·max(len(b), len(a)) — three full
@@ -7733,6 +7738,8 @@ pub fn sosfilt(sos: &[SosSection], x: &[f64]) -> Result<Vec<f64>, SignalError> {
             "sos must not be empty".to_string(),
         ));
     }
+    validate_sos_coefficients_finite(sos, "sosfilt")?;
+    validate_real_values_finite(x, "sosfilt input samples must be finite")?;
 
     let mut signal = x.to_vec();
 
@@ -7784,6 +7791,8 @@ pub fn sosfiltfilt(sos: &[SosSection], x: &[f64]) -> Result<Vec<f64>, SignalErro
             "input must have length >= 3 for sosfiltfilt".to_string(),
         ));
     }
+    validate_sos_coefficients_finite(sos, "sosfiltfilt")?;
+    validate_real_values_finite(x, "sosfiltfilt input samples must be finite")?;
 
     // Determine padding length, matching scipy.signal.sosfiltfilt:
     //   ntaps = 2*n_sections + 1 - min(#sections with b2==0, #sections with a2==0)
@@ -8450,6 +8459,31 @@ fn validate_ba_coefficients_finite(
         });
     }
     Ok(())
+}
+
+fn validate_real_values_finite(values: &[f64], detail: &str) -> Result<(), SignalError> {
+    if values.iter().all(|value| value.is_finite()) {
+        return Ok(());
+    }
+    Err(SignalError::NonFiniteInput {
+        detail: detail.to_string(),
+    })
+}
+
+fn validate_sos_coefficients_finite(
+    sos: &[SosSection],
+    context: &str,
+) -> Result<(), SignalError> {
+    if sos
+        .iter()
+        .flat_map(|section| section.iter())
+        .all(|value| value.is_finite())
+    {
+        return Ok(());
+    }
+    Err(SignalError::NonFiniteInput {
+        detail: format!("{context} SOS coefficients must be finite"),
+    })
 }
 
 /// Compute the frequency response of a digital filter over half or the whole unit circle.
@@ -20146,6 +20180,34 @@ mod tests {
     }
 
     #[test]
+    fn lfilter_rejects_non_finite_values() {
+        assert_eq!(
+            lfilter(&[1.0, f64::NAN], &[1.0], &[1.0], None),
+            Err(SignalError::NonFiniteInput {
+                detail: "lfilter numerator coefficients must be finite".to_string(),
+            })
+        );
+        assert_eq!(
+            lfilter(&[1.0], &[1.0, f64::INFINITY], &[1.0], None),
+            Err(SignalError::NonFiniteInput {
+                detail: "lfilter denominator coefficients must be finite".to_string(),
+            })
+        );
+        assert_eq!(
+            lfilter(&[1.0], &[1.0], &[f64::NEG_INFINITY], None),
+            Err(SignalError::NonFiniteInput {
+                detail: "lfilter input samples must be finite".to_string(),
+            })
+        );
+        assert_eq!(
+            lfilter(&[1.0, 0.0], &[1.0], &[1.0], Some(&[f64::NAN])),
+            Err(SignalError::NonFiniteInput {
+                detail: "lfilter initial conditions must be finite".to_string(),
+            })
+        );
+    }
+
+    #[test]
     fn lfiltic_matches_scipy_reference_vector() {
         let zi = lfiltic(&[1.0, 2.0, 3.0], &[1.0, 0.5], &[0.5], None).expect("lfiltic");
         let expected = [-0.25, 0.0];
@@ -20326,6 +20388,29 @@ mod tests {
     fn filtfilt_empty_coefficients_rejected() {
         assert!(filtfilt(&[], &[1.0], &[1.0, 2.0, 3.0]).is_err());
         assert!(filtfilt(&[1.0], &[], &[1.0, 2.0, 3.0]).is_err());
+    }
+
+    #[test]
+    fn filtfilt_rejects_non_finite_values() {
+        let x = [0.0, 1.0, 0.0, -1.0];
+        assert_eq!(
+            filtfilt(&[1.0, f64::INFINITY], &[1.0], &x),
+            Err(SignalError::NonFiniteInput {
+                detail: "filtfilt numerator coefficients must be finite".to_string(),
+            })
+        );
+        assert_eq!(
+            filtfilt(&[1.0], &[1.0, f64::NAN], &x),
+            Err(SignalError::NonFiniteInput {
+                detail: "filtfilt denominator coefficients must be finite".to_string(),
+            })
+        );
+        assert_eq!(
+            filtfilt(&[1.0], &[1.0], &[0.0, f64::NEG_INFINITY, 0.0, 1.0]),
+            Err(SignalError::NonFiniteInput {
+                detail: "filtfilt input samples must be finite".to_string(),
+            })
+        );
     }
 
     #[test]
@@ -21654,6 +21739,37 @@ mod tests {
     #[test]
     fn sosfilt_empty_rejected() {
         assert!(sosfilt(&[], &[1.0]).is_err());
+    }
+
+    #[test]
+    fn sos_filters_reject_non_finite_values() {
+        let sos = vec![[1.0, 0.0, 0.0, 1.0, 0.0, 0.0]];
+        assert_eq!(
+            sosfilt(&sos, &[0.0, f64::NAN]),
+            Err(SignalError::NonFiniteInput {
+                detail: "sosfilt input samples must be finite".to_string(),
+            })
+        );
+
+        let bad_sos = vec![[1.0, f64::INFINITY, 0.0, 1.0, 0.0, 0.0]];
+        assert_eq!(
+            sosfilt(&bad_sos, &[0.0, 1.0]),
+            Err(SignalError::NonFiniteInput {
+                detail: "sosfilt SOS coefficients must be finite".to_string(),
+            })
+        );
+        assert_eq!(
+            sosfiltfilt(&sos, &[0.0, 1.0, f64::NEG_INFINITY, 0.0]),
+            Err(SignalError::NonFiniteInput {
+                detail: "sosfiltfilt input samples must be finite".to_string(),
+            })
+        );
+        assert_eq!(
+            sosfiltfilt(&bad_sos, &[0.0, 1.0, 0.0, -1.0]),
+            Err(SignalError::NonFiniteInput {
+                detail: "sosfiltfilt SOS coefficients must be finite".to_string(),
+            })
+        );
     }
 
     #[test]
