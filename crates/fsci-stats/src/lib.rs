@@ -72646,6 +72646,26 @@ mod tests {
     }
 
     #[test]
+    fn weighted_corr_and_cronbach_match_analytic() {
+        // corrcoef_weighted/cronbachs_alpha were previously untested.
+        // corrcoef_weighted with uniform weights = Pearson: y=2x -> +1, y=-x -> -1.
+        let w = [1.0, 1.0, 1.0, 1.0];
+        assert!(
+            (corrcoef_weighted(&[1.0, 2.0, 3.0, 4.0], &[2.0, 4.0, 6.0, 8.0], &w) - 1.0).abs() < 1e-12,
+            "perfect +corr"
+        );
+        assert!(
+            (corrcoef_weighted(&[1.0, 2.0, 3.0, 4.0], &[-1.0, -2.0, -3.0, -4.0], &w) + 1.0).abs()
+                < 1e-12,
+            "perfect -corr"
+        );
+        // Cronbach's alpha for k identical items = 1.
+        let item = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let alpha = cronbachs_alpha(&[&item[..], &item[..], &item[..]]);
+        assert!((alpha - 1.0).abs() < 1e-10, "identical items alpha=1");
+    }
+
+    #[test]
     fn stats_helpers2_match_sklearn_scipy() {
         // fbeta_score, expected_freq, contingency_table were previously untested.
         assert!(
