@@ -182,6 +182,20 @@ fn checked_2d_element_count(
     Ok(expected)
 }
 
+fn checked_nonempty_2d_shapes(
+    a_shape: (usize, usize),
+    v_shape: (usize, usize),
+) -> Result<(), SignalError> {
+    let (ar, ac) = a_shape;
+    let (vr, vc) = v_shape;
+    if ar == 0 || ac == 0 || vr == 0 || vc == 0 {
+        return Err(SignalError::InvalidArgument(
+            "inputs must be non-empty".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 fn checked_kernel_area(label: &str, rows: usize, cols: usize) -> Result<usize, SignalError> {
     rows.checked_mul(cols).ok_or_else(|| {
         SignalError::InvalidArgument(format!("{label} area is too large"))
@@ -1193,11 +1207,7 @@ pub fn correlate2d(
     let (vr, vc) = v_shape;
     checked_2d_element_count(a_shape, a.len())?;
     let v_len = checked_2d_element_count(v_shape, v.len())?;
-    if ar == 0 || ac == 0 || vr == 0 || vc == 0 {
-        return Err(SignalError::InvalidArgument(
-            "inputs must be non-empty".to_string(),
-        ));
-    }
+    checked_nonempty_2d_shapes(a_shape, v_shape)?;
 
     // Reverse v in both dimensions for correlation
     let mut v_rev = vec![0.0; v_len];
@@ -1338,6 +1348,7 @@ pub fn convolve2d(
     let a_len = checked_2d_element_count(a_shape, a.len())?;
     let (vr, vc) = v_shape;
     let v_len = checked_2d_element_count(v_shape, v.len())?;
+    checked_nonempty_2d_shapes(a_shape, v_shape)?;
     // Flip the kernel in both axes; correlate2d flips again internally, so the
     // net effect is a true convolution Σ a[i,j]·v[m-i, n-j].
     let mut v_flip = vec![0.0; v_len];
@@ -1471,6 +1482,7 @@ pub fn correlate2d_with_boundary(
     let (vr, vc) = v_shape;
     checked_2d_element_count(a_shape, a.len())?;
     checked_2d_element_count(v_shape, v.len())?;
+    checked_nonempty_2d_shapes(a_shape, v_shape)?;
     if matches!(mode, ConvolveMode::Valid) && (ar < vr || ac < vc) {
         return Err(SignalError::InvalidArgument(
             "in valid mode, a must be at least as large as v".to_string(),
@@ -1503,6 +1515,7 @@ pub fn convolve2d_with_boundary(
     let (vr, vc) = v_shape;
     checked_2d_element_count(a_shape, a.len())?;
     let v_len = checked_2d_element_count(v_shape, v.len())?;
+    checked_nonempty_2d_shapes(a_shape, v_shape)?;
     if matches!(mode, ConvolveMode::Valid) && (ar < vr || ac < vc) {
         return Err(SignalError::InvalidArgument(
             "in valid mode, a must be at least as large as v".to_string(),
@@ -23980,6 +23993,62 @@ mod tests {
             .unwrap(),
             vec![66.0, 56.0, 63.0, 48.0, 38.0, 64.0, 62.0, 60.0, 74.0]
         );
+    }
+
+    #[test]
+    fn boundary_2d_convolutions_reject_empty_shapes() {
+        fn assert_empty_shape<T>(result: Result<T, SignalError>) {
+            assert!(
+                matches!(
+                    result,
+                    Err(SignalError::InvalidInputLength {
+                        expected: 1,
+                        actual: 0
+                    })
+                ),
+                "expected empty-shape argument error"
+            );
+        }
+
+        let empty: [f64; 0] = [];
+        let tap = [1.0_f64];
+
+        assert_empty_shape(correlate2d_with_boundary(
+            &empty,
+            (0, 1),
+            &tap,
+            (1, 1),
+            ConvolveMode::Same,
+            Boundary2d::Wrap,
+            0.0,
+        ));
+        assert_empty_shape(convolve2d_with_boundary(
+            &empty,
+            (1, 0),
+            &tap,
+            (1, 1),
+            ConvolveMode::Same,
+            Boundary2d::Symm,
+            0.0,
+        ));
+        assert_empty_shape(correlate2d_with_boundary(
+            &tap,
+            (1, 1),
+            &empty,
+            (0, 1),
+            ConvolveMode::Same,
+            Boundary2d::Fill,
+            10.0,
+        ));
+        assert_empty_shape(convolve2d_with_boundary(
+            &tap,
+            (1, 1),
+            &empty,
+            (1, 0),
+            ConvolveMode::Same,
+            Boundary2d::Wrap,
+            0.0,
+        ));
     }
 
     // ── Hilbert transform tests ──────────────────────────────────────
