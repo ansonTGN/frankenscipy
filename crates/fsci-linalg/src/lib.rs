@@ -11225,6 +11225,12 @@ pub static DISABLE_TALL_PINV_STREAMING_CERT: std::sync::atomic::AtomicBool =
 #[doc(hidden)]
 pub static DISABLE_TALL_PINV_ROW_MAJOR_CERT: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
+/// Runtime switch to force the tall `pinv` TRSM route to solve into the
+/// column-major `DMatrix` result before copying to public rows. Defaults off.
+/// `#[doc(hidden)]`; internal.
+#[doc(hidden)]
+pub static DISABLE_TALL_PINV_ROW_MAJOR_SOLVE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 /// Loose conditioning sanity floor for the solve-only normal-equations lstsq
 /// route: spectra below this rcond are hopeless even with refinement, so we
 /// fall back to the public thin-SVD route. Real acceptance is governed by the
@@ -11271,6 +11277,14 @@ fn tall_pinv_row_major_cert_disabled() -> bool {
     }
     static ENV: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ENV.get_or_init(|| std::env::var_os("FSCI_DISABLE_TALL_PINV_ROW_MAJOR_CERT").is_some())
+}
+
+fn tall_pinv_row_major_solve_disabled() -> bool {
+    if DISABLE_TALL_PINV_ROW_MAJOR_SOLVE.load(std::sync::atomic::Ordering::Relaxed) {
+        return true;
+    }
+    static ENV: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENV.get_or_init(|| std::env::var_os("FSCI_DISABLE_TALL_PINV_ROW_MAJOR_SOLVE").is_some())
 }
 
 fn pinv_full_rank_tall_cholesky(
@@ -11320,17 +11334,32 @@ fn pinv_full_rank_tall_cholesky_with_min_cols(
     }
 
     let chol = Cholesky::new(gram)?;
-    let pinv = if tall_pinv_trsm_disabled() {
-        chol.solve(&a_t)
+    let pseudo_inverse = if tall_pinv_trsm_disabled() {
+        let pinv = chol.solve(&a_t);
+        if pinv.iter().any(|value| !value.is_finite()) {
+            return None;
+        }
+        rows_from_dmatrix(&pinv)
+    } else if tall_pinv_row_major_solve_disabled() {
+        let pinv = cholesky_solve_matrix_rhs_batched(&chol, &a_t)?;
+        if pinv.iter().any(|value| !value.is_finite()) {
+            return None;
+        }
+        rows_from_dmatrix(&pinv)
     } else {
-        cholesky_solve_matrix_rhs_batched(&chol, &a_t)?
+        let rows = cholesky_solve_matrix_rhs_rows_batched(&chol, &a_t)?;
+        if rows
+            .iter()
+            .flat_map(|row| row.iter())
+            .any(|value| !value.is_finite())
+        {
+            return None;
+        }
+        rows
     };
-    if pinv.iter().any(|value| !value.is_finite()) {
-        return None;
-    }
-    let pseudo_inverse = rows_from_dmatrix(&pinv);
 
     let max_error = if tall_pinv_streaming_cert_disabled() {
+        let pinv = dmatrix_from_rows(&pseudo_inverse).ok()?;
         let right_inverse = &pinv * matrix;
         let mut max_error = 0.0_f64;
         for row in 0..cols {
@@ -11341,6 +11370,7 @@ fn pinv_full_rank_tall_cholesky_with_min_cols(
         }
         max_error
     } else if tall_pinv_row_major_cert_disabled() {
+        let pinv = dmatrix_from_rows(&pseudo_inverse).ok()?;
         pinv_right_inverse_max_error_streaming(&pinv, matrix)?
     } else {
         pinv_right_inverse_max_error_streaming_rows(&pseudo_inverse, matrix)?
@@ -15889,6 +15919,68 @@ fn cholesky_solve_matrix_rhs_batched(
     Some(out)
 }
 
+/// Solve `L·Lᵀ·X = RHS` and return `X` directly in the public row-major layout.
+/// This is the same triangular substitution as
+/// [`cholesky_solve_matrix_rhs_batched`], but skips the intermediate
+/// column-major `DMatrix` assembly for callers that already need rows.
+#[allow(clippy::needless_range_loop)]
+fn cholesky_solve_matrix_rhs_rows_batched(
+    chol: &Cholesky<f64, Dyn>,
+    rhs: &DMatrix<f64>,
+) -> Option<Vec<Vec<f64>>> {
+    let l = chol.l_dirty();
+    let n = l.nrows();
+    let w = rhs.ncols();
+    if l.ncols() != n || rhs.nrows() != n {
+        return None;
+    }
+    if n == 0 {
+        return Some(Vec::new());
+    }
+    if w == 0 {
+        return Some(vec![Vec::new(); n]);
+    }
+
+    let nthreads = if tall_pinv_trsm_threads_disabled() {
+        1
+    } else {
+        matmul_thread_count(n, n, w).min(w.div_ceil(64)).max(1)
+    };
+    if nthreads <= 1 {
+        let flat = cholesky_solve_matrix_rhs_columns_flat(chol, rhs, 0, w)?;
+        return Some(cholesky_rhs_flat_to_rows(n, w, &flat));
+    }
+
+    let chunk = w.div_ceil(nthreads);
+    let blocks: Vec<Option<(usize, Vec<f64>)>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..nthreads)
+            .filter_map(|thread_idx| {
+                let c0 = thread_idx * chunk;
+                if c0 >= w {
+                    return None;
+                }
+                let c1 = (c0 + chunk).min(w);
+                Some(scope.spawn(move || {
+                    cholesky_solve_matrix_rhs_columns_flat(chol, rhs, c0, c1)
+                        .map(|block| (c0, block))
+                }))
+            })
+            .collect();
+        handles.into_iter().map(|handle| handle.join().unwrap()).collect()
+    });
+
+    let mut out = vec![vec![0.0; w]; n];
+    for block in blocks {
+        let (c0, block) = block?;
+        let block_w = block.len() / n;
+        for row in 0..n {
+            let src = row * block_w;
+            out[row][c0..c0 + block_w].copy_from_slice(&block[src..src + block_w]);
+        }
+    }
+    Some(out)
+}
+
 #[allow(clippy::needless_range_loop)]
 fn cholesky_solve_matrix_rhs_columns(
     chol: &Cholesky<f64, Dyn>,
@@ -15896,6 +15988,19 @@ fn cholesky_solve_matrix_rhs_columns(
     c0: usize,
     c1: usize,
 ) -> Option<DMatrix<f64>> {
+    let n = chol.l_dirty().nrows();
+    let w = c1.checked_sub(c0)?;
+    let b = cholesky_solve_matrix_rhs_columns_flat(chol, rhs, c0, c1)?;
+    Some(DMatrix::from_fn(n, w, |row, col| b[row * w + col]))
+}
+
+#[allow(clippy::needless_range_loop)]
+fn cholesky_solve_matrix_rhs_columns_flat(
+    chol: &Cholesky<f64, Dyn>,
+    rhs: &DMatrix<f64>,
+    c0: usize,
+    c1: usize,
+) -> Option<Vec<f64>> {
     let l = chol.l_dirty();
     let n = l.nrows();
     let w = c1.checked_sub(c0)?;
@@ -15957,7 +16062,16 @@ fn cholesky_solve_matrix_rhs_columns(
         }
     }
 
-    Some(DMatrix::from_fn(n, w, |row, col| b[row * w + col]))
+    Some(b)
+}
+
+fn cholesky_rhs_flat_to_rows(n: usize, w: usize, flat: &[f64]) -> Vec<Vec<f64>> {
+    let mut rows = vec![vec![0.0; w]; n];
+    for row in 0..n {
+        let src = row * w;
+        rows[row].copy_from_slice(&flat[src..src + w]);
+    }
+    rows
 }
 
 /// Multi-RHS triangular solve for the inverse: solve `A·X[:, c0..c1] = I[:, c0..c1]`
@@ -18917,8 +19031,16 @@ mod tests {
 
         let expected = chol.solve(&a_t);
         let actual = cholesky_solve_matrix_rhs_batched(&chol, &a_t).expect("batched solve");
+        let actual_rows =
+            cholesky_solve_matrix_rhs_rows_batched(&chol, &a_t).expect("row-major batched solve");
 
         assert!(max_abs_dmatrix_diff(&actual, &expected) <= 1e-12);
+        assert_close_matrix(
+            &actual_rows,
+            &rows_from_dmatrix(&expected),
+            1e-12,
+            1e-12,
+        );
     }
 
     #[test]

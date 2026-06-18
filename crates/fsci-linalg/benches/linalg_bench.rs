@@ -376,6 +376,7 @@ fn bench_baseline_pinv(c: &mut Criterion) {
             fsci_linalg::DISABLE_TALL_PINV_TRSM_THREADS.store(false, Relaxed);
             fsci_linalg::DISABLE_TALL_PINV_STREAMING_CERT.store(false, Relaxed);
             fsci_linalg::DISABLE_TALL_PINV_ROW_MAJOR_CERT.store(false, Relaxed);
+            fsci_linalg::DISABLE_TALL_PINV_ROW_MAJOR_SOLVE.store(false, Relaxed);
             bencher.iter(|| pinv(&a, PinvOptions::default()).unwrap());
         });
         group.bench_function(format!("{rows}x{n}_trsm_serial"), |bencher| {
@@ -383,30 +384,45 @@ fn bench_baseline_pinv(c: &mut Criterion) {
             fsci_linalg::DISABLE_TALL_PINV_TRSM_THREADS.store(true, Relaxed);
             fsci_linalg::DISABLE_TALL_PINV_STREAMING_CERT.store(false, Relaxed);
             fsci_linalg::DISABLE_TALL_PINV_ROW_MAJOR_CERT.store(false, Relaxed);
+            fsci_linalg::DISABLE_TALL_PINV_ROW_MAJOR_SOLVE.store(false, Relaxed);
             bencher.iter(|| pinv(&a, PinvOptions::default()).unwrap());
             fsci_linalg::DISABLE_TALL_PINV_TRSM_THREADS.store(false, Relaxed);
+        });
+        group.bench_function(format!("{rows}x{n}_dmatrix_solve"), |bencher| {
+            fsci_linalg::DISABLE_TALL_PINV_TRSM.store(false, Relaxed);
+            fsci_linalg::DISABLE_TALL_PINV_TRSM_THREADS.store(false, Relaxed);
+            fsci_linalg::DISABLE_TALL_PINV_STREAMING_CERT.store(false, Relaxed);
+            fsci_linalg::DISABLE_TALL_PINV_ROW_MAJOR_CERT.store(false, Relaxed);
+            fsci_linalg::DISABLE_TALL_PINV_ROW_MAJOR_SOLVE.store(true, Relaxed);
+            bencher.iter(|| pinv(&a, PinvOptions::default()).unwrap());
+            fsci_linalg::DISABLE_TALL_PINV_ROW_MAJOR_SOLVE.store(false, Relaxed);
         });
         group.bench_function(format!("{rows}x{n}_dmatrix_cert"), |bencher| {
             fsci_linalg::DISABLE_TALL_PINV_TRSM.store(false, Relaxed);
             fsci_linalg::DISABLE_TALL_PINV_TRSM_THREADS.store(false, Relaxed);
             fsci_linalg::DISABLE_TALL_PINV_STREAMING_CERT.store(false, Relaxed);
             fsci_linalg::DISABLE_TALL_PINV_ROW_MAJOR_CERT.store(true, Relaxed);
+            fsci_linalg::DISABLE_TALL_PINV_ROW_MAJOR_SOLVE.store(true, Relaxed);
             bencher.iter(|| pinv(&a, PinvOptions::default()).unwrap());
             fsci_linalg::DISABLE_TALL_PINV_ROW_MAJOR_CERT.store(false, Relaxed);
+            fsci_linalg::DISABLE_TALL_PINV_ROW_MAJOR_SOLVE.store(false, Relaxed);
         });
         group.bench_function(format!("{rows}x{n}_materialized_cert"), |bencher| {
             fsci_linalg::DISABLE_TALL_PINV_TRSM.store(false, Relaxed);
             fsci_linalg::DISABLE_TALL_PINV_TRSM_THREADS.store(false, Relaxed);
             fsci_linalg::DISABLE_TALL_PINV_STREAMING_CERT.store(true, Relaxed);
             fsci_linalg::DISABLE_TALL_PINV_ROW_MAJOR_CERT.store(false, Relaxed);
+            fsci_linalg::DISABLE_TALL_PINV_ROW_MAJOR_SOLVE.store(true, Relaxed);
             bencher.iter(|| pinv(&a, PinvOptions::default()).unwrap());
             fsci_linalg::DISABLE_TALL_PINV_STREAMING_CERT.store(false, Relaxed);
+            fsci_linalg::DISABLE_TALL_PINV_ROW_MAJOR_SOLVE.store(false, Relaxed);
         });
         group.bench_function(format!("{rows}x{n}_chol_solve"), |bencher| {
             fsci_linalg::DISABLE_TALL_PINV_TRSM.store(true, Relaxed);
             fsci_linalg::DISABLE_TALL_PINV_TRSM_THREADS.store(false, Relaxed);
             fsci_linalg::DISABLE_TALL_PINV_STREAMING_CERT.store(false, Relaxed);
             fsci_linalg::DISABLE_TALL_PINV_ROW_MAJOR_CERT.store(false, Relaxed);
+            fsci_linalg::DISABLE_TALL_PINV_ROW_MAJOR_SOLVE.store(false, Relaxed);
             bencher.iter(|| pinv(&a, PinvOptions::default()).unwrap());
             fsci_linalg::DISABLE_TALL_PINV_TRSM.store(false, Relaxed);
         });
