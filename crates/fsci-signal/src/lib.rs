@@ -4509,6 +4509,11 @@ pub fn bilinear_zpk(
     fs: f64,
 ) -> Result<(Vec<fsci_fft::Complex64>, Vec<fsci_fft::Complex64>, f64), SignalError> {
     check_proper_prototype("bilinear_zpk", z, p)?;
+    if !(fs.is_finite() && fs > 0.0) {
+        return Err(SignalError::InvalidParameter {
+            detail: "fs must be finite and positive".to_string(),
+        });
+    }
     let fs2 = 2.0 * fs;
     let bilin = |c: fsci_fft::Complex64| -> fsci_fft::Complex64 {
         // (fs2 + c) / (fs2 - c)
@@ -25125,6 +25130,18 @@ mod tests {
                 r < 1.0,
                 "digital pole {:?} has |z|={r}, must be < 1",
                 (re, im)
+            );
+        }
+    }
+
+    #[test]
+    fn bilinear_zpk_rejects_invalid_sampling_frequency() {
+        let z: Vec<fsci_fft::Complex64> = Vec::new();
+        let p: Vec<fsci_fft::Complex64> = vec![(-1.0, 0.0)];
+        for fs in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert!(
+                bilinear_zpk(&z, &p, 1.0, fs).is_err(),
+                "fs={fs:?} should be rejected"
             );
         }
     }
