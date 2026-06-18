@@ -5693,6 +5693,30 @@ mod tests {
     }
 
     #[test]
+    fn pdist_extra_metrics_match_scipy() {
+        // scipy.spatial.distance.pdist cosine/canberra/braycurtis/correlation.
+        let x = vec![vec![1.0, 2.0, 3.0], vec![4.0, 6.0, 8.0]];
+        assert!(
+            (pdist(&x, DistanceMetric::Cosine).unwrap()[0] - 0.007_416_666_029_069_652).abs()
+                < 1e-12,
+            "cosine"
+        );
+        assert!(
+            (pdist(&x, DistanceMetric::Canberra).unwrap()[0] - 1.554_545_454_545_454_7).abs()
+                < 1e-12,
+            "canberra"
+        );
+        assert!(
+            (pdist(&x, DistanceMetric::Braycurtis).unwrap()[0] - 0.5).abs() < 1e-12,
+            "braycurtis"
+        );
+        assert!(
+            pdist(&x, DistanceMetric::Correlation).unwrap()[0].abs() < 1e-12,
+            "correlation ~0"
+        );
+    }
+
+    #[test]
     fn cdist_pdist_match_scipy() {
         // scipy.spatial.distance.cdist (euclidean) and pdist (condensed), 1.17.1.
         let a = vec![vec![0.0, 0.0], vec![1.0, 1.0]];
