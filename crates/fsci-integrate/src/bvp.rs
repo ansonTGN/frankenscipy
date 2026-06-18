@@ -119,6 +119,7 @@ where
 
         // Evaluate boundary condition residual
         let residual = bc(&y0, &yb);
+        validate_boundary_residual_len(&residual, n)?;
         let residual_norm: f64 = residual.iter().map(|r| r * r).sum::<f64>().sqrt();
 
         if residual_norm < options.tol {
@@ -143,6 +144,7 @@ where
                 BvpError::IvpFailed("IVP perturbation result is empty".to_string())
             })?;
             let residual_pert = bc(&y0_pert, yb_pert);
+            validate_boundary_residual_len(&residual_pert, n)?;
             for i in 0..n {
                 jac[i][j] = (residual_pert[i] - residual[i]) / eps_j;
             }
@@ -164,6 +166,7 @@ where
         .last()
         .ok_or_else(|| BvpError::IvpFailed("Final IVP result is empty".to_string()))?;
     let residual = bc(&y0, yb);
+    validate_boundary_residual_len(&residual, n)?;
     let residual_norm: f64 = residual.iter().map(|r| r * r).sum::<f64>().sqrt();
 
     if residual_norm < options.tol {
@@ -180,6 +183,16 @@ where
             residual: residual_norm,
         })
     }
+}
+
+fn validate_boundary_residual_len(residual: &[f64], expected: usize) -> Result<(), BvpError> {
+    if residual.len() != expected {
+        return Err(BvpError::InvalidArgument(format!(
+            "bc residual length must match y_guess length (expected {expected}, got {})",
+            residual.len()
+        )));
+    }
+    Ok(())
 }
 
 /// Internal IVP solver wrapper.
@@ -348,5 +361,39 @@ mod tests {
         let err = solve_bvp(&mut f, &bc, (0.0, 1.0), &[], BvpOptions::default())
             .expect_err("empty guess");
         assert!(matches!(err, BvpError::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn bvp_rejects_short_boundary_residual() {
+        let mut f = |_t: f64, _y: &[f64]| vec![0.0, 0.0];
+        let bc = |_ya: &[f64], _yb: &[f64]| vec![0.0];
+        let err = solve_bvp(
+            &mut f,
+            &bc,
+            (0.0, 1.0),
+            &[0.0, 0.0],
+            BvpOptions::default(),
+        )
+        .expect_err("short boundary residual");
+        assert!(
+            matches!(err, BvpError::InvalidArgument(msg) if msg.contains("expected 2, got 1"))
+        );
+    }
+
+    #[test]
+    fn bvp_rejects_long_boundary_residual() {
+        let mut f = |_t: f64, _y: &[f64]| vec![0.0, 0.0];
+        let bc = |_ya: &[f64], _yb: &[f64]| vec![0.0, 0.0, 0.0];
+        let err = solve_bvp(
+            &mut f,
+            &bc,
+            (0.0, 1.0),
+            &[0.0, 0.0],
+            BvpOptions::default(),
+        )
+        .expect_err("long boundary residual");
+        assert!(
+            matches!(err, BvpError::InvalidArgument(msg) if msg.contains("expected 2, got 3"))
+        );
     }
 }
