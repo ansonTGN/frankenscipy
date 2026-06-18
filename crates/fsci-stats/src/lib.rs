@@ -16696,6 +16696,43 @@ impl Erlang {
         assert!(rate > 0.0, "rate must be positive");
         Self { k, rate }
     }
+
+    /// Log-density at many points, hoisting `k·ln(λ)` and `lnΓ(k)` out of the
+    /// per-point loop. Byte-identical to mapping `logpdf` (lead leading, lnΓ last
+    /// subtraction); x≤0 delegates to `pdf`.
+    #[must_use]
+    pub fn logpdf_many(&self, xs: &[f64]) -> Vec<f64> {
+        let k = self.k as f64;
+        let lambda = self.rate;
+        let k_lnlambda = k * lambda.ln();
+        let lg = ln_gamma(k);
+        xs.iter()
+            .map(|&x| {
+                if x <= 0.0 {
+                    return self.pdf(x).ln();
+                }
+                k_lnlambda + (k - 1.0) * x.ln() - lambda * x - lg
+            })
+            .collect()
+    }
+
+    /// Density at many points; hoists `λ^k` (the lead factor) and `Γ(k)` (the
+    /// divisor) like [`logpdf_many`](Self::logpdf_many). Byte-identical to `pdf`.
+    #[must_use]
+    pub fn pdf_many(&self, xs: &[f64]) -> Vec<f64> {
+        let k = self.k as f64;
+        let lambda = self.rate;
+        let coeff = lambda.powf(k);
+        let gamma_k = ln_gamma(k).exp();
+        xs.iter()
+            .map(|&x| {
+                if x < 0.0 {
+                    return 0.0;
+                }
+                coeff * x.powf(k - 1.0) * (-lambda * x).exp() / gamma_k
+            })
+            .collect()
+    }
 }
 
 impl ContinuousDistribution for Erlang {
@@ -53145,6 +53182,14 @@ mod tests {
         assert!((e.pdf(2.0) - 0.091_969_860_292_860_57).abs() < 1e-12, "pdf(2)");
         assert!((e.pdf(4.0) - 0.135_335_283_236_612_7).abs() < 1e-12, "pdf(4)");
         assert!((e.cdf(4.0) - 0.323_323_583_816_936_54).abs() < 1e-12, "cdf(4)");
+        // Batch pdf_many/logpdf_many (λ^k/Γ(k) hoisted) byte-identical to per-point.
+        let xs = [-1.0, 0.0, 1.0, 2.0, 4.0, 9.0];
+        let pm = e.pdf_many(&xs);
+        let lpm = e.logpdf_many(&xs);
+        for (i, &x) in xs.iter().enumerate() {
+            assert_eq!(pm[i], e.pdf(x), "pdf_many != pdf at {x}");
+            assert_eq!(lpm[i], e.logpdf(x), "logpdf_many != logpdf at {x}");
+        }
     }
 
     /// frankenscipy-fubyp.
