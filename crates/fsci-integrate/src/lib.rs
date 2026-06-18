@@ -59,6 +59,15 @@ where
     if t.is_empty() {
         return Ok(vec![]);
     }
+    if y0.is_empty() {
+        return Err(IntegrateValidationError::EmptyY0);
+    }
+    if y0.iter().any(|value| !value.is_finite()) {
+        return Err(IntegrateValidationError::NonFiniteY0);
+    }
+    if t.iter().any(|value| !value.is_finite()) {
+        return Err(IntegrateValidationError::NonFiniteSpan);
+    }
     if t.len() == 1 {
         return Ok(vec![y0.to_vec()]);
     }
@@ -86,4 +95,30 @@ where
     // wait, solve_ivp result.y is Vec<Vec<f64>> where each inner vector is the state at t_i.
     // Let's assume result.y matches the shape we need.
     Ok(result.y)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn odeint_single_point_rejects_empty_initial_state() {
+        let err = odeint(&mut |_y, _t| Vec::new(), &[], &[0.0])
+            .expect_err("single-point odeint should validate empty y0");
+        assert_eq!(err, IntegrateValidationError::EmptyY0);
+    }
+
+    #[test]
+    fn odeint_single_point_rejects_non_finite_initial_state() {
+        let err = odeint(&mut |_y, _t| vec![0.0], &[f64::NAN], &[0.0])
+            .expect_err("single-point odeint should validate y0");
+        assert_eq!(err, IntegrateValidationError::NonFiniteY0);
+    }
+
+    #[test]
+    fn odeint_single_point_rejects_non_finite_time() {
+        let err = odeint(&mut |_y, _t| vec![0.0], &[1.0], &[f64::NAN])
+            .expect_err("single-point odeint should validate t");
+        assert_eq!(err, IntegrateValidationError::NonFiniteSpan);
+    }
 }
