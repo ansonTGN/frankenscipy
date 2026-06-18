@@ -3237,7 +3237,20 @@ where
         return (0.0, 0.0);
     }
 
-    let volume: f64 = bounds.iter().map(|&(a, b)| b - a).product();
+    let mut volume = 1.0;
+    for &(a, b) in bounds {
+        if !a.is_finite() || !b.is_finite() {
+            return (f64::NAN, f64::INFINITY);
+        }
+        let width = b - a;
+        if !width.is_finite() {
+            return (f64::NAN, f64::INFINITY);
+        }
+        volume *= width;
+        if !volume.is_finite() {
+            return (f64::NAN, f64::INFINITY);
+        }
+    }
 
     // Each sample consumes exactly `d` LCG draws, so chunk-boundary RNG states
     // are reachable via an `(chunk*d)`-step LCG jump. Evaluate the (expensive)
@@ -3514,6 +3527,25 @@ mod tests {
                 rel < 1e-10,
                 "gauss_legendre n={n} on x^{deg}: rel error {rel:.3e} (got {v}, exact {exact})"
             );
+        }
+    }
+
+    #[test]
+    fn monte_carlo_integrate_rejects_non_finite_bounds() {
+        for bounds in [
+            vec![(f64::NAN, 1.0)],
+            vec![(0.0, f64::INFINITY)],
+            vec![(f64::NEG_INFINITY, 1.0)],
+            vec![(-f64::MAX, f64::MAX)],
+        ] {
+            let (integral, error) = monte_carlo_integrate(
+                |_| -> f64 { panic!("invalid bounds should not be sampled") },
+                &bounds,
+                8,
+                1,
+            );
+            assert!(integral.is_nan(), "bounds={bounds:?}");
+            assert_eq!(error, f64::INFINITY, "bounds={bounds:?}");
         }
     }
 
