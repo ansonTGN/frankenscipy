@@ -4666,15 +4666,28 @@ pub fn betweenness_centrality(graph: &CsrMatrix) -> Vec<f64> {
     let n = graph.shape().rows;
     let mut bc = vec![0.0; n];
 
+    // Per-source Brandes scratch buffers hoisted out of the source loop and reset
+    // each iteration: byte-identical results, O(n) allocations instead of O(n^2)
+    // (n sources x 6 buffers). frankenscipy-4lpma.
+    let mut stack: Vec<usize> = Vec::with_capacity(n);
+    let mut predecessors: Vec<Vec<usize>> = vec![Vec::new(); n];
+    let mut sigma = vec![0.0f64; n];
+    let mut dist = vec![-1i64; n];
+    let mut delta = vec![0.0f64; n];
+    let mut queue: std::collections::VecDeque<usize> = std::collections::VecDeque::with_capacity(n);
+
     for s in 0..n {
-        // BFS from s
-        let mut stack = Vec::new();
-        let mut predecessors: Vec<Vec<usize>> = vec![vec![]; n];
-        let mut sigma = vec![0.0f64; n]; // number of shortest paths
-        sigma[s] = 1.0;
-        let mut dist = vec![-1i64; n];
+        // Reset the reused buffers to the per-source initial state.
+        stack.clear();
+        for p in predecessors.iter_mut() {
+            p.clear();
+        }
+        sigma.iter_mut().for_each(|x| *x = 0.0);
+        sigma[s] = 1.0; // number of shortest paths
+        dist.iter_mut().for_each(|x| *x = -1);
         dist[s] = 0;
-        let mut queue = std::collections::VecDeque::new();
+        delta.iter_mut().for_each(|x| *x = 0.0);
+        queue.clear();
         queue.push_back(s);
 
         while let Some(v) = queue.pop_front() {
@@ -4697,8 +4710,7 @@ pub fn betweenness_centrality(graph: &CsrMatrix) -> Vec<f64> {
             }
         }
 
-        // Accumulate
-        let mut delta = vec![0.0; n];
+        // Accumulate (delta was reset to zero at the top of the source loop).
         while let Some(w) = stack.pop() {
             for &v in &predecessors[w] {
                 delta[v] += (sigma[v] / sigma[w]) * (1.0 + delta[w]);
