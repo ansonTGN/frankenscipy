@@ -2825,6 +2825,11 @@ where
             detail: "order must be positive".to_string(),
         });
     }
+    if !a.is_finite() || !b.is_finite() {
+        return Err(IntegrateValidationError::QuadInvalidBounds {
+            detail: "newton_cotes_quad bounds must be finite".to_string(),
+        });
+    }
     let weights = newton_cotes(order)?;
     let panel_width = (b - a) / n_panels as f64;
     let mut total = 0.0;
@@ -5492,6 +5497,28 @@ mod tests {
             "simp[2] = {}, expected 1/6",
             simp[2]
         );
+    }
+
+    #[test]
+    fn newton_cotes_quad_rejects_non_finite_bounds() {
+        for (a, b) in [
+            (f64::NAN, 1.0),
+            (0.0, f64::INFINITY),
+            (f64::NEG_INFINITY, 1.0),
+        ] {
+            let err = newton_cotes_quad(
+                |_| -> f64 { panic!("invalid Newton-Cotes bounds should not be sampled") },
+                a,
+                b,
+                2,
+                2,
+            )
+            .expect_err("invalid Newton-Cotes bounds");
+            assert!(matches!(
+                err,
+                IntegrateValidationError::QuadInvalidBounds { .. }
+            ));
+        }
     }
 
     #[test]
