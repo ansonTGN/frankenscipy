@@ -3127,6 +3127,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn polygamma_match_scipy() {
+        // scipy.special.polygamma(n, x): n=1 is trigamma (=pi^2/6 at x=1),
+        // n=2 is -2*zeta(3) at x=1.
+        let m = RuntimeMode::Strict;
+        let pg = |n: usize, x: f64| match polygamma(n, &SpecialTensor::RealScalar(x), m) {
+            Ok(SpecialTensor::RealScalar(v)) => v,
+            other => panic!("expected scalar, got {other:?}"),
+        };
+        assert!((pg(1, 1.0) - 1.644_934_066_848_226_6).abs() < 1e-13, "polygamma(1,1)=pi^2/6");
+        assert!((pg(1, 2.0) - 0.644_934_066_848_226_6).abs() < 1e-13, "polygamma(1,2)");
+        assert!((pg(2, 1.0) - -2.404_113_806_319_188).abs() < 1e-12, "polygamma(2,1)=-2 zeta(3)");
+    }
+
+    #[test]
     fn digamma_scalar_match_scipy() {
         // scipy.special.digamma (psi): digamma(1) = -gamma (Euler-Mascheroni),
         // digamma(2) = 1 - gamma, digamma(0.5) = -gamma - 2 ln 2.
