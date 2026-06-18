@@ -8472,6 +8472,21 @@ mod tests {
     }
 
     #[test]
+    fn fcluster_maxclust_match_scipy() {
+        // Single-linkage Z of [[0,0],[0,1],[5,5],[5,6]]. fcluster (maxclust):
+        // 2 clusters -> [1,1,2,2], 1 -> all 1, 4 -> [1,2,3,4]. Matches
+        // scipy.cluster.hierarchy.fcluster(Z, t, criterion='maxclust').
+        let z = [
+            [0.0, 1.0, 1.0, 2.0],
+            [2.0, 3.0, 1.0, 2.0],
+            [4.0, 5.0, 6.403_124_237_432_849, 4.0],
+        ];
+        assert_eq!(fcluster(&z, 2).expect("fc2"), vec![1, 1, 2, 2]);
+        assert_eq!(fcluster(&z, 1).expect("fc1"), vec![1, 1, 1, 1]);
+        assert_eq!(fcluster(&z, 4).expect("fc4"), vec![1, 2, 3, 4]);
+    }
+
+    #[test]
     fn linkage_single_match_scipy() {
         // scipy.cluster.hierarchy.linkage(X, method='single') Z-matrix for two
         // well-separated pairs; final merge distance = sqrt(41) (single linkage).
