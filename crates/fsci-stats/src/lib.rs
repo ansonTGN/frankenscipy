@@ -62013,6 +62013,17 @@ mod tests {
     }
 
     #[test]
+    fn argus_pdf_cdf_match_scipy() {
+        // Exact scipy.stats.argus(chi=1). The Argus suite covers entropy, moments,
+        // skew/kurt, and stability but no exact pdf/cdf at a point (the pdf uses
+        // the Psi normalization).
+        let a = Argus::new(1.0);
+        assert!((a.pdf(0.5) - 1.194_751_007_931_253_6).abs() < 1e-12, "pdf(0.5)");
+        assert!((a.pdf(0.8) - 1.609_553_552_268_713_9).abs() < 1e-12, "pdf(0.8)");
+        assert!((a.cdf(0.5) - 0.302_559_575_258_048).abs() < 1e-10, "cdf(0.5)");
+    }
+
+    #[test]
     fn argus_moments_match_scipy_reference_values() {
         let cases = [
             (1.0, (0.618_702_668_355_183_7, 0.052_156_512_541_978_56)),
