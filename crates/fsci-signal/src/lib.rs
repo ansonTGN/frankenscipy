@@ -182,6 +182,12 @@ fn checked_2d_element_count(
     Ok(expected)
 }
 
+fn checked_kernel_area(label: &str, rows: usize, cols: usize) -> Result<usize, SignalError> {
+    rows.checked_mul(cols).ok_or_else(|| {
+        SignalError::InvalidArgument(format!("{label} area is too large"))
+    })
+}
+
 impl std::fmt::Display for SignalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -1550,8 +1556,9 @@ pub fn sepfir2d(
         ));
     }
     let (nhr, nhc) = (hrow.len(), hcol.len());
+    let kernel_area = checked_kernel_area("sepfir2d kernel", nhc, nhr)?;
     // Separable kernel K[i][j] = hcol[i] * hrow[j].
-    let mut kernel = vec![0.0_f64; nhc * nhr];
+    let mut kernel = vec![0.0_f64; kernel_area];
     for i in 0..nhc {
         for j in 0..nhr {
             kernel[i * nhr + j] = hcol[i] * hrow[j];
@@ -11990,9 +11997,7 @@ pub fn medfilt2d(
             "kernel_size dimensions must be odd and >= 1".to_string(),
         ));
     }
-    let kernel_area = kr.checked_mul(kc).ok_or_else(|| {
-        SignalError::InvalidArgument("kernel_size area is too large".to_string())
-    })?;
+    let kernel_area = checked_kernel_area("kernel_size", kr, kc)?;
     if rows == 0 || cols == 0 {
         return Ok(vec![]);
     }
@@ -26841,6 +26846,20 @@ mod tests {
             assert!((g - e).abs() < 1e-12, "{g} vs {e}");
         }
         assert!(sepfir2d(&x, (3, 5), &hrow, &hcol).is_err());
+    }
+
+    #[test]
+    fn sepfir2d_rejects_overflowing_kernel_area() {
+        let err = checked_kernel_area("sepfir2d kernel", usize::MAX, 3)
+            .expect_err("overflowing separable kernel area should fail");
+        assert!(
+            matches!(
+                err,
+                SignalError::InvalidParameter { ref detail }
+                    if detail == "sepfir2d kernel area is too large"
+            ),
+            "expected checked sepfir2d kernel-area overflow error, got {err:?}"
+        );
     }
 
     #[test]
