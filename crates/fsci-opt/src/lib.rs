@@ -7447,6 +7447,25 @@ mod tests {
     }
 
     #[test]
+    fn linear_sum_assignment_match_scipy() {
+        // scipy.optimize.linear_sum_assignment: minimal-cost assignment. Assert the
+        // (unique) optimal cost and a valid permutation rather than over-pinning a
+        // possibly-tie-broken column order.
+        let cost = vec![
+            vec![4.0, 1.0, 3.0],
+            vec![2.0, 0.0, 5.0],
+            vec![3.0, 2.0, 2.0],
+        ];
+        let (row, col) = linear_sum_assignment(&cost).expect("lsa");
+        assert_eq!(row, vec![0, 1, 2], "rows returned in order");
+        let total: f64 = row.iter().zip(&col).map(|(&r, &c)| cost[r][c]).sum();
+        assert!((total - 5.0).abs() < 1e-12, "optimal cost: {total}");
+        let mut sorted_col = col.clone();
+        sorted_col.sort();
+        assert_eq!(sorted_col, vec![0, 1, 2], "col is a permutation");
+    }
+
+    #[test]
     fn fminbound_matches_scipy_reference() {
         // scipy.optimize.fminbound(lambda x: (x-1.3)**2, 0, 3) -> 1.3
         let x = crate::fminbound(|x| (x - 1.3).powi(2), 0.0, 3.0);
