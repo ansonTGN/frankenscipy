@@ -1967,6 +1967,21 @@ fn validate_czt_complex_control(name: &str, value: (f64, f64)) -> Result<(), Sig
     })
 }
 
+fn validate_complex_values_finite(
+    values: &[(f64, f64)],
+    detail: &str,
+) -> Result<(), SignalError> {
+    if values
+        .iter()
+        .all(|&(real, imag)| real.is_finite() && imag.is_finite())
+    {
+        return Ok(());
+    }
+    Err(SignalError::NonFiniteInput {
+        detail: detail.to_string(),
+    })
+}
+
 /// Chirp Z-Transform: evaluate the Z-transform at M points along a spiral
 /// in the complex plane starting at `a`, stepping by `w`.
 ///
@@ -1997,6 +2012,7 @@ pub fn czt(
     if m == 0 {
         return Ok(vec![]);
     }
+    validate_real_values_finite(x, "czt input samples must be finite")?;
 
     let two_pi = 2.0 * std::f64::consts::PI;
 
@@ -2320,6 +2336,7 @@ impl CZT {
                 x.len()
             )));
         }
+        validate_complex_values_finite(x, "CZT input samples must be finite")?;
         let opts = fsci_fft::FftOptions::default();
         let mut xa: Vec<(f64, f64)> = Vec::with_capacity(self.nfft);
         for (&xk, &awk2k) in x.iter().zip(self.awk2.iter()).take(self.n) {
@@ -2342,6 +2359,14 @@ impl CZT {
 
     /// Real-input convenience: transform a real length-`n` signal.
     pub fn transform_real(&self, x: &[f64]) -> Result<Vec<(f64, f64)>, SignalError> {
+        if x.len() != self.n {
+            return Err(SignalError::InvalidArgument(format!(
+                "CZT defined for length {}, not {}",
+                self.n,
+                x.len()
+            )));
+        }
+        validate_real_values_finite(x, "CZT input samples must be finite")?;
         let xc: Vec<(f64, f64)> = x.iter().map(|&v| (v, 0.0)).collect();
         self.transform(&xc)
     }
@@ -17052,6 +17077,44 @@ mod tests {
         (0..n)
             .map(|k| ((0.3 * k as f64 + 1.0).sin(), (0.17 * k as f64).cos()))
             .collect()
+    }
+
+    #[test]
+    fn czt_and_zoom_fft_reject_non_finite_samples() {
+        assert_eq!(
+            czt(&[1.0, f64::NAN], 2, None, None),
+            Err(SignalError::NonFiniteInput {
+                detail: "czt input samples must be finite".to_string(),
+            })
+        );
+        assert_eq!(
+            zoom_fft(&[1.0, f64::INFINITY], (0.0, 1.0), 2),
+            Err(SignalError::NonFiniteInput {
+                detail: "czt input samples must be finite".to_string(),
+            })
+        );
+
+        let czt_plan = CZT::new(2, None, None, None).expect("CZT plan");
+        assert_eq!(
+            czt_plan.transform(&[(1.0, 0.0), (f64::NAN, 0.0)]),
+            Err(SignalError::NonFiniteInput {
+                detail: "CZT input samples must be finite".to_string(),
+            })
+        );
+        assert_eq!(
+            czt_plan.transform_real(&[1.0, f64::NEG_INFINITY]),
+            Err(SignalError::NonFiniteInput {
+                detail: "CZT input samples must be finite".to_string(),
+            })
+        );
+
+        let zoom_plan = ZoomFFT::new(2, (0.0, 1.0), Some(2), 2.0, false).expect("ZoomFFT plan");
+        assert_eq!(
+            zoom_plan.transform(&[(1.0, 0.0), (0.0, f64::INFINITY)]),
+            Err(SignalError::NonFiniteInput {
+                detail: "CZT input samples must be finite".to_string(),
+            })
+        );
     }
 
     #[test]
