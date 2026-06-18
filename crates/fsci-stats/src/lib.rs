@@ -23544,7 +23544,14 @@ pub fn ttest_ind(a: &[f64], b: &[f64]) -> TtestResult {
     let n1 = a.len() as f64;
     let n2 = b.len() as f64;
     let df = n1 + n2 - 2.0;
-    if a.len() < 2 || b.len() < 2 {
+    if a.is_empty() || b.is_empty() {
+        return TtestResult {
+            statistic: f64::NAN,
+            pvalue: f64::NAN,
+            df: f64::NAN,
+        };
+    }
+    if df <= 0.0 {
         return TtestResult {
             statistic: f64::NAN,
             pvalue: f64::NAN,
@@ -23553,8 +23560,16 @@ pub fn ttest_ind(a: &[f64], b: &[f64]) -> TtestResult {
     }
     let mean1: f64 = a.iter().sum::<f64>() / n1;
     let mean2: f64 = b.iter().sum::<f64>() / n2;
-    let var1: f64 = a.iter().map(|&x| (x - mean1).powi(2)).sum::<f64>() / (n1 - 1.0);
-    let var2: f64 = b.iter().map(|&x| (x - mean2).powi(2)).sum::<f64>() / (n2 - 1.0);
+    let var1: f64 = if a.len() > 1 {
+        a.iter().map(|&x| (x - mean1).powi(2)).sum::<f64>() / (n1 - 1.0)
+    } else {
+        0.0
+    };
+    let var2: f64 = if b.len() > 1 {
+        b.iter().map(|&x| (x - mean2).powi(2)).sum::<f64>() / (n2 - 1.0)
+    } else {
+        0.0
+    };
 
     // Pooled variance
     let sp2 = ((n1 - 1.0) * var1 + (n2 - 1.0) * var2) / df;
@@ -23595,7 +23610,14 @@ pub fn ttest_ind_alternative(a: &[f64], b: &[f64], alternative: &str) -> TtestRe
     let n1 = a.len() as f64;
     let n2 = b.len() as f64;
     let df = n1 + n2 - 2.0;
-    if a.len() < 2 || b.len() < 2 || a.iter().any(|v| v.is_nan()) || b.iter().any(|v| v.is_nan()) {
+    if a.is_empty() || b.is_empty() {
+        return TtestResult {
+            statistic: f64::NAN,
+            pvalue: f64::NAN,
+            df: f64::NAN,
+        };
+    }
+    if df <= 0.0 || a.iter().any(|v| v.is_nan()) || b.iter().any(|v| v.is_nan()) {
         return TtestResult {
             statistic: f64::NAN,
             pvalue: f64::NAN,
@@ -23604,8 +23626,16 @@ pub fn ttest_ind_alternative(a: &[f64], b: &[f64], alternative: &str) -> TtestRe
     }
     let mean1: f64 = a.iter().sum::<f64>() / n1;
     let mean2: f64 = b.iter().sum::<f64>() / n2;
-    let var1: f64 = a.iter().map(|&x| (x - mean1).powi(2)).sum::<f64>() / (n1 - 1.0);
-    let var2: f64 = b.iter().map(|&x| (x - mean2).powi(2)).sum::<f64>() / (n2 - 1.0);
+    let var1: f64 = if a.len() > 1 {
+        a.iter().map(|&x| (x - mean1).powi(2)).sum::<f64>() / (n1 - 1.0)
+    } else {
+        0.0
+    };
+    let var2: f64 = if b.len() > 1 {
+        b.iter().map(|&x| (x - mean2).powi(2)).sum::<f64>() / (n2 - 1.0)
+    } else {
+        0.0
+    };
 
     let sp2 = ((n1 - 1.0) * var1 + (n2 - 1.0) * var2) / df;
     let se = (sp2 * (1.0 / n1 + 1.0 / n2)).sqrt();
@@ -52737,6 +52767,42 @@ mod tests {
         let result = ttest_ind(&[1.0], &[2.0]);
         assert!(result.statistic.is_nan());
         assert!(result.pvalue.is_nan());
+        assert_eq!(result.df, 0.0);
+    }
+
+    #[test]
+    fn ttest_ind_empty_group_matches_scipy_df() {
+        let result = ttest_ind(&[], &[1.0, 2.0]);
+        assert!(result.statistic.is_nan());
+        assert!(result.pvalue.is_nan());
+        assert!(result.df.is_nan());
+
+        let alternative = ttest_ind_alternative(&[], &[1.0, 2.0], "less");
+        assert!(alternative.statistic.is_nan());
+        assert!(alternative.pvalue.is_nan());
+        assert!(alternative.df.is_nan());
+    }
+
+    #[test]
+    fn ttest_ind_singleton_group_matches_scipy_reference_values() {
+        let result = ttest_ind(&[1.0], &[2.0, 3.0]);
+        assert!(
+            (result.statistic - (-1.732_050_807_568_877_4)).abs() < 1e-15,
+            "ttest_ind statistic got {}",
+            result.statistic
+        );
+        assert!(
+            (result.pvalue - 0.333_333_333_333_333_37).abs() < 1e-15,
+            "ttest_ind pvalue got {}",
+            result.pvalue
+        );
+        assert_eq!(result.df, 1.0);
+
+        let less = ttest_ind_alternative(&[1.0], &[2.0, 3.0], "less");
+        assert!((less.pvalue - 0.166_666_666_666_666_69).abs() < 1e-15);
+
+        let greater = ttest_ind_alternative(&[1.0], &[2.0, 3.0], "greater");
+        assert!((greater.pvalue - 0.833_333_333_333_333_3).abs() < 1e-15);
     }
 
     // ── Random variate sampling (rvs) ─────────────────────────────
