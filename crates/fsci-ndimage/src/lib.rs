@@ -9368,6 +9368,26 @@ mod tests {
     }
 
     #[test]
+    fn ndimage_array_helpers_match_numpy() {
+        // Several previously-untested numpy-equivalent array helpers.
+        let a = NdArray::new(vec![3.0, 1.0, 4.0, 1.0, 5.0], vec![5]).unwrap();
+        assert_eq!(argmax(&a), 4);
+        assert_eq!(argmin(&a), 1); // first occurrence of the min
+        let b = NdArray::new(vec![1.0, 2.0, 3.0, 4.0], vec![4]).unwrap();
+        assert!((array_sum(&b) - 10.0).abs() < 1e-12, "sum");
+        assert_eq!(cumsum_array(&b).data, vec![1.0, 3.0, 6.0, 10.0]);
+        assert_eq!(diff_array(&b).data, vec![1.0, 1.0, 1.0]); // numpy.diff
+        let c = NdArray::new(vec![1.0, 2.0, 3.0, 4.0, 5.0], vec![5]).unwrap();
+        assert!((array_std(&c) - 2.0_f64.sqrt()).abs() < 1e-12, "std (population)");
+        let d = NdArray::new(vec![-1.0, 0.0, 5.0, 10.0], vec![4]).unwrap();
+        assert_eq!(clip(&d, 0.0, 5.0).data, vec![0.0, 0.0, 5.0, 5.0]);
+        let e = NdArray::new(vec![0.0, 1.0, 0.0, 2.0, 0.0], vec![5]).unwrap();
+        assert_eq!(count_nonzero(&e), 2);
+        let f = NdArray::new(vec![-1.0, 2.0, -3.0], vec![3]).unwrap();
+        assert_eq!(abs_array(&f).data, vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
     fn binary_dilation_erosion_box_match_scipy() {
         // fsci structure_size=3 = full 3x3 box (= scipy structure=ones((3,3))).
         // Dilation of a single center pixel -> all ones.
