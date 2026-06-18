@@ -48665,6 +48665,16 @@ mod tests {
     }
 
     #[test]
+    fn double_gamma_pdf_cdf_match_scipy() {
+        // Exact scipy.stats.dgamma(a=1.5). DoubleGamma previously had only an
+        // entropy test; pin the pdf (both symmetric branches) and cdf.
+        let d = DoubleGamma::new(1.5);
+        assert!((d.pdf(0.5) - 0.241_970_724_519_143_37).abs() < 1e-12, "pdf(0.5)");
+        assert!((d.pdf(-1.0) - 0.207_553_748_710_297_36).abs() < 1e-12, "pdf(-1) neg branch");
+        assert!((d.cdf(0.5) - 0.599_374_021_549_399_6).abs() < 1e-12, "cdf(0.5)");
+    }
+
+    #[test]
     fn gilbrat_dweibull_dgamma_gennorm_entropy_match_scipy() {
         // Gilbrat ≡ LogNormal(s=1): h = 0.5 + 0.5·ln(2π) ≈ 1.4189.
         assert_close(
