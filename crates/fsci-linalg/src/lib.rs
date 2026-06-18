@@ -13613,6 +13613,11 @@ pub fn leslie(f_vals: &[f64], s_vals: &[f64]) -> Result<Vec<Vec<f64>>, LinalgErr
     if f_vals.is_empty() {
         return Err(LinalgError::ExpectedSquareMatrix);
     }
+    if s_vals.is_empty() {
+        return Err(LinalgError::InvalidArgument {
+            detail: "survival rates must have length at least 1".to_string(),
+        });
+    }
     if s_vals.len() + 1 != f_vals.len() {
         return Err(LinalgError::IncompatibleShapes {
             a_shape: (f_vals.len(), f_vals.len()),
@@ -24755,6 +24760,12 @@ mod tests {
         assert_eq!(l[1][0], 0.9); // survival[0]
         assert_eq!(l[2][1], 0.7); // survival[1]
         assert_eq!(l[1][1], 0.0);
+    }
+
+    #[test]
+    fn leslie_rejects_empty_survival_vector_like_scipy() {
+        let err = leslie(&[1.0], &[]).expect_err("scipy rejects empty survival vector");
+        assert!(matches!(err, LinalgError::InvalidArgument { .. }));
     }
 
     #[test]
