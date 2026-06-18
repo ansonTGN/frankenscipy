@@ -7316,6 +7316,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn cbrt_handles_negatives_match_scipy() {
+        // scipy.special.cbrt = real cube root, so cbrt(-8)=-2 (NOT NaN like the
+        // (-8).powf(1/3) trap). Regression guard for the powf-domain class.
+        assert_eq!(cbrt(-8.0), -2.0);
+        assert_eq!(cbrt(27.0), 3.0);
+        assert_eq!(cbrt(0.0), 0.0);
+        assert!((cbrt(2.0) - 1.259_921_049_894_873_2).abs() < 1e-15, "cbrt(2)");
+        assert!((cbrt(-2.0) + 1.259_921_049_894_873_2).abs() < 1e-15, "cbrt(-2)");
+    }
+
+    #[test]
     fn sinc_match_numpy() {
         // numpy.sinc (normalized): sin(pi*x)/(pi*x), sinc(0)=1, sinc(integer)~0.
         assert_eq!(sinc_scalar(0.0), 1.0);
