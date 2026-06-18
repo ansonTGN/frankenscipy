@@ -146,7 +146,7 @@ fn validate_frequency_args(n: usize, sample_spacing: f64) -> Result<(), FftError
             detail: "n must be greater than zero",
         });
     }
-    if !(sample_spacing.is_finite() && sample_spacing > 0.0) {
+    if !(sample_spacing.is_finite() && sample_spacing != 0.0) {
         return Err(FftError::NonPositiveSampleSpacing);
     }
     Ok(())
@@ -623,10 +623,20 @@ mod tests {
     }
 
     #[test]
-    fn fftfreq_rejects_non_positive_spacing() {
+    fn fftfreq_accepts_negative_spacing_like_scipy() {
+        let freqs = fftfreq(4, -1.0).expect("negative spacing matches scipy");
+        assert_eq!(freqs, vec![-0.0, -0.25, 0.5, 0.25]);
+
+        let rfreqs = rfftfreq(4, -2.0).expect("negative real spacing matches scipy");
+        assert_eq!(rfreqs, vec![-0.0, -0.125, -0.25]);
+    }
+
+    #[test]
+    fn fftfreq_rejects_zero_or_non_finite_spacing() {
         assert!(fftfreq(4, 0.0).is_err());
-        assert!(fftfreq(4, -1.0).is_err());
+        assert!(rfftfreq(4, 0.0).is_err());
         assert!(fftfreq(4, f64::NAN).is_err());
+        assert!(rfftfreq(4, f64::INFINITY).is_err());
     }
 
     #[test]

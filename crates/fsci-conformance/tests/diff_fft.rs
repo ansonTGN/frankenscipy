@@ -894,23 +894,27 @@ fn adv_008_fftfreq_zero_n_rejected() {
 }
 
 #[test]
-fn adv_009_fftfreq_negative_spacing_rejected() {
-    let result = fftfreq(8, -1.0);
-    let pass = result.is_err();
+fn adv_009_fftfreq_negative_spacing_matches_scipy() {
+    let n = 8;
+    let d = -1.0;
+    let result = fftfreq(n, d).unwrap();
+    let expected = vec![-0.0, -0.125, -0.25, -0.375, 0.5, 0.375, 0.25, 0.125];
+    let diff = max_abs_diff_real(&result, &expected);
+    let pass = diff <= 1e-15;
     let log = DiffTestLog {
         test_id: "adv_009_fftfreq_neg_d".to_string(),
-        category: "adversarial".to_string(),
+        category: "differential".to_string(),
         input_summary: "fftfreq(n=8, d=-1.0)".to_string(),
-        expected: "error".to_string(),
+        expected: format!("{expected:?}"),
         actual: format!("{result:?}"),
-        diff: 0.0,
-        tolerance: 0.0,
+        diff,
+        tolerance: 1e-15,
         pass,
         timestamp_ms: timestamp_ms(),
         duration_ns: 0,
     };
     emit_log(&log);
-    assert!(pass, "fftfreq with negative spacing should fail");
+    assert!(pass, "fftfreq negative spacing should match scipy");
 }
 
 #[test]
