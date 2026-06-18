@@ -71592,6 +71592,33 @@ mod tests {
     }
 
     #[test]
+    fn zscore_mad_match_scipy() {
+        // scipy.stats.zscore (ddof=0) and median_abs_deviation (raw + 'normal').
+        let z = zscore(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        let ez = [
+            -1.414_213_562_373_095,
+            -0.707_106_781_186_547_5,
+            0.0,
+            0.707_106_781_186_547_5,
+            1.414_213_562_373_095,
+        ];
+        for (g, e) in z.iter().zip(&ez) {
+            assert!((g - e).abs() < 1e-12, "zscore: {g} vs {e}");
+        }
+        let data = [1.0, 2.0, 3.0, 4.0, 100.0];
+        assert!(
+            (median_abs_deviation(&data, 1.0) - 1.0).abs() < 1e-12,
+            "mad raw"
+        );
+        // scale='normal' = 1 / 0.6744897501960817
+        let normal = 1.0 / 0.674_489_750_196_081_7;
+        assert!(
+            (median_abs_deviation(&data, normal) - 1.482_602_218_505_602).abs() < 1e-12,
+            "mad normal"
+        );
+    }
+
+    #[test]
     fn linregress_match_scipy() {
         // scipy.stats.linregress 1.17.1 for x=[1..5], y=[2.1,3.9,6.1,8.0,9.9].
         let x = [1.0, 2.0, 3.0, 4.0, 5.0];
