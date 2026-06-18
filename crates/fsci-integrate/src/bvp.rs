@@ -470,7 +470,7 @@ mod tests {
             let err = solve_bvp(&mut f, &bc, (0.0, 1.0), &[0.0], options)
                 .expect_err("invalid IVP tolerance");
             assert!(
-                matches!(err, BvpError::InvalidArgument(msg) if msg.contains(expected)),
+                matches!(&err, BvpError::InvalidArgument(msg) if msg.contains(expected)),
                 "expected {expected} validation error, got {err:?}"
             );
         }
