@@ -7316,6 +7316,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn boxcox_scalar_match_scipy() {
+        // scipy.special.boxcox/inv_boxcox/boxcox1p (1.17.1), including the
+        // inv_boxcox NaN edge for a negative base (frankenscipy-9ns59).
+        assert!(
+            (boxcox_scalar(2.0, 0.5) - 0.828_427_124_746_190_1).abs() < 1e-12,
+            "boxcox"
+        );
+        assert!(
+            (boxcox_scalar(2.0, 0.0) - 0.693_147_180_559_945_3).abs() < 1e-12,
+            "boxcox lam0"
+        );
+        assert!(
+            (inv_boxcox_scalar(0.828_427_124_746_190_1, 0.5) - 2.0).abs() < 1e-12,
+            "inv_boxcox round-trip"
+        );
+        assert!(
+            inv_boxcox_scalar(5.0, -0.5).is_nan(),
+            "inv_boxcox negative base -> NaN"
+        );
+        assert!(
+            (boxcox1p_scalar(1.0, 0.5) - 0.828_427_124_746_190_1).abs() < 1e-12,
+            "boxcox1p"
+        );
+    }
+
+    #[test]
     fn scalar_special_functions_match_scipy() {
         // Golden values from scipy.special (1.17.1) for foundational scalar fns.
         let close = |got: f64, want: f64, name: &str| {
