@@ -26720,15 +26720,18 @@ pub fn linregress(x: &[f64], y: &[f64]) -> LinregressResult {
 
     // Correlation coefficient
     let rvalue = if ssym == 0.0 {
-        // All y values identical — perfect fit if slope is 0
-        if slope == 0.0 { 1.0 } else { 0.0 }
+        // All y values identical: scipy leaves the correlation undefined.
+        f64::NAN
     } else {
         ssxym / (ssxm * ssym).sqrt()
     };
 
     // p-value: test H0: slope = 0 using t-distribution
     let df = n - 2.0;
-    let (pvalue, stderr, intercept_stderr) = if df > 0.0 {
+    let (pvalue, stderr, intercept_stderr) = if x.len() == 2 {
+        let pvalue = if y[0] == y[1] { 1.0 } else { 0.0 };
+        (pvalue, 0.0, 0.0)
+    } else if df > 0.0 && rvalue.is_finite() {
         // Residual sum of squares
         let r2 = rvalue * rvalue;
         let sse = ssym * (1.0 - r2);
@@ -26736,18 +26739,10 @@ pub fn linregress(x: &[f64], y: &[f64]) -> LinregressResult {
         let se_slope = (mse / ssxm).sqrt();
         let se_intercept = (mse * (1.0 / n + xmean * xmean / ssxm)).sqrt();
 
-        let t_stat = if se_slope > 0.0 {
-            slope / se_slope
-        } else {
-            f64::INFINITY
-        };
-
-        let pval = if df >= 1.0 && se_slope > 0.0 {
-            let tdist = StudentT::new(df);
-            2.0 * tdist.sf(t_stat.abs())
-        } else {
-            0.0
-        };
+        let tiny = 1.0e-20;
+        let t_stat = rvalue * (df / ((1.0 - rvalue + tiny) * (1.0 + rvalue + tiny))).sqrt();
+        let tdist = StudentT::new(df);
+        let pval = 2.0 * tdist.sf(t_stat.abs());
         (pval, se_slope, se_intercept)
     } else {
         (f64::NAN, f64::NAN, f64::NAN)
@@ -53729,6 +53724,11 @@ mod tests {
             "stderr should be ~0, got {}",
             result.stderr
         );
+        assert!(
+            result.pvalue > 0.0 && result.pvalue < 1e-70,
+            "perfect-fit p-value should use scipy's tiny denominator, got {}",
+            result.pvalue
+        );
     }
 
     #[test]
@@ -53770,6 +53770,44 @@ mod tests {
     fn linregress_constant_x() {
         let result = linregress(&[5.0, 5.0, 5.0], &[1.0, 2.0, 3.0]);
         assert!(result.slope.is_nan(), "constant x => undefined slope");
+    }
+
+    #[test]
+    fn linregress_length_two_matches_scipy_inference_fields() {
+        let positive = linregress(&[1.0, 2.0], &[3.0, 4.0]);
+        assert_eq!(positive.slope, 1.0);
+        assert_eq!(positive.intercept, 2.0);
+        assert_eq!(positive.rvalue, 1.0);
+        assert_eq!(positive.pvalue, 0.0);
+        assert_eq!(positive.stderr, 0.0);
+        assert_eq!(positive.intercept_stderr, 0.0);
+
+        let negative = linregress(&[1.0, 2.0], &[4.0, 3.0]);
+        assert_eq!(negative.slope, -1.0);
+        assert_eq!(negative.intercept, 5.0);
+        assert_eq!(negative.rvalue, -1.0);
+        assert_eq!(negative.pvalue, 0.0);
+        assert_eq!(negative.stderr, 0.0);
+        assert_eq!(negative.intercept_stderr, 0.0);
+
+        let flat = linregress(&[1.0, 2.0], &[3.0, 3.0]);
+        assert_eq!(flat.slope, 0.0);
+        assert_eq!(flat.intercept, 3.0);
+        assert!(flat.rvalue.is_nan());
+        assert_eq!(flat.pvalue, 1.0);
+        assert_eq!(flat.stderr, 0.0);
+        assert_eq!(flat.intercept_stderr, 0.0);
+    }
+
+    #[test]
+    fn linregress_constant_y_matches_scipy_undefined_inference() {
+        let result = linregress(&[1.0, 2.0, 3.0], &[3.0, 3.0, 3.0]);
+        assert_eq!(result.slope, 0.0);
+        assert_eq!(result.intercept, 3.0);
+        assert!(result.rvalue.is_nan());
+        assert!(result.pvalue.is_nan());
+        assert!(result.stderr.is_nan());
+        assert!(result.intercept_stderr.is_nan());
     }
 
     #[test]
