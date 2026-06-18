@@ -3516,6 +3516,35 @@ mod tests {
     }
 
     #[test]
+    fn quad_adaptive_match_closed_form() {
+        // scipy.integrate.quad converges to the analytic integral; lock fsci's
+        // adaptive quad to the closed forms (equal to scipy's values to ~1e-10).
+        let close = |r: QuadResult, want: f64, n: &str| {
+            assert!((r.integral - want).abs() < 1e-9, "{n}: {} != {want}", r.integral);
+        };
+        close(
+            quad(|x| x * x, 0.0, 1.0, QuadOptions::default()).unwrap(),
+            1.0 / 3.0,
+            "x^2 on [0,1]",
+        );
+        close(
+            quad(|x: f64| x.sin(), 0.0, std::f64::consts::PI, QuadOptions::default()).unwrap(),
+            2.0,
+            "sin on [0,pi]",
+        );
+        close(
+            quad(|x: f64| x.exp(), 0.0, 1.0, QuadOptions::default()).unwrap(),
+            std::f64::consts::E - 1.0,
+            "exp on [0,1]",
+        );
+        close(
+            quad(|x| 1.0 / (1.0 + x * x), 0.0, 2.0, QuadOptions::default()).unwrap(),
+            2.0_f64.atan(),
+            "1/(1+x^2) on [0,2]",
+        );
+    }
+
+    #[test]
     fn quad_simpson_trapezoid_match_scipy() {
         // Golden values from scipy.integrate (1.17.1).
         // scipy.integrate.quad(exp(-x^2), 0, 2) = 0.8820813907624215 (= √π/2·erf(2)).
