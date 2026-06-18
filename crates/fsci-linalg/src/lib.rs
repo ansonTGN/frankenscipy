@@ -16796,6 +16796,26 @@ mod tests {
     }
 
     #[test]
+    fn matrix_helpers3_match_numpy() {
+        // Final batch of previously-untested linalg helpers.
+        assert_eq!(
+            mat_abs(&[vec![-1.0, 2.0], vec![3.0, -4.0]]),
+            vec![vec![1.0, 2.0], vec![3.0, 4.0]]
+        );
+        let m = vec![vec![1.0, 2.0], vec![3.0, 4.0]];
+        // mat_flatten is row-major; mat_from_flat is its inverse.
+        assert_eq!(mat_flatten(&m), vec![1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(mat_from_flat(&[1.0, 2.0, 3.0, 4.0], 2, 2), m);
+        // hstack horizontally concatenates (numpy.hstack).
+        let a = vec![vec![1.0, 2.0], vec![3.0, 4.0]];
+        let b = vec![vec![5.0], vec![6.0]];
+        assert_eq!(
+            hstack(&[&a[..], &b[..]]),
+            vec![vec![1.0, 2.0, 5.0], vec![3.0, 4.0, 6.0]]
+        );
+    }
+
+    #[test]
     fn matrix_helpers2_match_numpy() {
         // More previously-untested linalg helpers vs numpy/analytic identities.
         let rank_def = vec![vec![1.0, 2.0], vec![2.0, 4.0]];
