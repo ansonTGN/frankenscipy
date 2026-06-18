@@ -2595,6 +2595,21 @@ pub fn gauss_kronrod_quad<F>(f: F, a: f64, b: f64, options: QuadOptions) -> Quad
 where
     F: Fn(f64) -> f64,
 {
+    if !a.is_finite()
+        || !b.is_finite()
+        || !options.epsabs.is_finite()
+        || !options.epsrel.is_finite()
+        || options.epsabs < 0.0
+        || options.epsrel < 0.0
+    {
+        return QuadResult {
+            integral: f64::NAN,
+            error: f64::INFINITY,
+            neval: 0,
+            converged: false,
+        };
+    }
+
     gauss_kronrod_inner(&f, a, b, options)
 }
 
@@ -5168,6 +5183,35 @@ mod tests {
             result.integral,
             exact
         );
+    }
+
+    #[test]
+    fn gauss_kronrod_rejects_invalid_bounds_and_tolerances() {
+        for (a, b, options) in [
+            (f64::INFINITY, 1.0, QuadOptions::default()),
+            (
+                0.0,
+                1.0,
+                QuadOptions {
+                    epsabs: f64::NAN,
+                    ..QuadOptions::default()
+                },
+            ),
+            (
+                0.0,
+                1.0,
+                QuadOptions {
+                    epsrel: -1.0,
+                    ..QuadOptions::default()
+                },
+            ),
+        ] {
+            let result = gauss_kronrod_quad(|x| x, a, b, options);
+            assert!(result.integral.is_nan());
+            assert_eq!(result.error, f64::INFINITY);
+            assert_eq!(result.neval, 0);
+            assert!(!result.converged);
+        }
     }
 
     #[test]
