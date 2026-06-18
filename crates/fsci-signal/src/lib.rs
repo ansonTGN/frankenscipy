@@ -2301,6 +2301,11 @@ impl ZoomFFT {
                 "Invalid number of CZT data points ({n}) specified. n must be positive."
             )));
         }
+        if !(fs.is_finite() && fs > 0.0) {
+            return Err(SignalError::InvalidParameter {
+                detail: "fs must be finite and positive".to_string(),
+            });
+        }
         let m = match m {
             None => n,
             Some(m) if m >= 1 => m,
@@ -16755,6 +16760,21 @@ mod tests {
         let z = ZoomFFT::new(16, (0.0, 0.5), Some(8), 2.0, true).unwrap();
         let y = z.transform(&czt_xin(16)).unwrap();
         assert_eq!(y.len(), 8);
+    }
+
+    #[test]
+    fn zoom_fft_rejects_invalid_sampling_frequency() {
+        for fs in [0.0, -1.0, f64::INFINITY, f64::NAN] {
+            let err = ZoomFFT::new(8, (0.0, 0.5), Some(4), fs, false)
+                .expect_err("invalid sampling frequency");
+            assert_eq!(
+                err,
+                SignalError::InvalidParameter {
+                    detail: "fs must be finite and positive".to_string()
+                },
+                "fs={fs:?}"
+            );
+        }
     }
 
     #[test]
