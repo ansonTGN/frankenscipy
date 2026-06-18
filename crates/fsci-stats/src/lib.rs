@@ -70250,6 +70250,17 @@ mod tests {
     }
 
     #[test]
+    fn generalized_exponential_pdf_cdf_match_scipy() {
+        // Exact scipy.stats.genexpon(1,0.5,2). test_generalized_exponential only
+        // checks positivity and monotonic bounds, not exact values. Cross-read:
+        // fsci pdf = (a+b(1-e^{-cx}))*exp(-ax-bx+(b/c)(1-e^{-cx})) matches scipy.
+        let ge = GeneralizedExponential::new(1.0, 0.5, 2.0);
+        assert!((ge.pdf(0.0) - 1.0).abs() < 1e-12, "pdf(0)=a");
+        assert!((ge.pdf(1.0) - 0.396_717_957_469_691_35).abs() < 1e-12, "pdf(1)");
+        assert!((ge.cdf(1.0) - 0.723_026_604_022_324).abs() < 1e-10, "cdf(1)");
+    }
+
+    #[test]
     fn test_generalized_exponential() {
         let ge = GeneralizedExponential::new(1.0, 0.5, 2.0);
         assert!(ge.pdf(0.0) > 0.0);
