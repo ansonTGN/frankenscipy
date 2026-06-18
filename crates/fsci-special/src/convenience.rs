@@ -7331,6 +7331,15 @@ mod tests {
     }
 
     #[test]
+    fn gdtr_pdtr_match_scipy() {
+        // scipy.special gamma CDF (gdtr) and Poisson CDF/inverse (pdtr/pdtri).
+        use crate::gamma::{gdtr, pdtr, pdtri};
+        assert!((gdtr(1.0, 2.0, 3.0) - 0.800_851_726_528_544_2).abs() < 1e-13, "gdtr(1,2,3)");
+        assert!((pdtr(2.0, 3.0) - 0.423_190_081_126_843_64).abs() < 1e-13, "pdtr(2,3)");
+        assert!((pdtri(2.0, 0.4) - 3.105_378_597_263_35).abs() < 1e-11, "pdtri(2,0.4)");
+    }
+
+    #[test]
     fn chdtr_fdtr_match_scipy() {
         // scipy.special chi-square CDF/inverse and F CDF.
         use crate::beta::fdtr;
