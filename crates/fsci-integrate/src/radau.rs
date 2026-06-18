@@ -119,6 +119,7 @@ impl RadauSolver {
                 direction,
                 config.rtol,
                 &atol_vec,
+                config.mode,
             )?
             .min(config.max_step),
         };

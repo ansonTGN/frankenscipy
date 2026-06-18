@@ -205,6 +205,7 @@ impl BdfSolver {
                 direction,
                 config.rtol,
                 &atol_vec,
+                config.mode,
             )?
             .min(config.max_step),
         };
@@ -631,6 +632,7 @@ pub(crate) fn select_initial_step_bdf<F>(
     direction: f64,
     rtol: f64,
     atol: &[f64],
+    mode: RuntimeMode,
 ) -> Result<f64, crate::IntegrateValidationError>
 where
     F: FnMut(f64, &[f64]) -> Vec<f64>,
@@ -638,6 +640,9 @@ where
     let f0 = fun(t0, y0);
     let n = y0.len();
     validate_rhs_shape(f0.len(), n)?;
+    if mode == RuntimeMode::Hardened && !f0.iter().all(|value| value.is_finite()) {
+        return Err(crate::IntegrateValidationError::NonFiniteF0);
+    }
 
     let mut d0 = 0.0_f64;
     let mut d1 = 0.0_f64;
@@ -662,6 +667,9 @@ where
         .collect();
     let f1 = fun(t0 + direction * h0, &y1);
     validate_rhs_shape(f1.len(), n)?;
+    if mode == RuntimeMode::Hardened && !f1.iter().all(|value| value.is_finite()) {
+        return Err(crate::IntegrateValidationError::NonFiniteF0);
+    }
 
     let mut d2 = 0.0_f64;
     for j in 0..n {
@@ -816,7 +824,35 @@ mod tests {
             mode: RuntimeMode::Hardened,
             max_order: 5,
         };
-        let err = BdfSolver::new(&mut fun, config).expect_err("non-finite f0 should fail");
+        let err = match BdfSolver::new(&mut fun, config) {
+            Ok(_) => panic!("non-finite f0 should fail"),
+            Err(err) => err,
+        };
+        assert_eq!(err, crate::IntegrateValidationError::NonFiniteF0);
+    }
+
+    #[test]
+    fn select_initial_step_bdf_hardened_rejects_non_finite_probe_rhs() {
+        let mut calls = 0;
+        let mut fun = |_t: f64, _y: &[f64]| {
+            calls += 1;
+            if calls == 1 {
+                vec![1.0]
+            } else {
+                vec![f64::NAN]
+            }
+        };
+
+        let err = select_initial_step_bdf(
+            &mut fun,
+            0.0,
+            &[1.0],
+            1.0,
+            1e-6,
+            &[1e-8],
+            RuntimeMode::Hardened,
+        )
+        .expect_err("non-finite BDF probe RHS should fail");
         assert_eq!(err, crate::IntegrateValidationError::NonFiniteF0);
     }
 
