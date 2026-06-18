@@ -9544,6 +9544,44 @@ mod tests {
     }
 
     #[test]
+    fn pchip_akima_krogh_match_scipy() {
+        let x = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
+        let y = [0.0, 1.0, 4.0, 9.0, 16.0, 25.0]; // x^2
+        let xe = [0.5, 1.5, 2.5, 3.5, 4.5];
+        let close = |got: &[f64], want: &[f64], name: &str| {
+            for (i, (&g, &w)) in got.iter().zip(want.iter()).enumerate() {
+                assert!((g - w).abs() < 1e-9, "{name}[{i}]: {g} != {w}");
+            }
+        };
+        // scipy.interpolate.PchipInterpolator
+        close(
+            &pchip_interpolate(&x, &y, &xe).unwrap(),
+            &[
+                0.3125,
+                2.21875,
+                6.239_583_333_333_333,
+                12.244_791_666_666_666,
+                20.234_375,
+            ],
+            "pchip",
+        );
+        // scipy.interpolate.Akima1DInterpolator (reproduces x^2 on this grid)
+        close(
+            &akima1d_interpolate(&x, &y, &xe).unwrap(),
+            &[0.25, 2.25, 6.25, 12.25, 20.25],
+            "akima",
+        );
+        // scipy.interpolate.KroghInterpolator — polynomial through 4 points.
+        let xk = [0.0, 1.0, 2.0, 3.0];
+        let yk = [1.0, 3.0, 2.0, 5.0];
+        close(
+            &krogh_interpolate(&xk, &yk, &[0.5, 1.5, 2.5]).unwrap(),
+            &[2.8125, 2.4375, 2.5625],
+            "krogh",
+        );
+    }
+
+    #[test]
     fn cubic_spline_periodic_rejects_mismatched_endpoints() {
         let x = vec![0.0, 1.0, 2.0, 3.0];
         let y = vec![0.0, 1.0, 0.5, 0.25];
