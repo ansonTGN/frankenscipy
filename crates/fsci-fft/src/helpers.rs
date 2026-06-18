@@ -337,6 +337,12 @@ pub fn fftcorrelate(a: &[f64], b: &[f64], mode: &str) -> Result<Vec<f64>, FftErr
 /// input. scipy.signal.periodogram uses rfft internally for the same
 /// reason.
 pub fn periodogram_simple(x: &[f64], fs: f64) -> Result<(Vec<f64>, Vec<f64>), FftError> {
+    if !fs.is_finite() {
+        return Err(FftError::NonFiniteInput);
+    }
+    if fs <= 0.0 {
+        return Err(FftError::NonPositiveSampleSpacing);
+    }
     if x.is_empty() {
         return Ok((vec![], vec![]));
     }
@@ -536,7 +542,7 @@ mod tests {
 
     use super::{
         analytic_signal, fftconvolve, fftfreq, fftshift, fftshift_1d, ifftshift, ifftshift_1d,
-        polynomial_multiply_fft, rfftfreq, zero_pad_pow2,
+        periodogram_simple, polynomial_multiply_fft, rfftfreq, zero_pad_pow2,
     };
     use crate::{FftError, FftOptions};
 
@@ -688,6 +694,27 @@ mod tests {
     fn fftfreq_rejects_zero_spacing() {
         assert!(fftfreq(4, 0.0).is_err());
         assert!(rfftfreq(4, 0.0).is_err());
+    }
+
+    #[test]
+    fn periodogram_simple_rejects_invalid_sampling_rate() {
+        let input = [1.0, 2.0, 3.0, 4.0];
+        assert_eq!(
+            periodogram_simple(&input, 0.0).expect_err("zero sampling rate"),
+            FftError::NonPositiveSampleSpacing
+        );
+        assert_eq!(
+            periodogram_simple(&input, -1.0).expect_err("negative sampling rate"),
+            FftError::NonPositiveSampleSpacing
+        );
+        assert_eq!(
+            periodogram_simple(&input, f64::NAN).expect_err("nan sampling rate"),
+            FftError::NonFiniteInput
+        );
+        assert_eq!(
+            periodogram_simple(&input, f64::INFINITY).expect_err("infinite sampling rate"),
+            FftError::NonFiniteInput
+        );
     }
 
     #[test]
