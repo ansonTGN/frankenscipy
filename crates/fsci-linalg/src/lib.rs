@@ -16796,6 +16796,28 @@ mod tests {
     }
 
     #[test]
+    fn matrix_helpers_match_numpy() {
+        // Several previously-untested linalg helpers vs numpy/analytic identities.
+        assert_eq!(
+            outer(&[1.0, 2.0], &[3.0, 4.0]),
+            vec![vec![3.0, 4.0], vec![6.0, 8.0]]
+        );
+        let m = vec![vec![1.0, 2.0], vec![3.0, 4.0]];
+        assert!((frobenius_norm(&m) - 30.0_f64.sqrt()).abs() < 1e-12, "frobenius=sqrt30");
+        // 2x2 adjugate [[a,b],[c,d]] -> [[d,-b],[-c,a]].
+        assert_eq!(adjugate(&m), vec![vec![4.0, -2.0], vec![-3.0, 1.0]]);
+        // permanent of [[a,b],[c,d]] = ad + bc.
+        assert!((permanent(&m) - 10.0).abs() < 1e-12, "permanent");
+        // inf-norm = max abs row sum = max(3, 7) = 7.
+        assert!((mat_norm_inf(&m) - 7.0).abs() < 1e-12, "inf norm");
+        let b = vec![vec![2.0, 0.0], vec![1.0, 3.0]];
+        assert_eq!(
+            hadamard_product(&m, &b),
+            vec![vec![2.0, 0.0], vec![3.0, 12.0]]
+        );
+    }
+
+    #[test]
     fn cond_matches_numpy() {
         // numpy.linalg.cond (2-norm) = sigma_max/sigma_min. cond was untested.
         let diag = vec![vec![3.0, 0.0], vec![0.0, 1.0]];
