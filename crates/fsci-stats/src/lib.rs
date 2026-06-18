@@ -72650,6 +72650,15 @@ mod tests {
     }
 
     #[test]
+    fn exponential_logsf_deep_tail_match_scipy() {
+        // scipy.stats.expon(scale=2).logsf(1500) = -750, where the default ln(sf)
+        // underflows to -inf. Guards the closed-form logsf = -lambda*x override.
+        let e = Exponential::new(0.5);
+        assert!((e.logsf(1500.0) - -750.0).abs() < 1e-9, "logsf(1500) deep tail");
+        assert!((e.logsf(10.0) - -5.0).abs() < 1e-12, "logsf(10) representable");
+    }
+
+    #[test]
     fn rayleigh_logsf_tail_match_scipy() {
         // scipy.stats.rayleigh logsf = -x^2/2; default ln(sf) underflows by x~38.
         let d = Rayleigh { scale: 1.0 };
