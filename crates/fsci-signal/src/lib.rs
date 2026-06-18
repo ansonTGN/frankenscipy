@@ -5713,6 +5713,9 @@ pub fn spectral_entropy(magnitudes: &[f64]) -> f64 {
     if magnitudes.is_empty() {
         return 0.0;
     }
+    if magnitudes.iter().any(|&m| !m.is_finite() || m < 0.0) {
+        return f64::NAN;
+    }
     let total: f64 = magnitudes.iter().sum();
     if total <= 0.0 {
         return 0.0;
@@ -19670,6 +19673,19 @@ mod tests {
         }
 
         assert_eq!(spectral_flatness(&[0.0, 0.0]), 0.0);
+    }
+
+    #[test]
+    fn spectral_entropy_invalid_magnitudes_return_nan() {
+        for magnitudes in [[-1.0, 2.0], [f64::NAN, 2.0], [1.0, f64::INFINITY]] {
+            let entropy = spectral_entropy(&magnitudes);
+            assert!(
+                entropy.is_nan(),
+                "invalid magnitudes should produce NaN entropy, got {entropy}"
+            );
+        }
+
+        assert_eq!(spectral_entropy(&[0.0, 0.0]), 0.0);
     }
 
     #[test]
