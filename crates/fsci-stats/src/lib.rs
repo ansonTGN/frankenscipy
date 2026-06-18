@@ -38618,16 +38618,27 @@ pub fn ttest_ind_from_stats(
     let var1 = std1 * std1;
     let var2 = std2 * std2;
 
-    if n1 < 2 || n2 < 2 {
+    if n1 == 0 || n2 == 0 || (!equal_var && (n1 < 2 || n2 < 2)) {
         return TtestResult {
             statistic: f64::NAN,
             pvalue: f64::NAN,
-            df: if equal_var { n1f + n2f - 2.0 } else { f64::NAN },
+            df: if equal_var && n1 > 0 && n2 > 0 {
+                n1f + n2f - 2.0
+            } else {
+                f64::NAN
+            },
         };
     }
 
     let (se, df) = if equal_var {
         let df = n1f + n2f - 2.0;
+        if df <= 0.0 {
+            return TtestResult {
+                statistic: f64::NAN,
+                pvalue: f64::NAN,
+                df,
+            };
+        }
         let sp2 = ((n1f - 1.0) * var1 + (n2f - 1.0) * var2) / df;
         (sp2.mul_add(1.0 / n1f + 1.0 / n2f, 0.0).sqrt(), df)
     } else {
@@ -53778,6 +53789,34 @@ mod tests {
             "equal-var summary p-value",
         );
         assert_close(result.df, 22.0, 1e-12, "equal-var summary df");
+    }
+
+    #[test]
+    fn ttest_ind_from_stats_singleton_equal_var_matches_scipy_reference() {
+        let result = ttest_ind_from_stats(1.0, 0.0, 1, 2.5, 0.5_f64.sqrt(), 2, true);
+        assert_close(
+            result.statistic,
+            -1.732_050_807_568_877,
+            1e-15,
+            "singleton summary t-statistic",
+        );
+        assert_close(
+            result.pvalue,
+            0.333_333_333_333_333_4,
+            1e-15,
+            "singleton summary p-value",
+        );
+        assert_close(result.df, 1.0, 1e-15, "singleton summary df");
+
+        let both_singleton = ttest_ind_from_stats(1.0, 0.0, 1, 2.0, 0.0, 1, true);
+        assert!(both_singleton.statistic.is_nan());
+        assert!(both_singleton.pvalue.is_nan());
+        assert_eq!(both_singleton.df, 0.0);
+
+        let welch_singleton = ttest_ind_from_stats(1.0, 0.0, 1, 2.5, 0.5_f64.sqrt(), 2, false);
+        assert!(welch_singleton.statistic.is_nan());
+        assert!(welch_singleton.pvalue.is_nan());
+        assert!(welch_singleton.df.is_nan());
     }
 
     #[test]
