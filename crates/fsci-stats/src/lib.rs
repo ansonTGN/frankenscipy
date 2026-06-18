@@ -72646,6 +72646,24 @@ mod tests {
     }
 
     #[test]
+    fn stats_helpers2_match_sklearn_scipy() {
+        // fbeta_score, expected_freq, contingency_table were previously untested.
+        assert!(
+            (fbeta_score(&[1.0, 1.0, 0.0, 0.0], &[1.0, 0.0, 0.0, 0.0], 1.0) - 2.0 / 3.0).abs()
+                < 1e-12,
+            "F1 score"
+        );
+        // scipy.stats.contingency.expected_freq = outer(row,col)/total.
+        let ef = expected_freq(&[vec![10.0, 20.0], vec![30.0, 40.0]]);
+        assert_eq!(ef, vec![vec![12.0, 18.0], vec![28.0, 42.0]]);
+        // contingency_table of paired labels.
+        let (table, rm, cm) = contingency_table(&[0, 0, 1, 1], &[0, 1, 0, 1]);
+        assert_eq!(table, vec![vec![1, 1], vec![1, 1]]);
+        assert_eq!(rm, vec![2, 2]);
+        assert_eq!(cm, vec![2, 2]);
+    }
+
+    #[test]
     fn stats_helpers_match_analytic() {
         // Previously-untested stats helpers vs analytic/numpy values.
         assert_eq!(argmax(&[3.0, 1.0, 4.0, 1.0, 5.0]), Some(4));
