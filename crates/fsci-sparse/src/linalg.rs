@@ -4619,9 +4619,9 @@ pub fn clustering_coefficient(graph: &CsrMatrix) -> Vec<f64> {
     let mut cc = vec![0.0; n];
 
     for (i, cc_val) in cc.iter_mut().enumerate() {
-        let neighbors: Vec<usize> = (graph.indptr()[i]..graph.indptr()[i + 1])
-            .map(|idx| graph.indices()[idx])
-            .collect();
+        // The CSR row's indices ARE node i's neighbor list — borrow the contiguous
+        // slice instead of allocating a Vec per node. frankenscipy-icl0h.
+        let neighbors = &graph.indices()[graph.indptr()[i]..graph.indptr()[i + 1]];
 
         let k = neighbors.len();
         if k < 2 {
@@ -4630,8 +4630,8 @@ pub fn clustering_coefficient(graph: &CsrMatrix) -> Vec<f64> {
 
         // Count edges between neighbors
         let mut edges = 0;
-        for &u in &neighbors {
-            for &v in &neighbors {
+        for &u in neighbors {
+            for &v in neighbors {
                 if u < v {
                     // Check if edge (u, v) exists
                     let u_start = graph.indptr()[u];
@@ -5193,6 +5193,24 @@ mod tests {
         assert!((sparse_sum(&sparse_power(&a, 2.0)) - 14.0).abs() < 1e-12, "power");
         // frobenius inner = sum(a_ij*b_ij) = 1*1 + 3*1 = 4.
         assert!((sparse_frobenius_inner(&a, &b) - 4.0).abs() < 1e-12, "frobenius inner");
+    }
+
+    #[test]
+    fn clustering_coefficient_triangle() {
+        // K3 (complete triangle): every node's two neighbors are connected, so the
+        // clustering coefficient is 1 for all nodes (guards the triangle-counting
+        // path of clustering_coefficient, exercised by the neighbors-slice change).
+        use crate::{CsrMatrix, Shape2D};
+        let k3 = CsrMatrix::from_components(
+            Shape2D::new(3, 3),
+            vec![1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            vec![1, 2, 0, 2, 0, 1],
+            vec![0, 2, 4, 6],
+            false,
+        )
+        .unwrap();
+        assert_eq!(clustering_coefficient(&k3), vec![1.0, 1.0, 1.0]);
+        assert!((average_clustering(&k3) - 1.0).abs() < 1e-12, "avg clustering K3 = 1");
     }
 
     #[test]
