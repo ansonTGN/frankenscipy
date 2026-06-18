@@ -7331,6 +7331,22 @@ mod tests {
     }
 
     #[test]
+    fn log_ndtr_scalar_tail_match_scipy() {
+        // scipy.special.log_ndtr = log(Phi(x)), stable in BOTH tails. The left tail
+        // is the key: Phi(-50)=0 underflows but log_ndtr stays finite (-1254.83).
+        assert!((log_ndtr_scalar(0.0) - -0.693_147_180_559_945_3).abs() < 1e-13, "log_ndtr(0)");
+        assert!(
+            (log_ndtr_scalar(2.0) - -0.023_012_909_328_963_476).abs() < 1e-13,
+            "log_ndtr(2)"
+        );
+        assert!(
+            (log_ndtr_scalar(-50.0) - -1254.831_361_139_419_9).abs() < 1e-9,
+            "log_ndtr(-50) tail: {}",
+            log_ndtr_scalar(-50.0)
+        );
+    }
+
+    #[test]
     fn cbrt_handles_negatives_match_scipy() {
         // scipy.special.cbrt = real cube root, so cbrt(-8)=-2 (NOT NaN like the
         // (-8).powf(1/3) trap). Regression guard for the powf-domain class.
