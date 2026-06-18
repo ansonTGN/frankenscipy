@@ -27700,7 +27700,7 @@ pub fn describe(data: &[f64]) -> DescribeResult {
 /// skew = m3 / m2^(3/2) where m_k are central moments.
 pub fn skew(data: &[f64]) -> f64 {
     let n = data.len();
-    if n < 3 {
+    if n < 2 {
         return f64::NAN;
     }
     let nf = n as f64;
@@ -74534,6 +74534,16 @@ mod tests {
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
         let result = skew(&data);
         assert!(result.abs() < 1e-10, "skew got {result}, expected 0.0");
+    }
+
+    #[test]
+    fn skew_length_two_matches_scipy_reference_value() {
+        let data = vec![1.0, 2.0];
+        let result = skew(&data);
+        assert!(result.abs() < 1e-15, "skew got {result}, expected 0.0");
+
+        let degenerate = vec![3.0, 3.0];
+        assert!(skew(&degenerate).is_nan());
     }
 
     #[test]
