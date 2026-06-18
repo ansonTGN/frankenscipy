@@ -7331,6 +7331,21 @@ mod tests {
     }
 
     #[test]
+    fn spence_scalar_match_scipy() {
+        // scipy.special.spence (Spence's dilogarithm): spence(0)=pi^2/6, spence(1)=0,
+        // spence(2)=-pi^2/12.
+        assert!(
+            (spence_scalar(0.0) - 1.644_934_066_848_226_4).abs() < 1e-13,
+            "spence(0)=pi^2/6"
+        );
+        assert_eq!(spence_scalar(1.0), 0.0);
+        assert!(
+            (spence_scalar(2.0) - -0.822_467_033_424_114_2).abs() < 1e-13,
+            "spence(2)=-pi^2/12"
+        );
+    }
+
+    #[test]
     fn gammaincinv_betaincinv_match_scipy() {
         // scipy.special.gammaincinv/betaincinv (inverses of the regularized
         // incomplete gamma/beta).
