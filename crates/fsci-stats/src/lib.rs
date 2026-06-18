@@ -5814,6 +5814,16 @@ impl ContinuousDistribution for Rayleigh {
         }
     }
 
+    fn logsf(&self, x: f64) -> f64 {
+        // logsf = -x^2/(2*scale^2); the default ln(sf) underflows to -inf once
+        // sf -> 0 in the tail (rayleigh.logsf(40)=-inf vs scipy -800).
+        if x < 0.0 {
+            0.0
+        } else {
+            -(x * x) / (2.0 * self.scale * self.scale)
+        }
+    }
+
     fn ppf(&self, q: f64) -> f64 {
         if !(0.0..=1.0).contains(&q) {
             return f64::NAN;
@@ -71722,6 +71732,15 @@ mod tests {
         let g2 = GenExtreme { c: 0.2 };
         assert!((g2.logcdf(1.0) - -0.401_877_572_016_460_96).abs() < 1e-12, "c=0.2 logcdf(1)");
         assert!(g2.logcdf(-50.0) == f64::NEG_INFINITY, "c=0.2 out-of-support -> -inf");
+    }
+
+    #[test]
+    fn rayleigh_logsf_tail_match_scipy() {
+        // scipy.stats.rayleigh logsf = -x^2/2; default ln(sf) underflows by x~38.
+        let d = Rayleigh { scale: 1.0 };
+        assert!((d.logsf(2.0) - -2.0).abs() < 1e-12, "logsf(2)");
+        assert!((d.logsf(40.0) - -800.0).abs() < 1e-9, "logsf(40) tail");
+        assert!(d.sf(40.0) == 0.0, "sf(40) underflows as expected");
     }
 
     #[test]
