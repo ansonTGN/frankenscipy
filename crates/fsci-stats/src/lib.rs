@@ -42855,7 +42855,15 @@ pub fn psd_welch(data: &[f64], window_size: usize, overlap: usize, fs: f64) -> V
     let hop = window_size - overlap;
     let n_freq = window_size / 2 + 1;
     let mut psd = vec![0.0; n_freq];
-    let mut n_segments = 0;
+    let n_segments = if data.len() < window_size {
+        0
+    } else {
+        1 + (data.len() - window_size) / hop
+    };
+    if n_segments == 0 {
+        return psd;
+    }
+
     let owned_plan: WelchPlan;
     let (win, twiddle_cos, twiddle_sin): (&[f64], &[f64], &[f64]) =
         if window_size == WELCH_CACHED_WINDOW_SIZE {
@@ -42874,6 +42882,53 @@ pub fn psd_welch(data: &[f64], window_size: usize, overlap: usize, fs: f64) -> V
             )
         };
 
+    let work = (n_freq as u64)
+        .saturating_mul(n_segments as u64)
+        .saturating_mul(window_size as u64);
+    let nthreads = if work < 1 << 20 || n_freq < 4 {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(1)
+            .min(n_freq)
+            .max(1)
+    };
+
+    let denom = window_size as f64 * fs;
+    let n_seg_f = n_segments as f64;
+    if nthreads <= 1 {
+        let mut windowed = vec![0.0; window_size];
+        let mut start = 0;
+        while start + window_size <= data.len() {
+            for ((slot, &sample), &weight) in windowed
+                .iter_mut()
+                .zip(data[start..start + window_size].iter())
+                .zip(win.iter())
+            {
+                *slot = sample * weight;
+            }
+
+            for (k, psd_k) in psd.iter_mut().enumerate() {
+                let cos_row = &twiddle_cos[k * window_size..(k + 1) * window_size];
+                let sin_row = &twiddle_sin[k * window_size..(k + 1) * window_size];
+                let mut re = 0.0;
+                let mut im = 0.0;
+                for ((&s, &cos), &sin) in windowed.iter().zip(cos_row.iter()).zip(sin_row.iter()) {
+                    re += s * cos;
+                    im -= s * sin;
+                }
+                *psd_k += (re * re + im * im) / denom;
+            }
+
+            start += hop;
+        }
+        for psd_k in &mut psd {
+            *psd_k /= n_seg_f;
+        }
+        return psd;
+    }
+
     // Window every overlapping segment once. Each frequency bin's periodogram is
     // an independent O(window) DFT dot summed over these segments, so the bins fan
     // out across threads (one spawn-set). psd[k] accumulates over the segments in
@@ -42890,13 +42945,7 @@ pub fn psd_welch(data: &[f64], window_size: usize, overlap: usize, fs: f64) -> V
         );
         start += hop;
     }
-    n_segments = segments.len();
-    if n_segments == 0 {
-        return psd;
-    }
 
-    let denom = window_size as f64 * fs;
-    let n_seg_f = n_segments as f64;
     let psd_bin = |k: usize| -> f64 {
         let cos_row = &twiddle_cos[k * window_size..(k + 1) * window_size];
         let sin_row = &twiddle_sin[k * window_size..(k + 1) * window_size];
@@ -42913,36 +42962,18 @@ pub fn psd_welch(data: &[f64], window_size: usize, overlap: usize, fs: f64) -> V
         acc / n_seg_f
     };
 
-    let work = (n_freq as u64)
-        .saturating_mul(n_segments as u64)
-        .saturating_mul(window_size as u64);
-    let nthreads = if work < 1 << 20 || n_freq < 4 {
-        1
-    } else {
-        std::thread::available_parallelism()
-            .map(std::num::NonZero::get)
-            .unwrap_or(1)
-            .min(n_freq)
-            .max(1)
-    };
-    if nthreads <= 1 {
-        for (k, psd_k) in psd.iter_mut().enumerate() {
-            *psd_k = psd_bin(k);
+    let chunk = n_freq.div_ceil(nthreads);
+    let psd_bin = &psd_bin;
+    std::thread::scope(|scope| {
+        for (ci, out_block) in psd.chunks_mut(chunk).enumerate() {
+            let base = ci * chunk;
+            scope.spawn(move || {
+                for (lk, slot) in out_block.iter_mut().enumerate() {
+                    *slot = psd_bin(base + lk);
+                }
+            });
         }
-    } else {
-        let chunk = n_freq.div_ceil(nthreads);
-        let psd_bin = &psd_bin;
-        std::thread::scope(|scope| {
-            for (ci, out_block) in psd.chunks_mut(chunk).enumerate() {
-                let base = ci * chunk;
-                scope.spawn(move || {
-                    for (lk, slot) in out_block.iter_mut().enumerate() {
-                        *slot = psd_bin(base + lk);
-                    }
-                });
-            }
-        });
-    }
+    });
 
     psd
 }
@@ -44663,6 +44694,82 @@ mod tests {
             assert!(
                 diff < tol,
                 "{msg}[{idx}]: got {got}, expected {want} (diff={diff})"
+            );
+        }
+    }
+
+    fn psd_welch_materialized_reference(
+        data: &[f64],
+        window_size: usize,
+        overlap: usize,
+        fs: f64,
+    ) -> Vec<f64> {
+        if data.is_empty() || window_size == 0 || fs <= 0.0 || !fs.is_finite() {
+            return vec![];
+        }
+
+        let overlap = overlap.min(window_size.saturating_sub(1));
+        let hop = window_size - overlap;
+        let n_freq = window_size / 2 + 1;
+        let mut psd = vec![0.0; n_freq];
+        let plan = WelchPlan::new(window_size);
+        let mut segments: Vec<Vec<f64>> = Vec::new();
+        let mut start = 0;
+        while start + window_size <= data.len() {
+            segments.push(
+                data[start..start + window_size]
+                    .iter()
+                    .zip(plan.win.iter())
+                    .map(|(&sample, &weight)| sample * weight)
+                    .collect(),
+            );
+            start += hop;
+        }
+        if segments.is_empty() {
+            return psd;
+        }
+
+        let denom = window_size as f64 * fs;
+        let n_seg_f = segments.len() as f64;
+        for (k, psd_k) in psd.iter_mut().enumerate() {
+            let cos_row = &plan.twiddle_cos[k * window_size..(k + 1) * window_size];
+            let sin_row = &plan.twiddle_sin[k * window_size..(k + 1) * window_size];
+            let mut acc = 0.0;
+            for segment in &segments {
+                let mut re = 0.0;
+                let mut im = 0.0;
+                for ((&s, &cos), &sin) in segment.iter().zip(cos_row.iter()).zip(sin_row.iter()) {
+                    re += s * cos;
+                    im -= s * sin;
+                }
+                acc += (re * re + im * im) / denom;
+            }
+            *psd_k = acc / n_seg_f;
+        }
+        psd
+    }
+
+    #[test]
+    fn psd_welch_serial_streaming_matches_materialized_reference_bits() {
+        for &(n, window_size, overlap, fs) in &[
+            (4096usize, 128usize, 64usize, 1.0f64),
+            (513usize, 96usize, 32usize, 100.0f64),
+        ] {
+            let data: Vec<f64> = (0..n)
+                .map(|i| {
+                    let x = i as f64;
+                    (x * 0.017).sin() + (x * 0.031).cos() * 0.25 + (i % 17) as f64 * 0.001
+                })
+                .collect();
+            let got = psd_welch(&data, window_size, overlap, fs);
+            let expected = psd_welch_materialized_reference(&data, window_size, overlap, fs);
+            assert_eq!(
+                got.iter().map(|value| value.to_bits()).collect::<Vec<_>>(),
+                expected
+                    .iter()
+                    .map(|value| value.to_bits())
+                    .collect::<Vec<_>>(),
+                "psd_welch bit identity for n={n}, window_size={window_size}, overlap={overlap}"
             );
         }
     }
