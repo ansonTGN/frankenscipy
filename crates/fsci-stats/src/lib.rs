@@ -52740,6 +52740,18 @@ mod tests {
     }
 
     #[test]
+    fn laplace_asymmetric_pdf_cdf_match_scipy() {
+        // Exact scipy.stats.laplace_asymmetric(kappa=2). The suite covers entropy
+        // and skew/kurt but no exact pdf/cdf. pdf(1) (fast right decay) and pdf(-1)
+        // (slow left decay) exercise the asymmetric branches.
+        let l = LaplaceAsymmetric::new(2.0);
+        assert!((l.pdf(0.0) - 0.4).abs() < 1e-12, "pdf(0) peak");
+        assert!((l.pdf(1.0) - 0.054_134_113_294_645_08).abs() < 1e-12, "pdf(1) right");
+        assert!((l.pdf(-1.0) - 0.242_612_263_885_053_36).abs() < 1e-12, "pdf(-1) left");
+        assert!((l.cdf(0.0) - 0.8).abs() < 1e-12, "cdf(0)=kappa^2/(1+kappa^2)");
+    }
+
+    #[test]
     fn laplace_asymmetric_skewness_and_kurtosis_match_scipy_reference_values() {
         // scipy.stats.laplace_asymmetric(κ).stats(moments='sk').
         // κ = 1 is the symmetric Laplace (skew = 0, ex.kurt = 3).
