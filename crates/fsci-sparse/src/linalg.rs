@@ -5410,6 +5410,29 @@ mod tests {
     }
 
     #[test]
+    fn spsolve_cg_match_scipy_spd_system() {
+        // A = [[4,1,0],[1,3,1],[0,1,2]] (SPD), b = [1,2,3].
+        // scipy.sparse.linalg.spsolve / cg both give x = [2/9, 1/9, 13/9].
+        let a = CooMatrix::from_triplets(
+            Shape2D::new(3, 3),
+            vec![4.0, 1.0, 1.0, 3.0, 1.0, 1.0, 2.0],
+            vec![0, 0, 1, 1, 1, 2, 2],
+            vec![0, 1, 0, 1, 2, 1, 2],
+            false,
+        )
+        .expect("coo")
+        .to_csr()
+        .expect("csr");
+        let b = vec![1.0, 2.0, 3.0];
+        let expect = [2.0 / 9.0, 1.0 / 9.0, 13.0 / 9.0];
+        let direct = spsolve(&a, &b, SolveOptions::default()).expect("spsolve");
+        assert_close_slice(&direct.solution, &expect, 1e-10);
+        let it = cg(&a, &b, None, IterativeSolveOptions::default()).expect("cg");
+        assert!(it.converged, "cg should converge");
+        assert_close_slice(&it.solution, &expect, 1e-8);
+    }
+
+    #[test]
     fn spsolve_diagonal_system() {
         // [[2, 0], [0, 3]] x = [4, 9] => x = [2, 3]
         let a = CooMatrix::from_triplets(
