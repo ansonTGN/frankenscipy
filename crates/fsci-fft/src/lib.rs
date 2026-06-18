@@ -1051,13 +1051,19 @@ mod tests {
     fn analytic_signal_matches_scipy_reference() {
         // scipy.signal.hilbert([1, 2, 3, 4]) returns analytic signal
         let x = vec![1.0, 2.0, 3.0, 4.0];
+        let expected = [(1.0, 1.0), (2.0, -1.0), (3.0, -1.0), (4.0, 1.0)];
         let result = analytic_signal(&x).expect("analytic_signal");
         assert_eq!(result.len(), 4);
-        // Real part should equal input
-        for (i, (&(re, _), &expected)) in result.iter().zip(x.iter()).enumerate() {
+        for (i, (&(re, im), &(expected_re, expected_im))) in
+            result.iter().zip(expected.iter()).enumerate()
+        {
             assert!(
-                (re - expected).abs() < 1e-10,
-                "analytic_signal[{i}].real = {re}, expected {expected}"
+                (re - expected_re).abs() < 1e-10,
+                "analytic_signal[{i}].real = {re}, expected {expected_re}"
+            );
+            assert!(
+                (im - expected_im).abs() < 1e-10,
+                "analytic_signal[{i}].imag = {im}, expected {expected_im}"
             );
         }
     }
