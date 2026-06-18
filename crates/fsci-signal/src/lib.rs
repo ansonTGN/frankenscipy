@@ -15030,6 +15030,11 @@ pub fn minimum_phase(h: &[f64]) -> Result<Vec<f64>, SignalError> {
             "h must be 1-D and at least 2 samples long".to_string(),
         ));
     }
+    if h.iter().any(|value| !value.is_finite()) {
+        return Err(SignalError::NonFiniteInput {
+            detail: "minimum_phase coefficients must be finite".to_string(),
+        });
+    }
 
     let suggested_fft = ((2 * (h.len() - 1)) as f64 / 0.01).ceil() as usize;
     let n_fft = suggested_fft
@@ -25001,6 +25006,18 @@ mod tests {
     fn minimum_phase_rejects_short_filters() {
         assert!(minimum_phase(&[]).is_err());
         assert!(minimum_phase(&[1.0, 2.0]).is_err());
+    }
+
+    #[test]
+    fn minimum_phase_rejects_non_finite_coefficients() {
+        for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                minimum_phase(&[1.0, bad, 1.0]),
+                Err(SignalError::NonFiniteInput {
+                    detail: "minimum_phase coefficients must be finite".to_string(),
+                })
+            );
+        }
     }
 
     // ── Lomb-Scargle tests ───────────────────────────────────────────
