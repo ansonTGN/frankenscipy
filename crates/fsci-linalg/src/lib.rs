@@ -11213,6 +11213,11 @@ pub static DISABLE_TALL_PINV_TRSM: std::sync::atomic::AtomicBool =
 #[doc(hidden)]
 pub static DISABLE_TALL_PINV_TRSM_THREADS: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
+/// Runtime switch to force the tall `pinv` route to materialize `A⁺·A` for
+/// same-binary A/B benchmarks. Defaults off. `#[doc(hidden)]` — internal.
+#[doc(hidden)]
+pub static DISABLE_TALL_PINV_STREAMING_CERT: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 /// Loose conditioning sanity floor for the solve-only normal-equations lstsq
 /// route: spectra below this rcond are hopeless even with refinement, so we
 /// fall back to the public thin-SVD route. Real acceptance is governed by the
@@ -11243,6 +11248,14 @@ fn tall_pinv_trsm_threads_disabled() -> bool {
     }
     static ENV: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ENV.get_or_init(|| std::env::var_os("FSCI_DISABLE_TALL_PINV_TRSM_THREADS").is_some())
+}
+
+fn tall_pinv_streaming_cert_disabled() -> bool {
+    if DISABLE_TALL_PINV_STREAMING_CERT.load(std::sync::atomic::Ordering::Relaxed) {
+        return true;
+    }
+    static ENV: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENV.get_or_init(|| std::env::var_os("FSCI_DISABLE_TALL_PINV_STREAMING_CERT").is_some())
 }
 
 fn pinv_full_rank_tall_cholesky(
@@ -11301,14 +11314,19 @@ fn pinv_full_rank_tall_cholesky_with_min_cols(
         return None;
     }
 
-    let right_inverse = &pinv * matrix;
-    let mut max_error = 0.0_f64;
-    for row in 0..cols {
-        for col in 0..cols {
-            let target = if row == col { 1.0 } else { 0.0 };
-            max_error = max_error.max((right_inverse[(row, col)] - target).abs());
+    let max_error = if tall_pinv_streaming_cert_disabled() {
+        let right_inverse = &pinv * matrix;
+        let mut max_error = 0.0_f64;
+        for row in 0..cols {
+            for col in 0..cols {
+                let target = if row == col { 1.0 } else { 0.0 };
+                max_error = max_error.max((right_inverse[(row, col)] - target).abs());
+            }
         }
-    }
+        max_error
+    } else {
+        pinv_right_inverse_max_error_streaming(&pinv, matrix)?
+    };
     let tolerance = FULL_RANK_TALL_PINV_RIGHT_INVERSE_REL_TOL * (cols as f64).sqrt();
     if max_error > tolerance {
         return None;
@@ -11332,6 +11350,66 @@ fn dmatrix_norm1(m: &DMatrix<f64>) -> f64 {
         max_col_sum = max_col_sum.max(col_sum);
     }
     max_col_sum
+}
+
+/// Compute `max(abs(A⁺·A - I))` without materializing the full certificate
+/// matrix. This preserves the same fail-closed acceptance test while avoiding a
+/// `cols×cols` allocation and writeback on the hot tall-`pinv` route.
+fn pinv_right_inverse_max_error_streaming(
+    pinv: &DMatrix<f64>,
+    matrix: &DMatrix<f64>,
+) -> Option<f64> {
+    let rows = matrix.nrows();
+    let cols = matrix.ncols();
+    if pinv.nrows() != cols || pinv.ncols() != rows {
+        return None;
+    }
+
+    let mut max_error = 0.0_f64;
+    for row in 0..cols {
+        let mut col = 0;
+        while col + 4 <= cols {
+            let mut acc0 = 0.0_f64;
+            let mut acc1 = 0.0_f64;
+            let mut acc2 = 0.0_f64;
+            let mut acc3 = 0.0_f64;
+            for k in 0..rows {
+                let scale = pinv[(row, k)];
+                acc0 += scale * matrix[(k, col)];
+                acc1 += scale * matrix[(k, col + 1)];
+                acc2 += scale * matrix[(k, col + 2)];
+                acc3 += scale * matrix[(k, col + 3)];
+            }
+            let targets = [
+                if row == col { 1.0 } else { 0.0 },
+                if row == col + 1 { 1.0 } else { 0.0 },
+                if row == col + 2 { 1.0 } else { 0.0 },
+                if row == col + 3 { 1.0 } else { 0.0 },
+            ];
+            for (value, target) in [acc0, acc1, acc2, acc3].into_iter().zip(targets) {
+                let error = (value - target).abs();
+                if !error.is_finite() {
+                    return None;
+                }
+                max_error = max_error.max(error);
+            }
+            col += 4;
+        }
+        while col < cols {
+            let mut value = 0.0_f64;
+            for k in 0..rows {
+                value += pinv[(row, k)] * matrix[(k, col)];
+            }
+            let target = if row == col { 1.0 } else { 0.0 };
+            let error = (value - target).abs();
+            if !error.is_finite() {
+                return None;
+            }
+            max_error = max_error.max(error);
+            col += 1;
+        }
+    }
+    Some(max_error)
 }
 
 /// Solve-only pseudo-inverse route for a full-rank **square** matrix.
@@ -18762,6 +18840,38 @@ mod tests {
         let actual = cholesky_solve_matrix_rhs_batched(&chol, &a_t).expect("batched solve");
 
         assert!(max_abs_dmatrix_diff(&actual, &expected) <= 1e-12);
+    }
+
+    #[test]
+    fn streaming_pinv_certificate_matches_materialized_product() {
+        let rows = 32;
+        let cols = 16;
+        let mut data = Vec::with_capacity(rows * cols);
+        for row in 0..rows {
+            for col in 0..cols {
+                let diagonal = if row == col { 11.0 + col as f64 } else { 0.0 };
+                let smooth = ((row * 37 + col * 17 + 3) % 53) as f64 / 127.0;
+                data.push(diagonal + smooth);
+            }
+        }
+        let matrix = DMatrix::from_row_slice(rows, cols, &data);
+        let a_t = matrix.transpose();
+        let gram = &a_t * &matrix;
+        let chol = Cholesky::new(gram).expect("SPD Gram factor");
+        let pinv = cholesky_solve_matrix_rhs_batched(&chol, &a_t).expect("batched solve");
+
+        let streaming =
+            pinv_right_inverse_max_error_streaming(&pinv, &matrix).expect("streaming certificate");
+        let materialized = &pinv * &matrix;
+        let mut expected = 0.0_f64;
+        for row in 0..cols {
+            for col in 0..cols {
+                let target = if row == col { 1.0 } else { 0.0 };
+                expected = expected.max((materialized[(row, col)] - target).abs());
+            }
+        }
+
+        assert!((streaming - expected).abs() <= 1e-12);
     }
 
     #[test]
