@@ -4753,6 +4753,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn jv_yv_scalar_match_scipy() {
+        // scipy.special.jv/yv (Bessel functions of the first/second kind).
+        assert!((jv_scalar(0.0, 1.0) - 0.765_197_686_557_966_6).abs() < 1e-13, "jv(0,1)");
+        assert!((jv_scalar(1.0, 2.0) - 0.576_724_807_756_873_6).abs() < 1e-13, "jv(1,2)");
+        assert!(
+            (yv_scalar(0.0, 1.0, RuntimeMode::Strict).unwrap() - 0.088_256_964_215_677).abs()
+                < 1e-13,
+            "yv(0,1)"
+        );
+    }
+
+    #[test]
     fn lmbda_matches_scipy() {
         // frankenscipy: golden (vl, dl) from scipy.special.lmbda (1.17.1).
         let close = |got: &[f64], want: &[f64], msg: &str| {
