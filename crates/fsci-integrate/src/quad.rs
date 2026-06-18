@@ -3191,6 +3191,13 @@ where
     Cx: Fn(f64) -> f64,
     Cy: Fn(f64) -> f64,
 {
+    if !t_lo.is_finite() || !t_hi.is_finite() {
+        return f64::NAN;
+    }
+    if t_lo == t_hi {
+        return 0.0;
+    }
+
     let n = n.max(2) | 1;
     let h = (t_hi - t_lo) / (n - 1) as f64;
 
@@ -5468,6 +5475,22 @@ mod tests {
             "tplquad got {}, expected 0.125",
             result
         );
+    }
+
+    #[test]
+    fn line_integral_equal_bounds_returns_zero_without_sampling() {
+        let result = line_integral(
+            |_, _| -> f64 { panic!("zero-length line integral should not sample integrand") },
+            |_| -> f64 { panic!("zero-length line integral should not sample x curve") },
+            |_| -> f64 { panic!("zero-length line integral should not sample y curve") },
+            2.5,
+            2.5,
+            0,
+        );
+        assert_eq!(result, 0.0);
+
+        let invalid = line_integral(|_, _| 1.0, |t| t, |t| t, f64::INFINITY, f64::INFINITY, 3);
+        assert!(invalid.is_nan());
     }
 
     #[test]
