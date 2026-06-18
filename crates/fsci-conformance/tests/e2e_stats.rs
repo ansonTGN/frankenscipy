@@ -4138,6 +4138,58 @@ fn e2e_040_ks_2samp_exact_pvalue_parity() {
     assert!(all_pass, "scenario {scenario_id} had failures");
 }
 
+/// Scenario 40b: combined SciPy goldens for independent t-test and two-sample KS.
+#[test]
+fn e2e_040b_ttest_ind_ks_2samp_scipy_golden() {
+    let scenario_id = "e2e_stats_040b_ttest_ind_ks_2samp_scipy_golden";
+    let mut steps = Vec::new();
+    let mut all_pass = true;
+
+    let t = Instant::now();
+    let ttest = ttest_ind(&[1.2, 2.4, 2.8, 3.1, 4.0, 4.2], &[0.9, 1.7, 2.1, 2.9, 3.3]);
+    let ttest_pass = (ttest.statistic - 1.223_421_537_810_768_7).abs() < 1.0e-12
+        && (ttest.pvalue - 0.252_234_998_836_302_5).abs() < 1.0e-12
+        && ttest.df == 9.0;
+    if !ttest_pass {
+        all_pass = false;
+    }
+    steps.push(make_step(
+        1,
+        "ttest_ind_equal_var_scipy_golden",
+        "ttest_ind([1.2,2.4,2.8,3.1,4.0,4.2], [0.9,1.7,2.1,2.9,3.3])",
+        "independent equal-variance t-test should match SciPy statistic, p-value, and df",
+        &format!(
+            "statistic={:.16}, pvalue={:.16}, df={:.1}",
+            ttest.statistic, ttest.pvalue, ttest.df
+        ),
+        t.elapsed().as_nanos(),
+        if ttest_pass { "pass" } else { "FAIL" },
+    ));
+
+    let t = Instant::now();
+    let ks = ks_2samp(&[0.1, 0.4, 0.9, 1.3, 1.8], &[0.2, 0.3, 1.1, 1.4, 2.2, 2.8]);
+    let ks_pass = (ks.statistic - 0.333_333_333_333_333_3).abs() < 1.0e-15
+        && (ks.pvalue - 0.818_181_818_181_818_2).abs() < 1.0e-15;
+    if !ks_pass {
+        all_pass = false;
+    }
+    steps.push(make_step(
+        2,
+        "ks_2samp_exact_scipy_golden",
+        "ks_2samp([0.1,0.4,0.9,1.3,1.8], [0.2,0.3,1.1,1.4,2.2,2.8])",
+        "two-sample KS exact branch should match SciPy statistic and p-value",
+        &format!(
+            "statistic={:.16}, pvalue={:.16}",
+            ks.statistic, ks.pvalue
+        ),
+        t.elapsed().as_nanos(),
+        if ks_pass { "pass" } else { "FAIL" },
+    ));
+
+    assert_artifacts_written(scenario_id, &steps, all_pass);
+    assert!(all_pass, "scenario {scenario_id} had failures");
+}
+
 /// Scenario 41: ks_1samp asymptotic p-value parity.
 #[test]
 fn e2e_041_ks_1samp_asymptotic_pvalue_parity() {
