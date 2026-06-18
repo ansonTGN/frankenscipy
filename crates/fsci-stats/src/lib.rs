@@ -70743,6 +70743,18 @@ mod tests {
     }
 
     #[test]
+    fn skellam_pmf_cdf_sf_match_scipy() {
+        // Exact scipy.stats.skellam(5,3) values. test_skellam only checks pmf>0
+        // and sum~1 (tol 0.01), so it would miss a few-percent formula drift;
+        // this locks the exact pmf (both signs), cdf, and sf.
+        let sk = Skellam::new(5.0, 3.0);
+        assert!((sk.pmf_signed(2) - 0.143_130_147_599_149_1).abs() < 1e-12, "pmf(2)");
+        assert!((sk.pmf_signed(-1) - 0.081_762_240_903_197_71).abs() < 1e-12, "pmf(-1)");
+        assert!((sk.cdf(2) - 0.577_593_945_478_478_3).abs() < 1e-10, "cdf(2)");
+        assert!((sk.sf(2) - 0.422_406_054_521_521_7).abs() < 1e-10, "sf(2)");
+    }
+
+    #[test]
     fn test_skellam() {
         let sk = Skellam::new(5.0, 3.0);
         let pmf0 = sk.pmf_signed(0);
