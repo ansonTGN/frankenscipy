@@ -72020,6 +72020,23 @@ mod tests {
     }
 
     #[test]
+    fn skew_kurtosis_free_fn_match_scipy() {
+        // scipy.stats.skew (bias=True) and kurtosis (Fisher + bias=True defaults).
+        // Cross-reviewed: kurtosis_from_moments subtracts 3.0 (Fisher convention).
+        let x = [1.0, 2.0, 3.0, 4.0, 10.0];
+        assert!(
+            (skew(&x) - 1.138_419_957_660_616_7).abs() < 1e-12,
+            "skew: {}",
+            skew(&x)
+        );
+        assert!(
+            (kurtosis(&x) - -0.211_999_999_999_999_74).abs() < 1e-12,
+            "kurtosis(Fisher): {}",
+            kurtosis(&x)
+        );
+    }
+
+    #[test]
     fn levene_match_scipy() {
         // scipy.stats.levene default (median-centered) on 3 groups.
         let g1 = [1.0, 2.0, 3.0, 4.0];
