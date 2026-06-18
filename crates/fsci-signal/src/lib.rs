@@ -2318,7 +2318,11 @@ impl ZoomFFT {
         let (f1, f2) = fn_range;
         let mf = m as f64;
         let scale = if endpoint {
-            ((f2 - f1) * mf) / (fs * (mf - 1.0))
+            if m == 1 {
+                0.0
+            } else {
+                ((f2 - f1) * mf) / (fs * (mf - 1.0))
+            }
         } else {
             (f2 - f1) / fs
         };
@@ -16778,6 +16782,45 @@ mod tests {
     }
 
     #[test]
+    fn zoom_fft_endpoint_single_point_samples_start_frequency() {
+        let n = 16;
+        let f1 = 0.2;
+        let fs = 2.0;
+        let x = czt_xin(n);
+        let y = ZoomFFT::new(n, (f1, 0.6), Some(1), fs, true)
+            .expect("single-point endpoint grid")
+            .transform(&x)
+            .expect("transform");
+        assert_eq!(y.len(), 1);
+        assert!(
+            y[0].0.is_finite() && y[0].1.is_finite(),
+            "single-point endpoint grid produced {y:?}"
+        );
+
+        let mut expected = (0.0, 0.0);
+        let two_pi = 2.0 * std::f64::consts::PI;
+        for (k, &sample) in x.iter().enumerate() {
+            let angle = -two_pi * f1 * k as f64 / fs;
+            let twiddle = (angle.cos(), angle.sin());
+            let product = czt_cmul(sample, twiddle);
+            expected.0 += product.0;
+            expected.1 += product.1;
+        }
+        assert!(
+            (y[0].0 - expected.0).abs() < 1e-10,
+            "{:?} vs {:?}",
+            y[0],
+            expected
+        );
+        assert!(
+            (y[0].1 - expected.1).abs() < 1e-10,
+            "{:?} vs {:?}",
+            y[0],
+            expected
+        );
+    }
+
+    #[test]
     fn czt_rejects_wrong_length() {
         let c = CZT::new(7, None, None, None).unwrap();
         assert!(c.transform(&czt_xin(6)).is_err());
@@ -18250,6 +18293,46 @@ mod tests {
         }
         for (g, e) in c.a.iter().zip(&ea) {
             assert!((g - e).abs() < 1e-12, "a: {g} vs {e}");
+        }
+    }
+
+    #[test]
+    fn butter_bandpass_highpass_coeffs_match_scipy() {
+        // scipy.signal.butter(2, [0.2,0.5], 'band') and (2, 0.3, 'high'), 1.17.1.
+        // Exercises the lp2bp / lp2hp transforms, not just lowpass.
+        let bp = butter(2, &[0.2, 0.5], FilterType::Bandpass).expect("bandpass");
+        let bp_b = [
+            0.131_106_439_916_625_93,
+            0.0,
+            -0.262_212_879_833_251_87,
+            0.0,
+            0.131_106_439_916_625_93,
+        ];
+        let bp_a = [
+            1.0,
+            -1.400_068_516_168_091_5,
+            1.272_214_937_925_007_4,
+            -0.658_418_494_389_908_4,
+            0.272_214_937_925_007_17,
+        ];
+        for (g, e) in bp.b.iter().zip(&bp_b) {
+            assert!((g - e).abs() < 1e-11, "bp b: {g} vs {e}");
+        }
+        for (g, e) in bp.a.iter().zip(&bp_a) {
+            assert!((g - e).abs() < 1e-11, "bp a: {g} vs {e}");
+        }
+        let hp = butter(2, &[0.3], FilterType::Highpass).expect("highpass");
+        let hp_b = [
+            0.505_001_029_045_877_6,
+            -1.010_002_058_091_755_3,
+            0.505_001_029_045_877_6,
+        ];
+        let hp_a = [1.0, -0.747_789_178_258_503_4, 0.272_214_937_925_007_17];
+        for (g, e) in hp.b.iter().zip(&hp_b) {
+            assert!((g - e).abs() < 1e-12, "hp b: {g} vs {e}");
+        }
+        for (g, e) in hp.a.iter().zip(&hp_a) {
+            assert!((g - e).abs() < 1e-12, "hp a: {g} vs {e}");
         }
     }
 
