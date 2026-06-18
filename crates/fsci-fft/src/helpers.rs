@@ -313,7 +313,10 @@ pub fn fftconvolve(a: &[f64], b: &[f64], mode: &str) -> Result<Vec<f64>, FftErro
                 Ok(full[start..end.min(full.len())].to_vec())
             }
         }
-        _ => Ok(full), // "full"
+        "full" => Ok(full),
+        _ => Err(FftError::InvalidShape {
+            detail: "fftconvolve mode must be 'full', 'same', or 'valid'",
+        }),
     }
 }
 
@@ -521,7 +524,7 @@ mod tests {
         fftconvolve, fftfreq, fftshift, fftshift_1d, ifftshift, ifftshift_1d,
         polynomial_multiply_fft, rfftfreq,
     };
-    use crate::FftOptions;
+    use crate::{FftError, FftOptions};
 
     #[test]
     fn fftshift_nd_matches_numpy() {
@@ -725,6 +728,12 @@ mod tests {
         let b = vec![1.0, 1.0, 1.0];
         let result = fftconvolve(&a, &b, "same").unwrap();
         assert_eq!(result.len(), 5); // same length as a
+    }
+
+    #[test]
+    fn fftconvolve_rejects_invalid_mode() {
+        let err = fftconvolve(&[1.0, 2.0, 3.0], &[1.0], "nearest").unwrap_err();
+        assert!(matches!(err, FftError::InvalidShape { .. }));
     }
 
     #[test]
