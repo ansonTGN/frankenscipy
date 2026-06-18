@@ -4547,6 +4547,30 @@ mod tests {
     }
 
     #[test]
+    fn loadmat_reads_real_scipy_mat4_bytes() {
+        // No-mock differential coverage: these are the exact bytes produced by
+        // `scipy.io.savemat(buf, {'A': [[1,2,3],[4,5,6]], 'v': [[10,20,30,40]]},
+        // format='4')` (SciPy 1.17.1). fsci `loadmat` must read them back with
+        // the same shapes and row-major values SciPy reports. This guards the
+        // real MATLAB v4 wire format, not just an fsci→fsci round-trip.
+        let scipy_mat4: &[u8] = &[
+            0, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 65, 0, 0, 0, 0, 0, 0, 0,
+            240, 63, 0, 0, 0, 0, 0, 0, 16, 64, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 20, 64,
+            0, 0, 0, 0, 0, 0, 8, 64, 0, 0, 0, 0, 0, 0, 24, 64, 0, 0, 0, 0, 1, 0, 0, 0, 4, 0, 0, 0,
+            0, 0, 0, 0, 2, 0, 0, 0, 118, 0, 0, 0, 0, 0, 0, 0, 36, 64, 0, 0, 0, 0, 0, 0, 52, 64, 0,
+            0, 0, 0, 0, 0, 62, 64, 0, 0, 0, 0, 0, 0, 68, 64,
+        ];
+        let loaded = loadmat(scipy_mat4).expect("fsci loadmat must read scipy MAT v4 output");
+        assert_eq!(loaded.len(), 2);
+        let a = loaded.iter().find(|m| m.name == "A").expect("A present");
+        assert_eq!((a.rows, a.cols), (2, 3));
+        assert_eq!(a.data, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        let v = loaded.iter().find(|m| m.name == "v").expect("v present");
+        assert_eq!((v.rows, v.cols), (1, 4));
+        assert_eq!(v.data, vec![10.0, 20.0, 30.0, 40.0]);
+    }
+
+    #[test]
     fn savemat_binary_roundtrip_mat4_real_double() {
         let arrays = vec![
             MatArray {
