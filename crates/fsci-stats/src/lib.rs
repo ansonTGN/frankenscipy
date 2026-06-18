@@ -72011,6 +72011,27 @@ mod tests {
     }
 
     #[test]
+    fn yeojohnson_branches_match_scipy() {
+        // scipy.stats.yeojohnson all 4 sign/lambda branches.
+        assert!(
+            (yeojohnson(&[2.0], 0.5)[0] - 1.464_101_615_137_754_4).abs() < 1e-13,
+            "x>=0, lam!=0"
+        );
+        assert!(
+            (yeojohnson(&[2.0], 0.0)[0] - 1.098_612_288_668_109_8).abs() < 1e-13,
+            "x>=0, lam=0"
+        );
+        assert!(
+            (yeojohnson(&[-2.0], 0.5)[0] - -2.797_434_948_471_088).abs() < 1e-13,
+            "x<0, lam!=2"
+        );
+        assert!(
+            (yeojohnson(&[-2.0], 2.0)[0] - -1.098_612_288_668_109_8).abs() < 1e-13,
+            "x<0, lam=2"
+        );
+    }
+
+    #[test]
     fn wasserstein_energy_distance_match_scipy() {
         // scipy.stats.wasserstein_distance / energy_distance (unweighted).
         assert!(
