@@ -21901,6 +21901,33 @@ impl ContinuousDistribution for CrystalBall {
         }
     }
 
+    fn sf(&self, x: f64) -> f64 {
+        let beta = self.beta_param;
+        let m = self.m;
+        if x < -beta {
+            // Power-law left region: cdf is small, so 1 - cdf has no cancellation.
+            return 1.0 - self.cdf(x);
+        }
+        // Gaussian right region. From cdf = (tail_norm + sqrt(2pi)*(Phi(x)-Phi(-b)))
+        // /total_norm and Phi(b)+Phi(-b)=1, the algebra collapses to
+        //   sf(x) = sqrt(2pi) * Phi(-x) / total_norm,
+        // which equals 1 - cdf but evaluates Phi(-x) via erfc (standard_normal_cdf
+        // is erfc-stable for negative args) instead of cancelling 1 - cdf -> 0.
+        // The default underflowed sf to exactly 0 by x~8 (scipy: 7.5e-24). frankenscipy.
+        let gauss_norm = (2.0 * PI).sqrt() * standard_normal_cdf(beta);
+        let a_coeff = (m / beta).powf(m) * (-0.5 * beta * beta).exp();
+        let tail_norm = if m > 1.0 {
+            a_coeff * (m / beta).powf(1.0 - m) / (m - 1.0)
+        } else {
+            100.0 * a_coeff
+        };
+        let total_norm = gauss_norm + tail_norm;
+        if total_norm <= 0.0 {
+            return 0.5;
+        }
+        ((2.0 * PI).sqrt() * standard_normal_cdf(-x) / total_norm).clamp(0.0, 1.0)
+    }
+
     fn mean(&self) -> f64 {
         let beta = self.beta_param;
         let m = self.m;
@@ -71528,6 +71555,25 @@ mod tests {
         let hm = hmean(&data);
         let expected_hm = 5.0 / (1.0 + 0.5 + 1.0 / 3.0 + 0.25 + 0.2);
         assert!((hm - expected_hm).abs() < 1e-10, "hmean, got {}", hm);
+    }
+
+    #[test]
+    fn crystalball_sf_gaussian_tail_match_scipy() {
+        // scipy.stats.crystalball(2.0, 3.0). Right (Gaussian) tail: the default
+        // 1-cdf underflowed sf to 0 by x~8; the erfc form stays accurate.
+        let d = CrystalBall {
+            beta_param: 2.0,
+            m: 3.0,
+        };
+        assert!((d.sf(0.0) - 0.491_283_117_979_452_95).abs() < 1e-12, "sf(0)");
+        let rel = |g: f64, e: f64| (g - e).abs() / e < 1e-10;
+        assert!(rel(d.sf(5.0), 2.816_541_560_130_427e-7), "sf(5): {}", d.sf(5.0));
+        assert!(
+            rel(d.sf(10.0), 7.487_010_304_509_439e-24),
+            "sf(10) deep tail: {}",
+            d.sf(10.0)
+        );
+        assert!((d.sf(-5.0) - 0.995_579_191_604_779_5).abs() < 1e-12, "sf(-5) left");
     }
 
     #[test]
