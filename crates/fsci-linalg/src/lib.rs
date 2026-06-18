@@ -12707,6 +12707,15 @@ pub fn subspace_angles(
     b: &[Vec<f64>],
     options: DecompOptions,
 ) -> Result<Vec<f64>, LinalgError> {
+    let (a_rows, _) = matrix_shape(a)?;
+    let (b_rows, _) = matrix_shape(b)?;
+    if a_rows != b_rows {
+        return Err(LinalgError::IncompatibleShapes {
+            a_shape: (a_rows, 0),
+            b_len: b_rows,
+        });
+    }
+
     // Compute orthonormal bases.
     let qa = orth(a, None, options)?;
     let qb = orth(b, None, options)?;
@@ -24146,6 +24155,21 @@ mod tests {
             "orthogonal angle: {}, expected π/2",
             angles[0]
         );
+    }
+
+    #[test]
+    fn subspace_angles_rejects_row_mismatch_like_scipy() {
+        let a = vec![vec![1.0], vec![0.0]];
+        let b = vec![vec![1.0], vec![0.0], vec![0.0]];
+        let err = subspace_angles(&a, &b, DecompOptions::default())
+            .expect_err("scipy rejects different ambient dimensions");
+        assert!(matches!(err, LinalgError::IncompatibleShapes { .. }));
+
+        let zero_col_a = vec![Vec::new(), Vec::new()];
+        let zero_col_b = vec![Vec::new(), Vec::new(), Vec::new()];
+        let err = subspace_angles(&zero_col_a, &zero_col_b, DecompOptions::default())
+            .expect_err("scipy rejects row mismatch even with zero columns");
+        assert!(matches!(err, LinalgError::IncompatibleShapes { .. }));
     }
 
     #[test]
