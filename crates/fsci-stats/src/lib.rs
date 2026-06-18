@@ -71750,6 +71750,20 @@ mod tests {
     }
 
     #[test]
+    fn wasserstein_energy_distance_match_scipy() {
+        // scipy.stats.wasserstein_distance / energy_distance (unweighted).
+        assert!(
+            (wasserstein_distance(&[0.0, 1.0, 3.0], &[5.0, 6.0, 8.0]) - 5.0).abs() < 1e-12,
+            "wasserstein"
+        );
+        assert!(
+            (energy_distance(&[0.0, 1.0, 3.0], &[5.0, 6.0, 8.0]) - 2.708_012_801_545_320_4).abs()
+                < 1e-12,
+            "energy"
+        );
+    }
+
+    #[test]
     fn cauchy_pdf_cdf_sf_ppf_match_scipy() {
         // scipy.stats.cauchy(loc=1, scale=2): closed-form atan-based dist.
         let d = Cauchy::new(1.0, 2.0);
