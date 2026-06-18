@@ -43144,7 +43144,13 @@ pub fn durbin_watson(residuals: &[f64]) -> f64 {
         return f64::NAN;
     }
 
-    let num: f64 = residuals.windows(2).map(|w| (w[1] - w[0]).powi(2)).sum();
+    let num: f64 = residuals
+        .windows(2)
+        .map(|w| {
+            let delta = w[1] - w[0];
+            delta * delta
+        })
+        .sum();
     let den: f64 = residuals.iter().map(|&r| r * r).sum();
 
     if den == 0.0 {
@@ -49500,6 +49506,21 @@ mod tests {
 
         // Constant input → all 1.0 (var == 0 branch).
         assert_eq!(acf(&[5.0; 10], 4), vec![1.0; 5]);
+    }
+
+    #[test]
+    fn durbin_watson_square_multiply_matches_powi_reference_bits() {
+        // frankenscipy-8l8r1: the hot adjacent-delta square uses one
+        // multiplication instead of powi(2). Keep the old formula's bits.
+        let residuals = [-0.0_f64, 1.5, -2.0, 3.25, -4.5, 0.0];
+        let num: f64 = residuals
+            .windows(2)
+            .map(|window| (window[1] - window[0]).powi(2))
+            .sum();
+        let den: f64 = residuals.iter().map(|&value| value * value).sum();
+        let expected = num / den;
+        assert_eq!(durbin_watson(&residuals).to_bits(), expected.to_bits());
+        assert!(durbin_watson(&[0.0, 0.0]).is_nan());
     }
 
     #[test]
