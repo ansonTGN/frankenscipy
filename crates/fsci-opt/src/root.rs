@@ -438,15 +438,9 @@ where
     validate_root_options(options)?;
     validate_bracket_finite(bracket)?;
     let (mut a, mut b) = bracket;
-    let mut nfev = 0usize;
-    let mut fa = {
-        nfev += 1;
-        f(a)
-    };
-    let mut fb = {
-        nfev += 1;
-        f(b)
-    };
+    let mut eval = RootEvaluator::new(&f, options);
+    let mut fa = eval.evaluate(a)?;
+    let mut fb = eval.evaluate(b)?;
 
     if fa * fb > 0.0 {
         return Err(OptError::SignChangeRequired {
@@ -461,7 +455,7 @@ where
             true,
             ConvergenceStatus::Success,
             0,
-            nfev,
+            eval.function_calls,
             "exact root at a",
         ));
     }
@@ -472,7 +466,7 @@ where
             true,
             ConvergenceStatus::Success,
             0,
-            nfev,
+            eval.function_calls,
             "exact root at b",
         ));
     }
@@ -493,7 +487,7 @@ where
                 true,
                 ConvergenceStatus::Success,
                 iter,
-                nfev,
+                eval.function_calls,
                 "converged",
             ));
         }
@@ -510,8 +504,7 @@ where
             mid
         };
 
-        nfev += 1;
-        let fc = f(c);
+        let fc = eval.evaluate(c)?;
         if fc == 0.0 {
             return Ok(RootResult::terminal(
                 RootMethod::Toms748,
@@ -519,7 +512,7 @@ where
                 true,
                 ConvergenceStatus::Success,
                 iter,
-                nfev,
+                eval.function_calls,
                 "exact root found",
             ));
         }
@@ -540,7 +533,7 @@ where
         false,
         ConvergenceStatus::MaxIterations,
         options.maxiter,
-        nfev,
+        eval.function_calls,
         "toms748 failed to converge within maxiter",
     ))
 }
@@ -3538,6 +3531,27 @@ mod tests {
             "root = {}, expected sqrt(2)",
             result.root
         );
+    }
+
+    #[test]
+    fn toms748_rejects_non_finite_function_values() {
+        let f = |x: f64| if x > 0.8 { f64::NAN } else { x - 0.2 };
+
+        let hardened = RootOptions {
+            mode: RuntimeMode::Hardened,
+            ..RootOptions::default()
+        };
+        let err = toms748(&f, (0.1, 0.9), hardened)
+            .expect_err("hardened mode rejects non-finite callback values");
+        assert!(matches!(err, crate::OptError::NonFiniteInput { .. }));
+
+        let strict = RootOptions {
+            mode: RuntimeMode::Strict,
+            ..RootOptions::default()
+        };
+        let err = toms748(&f, (0.1, 0.9), strict)
+            .expect_err("strict mode maps non-finite callback values");
+        assert!(matches!(err, crate::OptError::InvalidArgument { .. }));
     }
 
     #[test]
