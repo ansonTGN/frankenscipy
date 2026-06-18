@@ -14872,6 +14872,11 @@ pub fn resample_poly_with_padtype(
             "up and down must be > 0".to_string(),
         ));
     }
+    if x.iter().any(|value| !value.is_finite()) {
+        return Err(SignalError::NonFiniteInput {
+            detail: "resample_poly input samples must be finite".to_string(),
+        });
+    }
     let parsed_mode = parse_resample_poly_pad_mode(x, padtype, cval)?;
     let (background, pad_mode, input) = match parsed_mode {
         ResamplePolyPadMode::Background(value) => (
@@ -23750,6 +23755,28 @@ mod tests {
                 "identity resample_poly mismatch at {i}"
             );
         }
+    }
+
+    #[test]
+    fn resample_poly_rejects_non_finite_samples() {
+        let nan_input = [1.0, f64::NAN, 3.0, 4.0];
+        let err = resample_poly(&nan_input, 3, 2).expect_err("non-finite resample_poly input");
+        assert_eq!(
+            err,
+            SignalError::NonFiniteInput {
+                detail: "resample_poly input samples must be finite".to_string()
+            }
+        );
+
+        let inf_input = [1.0, 2.0, f64::INFINITY, 4.0];
+        let err = resample_poly_with_padtype(&inf_input, 1, 1, Some("mean"), None)
+            .expect_err("non-finite padtype input");
+        assert_eq!(
+            err,
+            SignalError::NonFiniteInput {
+                detail: "resample_poly input samples must be finite".to_string()
+            }
+        );
     }
 
     #[test]
