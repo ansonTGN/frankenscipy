@@ -70319,6 +70319,18 @@ mod tests {
     }
 
     #[test]
+    fn rel_breit_wigner_pdf_cdf_match_scipy() {
+        // Exact scipy.stats.rel_breitwigner(0.5). test_rel_breit_wigner only checks
+        // positivity, mode=rho, and cdf bounds. Cross-read: fsci pdf
+        // k/((x^2-rho^2)^2+rho^2) matches scipy.
+        let rbw = RelBreitWigner::new(0.5);
+        assert!((rbw.pdf(0.0) - 0.895_284_966_629_666_5).abs() < 1e-12, "pdf(0)");
+        assert!((rbw.pdf(0.5) - 1.119_106_208_287_083).abs() < 1e-12, "pdf(0.5) peak");
+        assert!((rbw.pdf(1.0) - 0.344_340_371_780_640_9).abs() < 1e-12, "pdf(1)");
+        assert!((rbw.cdf(1.0) - 0.887_866_869_412_418_3).abs() < 1e-10, "cdf(1)");
+    }
+
+    #[test]
     fn test_rel_breit_wigner() {
         let rbw = RelBreitWigner::new(0.5);
         // pdf(0) is finite and positive (matches scipy), the peak is at x=rho.
