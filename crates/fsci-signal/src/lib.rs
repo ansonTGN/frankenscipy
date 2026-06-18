@@ -18302,6 +18302,24 @@ mod tests {
     }
 
     #[test]
+    fn cheby1_lowpass_coeffs_match_scipy() {
+        // scipy.signal.cheby1(2, 1.0 dB ripple, 0.3, 'low') exact b/a (1.17.1).
+        let c = cheby1(2, 1.0, &[0.3], FilterType::Lowpass).expect("cheby1");
+        let eb = [
+            0.138_225_408_687_470_44,
+            0.276_450_817_374_940_87,
+            0.138_225_408_687_470_44,
+        ];
+        let ea = [1.0, -0.773_503_049_858_572_2, 0.393_868_887_461_663_5];
+        for (g, e) in c.b.iter().zip(&eb) {
+            assert!((g - e).abs() < 1e-12, "cheby1 b: {g} vs {e}");
+        }
+        for (g, e) in c.a.iter().zip(&ea) {
+            assert!((g - e).abs() < 1e-12, "cheby1 a: {g} vs {e}");
+        }
+    }
+
+    #[test]
     fn butter_bandpass_highpass_coeffs_match_scipy() {
         // scipy.signal.butter(2, [0.2,0.5], 'band') and (2, 0.3, 'high'), 1.17.1.
         // Exercises the lp2bp / lp2hp transforms, not just lowpass.
