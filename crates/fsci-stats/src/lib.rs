@@ -4320,6 +4320,43 @@ impl GenGamma {
         );
         Self { a, c }
     }
+
+    /// Log-density at many points, hoisting `ln|c|` and `lnΓ(a)` out of the
+    /// per-point loop. Byte-identical to mapping `logpdf` (`ln|c|` kept leading,
+    /// `lnΓ(a)` kept as the last subtraction); x≤0 → −∞.
+    #[must_use]
+    pub fn logpdf_many(&self, xs: &[f64]) -> Vec<f64> {
+        let a = self.a;
+        let c = self.c;
+        let lead = c.abs().ln();
+        let lg = ln_gamma(a);
+        xs.iter()
+            .map(|&x| {
+                if x <= 0.0 {
+                    return f64::NEG_INFINITY;
+                }
+                lead + (c * a - 1.0) * x.ln() - x.powf(c) - lg
+            })
+            .collect()
+    }
+
+    /// Density at many points; hoists `ln|c|` and `lnΓ(a)` like
+    /// [`logpdf_many`](Self::logpdf_many). Byte-identical to mapping `pdf`.
+    #[must_use]
+    pub fn pdf_many(&self, xs: &[f64]) -> Vec<f64> {
+        let a = self.a;
+        let c = self.c;
+        let lead = c.abs().ln();
+        let lg = ln_gamma(a);
+        xs.iter()
+            .map(|&x| {
+                if x <= 0.0 {
+                    return 0.0;
+                }
+                (lead + (c * a - 1.0) * x.ln() - x.powf(c) - lg).exp()
+            })
+            .collect()
+    }
 }
 
 impl ContinuousDistribution for GenGamma {
@@ -47438,6 +47475,20 @@ mod tests {
                 rel < 1e-12,
                 "Beta({a},{b}).sf({x}) = {got:e}, scipy {expected:e}, rel={rel:e}"
             );
+        }
+    }
+
+    #[test]
+    fn gengamma_pdf_many_matches_pdf() {
+        // Batch pdf_many/logpdf_many (ln|c|/lnΓ(a) hoisted) must be byte-identical
+        // to per-point pdf/logpdf, including x<=0.
+        let g = GenGamma::new(1.9839, 1.542);
+        let xs = [-1.0, 0.0, 0.4, 1.0, 2.5, 7.0];
+        let pm = g.pdf_many(&xs);
+        let lpm = g.logpdf_many(&xs);
+        for (i, &x) in xs.iter().enumerate() {
+            assert_eq!(pm[i], g.pdf(x), "pdf_many != pdf at {x}");
+            assert_eq!(lpm[i], g.logpdf(x), "logpdf_many != logpdf at {x}");
         }
     }
 
