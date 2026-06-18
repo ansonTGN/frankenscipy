@@ -52426,6 +52426,17 @@ mod tests {
     }
 
     /// Erlang and Chi skew/kurt closed forms — frankenscipy-6m3we,
+    #[test]
+    fn erlang_pdf_cdf_match_scipy() {
+        // Exact scipy.stats.erlang(3, scale=2) [rate=0.5]. The Erlang suite covers
+        // entropy, skew/kurt, an exponential-relationship, and fit but no exact
+        // pdf/cdf at a point.
+        let e = Erlang::new(3, 0.5);
+        assert!((e.pdf(2.0) - 0.091_969_860_292_860_57).abs() < 1e-12, "pdf(2)");
+        assert!((e.pdf(4.0) - 0.135_335_283_236_612_7).abs() < 1e-12, "pdf(4)");
+        assert!((e.cdf(4.0) - 0.323_323_583_816_936_54).abs() < 1e-12, "cdf(4)");
+    }
+
     /// frankenscipy-fubyp.
     #[test]
     fn erlang_chi_skew_kurt_match_scipy() {
