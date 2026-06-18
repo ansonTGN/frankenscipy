@@ -371,23 +371,20 @@ pub fn cross_spectral_density(x: &[f64], y: &[f64], fs: f64) -> CrossSpectralRes
     let n = x.len();
     let opts = crate::FftOptions::default();
 
-    let cx: Vec<(f64, f64)> = x.iter().map(|&v| (v, 0.0)).collect();
-    let cy: Vec<(f64, f64)> = y.iter().map(|&v| (v, 0.0)).collect();
+    let fx = crate::rfft(x, &opts)?;
+    let fy = crate::rfft(y, &opts)?;
+    debug_assert_eq!(fx.len(), n / 2 + 1);
+    debug_assert_eq!(fy.len(), fx.len());
 
-    let fx = crate::fft(&cx, &opts)?;
-    let fy = crate::fft(&cy, &opts)?;
-
-    let n_freq = n / 2 + 1;
+    let n_freq = fx.len();
     let mut csd = Vec::with_capacity(n_freq);
     let mut freqs = Vec::with_capacity(n_freq);
+    let scale = 1.0 / (n as f64 * fs);
 
-    for k in 0..n_freq {
-        let (xr, xi) = fx[k];
-        let (yr, yi) = fy[k];
+    for (k, (&(xr, xi), &(yr, yi))) in fx.iter().zip(fy.iter()).enumerate() {
         // Cross-spectrum: X * conj(Y)
         let cr = xr * yr + xi * yi;
         let ci = xi * yr - xr * yi;
-        let scale = 1.0 / (n as f64 * fs);
         csd.push((cr * scale, ci * scale));
         freqs.push(k as f64 * fs / n as f64);
     }
@@ -783,6 +780,49 @@ mod tests {
                 .expect_err("infinite sampling rate"),
             FftError::NonFiniteInput
         );
+    }
+
+    #[test]
+    fn cross_spectral_density_matches_full_complex_fft_route() {
+        // PERF GUARD [frankenscipy-8l8r1.116]: CSD only needs the
+        // one-sided spectrum. The production path routes real inputs through
+        // rfft; this pins equivalence to the previous full-complex FFT route
+        // so batch conformance can reject any Hermitian unpack drift.
+        for n in [7_usize, 8, 31, 32] {
+            let x: Vec<f64> = (0..n)
+                .map(|idx| (idx as f64 * 0.23).sin() + 0.25 * (idx as f64 * 0.07).cos())
+                .collect();
+            let y: Vec<f64> = (0..n)
+                .map(|idx| (idx as f64 * 0.19).cos() - 0.5 * (idx as f64 * 0.11).sin())
+                .collect();
+            let fs = 48_000.0;
+
+            let (freqs, got) = cross_spectral_density(&x, &y, fs).expect("csd");
+            let opts = FftOptions::default();
+            let cx: Vec<(f64, f64)> = x.iter().map(|&value| (value, 0.0)).collect();
+            let cy: Vec<(f64, f64)> = y.iter().map(|&value| (value, 0.0)).collect();
+            let fx = crate::fft(&cx, &opts).expect("full x fft");
+            let fy = crate::fft(&cy, &opts).expect("full y fft");
+
+            assert_eq!(freqs.len(), n / 2 + 1);
+            assert_eq!(got.len(), freqs.len());
+            let scale = 1.0 / (n as f64 * fs);
+            for (k, &(actual_re, actual_im)) in got.iter().enumerate() {
+                let (xr, xi) = fx[k];
+                let (yr, yi) = fy[k];
+                let expected = ((xr * yr + xi * yi) * scale, (xi * yr - xr * yi) * scale);
+                assert!(
+                    (actual_re - expected.0).abs() < 1e-10,
+                    "n={n}, k={k}: csd re {actual_re} != {}",
+                    expected.0
+                );
+                assert!(
+                    (actual_im - expected.1).abs() < 1e-10,
+                    "n={n}, k={k}: csd im {actual_im} != {}",
+                    expected.1
+                );
+            }
+        }
     }
 
     #[test]

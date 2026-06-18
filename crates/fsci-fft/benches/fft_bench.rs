@@ -1,11 +1,12 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use fsci_fft::{FftOptions, fft, fft2, ifft, irfft, rfft};
+use fsci_fft::{FftOptions, cross_spectral_density, fft, fft2, ifft, irfft, rfft};
 use std::hint::black_box;
 
 type Complex64 = (f64, f64);
 
 const SIZES_1D: &[usize] = &[16, 64, 256, 1024];
 const SIZES_2D: &[(usize, usize)] = &[(8, 8), (16, 16), (32, 32)];
+const CSD_SIZES: &[usize] = &[4096, 65536];
 
 // Per SPEC §17: FFT transform p95 ≤ 210ms
 // Baseline sizes for conformance testing
@@ -28,6 +29,24 @@ fn make_real_input(n: usize) -> Vec<f64> {
             (2.0 * std::f64::consts::PI * t).sin()
         })
         .collect()
+}
+
+fn make_real_pair(n: usize) -> (Vec<f64>, Vec<f64>) {
+    let x: Vec<f64> = (0..n)
+        .map(|i| {
+            let t = i as f64 / n as f64;
+            (2.0 * std::f64::consts::PI * t).sin()
+                + 0.25 * (13.0 * std::f64::consts::PI * t).cos()
+        })
+        .collect();
+    let y: Vec<f64> = (0..n)
+        .map(|i| {
+            let t = i as f64 / n as f64;
+            (3.0 * std::f64::consts::PI * t).cos()
+                - 0.5 * (17.0 * std::f64::consts::PI * t).sin()
+        })
+        .collect();
+    (x, y)
 }
 
 fn default_opts() -> FftOptions {
@@ -133,6 +152,28 @@ fn bench_fft2(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_cross_spectral_density(c: &mut Criterion) {
+    let mut group = c.benchmark_group("fft_helpers");
+
+    for &n in CSD_SIZES {
+        let pair = make_real_pair(n);
+        group.bench_with_input(
+            BenchmarkId::new("cross_spectral_density", n),
+            &pair,
+            |b, (x, y)| {
+                b.iter(|| {
+                    let out =
+                        cross_spectral_density(black_box(x), black_box(y), black_box(48_000.0))
+                            .expect("cross_spectral_density");
+                    black_box(out.1.len());
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // BASELINE BENCHMARKS - Per SPEC §17
 // Run with: cargo bench --bench fft_bench -- baseline
@@ -205,7 +246,8 @@ criterion_group!(
     bench_ifft,
     bench_rfft,
     bench_irfft,
-    bench_fft2
+    bench_fft2,
+    bench_cross_spectral_density
 );
 
 criterion_group!(
