@@ -197,6 +197,16 @@ fn validate_bvp_options(options: &BvpOptions) -> Result<(), BvpError> {
             "tol must be finite and non-negative".to_string(),
         ));
     }
+    if !options.rtol.is_finite() || options.rtol <= 0.0 {
+        return Err(BvpError::InvalidArgument(
+            "rtol must be finite and positive".to_string(),
+        ));
+    }
+    if !options.atol.is_finite() || options.atol <= 0.0 {
+        return Err(BvpError::InvalidArgument(
+            "atol must be finite and positive".to_string(),
+        ));
+    }
     Ok(())
 }
 
@@ -395,6 +405,34 @@ mod tests {
             let err = solve_bvp(&mut f, &bc, (0.0, 1.0), &[0.0], options)
                 .expect_err("invalid boundary tolerance");
             assert!(matches!(err, BvpError::InvalidArgument(msg) if msg.contains("tol")));
+        }
+    }
+
+    #[test]
+    fn bvp_rejects_invalid_ivp_tolerances() {
+        for (rtol, atol, expected) in [
+            (f64::NAN, 1e-10, "rtol"),
+            (f64::INFINITY, 1e-10, "rtol"),
+            (0.0, 1e-10, "rtol"),
+            (-1e-8, 1e-10, "rtol"),
+            (1e-8, f64::NAN, "atol"),
+            (1e-8, f64::INFINITY, "atol"),
+            (1e-8, 0.0, "atol"),
+            (1e-8, -1e-10, "atol"),
+        ] {
+            let mut f = |_t: f64, _y: &[f64]| vec![0.0];
+            let bc = |_ya: &[f64], _yb: &[f64]| vec![1.0];
+            let options = BvpOptions {
+                rtol,
+                atol,
+                ..BvpOptions::default()
+            };
+            let err = solve_bvp(&mut f, &bc, (0.0, 1.0), &[0.0], options)
+                .expect_err("invalid IVP tolerance");
+            assert!(
+                matches!(err, BvpError::InvalidArgument(msg) if msg.contains(expected)),
+                "expected {expected} validation error, got {err:?}"
+            );
         }
     }
 
