@@ -9096,8 +9096,8 @@ pub fn eigs(a: &CsrMatrix, k: usize, options: EigsOptions) -> SparseResult<EigsR
 /// Ritz values from the projected upper-Hessenberg matrix `H` (tridiagonal, with
 /// real Ritz values, when `A` is symmetric), and back-transforms the top-`k`-by-
 /// magnitude Ritz vectors into the original space. O(m) matvecs total.
-fn krylov_arnoldi_eigs<F: Fn(&[f64]) -> Vec<f64>>(
-    op: F,
+fn krylov_arnoldi_eigs<F: FnMut(&[f64]) -> Vec<f64>>(
+    mut op: F,
     n: usize,
     k: usize,
     options: &EigsOptions,
@@ -9138,7 +9138,9 @@ fn krylov_arnoldi_eigs<F: Fn(&[f64]) -> Vec<f64>>(
 
     let mut actual_m = 0usize;
     for j in 0..m {
-        // w = op(v_j)  (A·v for eigs/eigsh; AᵀA·v for svds)
+        // w = op(v_j)  (A·v for eigs/eigsh; AᵀA·v for svds). The result becomes the
+        // next basis vector (v.push(w) below), so its allocation is necessary — but
+        // op itself (FnMut) may reuse internal scratch. frankenscipy-fo9cj.
         let mut w = op(&v[j]);
         total_matvec += 1;
 
@@ -9735,7 +9737,15 @@ pub fn svds(a: &CsrMatrix, k: usize, options: EigsOptions) -> SparseResult<SvdsR
     // previous power-iteration-with-deflation's O(k·max_iter). For a well-separated
     // spectrum a single subspace of max(2k+1, 20) resolves the extremes.
     let ncv = (2 * k + 1).max(20).min(n);
-    let ata_op = |v: &[f64]| csc_matvec(&a_csc, &csr_matvec(a, v));
+    // AᵀA·v: reuse a hoisted `tmp` (rows-length) for the discarded intermediate
+    // A·v instead of allocating it every Arnoldi step; the Aᵀ·tmp result is
+    // returned fresh because it becomes the next basis vector. frankenscipy-fo9cj
+    // (byte-identical: same kernels, tmp fully overwritten each call).
+    let mut tmp = vec![0.0; a.shape().rows];
+    let ata_op = move |v: &[f64]| -> Vec<f64> {
+        csr_matvec_into(a, v, &mut tmp);
+        csc_matvec(&a_csc, &tmp)
+    };
     let eig = krylov_arnoldi_eigs(ata_op, n, k, &options, ncv, false);
 
     let mut singular_values = Vec::with_capacity(k);
