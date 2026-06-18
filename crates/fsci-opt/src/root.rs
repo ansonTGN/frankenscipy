@@ -1737,7 +1737,16 @@ where
 {
     validate_multivariate_root_params(x0, tol, maxiter)?;
     let n = x0.len();
-    let m = m.max(1); // At least 1 history element
+    if m == 0 {
+        return Err(OptError::InvalidArgument {
+            detail: "anderson memory m must be greater than zero".to_string(),
+        });
+    }
+    if !beta.is_finite() {
+        return Err(OptError::InvalidArgument {
+            detail: "anderson beta must be finite".to_string(),
+        });
+    }
 
     let mut x = x0.to_vec();
     let mut fx = evaluate_multivariate_root(&func, &x, n, "anderson")?;
@@ -3489,6 +3498,19 @@ mod tests {
         let f = |_x: &[f64]| vec![];
         let err = anderson(f, &[], 1e-10, 200, 5, 1.0).expect_err("empty");
         assert!(matches!(err, crate::OptError::InvalidArgument { .. }));
+    }
+
+    #[test]
+    fn anderson_rejects_invalid_mixing_controls() {
+        let f = |x: &[f64]| vec![x[0]];
+
+        let err = anderson(f, &[1.0], 1e-10, 200, 0, 1.0).expect_err("zero memory");
+        assert!(matches!(err, crate::OptError::InvalidArgument { .. }));
+
+        for beta in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let err = anderson(f, &[1.0], 1e-10, 200, 5, beta).expect_err("non-finite beta");
+            assert!(matches!(err, crate::OptError::InvalidArgument { .. }));
+        }
     }
 
     #[test]
