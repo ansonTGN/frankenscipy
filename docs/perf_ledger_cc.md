@@ -371,10 +371,23 @@ property test) is the future lever to win at ALL sizes. But at realistic small-m
 sizes fsci now DOMINATES.
 
 ## Signal crate — head-to-head sweep vs scipy (2026-06-19)
-Oracle `docs/perf_oracle_signal.py`. fsci vs scipy.signal:
+Oracle `docs/perf_oracle_signal.py` + `/tmp/oracle_sig2.py`. fsci vs scipy.signal:
+
+### ⚠️ OPEN LOSS — fftconvolve 2.7× slower; bottleneck is fsci_fft (8l8r1's crate), not signal
+fftconvolve 4096×257 same: **fsci 323 µs vs scipy 119.6 µs = 2.7× SLOWER.** scipy pads to
+next_fast_len (~4400, 5/7/11-smooth) + uses rfft. TRIED BOTH in fftconvolve, BOTH FAILED →
+REVERTED (signal lib.rs back to origin, clean): (1) `fsci_fft::next_fast_len` (4400) +
+rfft → **393 µs, REGRESSION** — fsci_fft's mixed-radix path is much slower than its radix-4
+power-of-two path, so the smaller 5-smooth size is a net loss. (2) power-of-two + rfft →
+**326 µs, ~0 gain** — fsci_fft's `rfft` is NOT faster than its complex `fft` (no real-
+symmetry speedup). CONCLUSION: the gap is inside **fsci_fft** (no fast rfft, slow mixed-
+radix), 8l8r1's crate — not fixable from signal. Routed to 8l8r1. welch 8× FASTER, so
+fsci's own spectral path is fine; only the raw FFT primitive lags. Also welch/coherence
+already win, so this is isolated to convolution.
 
 | function | fsci | scipy | ratio |
 |---|---|---|---|
+| fftconvolve 4096×257 | 323 µs | 119.6 µs | **0.37× (2.7× SLOWER — fsci_fft, OPEN)** |
 | **firls 257 (FIXED)** | **296.5 µs** | 366 µs | **1.24× faster** (was 0.42×) |
 | filtfilt 4096 biquad | 80.3 µs | 120.2 µs | 1.50× faster |
 | sosfilt 4096×2 | 34.0 µs | 46.0 µs | 1.35× faster |
