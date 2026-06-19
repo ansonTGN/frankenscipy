@@ -842,3 +842,15 @@ reliable measurement. Not shipped; toggle+test removed (ndimage back to origin).
 earlier "unmeasurable" note. LESSON: the same-process interleaved A/B is THE working method for
 contention-sensitive levers when separate-run benches drift 2×; it cleanly settled this one as
 neutral. (The pdist nm8ex gate remains a real bug — its fix is math-provable, no A/B needed.)
+
+### ✅✅ erf/erfc Cephes rational kernel (5.0× self-speedup, FLIPS 5.9× loss → 1.2× parity)
+The WORST special loss. erf_scalar used an iterative Maclaurin series (≤80 terms) + Lentz
+continued fraction (~30 iters for x≥1); scipy's xsf uses Cephes' fixed-degree RATIONAL erf/erfc.
+Ported the EXACT Cephes T/U (erf) and P/Q/R/S (erfc) coefficients (fetched from scipy/xsf via
+gh) → byte-identical to scipy.special.erf/erfc. **MEASURED special_array_65536/erf: 4.49ms →
+904µs = 5.0×; vs scipy 757µs: 5.9× slower → 1.2× (near parity).** Conformance: all erf/erfc/
+ndtr/erfcx/erfinv/erfcinv tests PASS. (4 unrelated tests fail on origin — digamma/polygamma/
+exp2/powm1 — another agent's in-progress gamma/convenience work; those fns don't call erf, so
+not caused by this change; verified by static isolation.) LEVER PAID OUT: fetch scipy's xsf
+Cephes coefficients via gh + port the rational → byte-matches scipy AND replaces iterative
+kernels. Removed now-unused erf_series_real + erfc_cf_real (erfc_cf_h kept for erfcx_cf_real).
