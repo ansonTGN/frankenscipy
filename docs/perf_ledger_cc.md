@@ -822,3 +822,13 @@ threshold; expensive sort/trig ops can use a low one):
 - **ndimage** `ndimage_filter_thread_count` 1<<18, cheap mul-add → benched cases (gaussian 1.1M,
   correlate 1.6M) sit AT/above break-even, not clearly below; thread-cap fix unmeasurable under
   ramping load (reverted). The class is otherwise clean — no further gate bugs in my crates.
+
+### ✅ RESOLVED: ndimage filter thread-cap is NEUTRAL (load-invariant same-process A/B)
+Built the tool the degraded environment demanded: a same-process atomic-toggle A/B (FILTER_WORK_
+CAP_AB, interleaved OFF/ON 50× in one process → load cancels). VERDICT for gaussian_sigma2/256:
+cap OFF 5.889 ms vs cap ON 5.980 ms = **NEUTRAL** (~1.5%, within noise). The work-cap does NOT
+help under contention — the hypothesis (fewer threads = less oversubscription) is REFUTED by
+reliable measurement. Not shipped; toggle+test removed (ndimage back to origin). Supersedes the
+earlier "unmeasurable" note. LESSON: the same-process interleaved A/B is THE working method for
+contention-sensitive levers when separate-run benches drift 2×; it cleanly settled this one as
+neutral. (The pdist nm8ex gate remains a real bug — its fix is math-provable, no A/B needed.)
