@@ -31,6 +31,7 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `frankenscipy-8l8r1.122` | L-BFGS-B mutable Wolfe finite-difference probe scratch | 32D quadratic finite-difference `L-BFGS-B` | 6.055 us | 5.246 us parent | reject and revert |
 | `frankenscipy-8l8r1.116` | FFT CSD rfft real-spectrum route | 4096-sample CSD helper | 125.88 us | 112.08 us parent | reject and revert |
 | `frankenscipy-8l8r1.116` | FFT CSD rfft real-spectrum route | 65536-sample CSD helper vs SciPy rfft formula | 2.3509 ms | 1.653584 ms SciPy | reject and revert |
+| `frankenscipy-acdq2` | `gaussian_filter1d` always-line-walk plus outermost row-split/direct interior taps | `ndimage` gaussian sigma=2, 256x256 | 4.2236 ms | 2.4792 ms clean current; prior ledger current 3.238 ms | reject and revert |
 
 ## Internal Regression Gates
 
@@ -68,8 +69,9 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `fsci-cluster` linkage performance | measured loss plus internal keep | flat arena is 1.128x faster than the legacy nested helper on Average and 1.019x on Ward, but 1.385-1.497x slower than SciPy |
 | `fsci-cluster` linkage correctness | guarded | filtered linkage tests passed via rch (28 unit, 9 metamorphic); SciPy-backed `diff_cluster_linkage_from_distances` conformance passed locally |
 | `fsci-cluster` lint/build gate | partial | `cargo check -p fsci-cluster --benches` passed; fmt blocked on existing `perf_isomap.rs` drift and clippy blocked on existing `fsci-linalg` dependency lints |
+| `fsci-ndimage` gaussian_filter route | measured reject | always-line-walk plus outermost row-split regressed `gaussian_sigma2/256`; source reverted, current remains a SciPy loss routed to inner dot SIMD/tiled contiguous-span work |
 | rch SciPy oracle parity | blocked on worker image | `vmi1152480` and `vmi1227854` lacked `scipy`; local same-host oracle supplied the head-to-head ratios |
-| Release readiness | partial | two linalg perf clusters, one `fsci-signal` coherence win, one `fsci-opt` L-BFGS-B reject, one `fsci-special` measured SciPy loss, one `fsci-fft` CSD reject, and one `fsci-cluster` linkage measured SciPy loss verified; other code-first perf ledger entries still need gauntlet conversion |
+| Release readiness | partial | two linalg perf clusters, one `fsci-signal` coherence win, one `fsci-opt` L-BFGS-B reject, one `fsci-special` measured SciPy loss, one `fsci-fft` CSD reject, one `fsci-cluster` linkage measured SciPy loss, and one `fsci-ndimage` gaussian reject verified; other code-first perf ledger entries still need gauntlet conversion |
 
 ## Pending Gauntlet Backlog
 

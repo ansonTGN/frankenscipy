@@ -4,6 +4,46 @@ This ledger records every code-first performance attempt, including attempts tha
 are still awaiting the batch benchmark wave. Entries must name the retry
 condition so dead ends are not repeated casually.
 
+## 2026-06-19 - frankenscipy-acdq2 - ndimage gaussian_filter line-walk route
+
+- Agent: cod-a / MistyBirch
+- Lever: force `gaussian_filter1d_axis` onto the 1-D slab line walker for every
+  axis, then add outermost-axis row-splitting and direct interior tap indexing
+  to avoid `boundary_index_1d` on non-border rows.
+- Graveyard/artifact route tested: cache-aware line walking, branch removal in
+  the interior stencil, and parallel row chunks for the low-outer-slab case.
+- Decision: REJECT AND REVERT. No source change shipped.
+- Artifact:
+  `tests/artifacts/perf/2026-06-19-ndimage-gaussian-linewalk-reject/EVIDENCE.md`
+- Candidate command:
+  `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo bench -p fsci-ndimage --bench ndimage_bench -- correlate_gaussian/gaussian_sigma2/256 --noplot`
+- Candidate result, rch worker `vmi1152480`:
+
+  | Workload | Candidate mean | Candidate interval | Verdict |
+  | --- | ---: | ---: | --- |
+  | `correlate_gaussian/gaussian_sigma2/256` | 4.2236 ms | [4.0337 ms, 4.4246 ms] | loss |
+
+- Clean current result on `origin/main` commit `96a37a83`, rch worker `ovh-a`:
+
+  | Workload | Current mean | Current interval | Candidate/current |
+  | --- | ---: | ---: | ---: |
+  | `correlate_gaussian/gaussian_sigma2/256` | 2.4792 ms | [2.4545 ms, 2.5044 ms] | 1.704x slower |
+
+- Existing ledger current result before this attempt was also faster than the
+  candidate: 3.238 ms. That makes the route a rejection even with cross-worker
+  noise.
+- Local SciPy oracle (`python3 docs/perf_oracle_ndimage.py`, SciPy 1.17.1):
+  `gaussian_filter sigma=2 256x256` p50 was 1.47107 ms. The rejected candidate
+  is 2.87x slower than that oracle; the clean current rch row is still slower
+  and remains a gap.
+- Correctness/conformance guard: no optimized source was kept, so the
+  conformance surface is unchanged from `origin/main`.
+- Retry condition: do not retry fallback removal, outermost-axis row-splitting,
+  or scalar direct-index boundary peeling for this workload without a fresh
+  profile. The next plausible route is a lower-level contiguous-span/SIMD dot
+  kernel or a cache-tiled separable scratch/transpose path that preserves the
+  existing gaussian tolerance contract.
+
 ## 2026-06-19 - frankenscipy-8l8r1.115 - randomized_eigh projected sketch
 
 - Agent: cod-b / MistyBirch
