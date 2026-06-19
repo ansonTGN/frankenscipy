@@ -169,6 +169,25 @@ Oracle: scipy.sparse.random CSR `.dot(x)` (same n/density; SpMV time≈O(nnz)).
   regression, not a parallelization issue. SpMV is a candidate for a SIMD/unrolled
   row-sweep if large sparse problems matter.
 
+### Sparse eigsh / svds (frankenscipy-fo9cj Arnoldi arena) — REJECT, restored route 4W/1L/1N
+Oracle: SciPy 1.17.1 `scipy.sparse.linalg.eigsh` / `svds` on the same deterministic
+matrix family as the sparse perf bins. rch same-worker A/B on `ovh-a` rejected the
+row-major Arnoldi basis arena plus mutable matvec scratch: `eigsh` regressed all rows
+(1.667/6.594/16.147 ms vs parent 1.184/5.548/11.599 ms). `svds` movement was too small
+to save it (0.99x, 1.06x, 1.01x parent/candidate-style ratios across the sweep), so
+the source route was reverted.
+- **eigsh n=2000 k=6: fsci 1.184 ms vs scipy 3.000 ms = 2.53x FASTER.**
+- **eigsh n=8000 k=6: fsci 5.548 ms vs scipy 2.768 ms = 0.50x (2.00x SLOWER).**
+  This is the next real sparse eigensolver loss: optimize the mid-size restart /
+  iteration path or matvec throughput, not the discarded basis-arena copy route.
+- **eigsh n=20000 k=8: fsci 11.599 ms vs scipy 43.023 ms = 3.71x FASTER.**
+- **svds 2200x2000 k=6: fsci 1.191 ms vs scipy 17.567 ms = 14.75x FASTER.**
+- **svds 8200x8000 k=6: fsci 4.929 ms vs scipy 4.861 ms = 0.99x neutral.**
+- **svds 20200x20000 k=8: fsci 12.534 ms vs scipy 42.018 ms = 3.35x FASTER.**
+KEEP restored route. DO NOT retry the row-major `Vec<Vec>` replacement without
+allocator/profile proof that Arnoldi basis allocation is again a top-five cost and a
+new layout avoids the per-step basis copy cost.
+
 ### Gaussian KDE evaluate_many (parallel) — ✅ KEEP (marquee win)
 Oracle `docs/perf_oracle_kde.py` (scipy.stats.gaussian_kde, scott bw, n=1000/5000
 1-D, evaluate at n points). **fsci 17–18× FASTER:** n=1000 1.06 ms vs scipy 19.09 ms;

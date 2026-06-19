@@ -45,6 +45,10 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `frankenscipy-8l8r1.116` | FFT CSD rfft real-spectrum route | 4096-sample CSD helper | 125.88 us | 112.08 us parent | reject and revert |
 | `frankenscipy-8l8r1.116` | FFT CSD rfft real-spectrum route | 65536-sample CSD helper vs SciPy rfft formula | 2.3509 ms | 1.653584 ms SciPy | reject and revert |
 | `frankenscipy-acdq2` | `gaussian_filter1d` always-line-walk plus outermost row-split/direct interior taps | `ndimage` gaussian sigma=2, 256x256 | 4.2236 ms | 2.4792 ms clean current; prior ledger current 3.238 ms | reject and revert |
+| `frankenscipy-fo9cj` | Sparse Arnoldi row-major basis arena plus mutable operator scratch | `eigsh n=2000 k=6` | 1.667 ms | 1.184 ms parent/restored | reject and revert |
+| `frankenscipy-fo9cj` | Sparse Arnoldi row-major basis arena plus mutable operator scratch | `eigsh n=8000 k=6` | 6.594 ms | 5.548 ms parent/restored | reject and revert |
+| `frankenscipy-fo9cj` | Sparse Arnoldi row-major basis arena plus mutable operator scratch | `eigsh n=20000 k=8` | 16.147 ms | 11.599 ms parent/restored | reject and revert |
+| `frankenscipy-fo9cj` | Sparse Arnoldi row-major basis arena plus mutable operator scratch | `svds 2200/8200/20200 sweep` | 1.203 / 4.654 / 12.362 ms | 1.191 / 4.929 / 12.534 ms parent/restored | reject: mixed near-noise cannot offset `eigsh` regression |
 
 ## Internal Regression Gates
 
@@ -66,6 +70,7 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `frankenscipy-8l8r1.118` | Fused signal coherence | Compositional `csd(x,y)` + `csd(x,x)` + `csd(y,y)` route | 2.98x faster locally; 2.80x faster on rch `hz1` | keep fused route |
 | `frankenscipy-nm8ex` | Dim-4 Euclidean/Cosine direct serial `pdist` kernels | Generic metric-dispatch/reduction/threaded path | 5.54-29.51x faster on same-worker `hz2` | keep current despite SciPy loss |
 | `frankenscipy-x9ckc` | `jnjnp_zeros` guarded direct integer-order root polishing | Generic strict-mode bracketed zero route after output frontier | 1.17x faster at `nt=64`; 1.20x faster at `nt=128` on same-worker `hz1` | keep current despite SciPy loss |
+| `frankenscipy-fo9cj` | Restored sparse Arnoldi `Vec<Vec>` basis and allocating matvec closure | Row-major basis arena plus mutable operator scratch | 1.19-1.41x faster on `eigsh`; candidate `svds` movement only 0.99-1.06x | reject arena/scratch route |
 
 ## Current Readiness
 
@@ -96,8 +101,11 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `fsci-spatial` `pdist` performance | measured loss plus internal keep | dim-4 direct serial kernels are 5.54-29.51x faster than the generic threaded route on same-worker `hz2`, but still 1.14-1.63x slower than SciPy |
 | `fsci-spatial` `pdist` correctness | guarded | focused `pdist` tests passed via rch (10 passed), full `fsci-spatial` lib suite passed via rch (206 passed, 2 ignored) |
 | `fsci-spatial` lint/build gate | partial | `cargo check -p fsci-spatial --all-targets` passed; conformance is blocked by unrelated `e2e_sparse` compile error, clippy by existing `fsci-linalg` lints, and fmt by pre-existing `fsci-spatial` rustfmt drift |
+| `fsci-sparse` `eigsh`/`svds` performance | measured reject plus current-route SciPy wins | row-major Arnoldi arena regressed all `eigsh` rows and was reverted; restored route is 4 wins / 1 loss / 1 neutral vs SciPy, with the remaining loss at `eigsh n=8000 k=6` |
+| `fsci-sparse` `eigsh`/`svds` correctness | guarded | focused sparse eig/svds tests passed via rch; SciPy-backed `diff_sparse_eigsh_largest` and `diff_sparse_svds` conformance passed locally |
+| `fsci-sparse` lint/build gate | partial | `cargo check -p fsci-sparse --all-targets`, focused sparse tests, `cargo clippy -p fsci-sparse --all-targets --no-deps -- -D warnings`, UBS, and `git diff --check` passed; rch SciPy conformance blocked by missing worker SciPy and rustfmt by pre-existing file-wide drift |
 | rch SciPy oracle parity | blocked on worker image | `vmi1152480` and `vmi1227854` lacked `scipy`; local same-host oracle supplied the head-to-head ratios |
-| Release readiness | partial | two linalg perf clusters, one `fsci-signal` coherence win, one `fsci-opt` L-BFGS-B reject, one `fsci-special` measured SciPy-loss/internal-keep cutoff win, one `fsci-fft` CSD reject, one `fsci-cluster` linkage measured SciPy loss, one `fsci-ndimage` gaussian reject, and one `fsci-spatial` `pdist` internal keep verified; other code-first perf ledger entries still need gauntlet conversion |
+| Release readiness | partial | two linalg perf clusters, one `fsci-signal` coherence win, one `fsci-opt` L-BFGS-B reject, one `fsci-special` measured SciPy-loss/internal-keep cutoff win, one `fsci-fft` CSD reject, one `fsci-cluster` linkage measured SciPy loss, one `fsci-ndimage` gaussian reject, one `fsci-spatial` `pdist` internal keep, and one `fsci-sparse` Arnoldi reject verified; other code-first perf ledger entries still need gauntlet conversion |
 
 ## Pending Gauntlet Backlog
 

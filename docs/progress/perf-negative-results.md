@@ -656,25 +656,67 @@ Local original-SciPy oracle (`python3 docs/perf_oracle_fft_csd.py --reps 120
   65536 samples, and the replacement beats the fastest equivalent SciPy rfft
   formula while not regressing the 4096 row.
 
-## 2026-06-18 - frankenscipy-fo9cj - sparse Arnoldi row-major basis arena
+## 2026-06-19 - frankenscipy-fo9cj - sparse Arnoldi row-major basis arena
 
 - Agent: cod-b / MistyBirch
 - Lever: replace the `krylov_arnoldi_eigs` `Vec<Vec<f64>>` basis and allocating
   operator return with a row-major basis arena plus a reusable operator scratch
   buffer; switch `eigsh`, `eigs`, and `svds` callers to `csr_matvec_into` /
   `csc_matvec_into`.
-- Status: pending batch-test. This is a code-first commit per campaign
-  instruction; only local `cargo check -p fsci-sparse` is expected before commit.
-- Correctness guard: `csc_matvec_into_matches_allocating_reference` plus existing
-  `eigsh`, `eigs`, and `svds` conformance/unit coverage in the sparse crate.
-- Benchmark guard: run `cargo run --profile release-perf -p fsci-sparse --bin
-  perf_eigsh` and `cargo run --profile release-perf -p fsci-sparse --bin
-  perf_svds` against the pre-change commit on the same worker/target dir.
-- Retry condition: keep only if same-worker focused sparse eigensolver timings
-  show a stable win outside noise without eigs/eigsh/svds residual drift; if the
-  arena copy cost erases the allocation savings or regresses any row, reject this
-  exact arena/scratch formulation and do not retry without allocator/profile
-  evidence showing per-step basis allocation is again a top-5 sparse hotspot.
+- Status: MEASURED REJECT. Same-worker rch A/B on `ovh-a` showed the row-major
+  basis arena regressed every `eigsh` row, while `svds` only produced tiny mixed
+  movement. The source route was restored to the parent implementation.
+- Internal A/B, `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b`,
+  `cargo run --profile release-perf -p fsci-sparse --bin perf_eigsh`:
+
+| Workload | Candidate | Parent/restored | Parent/candidate | Result |
+| --- | ---: | ---: | ---: | --- |
+| `eigsh n=2000 k=6` | 1.667 ms | 1.184 ms | 0.71x | loss |
+| `eigsh n=8000 k=6` | 6.594 ms | 5.548 ms | 0.84x | loss |
+| `eigsh n=20000 k=8` | 16.147 ms | 11.599 ms | 0.72x | loss |
+
+- Internal A/B, same worker/target dir,
+  `cargo run --profile release-perf -p fsci-sparse --bin perf_svds`:
+
+| Workload | Candidate | Parent/restored | Parent/candidate | Result |
+| --- | ---: | ---: | ---: | --- |
+| `svds 2200x2000 k=6` | 1.203 ms | 1.191 ms | 0.99x | neutral/loss |
+| `svds 8200x8000 k=6` | 4.654 ms | 4.929 ms | 1.06x | tiny win |
+| `svds 20200x20000 k=8` | 12.362 ms | 12.534 ms | 1.01x | tiny win |
+
+- SciPy head-to-head on the restored route, same deterministic matrix family:
+
+| Workload | Restored Rust | SciPy 1.17.1 | SciPy/Rust | Result |
+| --- | ---: | ---: | ---: | --- |
+| `eigsh n=2000 k=6` | 1.184 ms | 3.000 ms | 2.53x | Rust win |
+| `eigsh n=8000 k=6` | 5.548 ms | 2.768 ms | 0.50x | Rust loss |
+| `eigsh n=20000 k=8` | 11.599 ms | 43.023 ms | 3.71x | Rust win |
+| `svds 2200x2000 k=6` | 1.191 ms | 17.567 ms | 14.75x | Rust win |
+| `svds 8200x8000 k=6` | 4.929 ms | 4.861 ms | 0.99x | neutral |
+| `svds 20200x20000 k=8` | 12.534 ms | 42.018 ms | 3.35x | Rust win |
+
+- Ratio summary vs SciPy after revert: 4 wins / 1 loss / 1 neutral. The real
+  measured gap to target next is mid-size `eigsh n=8000 k=6`, not the discarded
+  basis-arena allocation lever.
+- Correctness/conformance guards:
+  - PASS: rch `cargo check -p fsci-sparse --all-targets`
+  - PASS: rch `cargo test -p fsci-sparse eig -- --nocapture`
+  - PASS: rch `cargo test -p fsci-sparse svds -- --nocapture`
+  - PASS: local SciPy-backed `cargo test -p fsci-conformance --test
+    diff_sparse_eigsh_largest -- --nocapture`
+  - PASS: local SciPy-backed `cargo test -p fsci-conformance --test
+    diff_sparse_svds -- --nocapture`
+  - PASS: rch `cargo clippy -p fsci-sparse --all-targets --no-deps -- -D warnings`
+  - PASS: `git diff --check` and `ubs crates/fsci-sparse/src/linalg.rs`
+  - BLOCKED: rch SciPy-backed sparse conformance on `ovh-a` because the worker
+    image lacks `scipy`; local SciPy 1.17.1 supplied the oracle proof.
+  - BLOCKED: touched-file rustfmt check by pre-existing file-wide formatting
+    drift outside this sparse revert hunk; no unrelated formatting churn was
+    introduced.
+- Retry condition: do not retry this row-major `Vec<Vec>` replacement or mutable
+  operator scratch route. Reopen only if a fresh allocator/profile run puts
+  Arnoldi basis allocation in the top five costs and a new design avoids the
+  per-step basis copy cost that made this formulation slower.
 
 ## 2026-06-18 - frankenscipy-bpzha - RK step scratch double-buffer
 
