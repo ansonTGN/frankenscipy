@@ -288,8 +288,11 @@ pub fn affinity_propagation(
 
     for it in 0..max_iter {
         iters = it + 1;
-        // Responsibilities: r(i,k) = s(i,k) − max_{k'≠k}(a(i,k')+s(i,k')).
-        for i in 0..n {
+        // Responsibilities: r(i,k) = s(i,k) − max_{k'≠k}(a(i,k')+s(i,k')). Each row i
+        // reads only its own a[i]/s[i] (and old r[i]) and writes its own r[i], so the
+        // rows are independent — update them in parallel into ordered slots,
+        // byte-identical to the serial loop. frankenscipy-yw7ts.
+        let update_resp_row = |i: usize, r_row: &mut [f64]| {
             // Largest and second-largest of (a+s) across k', with argmax.
             let (mut max1, mut max1_idx, mut max2) = (f64::NEG_INFINITY, 0usize, f64::NEG_INFINITY);
             for k in 0..n {
@@ -302,11 +305,37 @@ pub fn affinity_propagation(
                     max2 = v;
                 }
             }
-            for k in 0..n {
+            for (k, rik) in r_row.iter_mut().enumerate() {
                 let competitor = if k == max1_idx { max2 } else { max1 };
                 let upd = s[i][k] - competitor;
-                r[i][k] = damping * r[i][k] + (1.0 - damping) * upd;
+                *rik = damping * *rik + (1.0 - damping) * upd;
             }
+        };
+        let nthreads_r = if n.saturating_mul(n) < (1 << 18) || n < 2 {
+            1
+        } else {
+            std::thread::available_parallelism()
+                .map(|c| c.get())
+                .unwrap_or(1)
+                .min(n)
+        };
+        if nthreads_r <= 1 {
+            for (i, r_row) in r.iter_mut().enumerate() {
+                update_resp_row(i, r_row);
+            }
+        } else {
+            let chunk = n.div_ceil(nthreads_r);
+            let update_resp_row = &update_resp_row;
+            std::thread::scope(|scope| {
+                for (t, r_chunk) in r.chunks_mut(chunk).enumerate() {
+                    let base = t * chunk;
+                    scope.spawn(move || {
+                        for (li, r_row) in r_chunk.iter_mut().enumerate() {
+                            update_resp_row(base + li, r_row);
+                        }
+                    });
+                }
+            });
         }
         // Availabilities: a(i,k)=min(0, r(k,k)+Σ_{i'∉{i,k}}max(0,r(i',k))); a(k,k)=Σ_{i'≠k}max(0,·).
         for k in 0..n {
