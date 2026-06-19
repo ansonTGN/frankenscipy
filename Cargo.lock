@@ -850,6 +850,7 @@ dependencies = [
 name = "fsci-cluster"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "fsci-linalg",
  "fsci-runtime",
  "proptest",
@@ -933,6 +934,7 @@ dependencies = [
 name = "fsci-io"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "fsci-runtime",
  "proptest",
 ]
@@ -1016,6 +1018,7 @@ dependencies = [
 name = "fsci-spatial"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "fsci-linalg",
  "fsci-runtime",
  "fsci-sparse",
