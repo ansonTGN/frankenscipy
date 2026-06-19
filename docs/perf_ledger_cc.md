@@ -20,6 +20,8 @@ regressions are reverted. Entries also routed to MistyBirch for the canonical me
 | GMM diag E-step parallel (yw7ts) | GMM n=20000 d=16 k=8 | 432.4 ms | 39.04 ms | **11.1× faster** | **3.07×** (119.8→39.0 ms) | ✅ KEEP |
 | AP responsibility parallel (yw7ts) | AP n=1000 d=4 | 319.4 ms | 249.9 ms | 1.28× faster | — | ✅ KEEP (parity) |
 | AP responsibility parallel (yw7ts) | AP n=2000 d=4 | 2158 ms | 2098 ms | **1.03× (PARITY)** | **2.02×** (4.23→2.10 s) | ✅ KEEP (parity) |
+| Interpolate evaluate_many parallel (yw7ts) | NdPPoly m=200k total=6 | n/a | 8.86 ms | — | **0.88× (REGRESSION)** vs serial 7.79 ms | ❌ **REVERTED** |
+| Interpolate evaluate_many parallel (yw7ts) | BPoly m=200k | n/a | ~8.5 ms | — | ~serial 8.18 ms (no gain) | ❌ **REVERTED** |
 
 ## Detail
 
@@ -42,6 +44,20 @@ LOSE ~2× to sklearn. **Keep the parallelization (real 2× internal, byte-identi
 but AP is NOT a competitive advantage.** Remaining gap = the still-serial availability
 update (column-strided over the row-major matrix; parallelizing it needs a transposed
 layout — a candidate future lever, NOT yet done). Commit `1f32a4b2`.
+
+### Interpolate batch-evaluator parallelization (frankenscipy-yw7ts) — ❌ REVERTED
+BPoly/NdPPoly/NdBSpline `evaluate_many` were parallelized across points (par_query_map
+for BPoly; hand-rolled per-thread scratch for NdPPoly/NdBSpline). **Measured A/B at
+m=200k** (forced-serial gate→MAX, rebuilt): NdPPoly **serial 7.79 ms vs parallel
+8.86 ms = 0.88× (a 14% REGRESSION)**; BPoly serial 8.18 ms ≈ parallel (no gain). The
+per-point work is only ~k/total flops (~30 for the typical low-degree/low-dim case),
+so 64-thread spawn + per-thread-scratch allocation overhead exceeds the compute — the
+opposite of GMM, whose heavy gaussian/exp per-point work parallelizes 3×. The gate
+(`points·total ≥ 2¹⁶`) counts flops, but 2¹⁶ flops is trivial vs thread overhead, and
+the break-even (if any) is contention-dependent and unverifiable on this shared host.
+**Reverted all three to the serial map; the byte-identical loop-invariant HOIST
+(binoms/strides/scratch precomputed once) is PRESERVED — that was the real, monotone
+win.** Conformance green (interpolate evaluate_many tests). Revert commit: this one.
 
 ## Notes / negative evidence
 - The ~50 byte-identical allocation/precompute/batch wins (buffer reuse, mem::take,

@@ -4634,28 +4634,29 @@ impl BPoly {
                 (0..=k).map(|a| binom(k, a)).collect()
             })
             .collect();
-        // Each query is an independent segment lookup + Bernstein sum reading the
-        // shared read-only `binoms` table, so split large query batches across
-        // threads (par_query_map) — bit-identical to the sequential map (order
-        // preserved, per-query pure). frankenscipy-yw7ts.
-        let work = self.c.first().map_or(1, Vec::len);
-        par_query_map(xs, work, |&xval| {
-            if xval.is_nan() {
-                return f64::NAN;
-            }
-            let seg = self.segment(xval);
-            let coeffs = &self.c[seg];
-            let k = coeffs.len() - 1;
-            let d = self.x[seg + 1] - self.x[seg];
-            let s = (xval - self.x[seg]) / d;
-            let s1 = 1.0 - s;
-            let bn = &binoms[seg];
-            let mut value = 0.0;
-            for (a, &ca) in coeffs.iter().enumerate() {
-                value += ca * bn[a] * s.powi(a as i32) * s1.powi((k - a) as i32);
-            }
-            value
-        })
+        // Per-query segment lookup + Bernstein sum, reading the hoisted `binoms`.
+        // (Parallelizing this with par_query_map MEASURED as a regression — the
+        // per-query work is only ~k flops, so thread-spawn overhead dominates;
+        // reverted to the serial map. frankenscipy-yw7ts ledger: docs/perf_ledger_cc.md.)
+        xs.iter()
+            .map(|&xval| {
+                if xval.is_nan() {
+                    return f64::NAN;
+                }
+                let seg = self.segment(xval);
+                let coeffs = &self.c[seg];
+                let k = coeffs.len() - 1;
+                let d = self.x[seg + 1] - self.x[seg];
+                let s = (xval - self.x[seg]) / d;
+                let s1 = 1.0 - s;
+                let bn = &binoms[seg];
+                let mut value = 0.0;
+                for (a, &ca) in coeffs.iter().enumerate() {
+                    value += ca * bn[a] * s.powi(a as i32) * s1.powi((k - a) as i32);
+                }
+                value
+            })
+            .collect()
     }
 
     /// The first derivative as a degree `k-1` Bernstein polynomial; the
@@ -4792,72 +4793,42 @@ impl NdBSpline {
             stride[i] = stride[i + 1] * ns[i + 1];
         }
         let total: usize = ns.iter().product();
-        // Per-point tensor-product B-spline evaluation into a caller-provided `idx`
-        // scratch (the per-dim `bases` are allocated per point already). Each point
-        // is an independent O(total) contraction reading only the immutable knots/
-        // coefficients, so split large point batches across threads into ordered
-        // output slots — byte-identical to the serial map (per-point pure, no cross-
-        // point reduction). Each thread carries its own idx. frankenscipy-yw7ts.
-        let eval_point = |point: &[f64], idx: &mut [usize]| -> f64 {
-            let bases: Vec<Vec<f64>> = (0..ndim)
-                .map(|d| eval_basis_all(&self.t[d], point[d], self.k, ns[d]))
-                .collect();
-            idx.iter_mut().for_each(|v| *v = 0);
-            let mut sum = 0.0f64;
-            for _ in 0..total {
-                let mut off = 0usize;
-                let mut w = 1.0f64;
-                for d in 0..ndim {
-                    off += idx[d] * stride[d];
-                    w *= bases[d][idx[d]];
-                }
-                if w != 0.0 {
-                    sum += self.c[off] * w;
-                }
-                for d in (0..ndim).rev() {
-                    idx[d] += 1;
-                    if idx[d] < ns[d] {
-                        break;
+        // Reused per-point `idx` scratch (point-invariant ns/stride hoisted above; the
+        // per-dim `bases` are allocated per point). (Parallelizing the per-point loop
+        // MEASURED as a regression on the typical low-degree/low-dim case — the
+        // O(total) contraction is too cheap to amortise thread-spawn + scratch
+        // overhead; reverted to the serial map. frankenscipy-yw7ts ledger:
+        // docs/perf_ledger_cc.md.)
+        let mut idx = vec![0usize; ndim];
+        points
+            .iter()
+            .map(|point| {
+                let bases: Vec<Vec<f64>> = (0..ndim)
+                    .map(|d| eval_basis_all(&self.t[d], point[d], self.k, ns[d]))
+                    .collect();
+                idx.iter_mut().for_each(|v| *v = 0);
+                let mut sum = 0.0f64;
+                for _ in 0..total {
+                    let mut off = 0usize;
+                    let mut w = 1.0f64;
+                    for d in 0..ndim {
+                        off += idx[d] * stride[d];
+                        w *= bases[d][idx[d]];
                     }
-                    idx[d] = 0;
-                }
-            }
-            sum
-        };
-        let nthreads = if points.len().saturating_mul(total.max(1)) < (1 << 16)
-            || points.len() < 4
-        {
-            1
-        } else {
-            std::thread::available_parallelism()
-                .map(|c| c.get())
-                .unwrap_or(1)
-                .min(points.len())
-        };
-        if nthreads <= 1 {
-            let mut idx = vec![0usize; ndim];
-            points
-                .iter()
-                .map(|point| eval_point(point, &mut idx))
-                .collect()
-        } else {
-            let mut out = vec![0.0f64; points.len()];
-            let chunk = points.len().div_ceil(nthreads);
-            let eval_point = &eval_point;
-            std::thread::scope(|scope| {
-                for (out_chunk, pts_chunk) in
-                    out.chunks_mut(chunk).zip(points.chunks(chunk))
-                {
-                    scope.spawn(move || {
-                        let mut idx = vec![0usize; ndim];
-                        for (o, point) in out_chunk.iter_mut().zip(pts_chunk.iter()) {
-                            *o = eval_point(point, &mut idx);
+                    if w != 0.0 {
+                        sum += self.c[off] * w;
+                    }
+                    for d in (0..ndim).rev() {
+                        idx[d] += 1;
+                        if idx[d] < ns[d] {
+                            break;
                         }
-                    });
+                        idx[d] = 0;
+                    }
                 }
-            });
-            out
-        }
+                sum
+            })
+            .collect()
     }
 }
 
@@ -4989,102 +4960,59 @@ impl NdPPoly {
         }
         let orders: Vec<usize> = (0..ndim).map(|d| self.c_shape[d] - 1).collect();
         let total: usize = orders.iter().map(|&k| k + 1).product();
-        // Per-point tensor-product Horner evaluation into caller-provided scratch
-        // (cell/dx/idx/powers). Each point is an independent O(total) contraction
-        // reading only the immutable coefficients/breakpoints, so split large point
-        // batches across threads into ordered output slots — byte-identical to the
-        // serial map (per-point pure, no cross-point reduction). Each thread carries
-        // its own scratch (the reused serial buffers become per-thread).
-        // frankenscipy-yw7ts.
-        let eval_point = |point: &[f64],
-                          cell: &mut [usize],
-                          dx: &mut [f64],
-                          idx: &mut [usize],
-                          powers: &mut [Vec<f64>]|
-         -> f64 {
-            for d in 0..ndim {
-                let bp = &self.x[d];
-                let m = bp.len() - 1;
-                let mut j = 0usize;
-                while j + 1 < m && point[d] >= bp[j + 1] {
-                    j += 1;
-                }
-                cell[d] = j;
-                dx[d] = point[d] - bp[j];
-            }
-            let mut base = 0usize;
-            for d in 0..ndim {
-                base += cell[d] * stride[ndim + d];
-            }
-            for d in 0..ndim {
-                let kd = orders[d];
-                for id in 0..=kd {
-                    powers[d][id] = dx[d].powi((kd - id) as i32);
-                }
-            }
-            idx.iter_mut().for_each(|v| *v = 0);
-            let mut sum = 0.0f64;
-            for _ in 0..total {
-                let mut off = base;
-                let mut term = 1.0f64;
+        // Reused per-point scratch (point-invariant strides/orders hoisted above).
+        // (Parallelizing the per-point loop MEASURED as a regression on the typical
+        // low-degree/low-dim case — the O(total) contraction is too cheap to amortise
+        // thread-spawn + per-thread-scratch overhead; reverted to the serial map.
+        // frankenscipy-yw7ts ledger: docs/perf_ledger_cc.md.)
+        let mut cell = vec![0usize; ndim];
+        let mut dx = vec![0.0f64; ndim];
+        let mut idx = vec![0usize; ndim];
+        let mut powers: Vec<Vec<f64>> = orders.iter().map(|&kd| vec![0.0f64; kd + 1]).collect();
+        points
+            .iter()
+            .map(|point| {
                 for d in 0..ndim {
-                    off += idx[d] * stride[d];
-                    term *= powers[d][idx[d]];
-                }
-                sum += self.c[off] * term;
-                for d in (0..ndim).rev() {
-                    idx[d] += 1;
-                    if idx[d] <= orders[d] {
-                        break;
+                    let bp = &self.x[d];
+                    let m = bp.len() - 1;
+                    let mut j = 0usize;
+                    while j + 1 < m && point[d] >= bp[j + 1] {
+                        j += 1;
                     }
-                    idx[d] = 0;
+                    cell[d] = j;
+                    dx[d] = point[d] - bp[j];
                 }
-            }
-            sum
-        };
-        let nthreads = if points.len().saturating_mul(total.max(1)) < (1 << 16)
-            || points.len() < 4
-        {
-            1
-        } else {
-            std::thread::available_parallelism()
-                .map(|c| c.get())
-                .unwrap_or(1)
-                .min(points.len())
-        };
-        if nthreads <= 1 {
-            let mut cell = vec![0usize; ndim];
-            let mut dx = vec![0.0f64; ndim];
-            let mut idx = vec![0usize; ndim];
-            let mut powers: Vec<Vec<f64>> =
-                orders.iter().map(|&kd| vec![0.0f64; kd + 1]).collect();
-            points
-                .iter()
-                .map(|point| eval_point(point, &mut cell, &mut dx, &mut idx, &mut powers))
-                .collect()
-        } else {
-            let mut out = vec![0.0f64; points.len()];
-            let chunk = points.len().div_ceil(nthreads);
-            let eval_point = &eval_point;
-            let orders = &orders;
-            std::thread::scope(|scope| {
-                for (out_chunk, pts_chunk) in
-                    out.chunks_mut(chunk).zip(points.chunks(chunk))
-                {
-                    scope.spawn(move || {
-                        let mut cell = vec![0usize; ndim];
-                        let mut dx = vec![0.0f64; ndim];
-                        let mut idx = vec![0usize; ndim];
-                        let mut powers: Vec<Vec<f64>> =
-                            orders.iter().map(|&kd| vec![0.0f64; kd + 1]).collect();
-                        for (o, point) in out_chunk.iter_mut().zip(pts_chunk.iter()) {
-                            *o = eval_point(point, &mut cell, &mut dx, &mut idx, &mut powers);
+                let mut base = 0usize;
+                for d in 0..ndim {
+                    base += cell[d] * stride[ndim + d];
+                }
+                for d in 0..ndim {
+                    let kd = orders[d];
+                    for id in 0..=kd {
+                        powers[d][id] = dx[d].powi((kd - id) as i32);
+                    }
+                }
+                idx.iter_mut().for_each(|v| *v = 0);
+                let mut sum = 0.0f64;
+                for _ in 0..total {
+                    let mut off = base;
+                    let mut term = 1.0f64;
+                    for d in 0..ndim {
+                        off += idx[d] * stride[d];
+                        term *= powers[d][idx[d]];
+                    }
+                    sum += self.c[off] * term;
+                    for d in (0..ndim).rev() {
+                        idx[d] += 1;
+                        if idx[d] <= orders[d] {
+                            break;
                         }
-                    });
+                        idx[d] = 0;
+                    }
                 }
-            });
-            out
-        }
+                sum
+            })
+            .collect()
     }
 }
 
