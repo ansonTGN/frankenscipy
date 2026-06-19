@@ -1,7 +1,7 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use fsci_ndimage::{
-    BoundaryMode, NdArray, binary_dilation, binary_erosion, maximum_filter, median_filter,
-    minimum_filter, rank_filter,
+    BoundaryMode, NdArray, binary_closing, binary_dilation, binary_erosion, binary_opening,
+    maximum_filter, median_filter, minimum_filter, rank_filter,
 };
 use std::hint::black_box;
 
@@ -50,6 +50,15 @@ fn bench_binary_morph(c: &mut Criterion) {
         });
         group.bench_function(BenchmarkId::new("dilation_256x256", size), |b| {
             b.iter(|| binary_dilation(black_box(&img), size, 1).expect("dilation"))
+        });
+        // opening = erosion∘dilation, closing = dilation∘erosion — both inherit the 2D
+        // bit-pack speedup (frankenscipy-9l5oo). scipy's binary_opening/closing don't
+        // decompose the box structure (full footprint), so they are very slow here.
+        group.bench_function(BenchmarkId::new("opening_256x256", size), |b| {
+            b.iter(|| binary_opening(black_box(&img), size, 1).expect("opening"))
+        });
+        group.bench_function(BenchmarkId::new("closing_256x256", size), |b| {
+            b.iter(|| binary_closing(black_box(&img), size, 1).expect("closing"))
         });
     }
     group.finish();

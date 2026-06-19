@@ -426,7 +426,13 @@ SYMMETRIC: `binary_dilate_bitpack_2d` (OR instead of AND, reflected-SE origin lo
 out-of-range = OR-identity 0). **s7 ~2.2 ms→642 µs (3.4× self) = 2.3× slower (was 6.6×);
 s15 ~2.2 ms→159 µs (14× self) = 3.3× FASTER vs scipy 521 µs (was 3.1× slower)**, 296/0.
 dilation-s7 still loses to scipy's very-fast 279 µs (mostly-set image) but improved 3.4×.
-Net: binary morphology 3 of 4 cases now parity-or-WIN (was all losses). SAME lever applied to
+Net: binary morphology 3 of 4 cases now parity-or-WIN (was all losses).
+BROAD REACH (measured, bench added): binary_opening (erosion∘dilation) and binary_closing
+(dilation∘erosion) INHERIT the bit-pack → **opening s7 2.8× / s15 9.0× faster; closing s7
+1.6× / s15 4.7× faster than scipy** (scipy 2.2–10.8 ms — it does NOT decompose the box
+structure, scanning the full s² footprint, where fsci's bit-packed separable path is
+1.1–1.7 ms). The bit-pack flip propagates to all higher-level binary morphology (opening/
+closing/tophat/fill_holes). SAME lever applied to
 `binary_dilation` (`binary_dilate_separable`: running count of ONES > 0, origin-aware lo =
 size/2 + refl to match the reflected-SE max-filter; even sizes use refl=−1): byte-identical
 **296/0**, dilation ~1.84/1.64 ms (same ~1.2–1.4× self-speedup). Dilation is still 3–6.6×
