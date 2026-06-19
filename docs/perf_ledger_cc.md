@@ -409,15 +409,19 @@ fsci vs scipy.ndimage (256² / 160² images):
 | binary_erosion 256² s7 (IMPROVED) | 1.81 ms | 0.60 ms | 0.33× (3.0× slower, was 3.7×) |
 | binary_erosion 256² s15 (IMPROVED) | 1.62 ms | 0.81 ms | 0.50× (2.0× slower, was 2.76×) |
 
-### ✅ binary_erosion 1.2–1.4× self-speedup — specialized running-count (shipped, partial)
-binary_erosion ran a float min-filter (monotonic deque + `total_cmp` per pixel) on the
-booleanized image. Added `binary_erode_separable`: per-axis sliding-window AND via a
-running COUNT of zeros (out-of-bounds = 0 = a zero, matching the Constant-0 min border).
-For binary data this is BYTE-IDENTICAL (min==1 ⇔ no zero in window) but replaces the deque
-+ total_cmp with two integer count updates per pixel. **2.20→1.81 ms (s7), 2.22→1.62 ms
-(s15) = 1.2–1.4× self-speedup**, conformance ndimage **296/0**. Monotone op-reduction (kept).
-Still 2–3× slower than scipy's bit-level NI_BinaryErosion — the remaining gap needs the
-bit-pack lever (64 px/u64 shift-AND), filed as the future full flip. SAME lever applied to
+### ✅✅✅ binary_erosion LOSS → WIN: 2D BIT-PACKING (radical lever, flipped)
+The radical lever LANDED — byte-identical on the first try. `binary_erode_bitpack_2d`:
+pack each row into u64 words (64 px/word), erode HORIZONTALLY via shift-AND (out[c] = AND of
+in[c-lo..c-lo+size-1], computed as the left-anchored `size`-fold shift-AND then `shift_bits_
+down` by `size-1-lo` to re-center) and VERTICALLY via word-AND of the `size` rows in the
+window. Constant-0 border falls out free (out-of-range bits/rows are 0 → AND is 0). Gated to
+2D + size<64 (single word-boundary shifts); N-D / huge windows fall back to the running count.
+**MEASURED: s7 2.20 ms→630 µs (3.5× self) = PARITY vs scipy 596 µs (was 3.7× slower); s15
+2.22 ms→180 µs (12× self) = 4.5× FASTER vs scipy 805 µs (was 2.76× slower).** Conformance
+ndimage **296/0**. A 2.76–3.7× LOSS flipped to parity-to-4.5×-WIN. The op-count math (~30×
+fewer ops) predicted it. KEY: erosion AND is commutative across axes so horizontal-then-
+vertical order is byte-identical; the Constant-0 border needs no special-casing in bit-space.
+EARLIER (superseded): running-count partial got 1.2–1.4×; the bit-pack subsumes it. SAME lever applied to
 `binary_dilation` (`binary_dilate_separable`: running count of ONES > 0, origin-aware lo =
 size/2 + refl to match the reflected-SE max-filter; even sizes use refl=−1): byte-identical
 **296/0**, dilation ~1.84/1.64 ms (same ~1.2–1.4× self-speedup). Dilation is still 3–6.6×

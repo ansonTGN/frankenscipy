@@ -3931,11 +3931,120 @@ fn binary_dilation_origin_reflection(size: usize) -> i64 {
 /// zero in the window) but replaces the per-pixel monotonic deque + `total_cmp` with two
 /// integer count updates. frankenscipy-9l5oo.
 fn binary_erode_separable(bin: &NdArray, size: usize) -> NdArray {
+    // Radical lever: 2D bit-packed erosion (64 px/u64) when the window fits a single word
+    // boundary (size < 64). Falls back to the per-pixel running count for N-D / huge windows.
+    if size < 64 {
+        if let Some(packed) = binary_erode_bitpack_2d(bin, size) {
+            return packed;
+        }
+    }
     let mut cur = bin.clone();
     for axis in 0..bin.ndim() {
         cur = binary_erode_along_axis(&cur, axis, size);
     }
     cur
+}
+
+/// Shift a packed bit-row UP (toward higher bit index) by `k` bits (1 ≤ k < 64):
+/// `out` bit i = `src` bit (i-k), zero-filled at the low end.
+fn shift_bits_up(src: &[u64], k: usize, out: &mut [u64]) {
+    for w in 0..src.len() {
+        let mut v = src[w] << k;
+        if w >= 1 {
+            v |= src[w - 1] >> (64 - k);
+        }
+        out[w] = v;
+    }
+}
+
+/// Shift a packed bit-row DOWN (toward lower bit index) by `m` bits (0 ≤ m < 64):
+/// `out` bit i = `src` bit (i+m), zero-filled at the high end.
+fn shift_bits_down(src: &[u64], m: usize, out: &mut [u64]) {
+    if m == 0 {
+        out.copy_from_slice(src);
+        return;
+    }
+    let n = src.len();
+    for w in 0..n {
+        let mut v = src[w] >> m;
+        if w + 1 < n {
+            v |= src[w + 1] << (64 - m);
+        }
+        out[w] = v;
+    }
+}
+
+/// 2D bit-packed binary erosion: pack each row into u64 words, erode horizontally via
+/// shift-AND (`out[c] = AND of in[c-lo..c-lo+size-1]`, centered by shifting the left-
+/// anchored AND down by `size-1-lo`) and vertically via word-AND of `size` rows. The
+/// Constant-0 border falls out for free (out-of-range bits/rows are zero → AND is zero).
+/// Byte-identical 0/1 output to the separable min-filter. `None` for non-2D. 9l5oo.
+fn binary_erode_bitpack_2d(bin: &NdArray, size: usize) -> Option<NdArray> {
+    if bin.ndim() != 2 {
+        return None;
+    }
+    let h = bin.shape[0];
+    let w = bin.shape[1];
+    if h == 0 || w == 0 {
+        return None;
+    }
+    let wpr = w.div_ceil(64);
+    let lo = size / 2; // erosion origin is 0 → lo = size/2 (matches minmax_filter_along_axis)
+    let center = size - 1 - lo; // re-center the left-anchored window
+
+    // Pack: bit (c%64) of word (r*wpr + c/64) is set iff pixel (r,c) != 0.
+    let mut packed = vec![0u64; h * wpr];
+    for r in 0..h {
+        let row_base = r * w;
+        let pk_base = r * wpr;
+        for c in 0..w {
+            if bin.data[row_base + c] != 0.0 {
+                packed[pk_base + c / 64] |= 1u64 << (c % 64);
+            }
+        }
+    }
+
+    // Horizontal erosion (within each row).
+    let mut h_eroded = vec![0u64; h * wpr];
+    let mut acc = vec![0u64; wpr];
+    let mut shifted = vec![0u64; wpr];
+    for r in 0..h {
+        let row = &packed[r * wpr..(r + 1) * wpr];
+        acc.copy_from_slice(row);
+        for k in 1..size {
+            shift_bits_up(row, k, &mut shifted);
+            for (a, s) in acc.iter_mut().zip(shifted.iter()) {
+                *a &= *s;
+            }
+        }
+        shift_bits_down(&acc, center, &mut h_eroded[r * wpr..(r + 1) * wpr]);
+    }
+
+    // Vertical erosion (word-AND of the `size` rows in [r-lo, r-lo+size-1]); any out-of-
+    // range row zeroes the whole output row (Constant-0 border).
+    let mut out = NdArray::zeros(bin.shape.clone());
+    let mut col_acc = vec![0u64; wpr];
+    for r in 0..h {
+        let top = r as i64 - lo as i64;
+        if top < 0 || top + size as i64 > h as i64 {
+            continue; // window hits the border → eroded to 0
+        }
+        let top = top as usize;
+        col_acc.copy_from_slice(&h_eroded[top * wpr..(top + 1) * wpr]);
+        for j in 1..size {
+            let src = &h_eroded[(top + j) * wpr..(top + j + 1) * wpr];
+            for (a, s) in col_acc.iter_mut().zip(src.iter()) {
+                *a &= *s;
+            }
+        }
+        let out_base = r * w;
+        for c in 0..w {
+            if (col_acc[c / 64] >> (c % 64)) & 1 == 1 {
+                out.data[out_base + c] = 1.0;
+            }
+        }
+    }
+    Some(out)
 }
 
 fn binary_erode_along_axis(arr: &NdArray, axis: usize, size: usize) -> NdArray {
