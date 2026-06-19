@@ -47,6 +47,8 @@ regressions are reverted. Entries also routed to MistyBirch for the canonical me
 | KDTree query dual-tree parallel (9k50g) | cKDTree query 4096 pts | 2032.8 µs | 1756.7 µs | **1.16× faster** | beats single-threaded C | ✅ KEEP |
 | silhouette per-anchor parallel | silhouette n=500 d=4 | 2064 µs | 720.8 µs | **2.86× faster** | no small-n regression | ✅ KEEP |
 | silhouette per-anchor parallel | silhouette n=2000 d=4 | 32928 µs | 3113.5 µs | **10.6× faster** | scales w/ n | ✅ KEEP |
+| ndimage zoom (kernel, NOT my opt) | zoom 2× 256² order=1 | 4842 µs | 85950 µs | **0.06× (17.7× SLOWER)** | order=1 slower than order=3! | ⚠️ LOSS → bead |
+| ndimage zoom (kernel, NOT my opt) | zoom 2× 256² order=3 | 14053 µs | 31573 µs | **0.45× (2.25× slower)** | generic spline-weight kernel | ⚠️ LOSS → bead |
 
 ## Detail
 
@@ -220,6 +222,21 @@ unlike interpolate's ~30 flops), so the parallel gate is well-calibrated and eve
 n=500 wins 2.86×. The ratio grows with n (parallel scales). KEEP. This negative
 regression-hunt result is itself evidence: the cluster/spatial parallelizations are
 correctly gated; interpolate was the lone over-eager case (already reverted).
+
+### ndimage zoom — ⚠️ LARGEST LOSS (kernel, not my optimization; bead filed)
+Oracle `docs/perf_oracle_zoom.py` (scipy.ndimage.zoom 2×, 256² image). **fsci LOSES
+2.25–17.7×:** order=1 85.95 ms vs scipy 4.84 ms (17.7×!); order=3 31.57 ms vs 14.05 ms
+(2.25×). **Smoking gun: fsci order=1 (86 ms) is SLOWER than order=3 (31.6 ms)** — the
+reverse of correct (bilinear should be cheaper than cubic). The output-pixel loop IS
+parallelized (fill_pixels_parallel, gate `pixels·kernel_work≥2¹⁸` fires for both), so
+this is NOT the parallelization — it's the per-pixel `sample_interpolated` computing
+B-spline weights generically with no fast low-order (bilinear) special case, so order=1
+pays nearly the full generic-spline cost AND apparently more (likely a per-pixel
+prefilter/weight recompute). **NOT my optimization (the geometric-transform
+parallelization is correct/byte-identical; the slow kernel is the underlying spline
+interpolation). Bead filed for the ndimage owner.** This is the gauntlet's single
+biggest loss and the clearest fix-target: special-case order≤1 (direct bilinear) +
+hoist any per-pixel weight setup. Honest LOSS recorded.
 
 ## Release-readiness summary (CrimsonForge beads, as of this round)
 

@@ -102,6 +102,25 @@ criterion_group!(
     bench_minmax_filter,
     bench_binary_morph,
     bench_rank_filter,
-    bench_correlate_gaussian
+    bench_correlate_gaussian,
+    bench_zoom
 );
 criterion_main!(benches);
+
+/// Geometric zoom (output-pixel loop parallelized). order=1 is cheap per pixel
+/// (bilinear) — a regression candidate if the parallel gate is over-eager; order=3
+/// is heavier (cubic spline). Head-to-head vs scipy.ndimage.zoom.
+fn bench_zoom(c: &mut Criterion) {
+    use fsci_ndimage::zoom;
+    let img = image(256);
+    let mut group = c.benchmark_group("zoom");
+    for &order in &[1usize, 3] {
+        group.bench_function(BenchmarkId::new("2x_256", order), |b| {
+            b.iter(|| {
+                zoom(black_box(&img), &[2.0, 2.0], order, BoundaryMode::Reflect, 0.0)
+                    .expect("zoom")
+            })
+        });
+    }
+    group.finish();
+}
