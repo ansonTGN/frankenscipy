@@ -8763,6 +8763,41 @@ mod tests {
     }
 
     #[test]
+    fn delaunay_empty_circumcircle_property_random() {
+        // Delaunay safety net (frankenscipy-9l5oo): the defining property is that no
+        // input point lies strictly inside any triangle's circumcircle. This validates
+        // the O(n²) Bowyer-Watson on a non-degenerate scattered point set AND is the
+        // invariant any future O(n log n) point-location rewrite must preserve — the
+        // existing test only covers 4 points / 2 triangles. Deterministic low-
+        // discrepancy (golden-ratio) points avoid exact cocircular degeneracies.
+        let n = 200usize;
+        let pts: Vec<(f64, f64)> = (0..n)
+            .map(|i| {
+                let t = i as f64;
+                (
+                    (t * 0.618_033_988_75).fract() * 100.0,
+                    (t * 0.414_213_562_37).fract() * 100.0,
+                )
+            })
+            .collect();
+        let tri = Delaunay::new(&pts).expect("delaunay");
+        assert!(!tri.simplices.is_empty(), "should produce triangles");
+        for &(a, b, c) in &tri.simplices {
+            let (pa, pb, pc) = (pts[a], pts[b], pts[c]);
+            for (k, &p) in pts.iter().enumerate() {
+                if k == a || k == b || k == c {
+                    continue;
+                }
+                assert!(
+                    !point_in_circumcircle(pa, pb, pc, p),
+                    "Delaunay property violated: point {k} inside circumcircle of \
+                     triangle ({a},{b},{c})"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn voronoi_vertices_matches_scipy_reference_values() {
         // scipy.spatial.Voronoi([[0,0], [1,0], [1,1], [0,1]]).vertices
         // -> [[0.5, 0.5]] (center of square)
