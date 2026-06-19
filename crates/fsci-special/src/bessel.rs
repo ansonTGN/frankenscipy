@@ -4718,15 +4718,50 @@ pub fn jnjnp_zeros(nt: usize) -> (Vec<f64>, Vec<i32>, Vec<i32>, Vec<i32>) {
     if nt == 0 {
         return (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     }
-    // (magnitude, order n, serial m, type t). Generate a superset large enough
-    // to contain the `nt` smallest: zeros increase with both order and serial,
-    // so orders `0..=nt+2` with `nt+2` zeros each more than cover them.
+
+    let max_envelope = nt + 2;
+    let root = (nt as f64).sqrt().ceil() as usize;
+    let mut per = (root + 4).clamp(1, max_envelope);
+    let mut n_max = (2 * root + 6).clamp(1, max_envelope);
+
+    loop {
+        let (mut cands, serial_frontier, order_frontier) =
+            jnjnp_zero_candidates_with_frontier(per, n_max, max_envelope);
+        if cands.len() >= nt {
+            sort_jnjnp_candidates(&mut cands);
+            let cutoff = cands[nt - 1].0;
+            if (serial_frontier > cutoff && order_frontier > cutoff)
+                || (per == max_envelope && n_max == max_envelope)
+            {
+                return collect_jnjnp_candidates(&cands, nt);
+            }
+        }
+
+        let next_per = (per.saturating_mul(2)).min(max_envelope);
+        let next_n_max = (n_max.saturating_mul(2)).min(max_envelope);
+        if next_per == per && next_n_max == n_max {
+            sort_jnjnp_candidates(&mut cands);
+            return collect_jnjnp_candidates(&cands, nt);
+        }
+        per = next_per;
+        n_max = next_n_max;
+    }
+}
+
+fn jnjnp_zero_candidates_with_frontier(
+    per: usize,
+    n_max: usize,
+    max_envelope: usize,
+) -> (Vec<(f64, i32, i32, i32)>, f64, f64) {
     let mut cands: Vec<(f64, i32, i32, i32)> = Vec::new();
+    let mut serial_frontier = f64::INFINITY;
     cands.push((0.0, 0, 0, 1)); // J_0'(0) = 0
-    let per = nt + 2;
-    let n_max = nt as u32 + 2;
-    for n in 0..=n_max {
+
+    for n in 0..=n_max as u32 {
         let jn = jn_zeros(n, per);
+        if let Some(&tail) = jn.last() {
+            serial_frontier = serial_frontier.min(tail);
+        }
         for (i, &x) in jn.iter().enumerate() {
             cands.push((x, n as i32, (i + 1) as i32, 0));
         }
@@ -4738,20 +4773,49 @@ pub fn jnjnp_zeros(nt: usize) -> (Vec<f64>, Vec<i32>, Vec<i32>, Vec<i32>) {
         } else {
             jnp_zeros_from_function_zeros(n, per, &jn)
         };
+        if let Some(&tail) = jp.last() {
+            serial_frontier = serial_frontier.min(tail);
+        }
         for (i, &x) in jp.iter().enumerate() {
             cands.push((x, n as i32, (i + 1) as i32, 1));
         }
     }
+
+    let order_frontier = if n_max >= max_envelope {
+        f64::INFINITY
+    } else {
+        let omitted_order = (n_max + 1) as u32;
+        let jn_first = jn_zeros(omitted_order, 1)
+            .into_iter()
+            .next()
+            .unwrap_or(f64::INFINITY);
+        let jnp_first = jnp_zeros(omitted_order, 1)
+            .into_iter()
+            .next()
+            .unwrap_or(f64::INFINITY);
+        jn_first.min(jnp_first)
+    };
+
+    (cands, serial_frontier, order_frontier)
+}
+
+fn sort_jnjnp_candidates(cands: &mut [(f64, i32, i32, i32)]) {
     cands.sort_by(|a, b| {
         a.0.partial_cmp(&b.0)
             .expect("Bessel zeros are finite")
             .then(a.3.cmp(&b.3))
     });
-    cands.truncate(nt);
-    let zo = cands.iter().map(|c| c.0).collect();
-    let n = cands.iter().map(|c| c.1).collect();
-    let m = cands.iter().map(|c| c.2).collect();
-    let t = cands.iter().map(|c| c.3).collect();
+}
+
+fn collect_jnjnp_candidates(
+    cands: &[(f64, i32, i32, i32)],
+    nt: usize,
+) -> (Vec<f64>, Vec<i32>, Vec<i32>, Vec<i32>) {
+    let kept = &cands[..nt.min(cands.len())];
+    let zo = kept.iter().map(|c| c.0).collect();
+    let n = kept.iter().map(|c| c.1).collect();
+    let m = kept.iter().map(|c| c.2).collect();
+    let t = kept.iter().map(|c| c.3).collect();
     (zo, n, m, t)
 }
 
@@ -4863,6 +4927,33 @@ mod tests {
         assert_eq!(t, vec![1, 1, 0, 1, 0, 1, 1, 0], "jnjnp t");
 
         assert!(jnjnp_zeros(0).0.is_empty(), "nt=0 -> empty");
+    }
+
+    #[test]
+    fn jnjnp_adaptive_envelope_matches_oversized_reference() {
+        for &nt in &[1_usize, 8, 32] {
+            let adaptive = jnjnp_zeros(nt);
+            let (mut cands, _, _) = jnjnp_zero_candidates_with_frontier(nt + 2, nt + 2, nt + 2);
+            sort_jnjnp_candidates(&mut cands);
+            let reference = collect_jnjnp_candidates(&cands, nt);
+
+            assert_eq!(
+                adaptive
+                    .0
+                    .iter()
+                    .map(|value| value.to_bits())
+                    .collect::<Vec<_>>(),
+                reference
+                    .0
+                    .iter()
+                    .map(|value| value.to_bits())
+                    .collect::<Vec<_>>(),
+                "zo bits for nt={nt}"
+            );
+            assert_eq!(adaptive.1, reference.1, "n for nt={nt}");
+            assert_eq!(adaptive.2, reference.2, "m for nt={nt}");
+            assert_eq!(adaptive.3, reference.3, "t for nt={nt}");
+        }
     }
 
     #[test]

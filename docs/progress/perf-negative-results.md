@@ -4,6 +4,68 @@ This ledger records every code-first performance attempt, including attempts tha
 are still awaiting the batch benchmark wave. Entries must name the retry
 condition so dead ends are not repeated casually.
 
+## 2026-06-19 - frankenscipy-01lxz - jnjnp_zeros output frontier
+
+- Agent: cod-b / MistyBirch
+- Lever: replace `jnjnp_zeros` fixed `nt + 2` by `nt + 2` candidate generation
+  with an output-sensitive monotone frontier. The new route starts near
+  `sqrt(nt)`, sorts the candidate subset, and expands only when the retained
+  cutoff is not below both the generated serial-tail frontier and the first
+  omitted-order frontier.
+- Graveyard/artifact route tested: output-sensitive enumeration, monotone
+  frontier certification, and constant-factor collapse before lower-level SIMD
+  work.
+- Decision: KEEP as a major internal win, route residual SciPy loss deeper. No
+  revert.
+- Artifact:
+  `tests/artifacts/perf/frankenscipy-cod-b-jnp-frontier/EVIDENCE.md`
+- Baseline/candidate command:
+  `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b rch exec -- cargo bench -p fsci-special --bench special_bench -- acoco_gauntlet_jnjnp_zeros --noplot`
+- Candidate same-worker command:
+  `RCH_WORKER=hz1 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b rch exec -- cargo bench -p fsci-special --bench special_bench -- acoco_gauntlet_jnjnp_zeros --noplot`
+- SciPy oracle command:
+  `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b cargo bench -p fsci-special --bench special_bench -- acoco_gauntlet_jnjnp_zeros --noplot`
+  because rch worker `hz1` could not import `scipy.special`.
+- Same-worker internal A/B on rch worker `hz1`:
+
+  | Workload | Baseline current mean | Candidate current mean | Candidate/baseline | Verdict |
+  | --- | ---: | ---: | ---: | --- |
+  | `jnjnp_zeros(nt=64)` | 97.861 ms | 5.4922 ms | 0.0561x time, 17.82x faster | keep |
+  | `jnjnp_zeros(nt=128)` | 513.89 ms | 10.121 ms | 0.0197x time, 50.77x faster | keep |
+
+- Local SciPy oracle (`scipy.special.jnjnp_zeros`, SciPy available on the local
+  host):
+
+  | Workload | Candidate Rust mean | SciPy mean | Candidate/SciPy | Verdict |
+  | --- | ---: | ---: | ---: | --- |
+  | `jnjnp_zeros(nt=64)` | 4.3372 ms | 486.57 us | 8.91x slower | residual loss |
+  | `jnjnp_zeros(nt=128)` | 7.5415 ms | 792.81 us | 9.51x slower | residual loss |
+
+- SciPy win/loss/neutral: `0/2/0`.
+- Same-worker internal keep/loss/neutral: `2/0/0`.
+- Correctness/conformance guards:
+  - PASS: `rch exec -- cargo test -p fsci-special jnjnp_adaptive_envelope_matches_oversized_reference --lib -- --nocapture`
+    on worker `ovh-a`.
+  - PASS: `rch exec -- cargo test -p fsci-special jnyn_and_jnjnp_zeros_match_scipy --lib -- --nocapture`
+    on worker `hz1`.
+  - PASS: `rch exec -- cargo check -p fsci-special --all-targets` on worker
+    `ovh-b`.
+  - BLOCKED: `rch exec -- cargo clippy -p fsci-special --all-targets -- -D warnings`
+    stopped in dependency crates `fsci-integrate` (`too_many_arguments`) and
+    `fsci-linalg` (`needless_range_loop`, `needless_borrow`) before reaching
+    this patch.
+  - PARTIAL: broad `cargo fmt --check` and touched-file `rustfmt --check`
+    report pre-existing rustfmt drift outside this patch; no broad formatting
+    churn was applied.
+- Negative evidence: the frontier removes the known over-generation gap but
+  still leaves Rust roughly 9x slower than SciPy. Do not retry fixed envelope
+  tuning, duplicate derivative-zero bracketing, or other candidate-count-only
+  tweaks on this workload.
+- Retry condition: the next credible route is deeper per-root cost reduction:
+  SciPy-style global zero enumeration, lower-constant Bessel/derivative
+  evaluation, or a batched bracketing/root-polishing primitive that preserves the
+  existing SciPy-order output contract.
+
 ## 2026-06-19 - frankenscipy-acdq2 - ndimage gaussian_filter line-walk route
 
 - Agent: cod-a / MistyBirch
