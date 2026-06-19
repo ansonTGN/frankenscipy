@@ -1,0 +1,155 @@
+{
+  "agent": "cod-b / MistyBirch",
+  "artifact": "least_squares_vs_scipy",
+  "generated_at": "2026-06-19T01:01:41.811557+00:00",
+  "git_head": "41bf34a45859e9a9a02bead1b179aed532d93650",
+  "hostname": "thinkstation1",
+  "numpy": "2.4.3",
+  "platform": "Linux-6.17.0-35-generic-x86_64-with-glibc2.42",
+  "python": "3.13.7",
+  "rust_bench_command": "rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b cargo bench -p fsci-opt --bench optimize_bench -- least_squares --noplot",
+  "scipy": "1.17.1",
+  "workloads": [
+    {
+      "name": "least_squares/rosenbrock_residual",
+      "ratio_scipy_p50_over_rust_p50": 549.0801407349493,
+      "runs": 200,
+      "rust": {
+        "ci_high_us": 2.6205,
+        "ci_low_us": 2.4964,
+        "p50_us": 2.558,
+        "source": "rch criterion median"
+      },
+      "scipy": {
+        "max_us": 3275.456,
+        "mean_us": 1511.644905,
+        "min_us": 1307.233,
+        "output_samples": [
+          {
+            "cost": 0.0,
+            "nfev": 21,
+            "njev": null,
+            "status": 1,
+            "success": true,
+            "x": [
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "cost": 0.0,
+            "nfev": 21,
+            "njev": null,
+            "status": 1,
+            "success": true,
+            "x": [
+              1.0,
+              1.0
+            ]
+          }
+        ],
+        "p50_us": 1404.547,
+        "p95_us": 2297.906,
+        "p99_us": 2645.985
+      },
+      "verdict_vs_scipy": "win",
+      "warmup": 20
+    },
+    {
+      "name": "least_squares/exp_curve_64",
+      "ratio_scipy_p50_over_rust_p50": 44.47906331207182,
+      "runs": 200,
+      "rust": {
+        "ci_high_us": 17.362,
+        "ci_low_us": 16.516,
+        "p50_us": 16.932,
+        "source": "rch criterion median"
+      },
+      "scipy": {
+        "max_us": 1588.604,
+        "mean_us": 792.82383,
+        "min_us": 723.108,
+        "output_samples": [
+          {
+            "cost": 0.0,
+            "nfev": 7,
+            "njev": null,
+            "status": 3,
+            "success": true,
+            "x": [
+              2.5,
+              1.3,
+              0.5
+            ]
+          },
+          {
+            "cost": 0.0,
+            "nfev": 7,
+            "njev": null,
+            "status": 3,
+            "success": true,
+            "x": [
+              2.5,
+              1.3,
+              0.5
+            ]
+          }
+        ],
+        "p50_us": 753.1195,
+        "p95_us": 1020.621,
+        "p99_us": 1452.558
+      },
+      "verdict_vs_scipy": "win",
+      "warmup": 20
+    },
+    {
+      "name": "least_squares/exp_linear_curve_128",
+      "ratio_scipy_p50_over_rust_p50": 17.978159440109405,
+      "runs": 200,
+      "rust": {
+        "ci_high_us": 50.885,
+        "ci_low_us": 48.613,
+        "p50_us": 49.724,
+        "source": "rch criterion median"
+      },
+      "scipy": {
+        "max_us": 1606.659,
+        "mean_us": 920.1764049999999,
+        "min_us": 867.771,
+        "output_samples": [
+          {
+            "cost": 4.383416553425349e-31,
+            "nfev": 7,
+            "njev": null,
+            "status": 3,
+            "success": true,
+            "x": [
+              1.9999999999999998,
+              0.7,
+              0.25000000000000017,
+              -0.03000000000000003
+            ]
+          },
+          {
+            "cost": 4.383416553425349e-31,
+            "nfev": 7,
+            "njev": null,
+            "status": 3,
+            "success": true,
+            "x": [
+              1.9999999999999998,
+              0.7,
+              0.25000000000000017,
+              -0.03000000000000003
+            ]
+          }
+        ],
+        "p50_us": 893.9459999999999,
+        "p95_us": 1015.962,
+        "p99_us": 1414.085
+      },
+      "verdict_vs_scipy": "win",
+      "warmup": 20
+    }
+  ]
+}

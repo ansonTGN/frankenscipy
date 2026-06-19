@@ -4,6 +4,37 @@ This ledger records every code-first performance attempt, including attempts tha
 are still awaiting the batch benchmark wave. Entries must name the retry
 condition so dead ends are not repeated casually.
 
+## 2026-06-19 - Gauntlet verification - fsci-opt least_squares scratch cluster
+
+- Agent: cod-b / MistyBirch
+- Beads verified: `frankenscipy-szky7`, `frankenscipy-y1mzk`
+- Decision: KEEP. No revert. All measured head-to-head rows are wins vs the
+  original SciPy LM path on warmed single-process realistic Python callback
+  workloads.
+- Artifact: `tests/artifacts/perf/2026-06-19-opt-least-squares-gauntlet/least_squares_vs_scipy.json`
+- Rust bench command: `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b cargo bench -p fsci-opt --bench optimize_bench -- least_squares --noplot`
+- SciPy oracle: Python 3, SciPy 1.17.1, NumPy 2.4.3, `scipy.optimize.least_squares(method="lm")`.
+
+| Workload | Rust Criterion p50 (us) | SciPy p50 (us) | SciPy p95 (us) | SciPy/Rust p50 | Verdict |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `least_squares/rosenbrock_residual` | 2.558 | 1404.547 | 2297.906 | 549.08x | win |
+| `least_squares/exp_curve_64` | 16.932 | 753.120 | 1020.621 | 44.48x | win |
+| `least_squares/exp_linear_curve_128` | 49.724 | 893.946 | 1015.962 | 17.98x | win |
+
+- Correctness/conformance guards:
+  - PASS: `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b cargo check -p fsci-opt`
+  - PASS: `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b cargo test -p fsci-opt --test metamorphic_tests mr_least_squares -- --nocapture` (2 passed)
+  - PASS: `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b cargo run -p fsci-opt --release --bin diff_lsq`
+  - PASS: `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b cargo run -p fsci-opt --release --bin diff_leastsq`
+- Blocker recorded separately: broad `cargo test -p fsci-opt least_squares`
+  still fails before reaching least-squares assertions because unrelated
+  `crates/fsci-opt/src/lib.rs` test modules miss imports for numerical helper
+  functions and `OptError`; filed follow-up `frankenscipy-uxs8k`.
+- Negative evidence: none for this cluster. Do not retry or revert the
+  fixed-shape Jacobian scratch reuse or LM normal-equation scratch reuse on the
+  basis of this gauntlet; route future opt perf work to a lower-level hotspot or
+  a workload that shows a measured neutral/loss row.
+
 ## 2026-06-19 - frankenscipy-y1mzk - least_squares LM normal-equation scratch
 
 - Agent: cod-b / MistyBirch
@@ -11,16 +42,16 @@ condition so dead ends are not repeated casually.
   residual/Jacobian path while reusing fixed-shape scratch for `J^T J`,
   `J^T r`, the damped normal-equation matrix, Cholesky factor, forward/backward
   solve vectors, and `J*step` predicted-reduction work.
-- Status: pending batch-test. This is a code-first commit per campaign
-  instruction; local `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b
-  cargo check -p fsci-opt` is the pre-commit gate.
+- Status: measured KEEP. 2026-06-19 gauntlet found wins vs SciPy LM on all
+  selected least-squares rows: 549.08x, 44.48x, and 17.98x p50 SciPy/Rust.
 - Correctness guard: existing `least_squares`, `curve_fit`, and `leastsq`
   coverage exercises convergence and covariance paths; the helper preserves
   residual evaluation order, finite-difference values, LM damping updates,
   fallback diagonal solve semantics, and `nfev`/`njev`/`nit` accounting.
 - Benchmark guard: Criterion `least_squares/rosenbrock_residual`,
-  `least_squares/exp_curve_64`, and new `least_squares/exp_linear_curve_128`
-  rows quantify the scratch-reuse path against the allocation-heavy original.
+  `least_squares/exp_curve_64`, and `least_squares/exp_linear_curve_128`
+  rows quantify the scratch-reuse path against SciPy LM in the gauntlet
+  artifact above.
 - Retry condition: keep only if same-worker focused `fsci-opt` least-squares /
   curve-fit timings improve without convergence, cost, parameter, Jacobian, or
   counter drift; if timings are neutral/slower, reject this exact LM
@@ -36,17 +67,17 @@ condition so dead ends are not repeated casually.
   Jacobian rows and perturbation vector across accepted steps instead of
   allocating a fresh `m x n` `Vec<Vec<f64>>` plus `x_perturbed` for every
   Jacobian rebuild.
-- Status: pending batch-test. This is a code-first commit per campaign
-  instruction; local `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b
-  cargo check -p fsci-opt` is the pre-commit gate.
+- Status: measured KEEP. 2026-06-19 gauntlet found wins vs SciPy LM on all
+  selected least-squares rows: 549.08x, 44.48x, and 17.98x p50 SciPy/Rust.
 - Correctness guard: existing `least_squares`, `curve_fit`, and `leastsq`
   coverage plus the `diff_lsq` probe exercise the residual evaluation contract.
   The helper preserves forward-difference order, residual call count,
   `nfev`/`njev` accounting, accepted/rejected damping updates, and final
   Jacobian row/column shape.
-- Benchmark guard: new Criterion `least_squares/rosenbrock_residual` and
-  `least_squares/exp_curve_64` rows quantify the allocation-removal path
-  against the original allocation-per-Jacobian route in the opt batch wave.
+- Benchmark guard: Criterion `least_squares/rosenbrock_residual`,
+  `least_squares/exp_curve_64`, and `least_squares/exp_linear_curve_128`
+  rows quantify the allocation-removal path against SciPy LM in the gauntlet
+  artifact above.
 - Retry condition: keep only if same-worker focused `fsci-opt` least-squares /
   curve-fit timings improve without convergence, `nfev`/`njev`, cost, or
   parameter drift; if timings are neutral or slower, reject this exact
