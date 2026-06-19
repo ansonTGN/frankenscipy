@@ -40,6 +40,7 @@ regressions are reverted. Entries also routed to MistyBirch for the canonical me
 | gaussian_kde evaluate_many parallel | KDE n=1000 eval 1000 pts | 19090 µs | 1062 µs | **18.0× faster** | heavy per-pt → scales | ✅ KEEP |
 | gaussian_kde evaluate_many parallel | KDE n=5000 eval 5000 pts | 201197 µs | 11959 µs | **16.8× faster** | — | ✅ KEEP |
 | MGC mgc_map O(n²) + parallel reps | multiscale_graphcorr n=80 reps=100 | 295705 µs | 21578 µs | **13.7× faster** | O(n⁴)→O(n²) + parallel | ✅ KEEP |
+| Rotation.apply_many (w7ocv) | apply 8192 pts | 28.30 µs | 12.03 µs | **2.35× faster** | matrix-once hoist 4.5× vs map | ✅ KEEP |
 
 ## Detail
 
@@ -171,6 +172,17 @@ functions — a pure-Python permutation loop (reps × the O(n²) statistic). fsc
 `mgc_map` is the O(n⁴)→O(n²) prefix-sum form AND the `reps` permutation scoring is
 parallelized. Double lever (better asymptotics + parallel heavy work) → big win vs
 scipy's non-vectorized path. KEEP. Conformance green.
+
+### Spatial Rotation.apply_many (frankenscipy-w7ocv) — ✅ KEEP (win)
+Oracle `docs/perf_oracle_xform.py` (scipy.spatial.transform.Rotation.apply, 8192 pts).
+**fsci 12.03 µs vs scipy 28.30 µs = 2.35× FASTER.** The `apply_many` batch path builds
+the 3×3 rotation matrix ONCE then applies in a tight Rust loop — 4.5× over the naive
+per-point `map(apply)` (54 µs). NOTABLE: this is a CHEAP per-point op (3×3 matvec, ~9
+flops) yet fsci WINS at n=8192 — because the kernel is REGULAR (dense matrix, linear
+access) and scipy's Rotation.apply carries numpy dispatch + intermediate-array overhead.
+Refines the boundary: fsci beats scipy on regular low-overhead batch kernels even when
+cheap; it loses only on IRREGULAR kernels where scipy's C is tightly tuned (SpMV gather,
+pdist). KEEP. Conformance green.
 
 ## Release-readiness summary (CrimsonForge beads, as of this round)
 
