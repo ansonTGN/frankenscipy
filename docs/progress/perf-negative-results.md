@@ -538,21 +538,26 @@ Local original-SciPy oracle (`python3 docs/perf_oracle_fft_csd.py --reps 120
 - Lever: replace per-probe `x + alpha*d` trial `Vec` construction in public
   Wolfe line search with one reusable trial buffer, and thread that buffer
   through the bisection zoom phase.
-- Status: pending batch-test. This is a code-first commit per campaign
-  instruction; local `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b
-  cargo check -p fsci-opt` passed before commit.
-- Correctness guard: existing Wolfe1/Wolfe2 tests cover alpha selection,
-  Armijo/curvature conditions, public-vs-probed equivalence, mismatched
-  dimensions, and gradient length rejection; the change only alters trial-point
-  storage.
-- Benchmark guard: compare high-dimensional BFGS/CG optimizer workloads with
-  repeated line-search probes against the pre-change commit on the same worker,
-  and include a focused line-search microbench if the batch wave has one.
-- Retry condition: keep only if same-worker optimizer or line-search timings
-  improve without alpha, evaluation-count, or accepted-gradient drift; if the
-  helper call/fill path is neutral or slower, reject this trial-buffer lever and
-  do not retry public Wolfe scratch reuse without allocation-profile evidence
-  showing trial-point construction is again a top-5 opt hotspot.
+- Status: measured reject on 2026-06-19. Same-worker `hz2` proof-mode
+  Criterion showed only neutral/noisy movement versus `fcbcbaf4^`, so the
+  public Wolfe source path was restored to the parent implementation.
+- Same-worker Rust gate:
+  `RCH_REQUIRE_REMOTE=1 RCH_WORKER=hz2 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b
+  rch exec -- cargo bench -p fsci-opt --bench optimize_bench --
+  rosenbrock_exact_gradient/10 --sample-size 10 --measurement-time 1
+  --warm-up-time 1`.
+  BFGS median `64.178 us -> 63.085 us` (`1.017x`, overlapping intervals);
+  CG median `170.54 us -> 157.46 us` (`1.083x`, overlapping intervals).
+  Repeated current Criterion reported no performance change (`p = 0.48` BFGS,
+  `p = 0.85` CG), so this is neutral rather than a keep.
+- SciPy scorecard: `2/0/0` final-source wins/losses/neutrals, but Python ran
+  on `thinkstation1` because RCH does not remote non-compilation commands here.
+  Final restored Rust rows were `88.1x` faster than SciPy BFGS exact-gradient
+  Rosenbrock-10 and `121.0x` faster than SciPy CG exact-gradient Rosenbrock-10.
+- Artifact: `tests/artifacts/perf/frankenscipy-6m75u/EVIDENCE.md`.
+- Retry condition: do not retry public Wolfe trial-point scratch reuse unless a
+  fresh allocation profile puts public Wolfe trial construction back in the top
+  opt hotspots. Probe-path scratch reuse is separate and not rejected here.
 
 ## 2026-06-18 - frankenscipy-va60h - linkage row-major distance arena
 
