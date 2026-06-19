@@ -262,6 +262,100 @@ pub fn expn_scalar(n: u32, x: f64) -> f64 {
 // Scalar Kernels
 // ══════════════════════════════════════════════════════════════════════
 
+// Cephes complete elliptic K/E via the EXACT scipy/xsf polynomial coefficients (ellpk/ellpe) —
+// O(1) rational+log instead of the ~5-6-iteration AGM, byte-matching scipy.special.ellipk/ellipe.
+// frankenscipy-9l5oo. ellpk(x)=K(1−x), ellpe(x)=E(1−x); polevl = Horner from coef[0].
+fn cephes_polevl(x: f64, coef: &[f64]) -> f64 {
+    coef.iter().fold(0.0, |acc, &c| acc * x + c)
+}
+const CEPHES_MACHEP: f64 = 1.11022302462515654042E-16;
+const ELLPK_C1: f64 = 1.3862943611198906188E0; // log(4)
+const ELLPK_P: [f64; 11] = [
+    1.37982864606273237150E-4,
+    2.28025724005875567385E-3,
+    7.97404013220415179367E-3,
+    9.85821379021226008714E-3,
+    6.87489687449949877925E-3,
+    6.18901033637687613229E-3,
+    8.79078273952743772254E-3,
+    1.49380448916805252718E-2,
+    3.08851465246711995998E-2,
+    9.65735902811690126535E-2,
+    1.38629436111989062502E0,
+];
+const ELLPK_Q: [f64; 11] = [
+    2.94078955048598507511E-5,
+    9.14184723865917226571E-4,
+    5.94058303753167793257E-3,
+    1.54850516649762399335E-2,
+    2.39089602715924892727E-2,
+    3.01204715227604046988E-2,
+    3.73774314173823228969E-2,
+    4.88280347570998239232E-2,
+    7.03124996963957469739E-2,
+    1.24999999999870820058E-1,
+    4.99999999999999999821E-1,
+];
+const ELLPE_P: [f64; 11] = [
+    1.53552577301013293365E-4,
+    2.50888492163602060990E-3,
+    8.68786816565889628429E-3,
+    1.07350949056076193403E-2,
+    7.77395492516787092951E-3,
+    7.58395289413514708519E-3,
+    1.15688436810574127319E-2,
+    2.18317996015557253103E-2,
+    5.68051945617860553470E-2,
+    4.43147180560990850618E-1,
+    1.00000000000000000299E0,
+];
+const ELLPE_Q: [f64; 10] = [
+    3.27954898576485872656E-5,
+    1.00962792679356715133E-3,
+    6.50609489976927491433E-3,
+    1.68862163993311317300E-2,
+    2.61769742454493659583E-2,
+    3.34833904888224918614E-2,
+    4.27180926518931511717E-2,
+    5.85936634471101055642E-2,
+    9.37499997197644278445E-2,
+    2.49999999999888314361E-1,
+];
+
+/// Cephes `ellpk(x) = K(1−x)`: complete elliptic K via the exact xsf polynomial.
+fn cephes_ellpk_x(x: f64) -> f64 {
+    if x < 0.0 {
+        return f64::NAN;
+    }
+    if x > 1.0 {
+        if x.is_infinite() {
+            return 0.0;
+        }
+        return cephes_ellpk_x(1.0 / x) / x.sqrt();
+    }
+    if x > CEPHES_MACHEP {
+        cephes_polevl(x, &ELLPK_P) - x.ln() * cephes_polevl(x, &ELLPK_Q)
+    } else if x == 0.0 {
+        f64::INFINITY
+    } else {
+        ELLPK_C1 - 0.5 * x.ln()
+    }
+}
+
+/// Cephes `ellpe(x) = E(1−x)`: complete elliptic E via the exact xsf polynomial.
+fn cephes_ellpe_x(x: f64) -> f64 {
+    if x <= 0.0 {
+        return if x == 0.0 { 1.0 } else { f64::NAN };
+    }
+    if x > 1.0 {
+        if x.is_infinite() {
+            return f64::INFINITY;
+        }
+        return cephes_ellpe_x(1.0 - 1.0 / x) * x.sqrt();
+    }
+    cephes_polevl(x, &ELLPE_P) - x.ln() * (x * cephes_polevl(x, &ELLPE_Q))
+}
+
 fn ellipk_scalar(m: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
     if m.is_nan() {
         return Ok(f64::NAN);
@@ -290,19 +384,8 @@ fn ellipk_scalar(m: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
         return Ok(PI / 2.0);
     }
 
-    // AGM iteration: K(m) = π / (2 * agm(1, sqrt(1-m)))
-    let mut a = 1.0;
-    let mut b = (1.0 - m).sqrt();
-    for _ in 0..50 {
-        let a_new = 0.5 * (a + b);
-        let b_new = (a * b).sqrt();
-        if (a_new - b_new).abs() < 1.0e-15 * a_new {
-            return Ok(PI / (2.0 * a_new));
-        }
-        a = a_new;
-        b = b_new;
-    }
-    Ok(PI / (2.0 * a))
+    // Cephes ellpk(1−m) — exact xsf polynomial (byte-matches scipy.special.ellipk), no AGM loop.
+    Ok(cephes_ellpk_x(1.0 - m))
 }
 
 fn ellipkm1_scalar(p: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
@@ -372,29 +455,8 @@ fn ellipe_scalar(m: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
         return Ok(1.0);
     }
 
-    // AGM with E accumulator
-    let mut a = 1.0;
-    let mut b = (1.0 - m).sqrt();
-    let mut c2_sum = m; // sum of c_n^2 * 2^n
-    let mut power = 1.0; // 2^n
-
-    for _ in 0..50 {
-        let a_new = 0.5 * (a + b);
-        let b_new = (a * b).sqrt();
-        let c = 0.5 * (a - b);
-        power *= 2.0;
-        c2_sum += c * c * power;
-        a = a_new;
-        b = b_new;
-        if c.abs() < 1.0e-15 {
-            break;
-        }
-    }
-
-    // E(m) = K(m) * (1 - sum(c_n^2 * 2^n) / 2)
-    // More precisely: E = (π/(2*agm)) * (1 - sum/2)
-    let k = PI / (2.0 * a);
-    Ok(k * (1.0 - c2_sum / 2.0))
+    // Cephes ellpe(1−m) — exact xsf polynomial (byte-matches scipy.special.ellipe), no AGM loop.
+    Ok(cephes_ellpe_x(1.0 - m))
 }
 
 fn ellipkinc_scalar(phi: f64, m: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
