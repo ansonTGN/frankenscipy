@@ -181,8 +181,26 @@ fn bench_kde(c: &mut Criterion) {
     group.finish();
 }
 
+/// Multiscale graph correlation — mgc_map is O(n²) (prefix-sum) vs the naive O(n⁴),
+/// and the `reps` permutation scoring is parallelized. Head-to-head vs
+/// scipy.stats.multiscale_graphcorr (docs/perf_oracle_mgc.py).
+fn bench_mgc(c: &mut Criterion) {
+    use fsci_stats::multiscale_graphcorr;
+    let n = 80usize;
+    let x: Vec<Vec<f64>> = (0..n).map(|i| vec![(i as f64 * 0.1).sin()]).collect();
+    let y: Vec<Vec<f64>> = (0..n)
+        .map(|i| vec![(i as f64 * 0.1).sin() + (i as f64 * 0.37).cos() * 0.3])
+        .collect();
+    let mut group = c.benchmark_group("mgc");
+    group.bench_function("n80_reps100", |b| {
+        b.iter(|| multiscale_graphcorr(&x, &y, 100, Some(0)))
+    });
+    group.finish();
+}
+
 criterion_group!(
     benches,
+    bench_mgc,
     bench_qmc_discrepancy,
     bench_qmc_sampling,
     bench_ordering_and_bins,

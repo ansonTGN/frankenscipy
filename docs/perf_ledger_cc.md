@@ -39,6 +39,7 @@ regressions are reverted. Entries also routed to MistyBirch for the canonical me
 | spmv_csr (serial, baseline) | SpMV n=10000 nnz=100k | 131.6 µs | 197.5 µs | **0.67× (1.5× slower)** | gap narrows w/ n | ⚠️ scale gap |
 | gaussian_kde evaluate_many parallel | KDE n=1000 eval 1000 pts | 19090 µs | 1062 µs | **18.0× faster** | heavy per-pt → scales | ✅ KEEP |
 | gaussian_kde evaluate_many parallel | KDE n=5000 eval 5000 pts | 201197 µs | 11959 µs | **16.8× faster** | — | ✅ KEEP |
+| MGC mgc_map O(n²) + parallel reps | multiscale_graphcorr n=80 reps=100 | 295705 µs | 21578 µs | **13.7× faster** | O(n⁴)→O(n²) + parallel | ✅ KEEP |
 
 ## Detail
 
@@ -162,6 +163,14 @@ slots parallelization pays off, the mirror image of the (reverted) interpolate c
 which fsci's parallel Rust crushes. **This is the cleanest validation of the gauntlet's
 central lesson: parallelize HEAVY per-element work (KDE ✅), not cheap (interpolate ❌).**
 KEEP. Conformance green.
+
+### Multiscale graph correlation (MGC) — ✅ KEEP (marquee win)
+Oracle `docs/perf_oracle_mgc.py` (scipy.stats.multiscale_graphcorr, n=80, reps=100).
+**fsci 21.58 ms vs scipy 295.7 ms = 13.7× FASTER.** MGC is one of scipy's slowest
+functions — a pure-Python permutation loop (reps × the O(n²) statistic). fsci's
+`mgc_map` is the O(n⁴)→O(n²) prefix-sum form AND the `reps` permutation scoring is
+parallelized. Double lever (better asymptotics + parallel heavy work) → big win vs
+scipy's non-vectorized path. KEEP. Conformance green.
 
 ## Release-readiness summary (CrimsonForge beads, as of this round)
 
