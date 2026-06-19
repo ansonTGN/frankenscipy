@@ -315,6 +315,32 @@ map_coordinates all share the path); the residual ~4× order=1 gap is the genera
 rewrite, not the weight arithmetic (the direct-weights micro-opt was measured ~0-gain
 and reverted). order=3 is already a release-ready near-parity result.
 
+## BOLD-VERIFY phase outcome (implemented levers, not just measured)
+
+This phase moved from MEASURING gaps to FIXING them, conformance-gated via `cargo test`:
+- **✅ FIXED & SHIPPED — zoom order=1** (`wm14d`, `3c027183`): the gauntlet's biggest
+  loss, 17.7× → 4.0× slower (85.95→19.41 ms, 4.4× faster). Root-caused to order=1 being
+  the lone interpolating order with no fast path (padded coord_offsets hid it). Cardinal
+  fast path for padded linear + stack-array `cardinal_bspline`. Conformance 296/0.
+- **✅ BROAD REACH — rotate/affine/map_coordinates** share `sample_interpolated`, so the
+  same fix rescued them. Measured: **rotate order=3 6.44 ms vs scipy 5.58 ms = NEAR-PARITY**;
+  order=1 4.4× (residual). The whole geometric-transform family is now release-ready at
+  order=3 and pathology-free at order=1.
+- **↩️ REVERTED ~0-gain** — direct order=1 weights (skip cardinal_bspline calls): measured
+  no gain (bottleneck is the general support-machinery, not the weight arithmetic).
+
+**Remaining LOSS gaps — all assessed, all need substantial SIMD/algorithm work (prioritized):**
+1. `9l5oo` Delaunay O(n²)→O(n log n) jump-and-walk locate — HIGHEST IMPACT (complexity
+   class), but multi-hour rewrite + triangle-order conformance risk.
+2. `nm8ex` pdist — needs SIMD distance kernel (the parallel path HELPS; the serial kernel
+   is ~10–60× slower than scipy C). NOT a gate fix.
+3. `9g6ku` kmeans2 — SIMD distance, but iterative/CHAOTIC so SIMD FP-reorder breaks
+   conformance (a 1-ULP distance change cascades to a different clustering). Needs the
+   gemm-trick (≠ byte-identical) + tolerance acceptance.
+4. gaussian_filter 2.83× — specialized 1D-axis correlate (routes through shared `convolve`).
+5. geometric order=1 4× — specialized 2D bilinear bypassing the support machinery (low-ROI;
+   order=3 already near-parity).
+
 ## Release-readiness summary (CrimsonForge beads, as of this round)
 
 5 beads measured head-to-head vs scipy/sklearn (release, 64 cores, multi-agent load):
