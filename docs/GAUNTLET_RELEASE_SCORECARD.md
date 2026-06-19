@@ -48,6 +48,8 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `frankenscipy-8l8r1.122` | L-BFGS-B mutable Wolfe finite-difference probe scratch | 32D quadratic finite-difference `L-BFGS-B` | 6.055 us | 5.246 us parent | reject and revert |
 | `frankenscipy-8l8r1.116` | FFT CSD rfft real-spectrum route | 4096-sample CSD helper | 125.88 us | 112.08 us parent | reject and revert |
 | `frankenscipy-8l8r1.116` | FFT CSD rfft real-spectrum route | 65536-sample CSD helper vs SciPy rfft formula | 2.3509 ms | 1.653584 ms SciPy | reject and revert |
+| `frankenscipy-8l8r1.124` | `jnjnp_zeros` top-k candidate partition | `jnjnp_zeros(nt=64)` same-binary probe | 0.911730 ms | 0.928939 ms full-sort | reject: 1.019x near-noise |
+| `frankenscipy-8l8r1.124` | `jnjnp_zeros` top-k candidate partition | `jnjnp_zeros(nt=128)` same-binary probe | 1.715855 ms | 1.737776 ms full-sort | reject: 1.013x near-noise |
 | `frankenscipy-acdq2` | `gaussian_filter1d` always-line-walk plus outermost row-split/direct interior taps | `ndimage` gaussian sigma=2, 256x256 | 4.2236 ms | 2.4792 ms clean current; prior ledger current 3.238 ms | reject and revert |
 | `frankenscipy-fo9cj` | Sparse Arnoldi row-major basis arena plus mutable operator scratch | `eigsh n=2000 k=6` | 1.667 ms | 1.184 ms parent/restored | reject and revert |
 | `frankenscipy-fo9cj` | Sparse Arnoldi row-major basis arena plus mutable operator scratch | `eigsh n=8000 k=6` | 6.594 ms | 5.548 ms parent/restored | reject and revert |
@@ -66,6 +68,7 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `frankenscipy-acoco` | `jnjnp_zeros` bracket reuse | Pre-optimization duplicate `jnp_zeros` bracketing route | 1.26x faster at `nt=64`; 1.33x faster at `nt=128` | keep current despite SciPy loss |
 | `frankenscipy-96n2y` | `jnjnp_zeros` tighter frontier seed and dimension-specific expansion | Guarded root-cost route from `frankenscipy-x9ckc` | 2.12x faster at `nt=64`; 1.38x faster at `nt=128` on same-worker `hz1` | keep current despite SciPy loss |
 | `frankenscipy-8l8r1.123` | `jnjnp_zeros` cutoff-driven generator | Tighter rectangular frontier seed from `frankenscipy-96n2y` | 2.30x faster at `nt=64`; 2.28x faster at `nt=128` on same-worker `ovh-b` | keep current despite SciPy loss |
+| `frankenscipy-8l8r1.123` | `jnjnp_zeros` cutoff-driven full-sort prefix | Top-k candidate partition from `frankenscipy-8l8r1.124` | top-k only 1.019x at `nt=64` and 1.013x at `nt=128` in longer same-binary probe | reject top-k; keep full-sort |
 | `frankenscipy-wm14d` | 2D Reflect/order=1 direct bilinear zoom fast path with parallel fill | Generic per-pixel sampler path | 4.27x faster on `zoom/2x_256/order=1` on same-worker `ovh-b` | keep current despite SciPy loss |
 | `frankenscipy-wm14d` | 2D Reflect/order=1 direct bilinear zoom fast path with parallel fill | Serial fill probe inside the same fast path | 1.22x faster than serial on same-worker `ovh-b` | revert serial probe |
 | `frankenscipy-8l8r1.116` | Full-complex CSD route | rfft CSD route | 1.123x faster on 4096; rfft wins 2.107x on 65536 but loses to SciPy rfft oracle | revert rfft route |
@@ -92,7 +95,7 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | FFT CSD performance | measured reject | rfft route regressed 4096 internally and was 1.42-1.75x slower than the equivalent SciPy rfft formula; full-complex route restored |
 | FFT CSD correctness | guarded | full-complex equivalence guard retained; final fsci-fft gates recorded in `docs/progress/perf-release-readiness-scorecard.md` |
 | `fsci-opt` lint/build gate | guarded | `cargo check -p fsci-opt --all-targets`, `cargo fmt -p fsci-opt --check`, and `cargo clippy -p fsci-opt --all-targets -- -D warnings` passed |
-| `fsci-special` `jnjnp_zeros` performance | measured loss plus internal keep | cutoff-driven generator is 2.30x faster at `nt=64` and 2.28x faster at `nt=128` than the tighter rectangular frontier on same-worker `ovh-b`, but still 3.68-3.71x slower than SciPy |
+| `fsci-special` `jnjnp_zeros` performance | measured loss plus internal keep and reject | cutoff-driven generator is 2.30x faster at `nt=64` and 2.28x faster at `nt=128` than the tighter rectangular frontier on same-worker `ovh-b`, but still 3.68-3.71x slower than SciPy; top-k candidate partition was rejected as 1.019x/1.013x near-noise |
 | `fsci-special` `jnjnp_zeros` correctness | guarded | `jnjnp_adaptive_envelope_matches_oversized_reference`, `jnjnp_frontier_matches_scipy_bench_cutoffs`, and `jnyn_and_jnjnp_zeros_match_scipy` passed via rch; live SciPy `diff_special_bessel_zeros` conformance passed locally |
 | `fsci-special` lint/build gate | partial | `cargo check -p fsci-special --all-targets` passed; clippy `-D warnings` stopped on existing `fsci-integrate`/`fsci-linalg` dependency lints; broad rustfmt/touched-file rustfmt remain blocked by pre-existing formatting drift outside this patch |
 | `fsci-ndimage` zoom order=1 performance | measured loss plus internal keep | 2D Reflect/order=1 direct bilinear zoom path is 4.27x faster than the generic sampler on same-worker `ovh-b`, but still 2.05x slower than SciPy |
@@ -110,7 +113,7 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `fsci-sparse` `eigsh`/`svds` correctness | guarded | focused sparse eig/svds tests passed via rch; SciPy-backed `diff_sparse_eigsh_largest` and `diff_sparse_svds` conformance passed locally |
 | `fsci-sparse` lint/build gate | partial | `cargo check -p fsci-sparse --all-targets`, focused sparse tests, `cargo clippy -p fsci-sparse --all-targets --no-deps -- -D warnings`, UBS, and `git diff --check` passed; rch SciPy conformance blocked by missing worker SciPy and rustfmt by pre-existing file-wide drift |
 | rch SciPy oracle parity | blocked on worker image | `vmi1152480` and `vmi1227854` lacked `scipy`; local same-host oracle supplied the head-to-head ratios |
-| Release readiness | partial | two linalg perf clusters, one `fsci-signal` coherence win, one `fsci-opt` L-BFGS-B reject, one `fsci-special` measured SciPy-loss/internal-keep cutoff win, one `fsci-fft` CSD reject, one `fsci-cluster` linkage measured SciPy loss, one `fsci-ndimage` gaussian reject, one `fsci-spatial` `pdist` internal keep, and one `fsci-sparse` Arnoldi reject verified; other code-first perf ledger entries still need gauntlet conversion |
+| Release readiness | partial | two linalg perf clusters, one `fsci-signal` coherence win, one `fsci-opt` L-BFGS-B reject, one `fsci-special` measured SciPy-loss/internal-keep cutoff win plus one top-k reject, one `fsci-fft` CSD reject, one `fsci-cluster` linkage measured SciPy loss, one `fsci-ndimage` gaussian reject, one `fsci-spatial` `pdist` internal keep, and one `fsci-sparse` Arnoldi reject verified; other code-first perf ledger entries still need gauntlet conversion |
 
 ## Pending Gauntlet Backlog
 

@@ -108,6 +108,38 @@ Readiness notes:
 - The clippy blocker is outside this benchmark/evidence change and should be
   handled as a separate lint-hygiene bead.
 
+## 2026-06-19 - fsci-special jnjnp_zeros top-k select reject
+
+- Agent: cod-a / MistyBirch
+- Bead: `frankenscipy-8l8r1.124`
+- Decision: REJECT and revert the top-k candidate partition. Score for this
+  sub-cluster: 2/5.
+- Artifact:
+  `tests/artifacts/perf/2026-06-19-8l8r1-jnjnp-topk-select/EVIDENCE.md`
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| Rust per-crate Criterion bench | PASS | baseline current route on RCH worker `vmi1153651`; candidate Criterion run on `hz2` treated as directional only because RCH worker affinity was not stable |
+| Same-binary A/B probe | PASS | ignored release probe asserted bit-identical output, then timed full-sort vs top-k in one optimized binary |
+| SciPy head-to-head oracle | PASS | local SciPy 1.17.1, `scipy.special.jnjnp_zeros`; RCH workers lacked `scipy.special` |
+| Focused special tests | PASS | `cargo test -p fsci-special jnjnp -- --nocapture` passed via RCH during the probe |
+| Source revert | PASS | `crates/fsci-special/src/bessel.rs` restored to the cutoff-driven full-sort route |
+
+| Workload / route | Mean | Ratio | Verdict |
+| --- | ---: | ---: | --- |
+| Restored Rust full-sort `jnjnp_zeros(nt=64)` | 1.5407 ms | 3.65x slower than SciPy | SciPy loss, final source |
+| Restored Rust full-sort `jnjnp_zeros(nt=128)` | 3.5199 ms | 4.54x slower than SciPy | SciPy loss, final source |
+| SciPy `jnjnp_zeros(nt=64)` | 421.59 us | 1.00x oracle | reference |
+| SciPy `jnjnp_zeros(nt=128)` | 774.75 us | 1.00x oracle | reference |
+| Top-k candidate, same-binary `nt=64` | 0.911730 ms | 1.019x vs full-sort | reject as near-noise |
+| Top-k candidate, same-binary `nt=128` | 1.715855 ms | 1.013x vs full-sort | reject as near-noise |
+
+Readiness notes:
+
+- The final source is unchanged by this rejected probe.
+- Future `jnjnp_zeros` work should target root-generation and Bessel
+  evaluation constants, not candidate prefix sorting or partial sort variants.
+
 ## 2026-06-19 - fsci-fft CSD rfft-route gauntlet
 
 - Agent: cod-b / MistyBirch

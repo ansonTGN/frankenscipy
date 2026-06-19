@@ -4,6 +4,47 @@ This ledger records every code-first performance attempt, including attempts tha
 are still awaiting the batch benchmark wave. Entries must name the retry
 condition so dead ends are not repeated casually.
 
+## 2026-06-19 - frankenscipy-8l8r1.124 - jnjnp_zeros top-k select
+
+- Agent: cod-a / MistyBirch
+- Lever tested: replace full candidate sorting inside the cutoff-driven
+  `jnjnp_zeros` generator with `select_nth_unstable_by` plus sorting only the
+  retained prefix.
+- Decision: REJECT and revert. The final source remains the full-sort
+  cutoff-driven generator from `frankenscipy-8l8r1.123`.
+- Artifact:
+  `tests/artifacts/perf/2026-06-19-8l8r1-jnjnp-topk-select/EVIDENCE.md`
+- Baseline command:
+  `RCH_REQUIRE_REMOTE=1 RCH_WORKER=ovh-b CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo bench -p fsci-special --bench special_bench -- acoco_gauntlet_jnjnp_zeros --noplot`
+- Same-binary probe command:
+  `RCH_REQUIRE_REMOTE=1 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo test -p fsci-special jnjnp_topk_select_perf_probe --release -- --ignored --nocapture`
+- SciPy oracle command: local Python timing of
+  `scipy.special.jnjnp_zeros(nt)` because RCH workers could not import
+  `scipy.special`.
+
+| Workload / route | Mean | Ratio | Verdict |
+| --- | ---: | ---: | --- |
+| `nt=64` restored full-sort current, RCH `vmi1153651` | 1.5407 ms | 3.65x slower than SciPy | final-source SciPy loss |
+| `nt=128` restored full-sort current, RCH `vmi1153651` | 3.5199 ms | 4.54x slower than SciPy | final-source SciPy loss |
+| SciPy `jnjnp_zeros(nt=64)`, local SciPy 1.17.1 | 421.59 us | 1.00x oracle | reference |
+| SciPy `jnjnp_zeros(nt=128)`, local SciPy 1.17.1 | 774.75 us | 1.00x oracle | reference |
+| Same-binary top-k probe `nt=64`, longer RCH `hz1` run | 0.911730 ms vs 0.928939 ms full-sort | 1.019x | neutral |
+| Same-binary top-k probe `nt=128`, longer RCH `hz1` run | 1.715855 ms vs 1.737776 ms full-sort | 1.013x | neutral |
+
+- SciPy win/loss/neutral for final source: `0/2/0`.
+- Candidate internal keep/loss/neutral: `0/0/2`; the first short same-binary
+  probe showed one 1.13x `nt=64` win and one neutral/loss `nt=128` row, but the
+  longer probe collapsed to near-noise on both rows.
+- Correctness guard: the ignored release probe asserted bit-identical
+  `(zo, n, m, t)` outputs before timing. Focused `fsci-special jnjnp` tests
+  passed via RCH during the probe.
+- Negative evidence: candidate ordering/selection is not the next bottleneck.
+  Do not retry top-k partitioning, partial sorting, or output-prefix sorting
+  without a fresh profile showing candidate sorting dominates and a same-binary
+  gate above 10 percent on both `nt=64` and `nt=128`.
+- Retry condition: route deeper to lower-cost Bessel/root generation,
+  recurrence constants, or a SciPy-style compiled root-polishing strategy.
+
 ## 2026-06-19 - frankenscipy-wm14d - ndimage zoom order=1 residual fast path
 
 - Agent: cod-b / MistyBirch
