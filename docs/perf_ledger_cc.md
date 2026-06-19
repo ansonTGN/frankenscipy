@@ -765,3 +765,16 @@ vectorized contraction; a SIMD/unrolled kx=ky=3 contraction could reach parity (
   the gauntlet revert-risk lives in the **parallelizations** (spawn overhead at small
   n) — those are gate-validated above.
 - AP availability-update parallelization is the one OPEN lever surfaced by measurement.
+
+### 🔬 pdist/cdist parallel gate parallelizes BELOW spawn break-even (bead nm8ex) — ROOT-CAUSED, handed to MistyBirch
+MEASURED: pdist/euclidean/256 (N=256, d=4) = ~2.68ms vs scipy ~96µs (28×), but SERIAL would be
+~131µs (~1.4× scipy = near parity). The 20× inflation is a GATE BUG: `cdist_thread_count`
+(spatial lib.rs ~913) goes parallel when `work = na·nb·dim ≥ 1<<18` (262144). N=256,d4 hits
+work==262144 exactly → spawns ~64 OS threads (`cores.min(na/2)`) for ~131µs of serial work.
+Spawning ~64 threads costs hundreds of µs, so parallel LOSES to serial even on an idle machine
+— the gate parallelizes below the spawn break-even. FIX (byte-identical, serial==parallel
+offset-fill): raise threshold to `1<<21` (2M ≈ 2·spawn/per-op break-even) so only genuinely
+large matrices parallelize; cap thread count for medium work. spatial lib.rs is RESERVED by
+MistyBirch → sent the finding+fix via agent-mail (msg 1336) rather than collide. This is the
+real mechanism behind the documented pdist loss: it's a parallel-gate-below-break-even bug, NOT
+the SIMD kernel (sqeuclidean is already explicit Simd<f64,8>) and NOT a structural layout wall.
