@@ -570,6 +570,75 @@ print(f"{elapsed:.17f}")
     Some(Duration::from_secs_f64(seconds))
 }
 
+fn scipy_eigh_subset_duration(n: usize, k: usize, rank: usize, iters: u64) -> Option<Duration> {
+    let script = r#"
+import sys
+import time
+import numpy as np
+import scipy.linalg as la
+
+n = int(sys.argv[1])
+k = int(sys.argv[2])
+rank = int(sys.argv[3])
+iters = int(sys.argv[4])
+i = np.arange(n, dtype=np.float64)
+factors = []
+for r in range(rank):
+    x = float(r + 3) * (i + 5.0)
+    factors.append(np.sin(x) * 0.5 + np.cos(x) * 0.25)
+a = np.zeros((n, n), dtype=np.float64)
+for r, f in enumerate(factors):
+    weight = float(rank - r)
+    a += weight * np.outer(f, f)
+lo = max(0, n - k)
+la.eigh(a, subset_by_index=(lo, n - 1), check_finite=False)
+start = time.perf_counter()
+checksum = 0.0
+for _ in range(iters):
+    w, v = la.eigh(a, subset_by_index=(lo, n - 1), check_finite=False)
+    checksum += float(w[-1]) + float(v[0, -1])
+elapsed = time.perf_counter() - start
+if not np.isfinite(checksum):
+    raise SystemExit("non-finite checksum")
+print(f"{elapsed:.17f}")
+"#;
+    let mut child = Command::new("python3")
+        .args([
+            "-",
+            &n.to_string(),
+            &k.to_string(),
+            &rank.to_string(),
+            &iters.to_string(),
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn scipy eigh oracle");
+    child
+        .stdin
+        .as_mut()
+        .expect("open scipy eigh oracle stdin")
+        .write_all(script.as_bytes())
+        .expect("write scipy eigh oracle script");
+    let output = child
+        .wait_with_output()
+        .expect("wait for scipy eigh oracle");
+    if !output.status.success() {
+        eprintln!(
+            "scipy eigh oracle failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return None;
+    }
+    let stdout = String::from_utf8(output.stdout).expect("utf8 scipy eigh timing");
+    let seconds: f64 = stdout
+        .trim()
+        .parse()
+        .expect("parse scipy eigh timing seconds");
+    Some(Duration::from_secs_f64(seconds))
+}
+
 fn bench_u0ucw_gauntlet_scipy_pinv(c: &mut Criterion) {
     use std::sync::atomic::Ordering::Relaxed;
 
@@ -633,6 +702,47 @@ fn bench_u0ucw_gauntlet_scipy_lstsq(c: &mut Criterion) {
         });
     } else {
         eprintln!("skipping 500x1000_scipy_lstsq: python3 cannot import scipy.linalg");
+    }
+    group.finish();
+}
+
+fn bench_randomized_eigh_gauntlet_scipy(c: &mut Criterion) {
+    let mut group = c.benchmark_group("randomized_eigh_gauntlet_scipy");
+    group.sample_size(10);
+    group.warm_up_time(Duration::from_secs(1));
+    group.measurement_time(Duration::from_secs(5));
+    for &(n, k) in RANDOMIZED_EIGH_CASES {
+        let rank = k + 8;
+        let a = make_low_rank_symmetric_eigh_matrix(n, rank);
+        group.bench_function(format!("{n}x{n}_k{k}_rust_randomized"), |bencher| {
+            bencher.iter(|| {
+                black_box(
+                    randomized_eigh(
+                        black_box(&a),
+                        black_box(k),
+                        black_box(8),
+                        black_box(2),
+                        black_box(0x5eed_1234),
+                    )
+                    .unwrap(),
+                )
+            });
+        });
+        group.bench_function(format!("{n}x{n}_k{k}_rust_full_eigh"), |bencher| {
+            bencher.iter(|| black_box(eigh(black_box(&a), DecompOptions::default()).unwrap()));
+        });
+        if scipy_pinv_available() {
+            group.bench_function(format!("{n}x{n}_k{k}_scipy_subset_eigh"), |bencher| {
+                bencher.iter_custom(|iters| {
+                    scipy_eigh_subset_duration(n, k, rank, iters)
+                        .expect("scipy eigh oracle should run after availability check")
+                });
+            });
+        } else {
+            eprintln!(
+                "skipping {n}x{n}_k{k}_scipy_subset_eigh: python3 cannot import scipy.linalg"
+            );
+        }
     }
     group.finish();
 }
@@ -743,6 +853,7 @@ criterion_group!(
     bench_u0ucw_wide_pinv,
     bench_u0ucw_gauntlet_scipy_pinv,
     bench_u0ucw_gauntlet_scipy_lstsq,
+    bench_randomized_eigh_gauntlet_scipy,
     bench_baseline_pinv
 );
 

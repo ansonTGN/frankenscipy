@@ -4,6 +4,38 @@ This ledger records every code-first performance attempt, including attempts tha
 are still awaiting the batch benchmark wave. Entries must name the retry
 condition so dead ends are not repeated casually.
 
+## 2026-06-19 - frankenscipy-8l8r1.115 - randomized_eigh projected sketch
+
+- Agent: cod-b / MistyBirch
+- Lever: keep `randomized_eigh` on a projected symmetric sketch: deterministic
+  random block, thin modified Gram-Schmidt basis, two power iterations, and a
+  full eigensolve only on the small `q^T A q` matrix.
+- Decision: KEEP. No revert. The route is a measured head-to-head win against
+  SciPy subset `eigh` on the scoped low-rank symmetric top-k workloads.
+- Artifact: `tests/artifacts/perf/frankenscipy-8l8r1.115/EVIDENCE.md`
+- Remote guard commands:
+  - `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b rch exec -- cargo check -p fsci-linalg --all-targets`
+  - `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b rch exec -- cargo test -p fsci-linalg randomized_eigh_matches_full_eigh_on_low_rank --lib -- --nocapture`
+  - `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b rch exec -- cargo bench -p fsci-linalg --bench linalg_bench randomized_eigh_gauntlet_scipy -- --noplot`
+- SciPy oracle command: local same-host run
+  `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b cargo bench -p fsci-linalg --bench linalg_bench randomized_eigh_gauntlet_scipy -- --noplot`
+  because rch worker `ovh-a` skipped the SciPy rows with missing
+  `scipy.linalg`.
+
+| Workload | Rust randomized mean | Rust full `eigh` mean | SciPy subset `eigh` mean | SciPy/Rust randomized | Full/Rand internal | Verdict |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 256x256, k=16 | 3.492738 ms | 11.509742 ms | 4.879053 ms | 1.40x faster | 3.30x faster | win |
+| 512x512, k=24 | 16.774593 ms | 136.046217 ms | 198.116969 ms | 11.81x faster | 8.11x faster | win |
+
+- Negative evidence: Rust full `eigh` remains 3.30x to 8.11x slower than the
+  projected route on these top-k low-rank shapes. Do not route this workload
+  back through the full dense eigensolver unless a future conformance failure
+  invalidates the randomized projection contract.
+- Retry condition: continue only with deeper sketch-quality or blocked-operator
+  improvements that preserve the existing low-rank invariant tests and improve
+  the same `randomized_eigh_gauntlet_scipy` group; reject scalar housekeeping or
+  allocation-only tweaks that do not move this head-to-head SciPy ratio.
+
 ## 2026-06-19 - Gauntlet verification - fsci-opt least_squares scratch cluster
 
 - Agent: cod-b / MistyBirch
@@ -559,6 +591,51 @@ Local original-SciPy oracle (`python3 docs/perf_oracle_fft_csd.py --reps 120
   eigenspectrum was not a measurable cost, reject this exact diagonal-rcond
   shortcut and do not retry unless profiles put `AA^T` symmetric eigensolve
   back in the top wide-`pinv` hotspot list.
+
+## 2026-06-19 - frankenscipy-8l8r1.116 - FFT CSD rfft real-spectrum route
+
+- Agent: cod-a / MistyBirch
+- Lever: route `fsci_fft::cross_spectral_density` real input pairs through
+  two `rfft` calls instead of promoting both inputs to complex buffers and
+  running two full complex FFTs before taking the one-sided half.
+- Status: measured REJECT and reverted. The rfft route won the large internal
+  row but regressed the 4096 row and remained slower than the fastest
+  equivalent SciPy `scipy.fft.rfft` cross-spectrum formula on both measured
+  sizes. The release route is restored to the full-complex implementation while
+  keeping the Criterion CSD rows, SciPy oracle script, and full-complex
+  equivalence guard.
+- Artifact:
+  `tests/artifacts/perf/2026-06-19-fft-csd-gauntlet/csd_rfft_reject.json`
+- Optimization commit under test: `d027c140bc8a937877e8c018cf7265d1f4bc5049`
+  vs parent `55f32c99f69991f4ab252621dd86948dc6e95b20`.
+
+Same-worker internal A/B (`hz1`, Criterion mean; parent scratch had only the
+same CSD bench harness added, with parent library code unchanged):
+
+| Workload | Parent full-complex mean | Candidate rfft mean | Candidate time vs parent | Verdict |
+| --- | ---: | ---: | ---: | --- |
+| `fft_helpers/cross_spectral_density/4096` | 112.08 us | 125.88 us | 1.123x | loss |
+| `fft_helpers/cross_spectral_density/65536` | 4.9543 ms | 2.3509 ms | 0.475x | win |
+
+Local original-SciPy oracle (`python3 docs/perf_oracle_fft_csd.py --reps 120
+--warmups 5`, Python 3.13.7 / NumPy 2.4.3 / SciPy 1.17.1):
+
+| Workload | SciPy rfft-formula p50 | Candidate Rust mean | SciPy/Rust | Verdict |
+| --- | ---: | ---: | ---: | --- |
+| `cross_spectral_density/4096` | 72.091 us | 125.88 us | 0.573x | Rust slower |
+| `cross_spectral_density/65536` | 1.653584 ms | 2.3509 ms | 0.703x | Rust slower |
+
+- Correctness/conformance guards to re-run in this closeout:
+  - `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a RUSTFLAGS='-C force-frame-pointers=yes' cargo check -p fsci-fft --all-targets`
+  - `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a RUSTFLAGS='-C force-frame-pointers=yes' cargo test -p fsci-fft cross_spectral_density -- --nocapture`
+  - `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a RUSTFLAGS='-C force-frame-pointers=yes' cargo clippy -p fsci-fft --all-targets -- -D warnings`
+  - `python3 docs/perf_oracle_fft_csd.py --reps 120 --warmups 5`
+  - `git diff --check` and `ubs` on the changed file set.
+- Retry condition: do not retry this standalone rfft CSD route. Reopen only if
+  a fresh same-worker profile attributes a clearly-above-noise share to full
+  complex promotion inside `cross_spectral_density` on a workload of at least
+  65536 samples, and the replacement beats the fastest equivalent SciPy rfft
+  formula while not regressing the 4096 row.
 
 ## 2026-06-18 - frankenscipy-va60h - MDS streamed double-centering
 
