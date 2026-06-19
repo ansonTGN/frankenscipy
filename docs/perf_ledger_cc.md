@@ -28,6 +28,8 @@ regressions are reverted. Entries also routed to MistyBirch for the canonical me
 | pdist parallel (8e7e6d99, NOT mine) | pdist euclidean n=256 | 92.1 µs | 674.9 µs | **0.14× (7.3× SLOWER)** | gate fires at n=256 | ⚠️ LOSS → owner |
 | pdist parallel (8e7e6d99, NOT mine) | pdist euclidean n=512 | 326.3 µs | 889.0 µs | **0.37× (2.7× SLOWER)** | overhead amortizes w/ n | ⚠️ LOSS → owner |
 | pdist parallel (8e7e6d99, NOT mine) | pdist cosine n=256 | 81.9 µs | 736.7 µs | **0.11× (9× SLOWER)** | — | ⚠️ LOSS → owner |
+| linkage NN-chain (average) | linkage n=400 d=4 | 1586.5 µs | 1904.5 µs | **0.83× (1.2× slower)** | — | ⚠️ near-parity |
+| cophenet mem::take (jphzn) | cophenet n=400 | 401.5 µs | 219.7 µs | **1.83× faster** | — | ✅ KEEP |
 
 ## Detail
 
@@ -89,6 +91,19 @@ not vs scipy; implied serial ≈ 3.4–6.5 ms at n=512 → fsci's pure-Rust pdis
 ~10–60× slower than scipy's C. **NOT reverted — another agent's file; routed to the
 spatial owner.** Recommendation: raise the pdist gate well above 2¹⁸ AND/OR a faster
 inner kernel (scipy uses tuned C). Honest LOSS recorded.
+
+### Hierarchical clustering: linkage + cophenet (frankenscipy-jphzn) — ⚠️ parity / ✅ KEEP
+Oracle `docs/perf_oracle_hier.py` (scipy.cluster.hierarchy, n=400 blobs, average).
+- **linkage average: fsci 1904.5 µs vs scipy 1586.5 µs = 0.83× (1.2× SLOWER).** Near-
+  parity — scipy's NN-chain linkage is tuned C; fsci's pure-Rust version is within
+  20%. NOT a regression (no parallelization involved); just the expected small gap to
+  optimized C. KEEP (correct + close); a faster reducible-distance update is a future
+  lever if linkage becomes a bottleneck.
+- **cophenet: fsci 219.7 µs vs scipy 401.5 µs (distances-only, fair) = 1.83× FASTER.**
+  The `jphzn` move-instead-of-clone of each node's member list helps; the tree
+  traversal is efficient. (NB: the naive `cophenet(Z, Y)` scipy call is 1758 µs but
+  ALSO computes the correlation coefficient — not comparable; used `cophenet(Z)`.)
+  KEEP.
 
 ## Release-readiness summary (CrimsonForge beads, as of this round)
 
