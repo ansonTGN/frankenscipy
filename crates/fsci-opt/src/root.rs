@@ -1920,7 +1920,7 @@ where
         h[k][k] = r;
         h[k + 1][k] = 0.0;
         g[k + 1] = -sn[k] * g[k];
-        g[k] = cs[k] * g[k];
+        g[k] *= cs[k];
         k_used = k + 1;
         if g[k + 1].abs() <= tol * bnorm || breakdown {
             break;
@@ -2099,7 +2099,11 @@ where
         let mut alpha_p = 1.0_f64;
         let mut alpha_m = 1.0_f64;
         let (xp, fp, fp_res) = loop {
-            let xp: Vec<f64> = x_k.iter().zip(&d).map(|(xi, di)| xi + alpha_p * di).collect();
+            let xp: Vec<f64> = x_k
+                .iter()
+                .zip(&d)
+                .map(|(xi, di)| xi + alpha_p * di)
+                .collect();
             let fp_res = func(&xp);
             nfev += 1;
             let fp = merit(&fp_res);
@@ -2108,7 +2112,11 @@ where
             }
             let alpha_tp = alpha_p * alpha_p * fk_cur / (fp + (2.0 * alpha_p - 1.0) * fk_cur);
 
-            let xm: Vec<f64> = x_k.iter().zip(&d).map(|(xi, di)| xi - alpha_m * di).collect();
+            let xm: Vec<f64> = x_k
+                .iter()
+                .zip(&d)
+                .map(|(xi, di)| xi - alpha_m * di)
+                .collect();
             let fm_res = func(&xm);
             nfev += 1;
             let fm = merit(&fm_res);
@@ -2533,7 +2541,11 @@ mod tests {
         let r2 = df_sane(f2, &[2.0, 3.0], 1e-8, 2000).unwrap();
         assert!(r2.converged, "{}", r2.message);
         // root: x1=2, (x0-1)^3 = x1-1 = 1 -> x0 = 2.
-        assert!((r2.x[0] - 2.0).abs() < 1e-4 && (r2.x[1] - 2.0).abs() < 1e-4, "x = {:?}", r2.x);
+        assert!(
+            (r2.x[0] - 2.0).abs() < 1e-4 && (r2.x[1] - 2.0).abs() < 1e-4,
+            "x = {:?}",
+            r2.x
+        );
     }
 
     #[test]
@@ -2549,7 +2561,11 @@ mod tests {
         let f1 = |x: &[f64]| vec![x[0] + x[1] - 3.0, x[0] * x[0] + x[1] * x[1] - 5.0];
         let r = newton_krylov(f1, &[2.0, 0.5], 1e-10, 100).unwrap();
         assert!(r.converged, "{}", r.message);
-        assert!((r.x[0] - 2.0).abs() < 1e-7 && (r.x[1] - 1.0).abs() < 1e-7, "x = {:?}", r.x);
+        assert!(
+            (r.x[0] - 2.0).abs() < 1e-7 && (r.x[1] - 1.0).abs() < 1e-7,
+            "x = {:?}",
+            r.x
+        );
 
         // Classic 3-equation system; scipy root (0.5, 0, -0.52359878).
         let f2 = |x: &[f64]| {
@@ -2564,7 +2580,7 @@ mod tests {
         assert!(
             (r2.x[0] - 0.5).abs() < 1e-6
                 && r2.x[1].abs() < 1e-6
-                && (r2.x[2] + 0.52359878).abs() < 1e-6,
+                && (r2.x[2] + std::f64::consts::FRAC_PI_6).abs() < 1e-6,
             "x2 = {:?}",
             r2.x
         );
@@ -3538,7 +3554,7 @@ mod tests {
             mode: RuntimeMode::Hardened,
             ..RootOptions::default()
         };
-        let err = toms748(&f, (0.1, 0.9), hardened)
+        let err = toms748(f, (0.1, 0.9), hardened)
             .expect_err("hardened mode rejects non-finite callback values");
         assert!(matches!(err, crate::OptError::NonFiniteInput { .. }));
 
@@ -3546,7 +3562,7 @@ mod tests {
             mode: RuntimeMode::Strict,
             ..RootOptions::default()
         };
-        let err = toms748(&f, (0.1, 0.9), strict)
+        let err = toms748(f, (0.1, 0.9), strict)
             .expect_err("strict mode maps non-finite callback values");
         assert!(matches!(err, crate::OptError::InvalidArgument { .. }));
     }

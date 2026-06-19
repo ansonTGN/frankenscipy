@@ -724,7 +724,9 @@ pub fn quadratic_assignment(
 
         // Direction Q from the linear assignment on the gradient.
         let cost: Vec<Vec<f64>> = if maximize {
-            grad.iter().map(|r| r.iter().map(|&v| -v).collect()).collect()
+            grad.iter()
+                .map(|r| r.iter().map(|&v| -v).collect())
+                .collect()
         } else {
             grad.clone()
         };
@@ -775,7 +777,12 @@ pub fn quadratic_assignment(
         let diff: f64 = p
             .iter()
             .zip(&p_new)
-            .map(|(pr, nr)| pr.iter().zip(nr).map(|(&x, &y)| (x - y) * (x - y)).sum::<f64>())
+            .map(|(pr, nr)| {
+                pr.iter()
+                    .zip(nr)
+                    .map(|(&x, &y)| (x - y) * (x - y))
+                    .sum::<f64>()
+            })
             .sum::<f64>()
             .sqrt()
             / nf.sqrt();
@@ -3143,12 +3150,7 @@ where
 /// `[xa, xb, xc]` already-downhill bracket (requires `f(xb) < f(xa)` and
 /// `f(xb) < f(xc)`). The bracket establishes the search bounds, then Brent's
 /// parabolic-interpolation method locates the minimum within them.
-pub fn brent<F>(
-    func: F,
-    brack: Option<&[f64]>,
-    tol: f64,
-    maxiter: usize,
-) -> Result<f64, OptError>
+pub fn brent<F>(func: F, brack: Option<&[f64]>, tol: f64, maxiter: usize) -> Result<f64, OptError>
 where
     F: Fn(f64) -> f64,
 {
@@ -3162,12 +3164,12 @@ where
             detail: "maxiter must be greater than zero".to_string(),
         });
     }
-    if let Some(b) = brack {
-        if b.iter().any(|value| !value.is_finite()) {
-            return Err(OptError::InvalidArgument {
-                detail: "brack values must be finite".to_string(),
-            });
-        }
+    if let Some(b) = brack
+        && b.iter().any(|value| !value.is_finite())
+    {
+        return Err(OptError::InvalidArgument {
+            detail: "brack values must be finite".to_string(),
+        });
     }
     // Establish the bracketing triple (xa, xc) bounding the minimum.
     let (xa, xc) = match brack {
@@ -3386,7 +3388,11 @@ where
     let f0 = func(x0);
     if f0.len() != x0.len() {
         return Err(OptError::InvalidArgument {
-            detail: format!("F(x0) length {} must equal x0 length {}", f0.len(), x0.len()),
+            detail: format!(
+                "F(x0) length {} must equal x0 length {}",
+                f0.len(),
+                x0.len()
+            ),
         });
     }
     Ok(f0)
@@ -3826,8 +3832,24 @@ fn dense_spd_solve(m: &[Vec<f64>], rhs: &[f64]) -> Option<Vec<f64>> {
             if r != col {
                 let f = aug[r][col] / aug[col][col];
                 if f != 0.0 {
-                    for k in col..=n {
-                        aug[r][k] -= f * aug[col][k];
+                    if r < col {
+                        let (rows_before_pivot, rows_from_pivot) = aug.split_at_mut(col);
+                        let row = &mut rows_before_pivot[r];
+                        let pivot = &rows_from_pivot[0];
+                        for (entry, &pivot_entry) in
+                            row[col..=n].iter_mut().zip(pivot[col..=n].iter())
+                        {
+                            *entry -= f * pivot_entry;
+                        }
+                    } else {
+                        let (rows_before_row, rows_from_row) = aug.split_at_mut(r);
+                        let pivot = &rows_before_row[col];
+                        let row = &mut rows_from_row[0];
+                        for (entry, &pivot_entry) in
+                            row[col..=n].iter_mut().zip(pivot[col..=n].iter())
+                        {
+                            *entry -= f * pivot_entry;
+                        }
                     }
                 }
             }
@@ -3844,15 +3866,12 @@ fn dense_spd_solve(m: &[Vec<f64>], rhs: &[f64]) -> Option<Vec<f64>> {
 /// (`f64::NEG_INFINITY`/`INFINITY`) for one-sided or unconstrained variables.
 /// The problem is convex, so the returned minimiser matches scipy's `bvls`
 /// solution to solver tolerance.
-pub fn lsq_linear(
-    a: &[Vec<f64>],
-    b: &[f64],
-    lb: &[f64],
-    ub: &[f64],
-) -> Result<Vec<f64>, OptError> {
+pub fn lsq_linear(a: &[Vec<f64>], b: &[f64], lb: &[f64], ub: &[f64]) -> Result<Vec<f64>, OptError> {
     let m = a.len();
     if m == 0 {
-        return Err(OptError::InvalidArgument { detail: "empty matrix".to_string() });
+        return Err(OptError::InvalidArgument {
+            detail: "empty matrix".to_string(),
+        });
     }
     let n = a[0].len();
     if b.len() != m || lb.len() != n || ub.len() != n {
@@ -3891,7 +3910,9 @@ pub fn lsq_linear(
             gram[j1][j2] = a.iter().map(|row| row[j1] * row[j2]).sum();
         }
     }
-    let atb: Vec<f64> = (0..n).map(|j| a.iter().zip(b).map(|(r, &bi)| r[j] * bi).sum()).collect();
+    let atb: Vec<f64> = (0..n)
+        .map(|j| a.iter().zip(b).map(|(r, &bi)| r[j] * bi).sum())
+        .collect();
 
     // State: -1 = at lower, +1 = at upper, 0 = free. Start each variable at a bound.
     let mut state = vec![0i8; n];
@@ -3924,7 +3945,11 @@ pub fn lsq_linear(
             let sub_rhs: Vec<f64> = free
                 .iter()
                 .map(|&i| {
-                    atb[i] - (0..n).filter(|&k| state[k] != 0).map(|k| gram[i][k] * x[k]).sum::<f64>()
+                    atb[i]
+                        - (0..n)
+                            .filter(|&k| state[k] != 0)
+                            .map(|k| gram[i][k] * x[k])
+                            .sum::<f64>()
                 })
                 .collect();
             let Some(z) = dense_spd_solve(&sub_gram, &sub_rhs) else {
@@ -3962,8 +3987,9 @@ pub fn lsq_linear(
         }
         // KKT check: free the bound variable that most violates optimality.
         // Gradient g = Gram·x − atb = Aᵀ(Ax − b).
-        let g: Vec<f64> =
-            (0..n).map(|j| (0..n).map(|k| gram[j][k] * x[k]).sum::<f64>() - atb[j]).collect();
+        let g: Vec<f64> = (0..n)
+            .map(|j| (0..n).map(|k| gram[j][k] * x[k]).sum::<f64>() - atb[j])
+            .collect();
         let mut best = None;
         let mut best_score = tol;
         for j in 0..n {
@@ -5321,11 +5347,12 @@ mod tests {
     use crate::{
         BasinhoppingOptions, Bounds, ConvergenceStatus, DifferentialEvolutionOptions,
         DifferentiateOptions, Integrality, LinearConstraint, MilpOptions, MilpProblem,
-        MinimizeOptions, NonlinearConstraint, OptimizeMethod, RootOptions, approx_fprime,
+        MinimizeOptions, NonlinearConstraint, OptError, OptimizeMethod, RootOptions, approx_fprime,
         basinhopping, bracket, brent_minimize, brute, check_grad, cobyla, derivative,
         differential_evolution, differential_evolution_constrained, dual_annealing, fixed_point,
         golden, gradient_descent, hessian, isotonic_regression, jacobian, linear_sum_assignment,
-        linprog, milp, minimize_scalar_bounded, nnls, projected_gradient_descent, pso,
+        linprog, milp, minimize_scalar_bounded, minimize_trisection, nnls, numerical_gradient,
+        numerical_hessian, numerical_jacobian, projected_gradient_descent, pso,
         quadratic_assignment, rosen, rosen_der, rosen_hess, rosen_hess_prod, shgo,
     };
 
@@ -5334,13 +5361,20 @@ mod tests {
         // numerical gradient/hessian/jacobian (exact within FD roundoff for low-degree
         // polys) and minimize_trisection. All four were previously untested.
         let g = numerical_gradient(|x: &[f64]| x[0] * x[0] + x[1] * x[1], &[1.0, 2.0], 1e-5);
-        assert!((g[0] - 2.0).abs() < 1e-4 && (g[1] - 4.0).abs() < 1e-4, "gradient");
+        assert!(
+            (g[0] - 2.0).abs() < 1e-4 && (g[1] - 4.0).abs() < 1e-4,
+            "gradient"
+        );
         let h = numerical_hessian(|x: &[f64]| x[0] * x[0] + x[1] * x[1], &[1.0, 2.0], 1e-3);
         assert!(
             (h[0][0] - 2.0).abs() < 1e-3 && (h[1][1] - 2.0).abs() < 1e-3 && h[0][1].abs() < 1e-3,
             "hessian"
         );
-        let j = numerical_jacobian(|x: &[f64]| vec![x[0] * x[1], x[0] + x[1]], &[2.0, 3.0], 1e-5);
+        let j = numerical_jacobian(
+            |x: &[f64]| vec![x[0] * x[1], x[0] + x[1]],
+            &[2.0, 3.0],
+            1e-5,
+        );
         assert!(
             (j[0][0] - 3.0).abs() < 1e-4
                 && (j[0][1] - 2.0).abs() < 1e-4
@@ -5350,7 +5384,10 @@ mod tests {
         );
         // minimize_trisection of (x-2)^2 over [0,5] -> (2, 0).
         let (xmin, fmin) = minimize_trisection(|x: f64| (x - 2.0).powi(2), 0.0, 5.0, 1e-8, 200);
-        assert!((xmin - 2.0).abs() < 1e-5 && fmin.abs() < 1e-9, "trisection min");
+        assert!(
+            (xmin - 2.0).abs() < 1e-5 && fmin.abs() < 1e-9,
+            "trisection min"
+        );
     }
 
     #[test]
@@ -5390,8 +5427,13 @@ mod tests {
     #[test]
     fn lsq_linear_rejects_ragged_matrix() {
         use crate::lsq_linear;
-        let err = lsq_linear(&[vec![1.0, 2.0], vec![3.0]], &[1.0, 2.0], &[0.0, 0.0], &[1.0, 1.0])
-            .expect_err("ragged A should fail closed");
+        let err = lsq_linear(
+            &[vec![1.0, 2.0], vec![3.0]],
+            &[1.0, 2.0],
+            &[0.0, 0.0],
+            &[1.0, 1.0],
+        )
+        .expect_err("ragged A should fail closed");
         assert!(matches!(err, crate::OptError::InvalidArgument { .. }));
     }
 
@@ -6692,7 +6734,9 @@ mod tests {
         ] {
             let (state, cost) = crate::simulated_annealing(
                 7_i32,
-                |_| -> f64 { panic!("invalid simulated_annealing controls should not sample cost") },
+                |_| -> f64 {
+                    panic!("invalid simulated_annealing controls should not sample cost")
+                },
                 |_, _| -> i32 {
                     panic!("invalid simulated_annealing controls should not sample neighbor")
                 },
@@ -6726,7 +6770,10 @@ mod tests {
     #[test]
     fn brute_rejects_overflowing_grid_size() {
         let result = crate::brute(|_| 0.0, &[(0.0, 1.0), (0.0, 1.0)], usize::MAX);
-        assert!(matches!(result, Err(crate::OptError::InvalidArgument { .. })));
+        assert!(matches!(
+            result,
+            Err(crate::OptError::InvalidArgument { .. })
+        ));
     }
 
     #[test]
@@ -7106,7 +7153,12 @@ mod tests {
         ];
         for i in 0..2 {
             for k in 0..3 {
-                assert!((j2[i][k] - exp2[i][k]).abs() < 1e-7, "2pt[{i}][{k}] {} vs {}", j2[i][k], exp2[i][k]);
+                assert!(
+                    (j2[i][k] - exp2[i][k]).abs() < 1e-7,
+                    "2pt[{i}][{k}] {} vs {}",
+                    j2[i][k],
+                    exp2[i][k]
+                );
             }
         }
 
@@ -7118,13 +7170,18 @@ mod tests {
         ];
         for i in 0..2 {
             for k in 0..3 {
-                assert!((j3[i][k] - exp3[i][k]).abs() < 1e-7, "3pt[{i}][{k}] {} vs {}", j3[i][k], exp3[i][k]);
+                assert!(
+                    (j3[i][k] - exp3[i][k]).abs() < 1e-7,
+                    "3pt[{i}][{k}] {} vs {}",
+                    j3[i][k],
+                    exp3[i][k]
+                );
             }
         }
 
         // Custom relative step (2-point).
-        let jr =
-            approx_derivative(fun, &x0, FiniteDiffMethod::TwoPoint, Some(1e-6), None, None).unwrap();
+        let jr = approx_derivative(fun, &x0, FiniteDiffMethod::TwoPoint, Some(1e-6), None, None)
+            .unwrap();
         assert!((jr[0][0] - 6.000002999971).abs() < 1e-6);
         assert!((jr[1][2] - 1.755164884021).abs() < 1e-6);
 
@@ -7169,7 +7226,13 @@ mod tests {
         assert!((x - 2.0).abs() < 1e-6, "quad brack2 {x} vs 2");
         let x = brent(|x| x.cos(), Some(&[0.0, 2.0]), 1.48e-8, 500).unwrap();
         assert!((x - std::f64::consts::PI).abs() < 1e-6, "cos {x} vs pi");
-        let x = brent(|x| (x + 3.5).powi(2) + 1.0, Some(&[-10.0, -1.0]), 1.48e-8, 500).unwrap();
+        let x = brent(
+            |x| (x + 3.5).powi(2) + 1.0,
+            Some(&[-10.0, -1.0]),
+            1.48e-8,
+            500,
+        )
+        .unwrap();
         assert!((x + 3.5).abs() < 1e-6, "shifted {x} vs -3.5");
         let x = brent(
             |x| (x - 1.3).powi(4) + 0.5 * x,
@@ -7185,7 +7248,15 @@ mod tests {
         assert!(brent(|x| (x - 2.0).powi(2), None, 0.0, 500).is_err());
         assert!(brent(|x| (x - 2.0).powi(2), None, f64::NAN, 500).is_err());
         assert!(brent(|x| (x - 2.0).powi(2), None, 1.48e-8, 0).is_err());
-        assert!(brent(|x| (x - 2.0).powi(2), Some(&[0.0, f64::INFINITY]), 1.48e-8, 500).is_err());
+        assert!(
+            brent(
+                |x| (x - 2.0).powi(2),
+                Some(&[0.0, f64::INFINITY]),
+                1.48e-8,
+                500
+            )
+            .is_err()
+        );
     }
 
     #[test]

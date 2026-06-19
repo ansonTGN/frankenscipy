@@ -1,5 +1,49 @@
 # Performance Release-Readiness Scorecard
 
+## 2026-06-19 - fsci-opt L-BFGS-B Wolfe-probe gauntlet
+
+- Agent: cod-b / MistyBirch
+- Bead: `frankenscipy-8l8r1.122`
+- Decision: REJECT and revert the mutable Wolfe finite-difference
+  gradient-probe scratch path. Score for this sub-cluster: 4/5.
+- Artifact: `tests/artifacts/perf/2026-06-19-opt-lbfgsb-gauntlet/lbfgsb_wolfe_probe_reject.json`
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| Rust per-crate compile | PASS | `cargo check -p fsci-opt --all-targets` via rch with `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b` |
+| Criterion focused bench | PASS | `lbfgsb` group only; same-worker parent/candidate A/B on `ovh-a`, post-revert current-tree sample on `hz2` |
+| SciPy head-to-head oracle | PASS | Local Python oracle, SciPy 1.17.1 / NumPy 2.4.3; rch declined the Python oracle as non-compilation |
+| Targeted opt tests | PASS | `cargo test -p fsci-opt lbfgsb -- --nocapture` passed |
+| L-BFGS-B conformance | PASS | `FSCI_REQUIRE_SCIPY_ORACLE=1 cargo test -p fsci-conformance --test diff_opt_lbfgsb_minimize -- --nocapture` passed |
+| Formatting | PASS | `cargo fmt -p fsci-opt --check` passed |
+| Clippy `-D warnings` | PASS | `cargo clippy -p fsci-opt --all-targets -- -D warnings` passed after minimal fsci-opt lint cleanup |
+
+Same-worker internal A/B:
+
+| Workload | Parent p50 (us) | Candidate p50 (us) | Candidate time vs parent | Verdict |
+| --- | ---: | ---: | ---: | --- |
+| `lbfgsb/rosenbrock_unconstrained_fd/2` | 17.491 | 17.405 | 0.995x | neutral |
+| `lbfgsb/rosenbrock_unconstrained_fd/10` | 87.087 | 106.440 | 1.222x | loss |
+| `lbfgsb/quadratic_unconstrained_fd/32` | 5.246 | 6.055 | 1.154x | loss |
+
+Post-revert current route vs SciPy:
+
+| Workload | Rust p50 (us) | SciPy p50 (us) | SciPy/Rust p50 | Verdict |
+| --- | ---: | ---: | ---: | --- |
+| `lbfgsb/rosenbrock_unconstrained_fd/2` | 22.236 | 4585.899 | 206.24x | current route remains fast |
+| `lbfgsb/rosenbrock_unconstrained_fd/10` | 105.090 | 18262.642 | 173.78x | current route remains fast |
+| `lbfgsb/quadratic_unconstrained_fd/32` | 6.313 | 1447.172 | 229.23x | current route remains fast |
+
+Readiness notes:
+
+- The release candidate is the reverted parent-style Strong-Wolfe path, not the
+  mutable finite-difference probe scratch path from `b5dbf124`.
+- The original SciPy ratios remain strong on realistic Python-callback
+  workloads, but the rejected lever made the in-crate route slower on the
+  larger same-worker rows and is not release evidence.
+- Future opt work should route to a fresh measured hotspot instead of retrying
+  Wolfe finite-difference probe Vec reuse without new allocation-profile proof.
+
 ## 2026-06-19 - fsci-linalg wide lstsq row-streaming gauntlet
 
 - Agent: cod-a / MistyBirch

@@ -226,10 +226,12 @@ where
             &jtr,
             mu,
             n,
-            &mut damped_normal,
-            &mut cholesky_low,
-            &mut solve_y,
-            &mut step,
+            DampedNormalScratch {
+                a: &mut damped_normal,
+                low: &mut cholesky_low,
+                y: &mut solve_y,
+                step: &mut step,
+            },
         );
 
         let step_norm = l2_norm(&step);
@@ -504,10 +506,7 @@ where
             (1, "The solution converged.")
         }
     } else {
-        (
-            5,
-            "Number of calls to function has reached maxfev = 0.",
-        )
+        (5, "Number of calls to function has reached maxfev = 0.")
     };
 
     Ok(LeastsqResult {
@@ -565,7 +564,7 @@ fn finite_diff_jacobian_into<F>(
         let step = eps * (1.0 + x[j].abs());
         let original = x_perturbed[j];
         x_perturbed[j] += step;
-        let r_plus = residuals(&x_perturbed);
+        let r_plus = residuals(x_perturbed);
         x_perturbed[j] = original; // restore
         for i in 0..m {
             jac[i][j] = (r_plus[i] - r0[i]) / step;
@@ -637,36 +636,40 @@ fn max_diag_jtj(jac: &[Vec<f64>]) -> f64 {
 
 /// Solve (A + mu * I) * x = -b into fixed-shape scratch.
 /// Falls back to diagonal if matrix is singular.
+struct DampedNormalScratch<'a> {
+    a: &'a mut Vec<Vec<f64>>,
+    low: &'a mut Vec<Vec<f64>>,
+    y: &'a mut Vec<f64>,
+    step: &'a mut Vec<f64>,
+}
+
 fn solve_damped_normal_equations_into(
     jtj: &[Vec<f64>],
     jtr: &[f64],
     mu: f64,
     n: usize,
-    a: &mut Vec<Vec<f64>>,
-    low: &mut Vec<Vec<f64>>,
-    y: &mut Vec<f64>,
-    step: &mut Vec<f64>,
+    scratch: DampedNormalScratch<'_>,
 ) {
-    resize_square(a, n);
-    for (dst_row, src_row) in a.iter_mut().zip(jtj.iter()) {
+    resize_square(scratch.a, n);
+    for (dst_row, src_row) in scratch.a.iter_mut().zip(jtj.iter()) {
         dst_row.copy_from_slice(src_row);
     }
-    for (i, row) in a.iter_mut().enumerate() {
+    for (i, row) in scratch.a.iter_mut().enumerate() {
         row[i] += mu;
     }
 
     // Solve via Cholesky decomposition
-    if cholesky_decompose_into(a, n, low) {
-        cholesky_solve_with_l_into(low, jtr, n, y, step);
+    if cholesky_decompose_into(scratch.a, n, scratch.low) {
+        cholesky_solve_with_l_into(scratch.low, jtr, n, scratch.y, scratch.step);
         // Return -step (we solve A*step = -jtr, but passed jtr not -jtr).
-        for value in step.iter_mut() {
+        for value in scratch.step.iter_mut() {
             *value = -*value;
         }
     } else {
         // Fallback: diagonal solve
-        step.resize(n, 0.0);
+        scratch.step.resize(n, 0.0);
         for i in 0..n {
-            step[i] = -jtr[i] / (jtj[i][i] + mu);
+            scratch.step[i] = -jtr[i] / (jtj[i][i] + mu);
         }
     }
 }
@@ -1055,7 +1058,9 @@ mod tests {
         // A converged run reports a MINPACK success flag (1..=4).
         assert!((1..=4).contains(&res.ier), "ier = {}", res.ier);
         // cov_x is the unscaled (JᵀJ)⁻¹ and is finite for a full-rank Jacobian.
-        let cov = res.cov_x.expect("cov_x should be Some for full-rank Jacobian");
+        let cov = res
+            .cov_x
+            .expect("cov_x should be Some for full-rank Jacobian");
         assert_eq!(cov.len(), 2);
         assert!(cov.iter().flatten().all(|v| v.is_finite()));
 
@@ -1063,10 +1068,21 @@ mod tests {
         let us = [0.0_f64, 1.0, 2.0, 3.0, 4.0, 5.0];
         let vs = [0.1_f64, 0.9, 2.1, 2.9, 4.2, 4.8];
         let r3 = move |p: &[f64]| -> Vec<f64> {
-            us.iter().zip(vs.iter()).map(|(&u, &v)| p[0] * u + p[1] - v).collect()
+            us.iter()
+                .zip(vs.iter())
+                .map(|(&u, &v)| p[0] * u + p[1] - v)
+                .collect()
         };
         let lin = leastsq(r3, &[0.0, 0.0], LeastSquaresOptions::default()).unwrap();
-        assert!((lin.x[0] - 0.977_142_857).abs() < 1e-6, "slope = {}", lin.x[0]);
-        assert!((lin.x[1] - 0.057_142_857).abs() < 1e-6, "intercept = {}", lin.x[1]);
+        assert!(
+            (lin.x[0] - 0.977_142_857).abs() < 1e-6,
+            "slope = {}",
+            lin.x[0]
+        );
+        assert!(
+            (lin.x[1] - 0.057_142_857).abs() < 1e-6,
+            "intercept = {}",
+            lin.x[1]
+        );
     }
 }

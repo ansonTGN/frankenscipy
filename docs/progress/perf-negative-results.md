@@ -130,24 +130,42 @@ condition so dead ends are not repeated casually.
   gradient probes through `line_search_wolfe2_with_gradient_probe`, reusing the
   line-search trial buffer and gradient `Vec` instead of allocating a fresh
   `g` and `xp` inside every curvature probe.
-- Status: pending batch-test. This is a code-first commit per campaign
-  instruction; local `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b
-  cargo check -p fsci-opt` is the pre-commit gate.
-- Correctness guard: existing unconstrained/bounded `L-BFGS-B` tests and the
-  hard Rosenbrock Strong-Wolfe regression cover accepted-step behavior; the
-  patch intentionally keeps the accepted-step `finite_diff_gradient` recompute
-  so `OptimizeResult` counters and final gradient shape stay on the previous
-  public path.
-- Benchmark guard: compare focused `fsci-opt` `L-BFGS-B` Rosenbrock/quadratic
-  rows and the optimizer batch wave against the pre-change commit on the same
-  worker/target dir, with attention to high-dimensional finite-difference
-  line-search probes.
-- Retry condition: keep only if same-worker `L-BFGS-B` optimizer timings
-  improve without alpha, `nfev`/`njev`, accepted-gradient, or convergence drift;
-  if the mutable-probe path is neutral or slower, reject this exact
-  finite-difference probe scratch route and do not retry unless allocation
-  profiles put `L-BFGS-B` Wolfe gradient-probe Vec churn back in the top-5
-  `fsci-opt` hotspots.
+- Status: measured REJECT and reverted. The attempted mutable-probe path was
+  neutral on 2D Rosenbrock and slower on both larger rows, so the source path
+  was restored to the parent `line_search_wolfe2` implementation while keeping
+  the new Criterion/SciPy measurement harness.
+- Artifact: `tests/artifacts/perf/2026-06-19-opt-lbfgsb-gauntlet/lbfgsb_wolfe_probe_reject.json`
+- Optimization commit under test: `b5dbf1244e52632edc9bd0edc2102cb3ff78dfad`
+  vs parent `69ae5d214f8e90356789b112cff30a5c69b43d2a`.
+
+Same-worker internal A/B (`ovh-a`, Criterion p50):
+
+| Workload | Parent p50 (us) | Candidate p50 (us) | Candidate time vs parent | Verdict |
+| --- | ---: | ---: | ---: | --- |
+| `lbfgsb/rosenbrock_unconstrained_fd/2` | 17.491 | 17.405 | 0.995x | neutral |
+| `lbfgsb/rosenbrock_unconstrained_fd/10` | 87.087 | 106.440 | 1.222x | loss |
+| `lbfgsb/quadratic_unconstrained_fd/32` | 5.246 | 6.055 | 1.154x | loss |
+
+Post-revert current route vs original SciPy (`hz2` Rust Criterion p50, local
+SciPy 1.17.1 / NumPy 2.4.3 oracle p50):
+
+| Workload | Current Rust p50 (us) | SciPy p50 (us) | SciPy/Rust p50 | Verdict |
+| --- | ---: | ---: | ---: | --- |
+| `lbfgsb/rosenbrock_unconstrained_fd/2` | 22.236 | 4585.899 | 206.24x | current route remains fast |
+| `lbfgsb/rosenbrock_unconstrained_fd/10` | 105.090 | 18262.642 | 173.78x | current route remains fast |
+| `lbfgsb/quadratic_unconstrained_fd/32` | 6.313 | 1447.172 | 229.23x | current route remains fast |
+
+- Correctness/conformance guards:
+  - PASS: `cargo fmt -p fsci-opt --check`
+  - PASS: `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b RUSTFLAGS='-C force-frame-pointers=yes' cargo check -p fsci-opt --all-targets`
+  - PASS: `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b RUSTFLAGS='-C force-frame-pointers=yes' cargo test -p fsci-opt lbfgsb -- --nocapture`
+  - PASS: `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b RUSTFLAGS='-C force-frame-pointers=yes' FSCI_REQUIRE_SCIPY_ORACLE=1 cargo test -p fsci-conformance --test diff_opt_lbfgsb_minimize -- --nocapture`
+  - PASS: `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b RUSTFLAGS='-C force-frame-pointers=yes' cargo clippy -p fsci-opt --all-targets -- -D warnings`
+- Retry condition: do not retry this mutable finite-difference probe scratch
+  formulation. Reopen only if a fresh allocation profile again puts
+  `L-BFGS-B` Wolfe gradient-probe Vec churn in the top-5 `fsci-opt` hotspots
+  and a new same-worker parent/candidate A/B shows a material win across the
+  10D Rosenbrock and 32D quadratic rows.
 
 ## 2026-06-18 - frankenscipy-fo9cj - sparse Arnoldi row-major basis arena
 

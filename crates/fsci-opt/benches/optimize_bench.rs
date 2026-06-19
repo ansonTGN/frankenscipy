@@ -1,12 +1,14 @@
 #![forbid(unsafe_code)]
 //! Criterion benchmarks for fsci-opt (P2C-003-H).
 //!
-//! Groups: bfgs, cg, powell, brentq, brenth, bisect, ridder
+//! Groups: bfgs, lbfgsb, cg, powell, brentq, brenth, bisect, ridder
+
+use std::time::Duration;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use fsci_opt::{
     LeastSquaresOptions, MinimizeOptions, OptimizeMethod, RootMethod, RootOptions, bfgs, bisect,
-    brenth, brentq, cg_pr_plus, least_squares, powell, ridder,
+    brenth, brentq, cg_pr_plus, lbfgsb, least_squares, powell, ridder,
 };
 use fsci_runtime::RuntimeMode;
 
@@ -46,6 +48,16 @@ fn opts(method: OptimizeMethod) -> MinimizeOptions {
     MinimizeOptions {
         method: Some(method),
         mode: RuntimeMode::Strict,
+        ..Default::default()
+    }
+}
+
+fn lbfgsb_opts() -> MinimizeOptions {
+    MinimizeOptions {
+        method: Some(OptimizeMethod::LBfgsB),
+        mode: RuntimeMode::Strict,
+        tol: Some(1.0e-8),
+        maxiter: Some(2000),
         ..Default::default()
     }
 }
@@ -94,6 +106,49 @@ fn bench_bfgs(c: &mut Criterion) {
             },
         );
     }
+    group.finish();
+}
+
+fn bench_lbfgsb(c: &mut Criterion) {
+    let mut group = c.benchmark_group("lbfgsb");
+    group.sample_size(10);
+    group.warm_up_time(Duration::from_secs(1));
+    group.measurement_time(Duration::from_secs(4));
+
+    let x0 = vec![-1.2, 1.0];
+    group.bench_with_input(
+        BenchmarkId::new("rosenbrock_unconstrained_fd", 2usize),
+        &x0,
+        |b, x0| {
+            b.iter(|| {
+                let _ = lbfgsb(&rosenbrock, x0, lbfgsb_opts(), None);
+            });
+        },
+    );
+
+    let x0: Vec<f64> = (0..10)
+        .map(|i| if i % 2 == 0 { -1.2 } else { 1.0 })
+        .collect();
+    group.bench_with_input(
+        BenchmarkId::new("rosenbrock_unconstrained_fd", 10usize),
+        &x0,
+        |b, x0| {
+            b.iter(|| {
+                let _ = lbfgsb(&rosenbrock, x0, lbfgsb_opts(), None);
+            });
+        },
+    );
+
+    let x0: Vec<f64> = (0..32).map(|i| (i as f64 % 7.0) - 3.0).collect();
+    group.bench_with_input(
+        BenchmarkId::new("quadratic_unconstrained_fd", 32usize),
+        &x0,
+        |b, x0| {
+            b.iter(|| {
+                let _ = lbfgsb(&quadratic, x0, lbfgsb_opts(), None);
+            });
+        },
+    );
     group.finish();
 }
 
@@ -224,13 +279,8 @@ fn bench_least_squares(c: &mut Criterion) {
     let mut group = c.benchmark_group("least_squares");
     group.bench_function("rosenbrock_residual", |b| {
         b.iter(|| {
-            let residuals =
-                |x: &[f64]| vec![10.0 * (x[1] - x[0] * x[0]), 1.0 - x[0]];
-            let _ = least_squares(
-                residuals,
-                &[-1.2, 1.0],
-                LeastSquaresOptions::default(),
-            );
+            let residuals = |x: &[f64]| vec![10.0 * (x[1] - x[0] * x[0]), 1.0 - x[0]];
+            let _ = least_squares(residuals, &[-1.2, 1.0], LeastSquaresOptions::default());
         });
     });
 
@@ -248,11 +298,7 @@ fn bench_least_squares(c: &mut Criterion) {
                     .map(|(&x, &y)| p[0] * (-p[1] * x).exp() + p[2] - y)
                     .collect::<Vec<_>>()
             };
-            let _ = least_squares(
-                residuals,
-                &[1.0, 1.0, 1.0],
-                LeastSquaresOptions::default(),
-            );
+            let _ = least_squares(residuals, &[1.0, 1.0, 1.0], LeastSquaresOptions::default());
         });
     });
 
@@ -283,6 +329,7 @@ fn bench_least_squares(c: &mut Criterion) {
 criterion_group!(
     benches,
     bench_bfgs,
+    bench_lbfgsb,
     bench_cg,
     bench_powell,
     bench_brentq,
