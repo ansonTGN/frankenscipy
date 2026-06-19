@@ -19,6 +19,8 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | --- | --- | --- | ---: | ---: | ---: | --- |
 | `frankenscipy-acoco` | `jnjnp_zeros` bracket reuse | `scipy.special.jnjnp_zeros(nt=64)` equivalent | 80.728603 ms | 0.493655 ms | 163.53x slower | keep internal bracket reuse; route deeper |
 | `frankenscipy-acoco` | `jnjnp_zeros` bracket reuse | `scipy.special.jnjnp_zeros(nt=128)` equivalent | 410.059973 ms | 0.924456 ms | 443.57x slower | keep internal bracket reuse; route deeper |
+| `frankenscipy-va60h` | Linkage flat row-major distance arena | `scipy.cluster.hierarchy.linkage(method="average")`, n=800 d=4 | 6.1713 ms | 4.4550 ms | 1.385x slower | keep internal flat arena; route deeper |
+| `frankenscipy-va60h` | Linkage flat row-major distance arena | `scipy.cluster.hierarchy.linkage(method="ward")`, n=800 d=4 | 7.5250 ms | 5.0256 ms | 1.497x slower | keep internal flat arena; route deeper |
 
 ## Measured Rejects
 
@@ -39,6 +41,8 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `frankenscipy-8l8r1.122` | Parent-style `line_search_wolfe2` gradient closure | Mutable `line_search_wolfe2_with_gradient_probe` path | 1.222x faster on 10D Rosenbrock; 1.154x faster on 32D quadratic | revert mutable-probe route |
 | `frankenscipy-acoco` | `jnjnp_zeros` bracket reuse | Pre-optimization duplicate `jnp_zeros` bracketing route | 1.26x faster at `nt=64`; 1.33x faster at `nt=128` | keep current despite SciPy loss |
 | `frankenscipy-8l8r1.116` | Full-complex CSD route | rfft CSD route | 1.123x faster on 4096; rfft wins 2.107x on 65536 but loses to SciPy rfft oracle | revert rfft route |
+| `frankenscipy-va60h` | Flat row-major linkage arena | Legacy nested-row NN-array helper | 1.128x faster on Average; 1.019x faster on Ward | keep current despite SciPy loss |
+| `frankenscipy-va60h` | Flat row-major linkage arena | Reverted production nested route probe | 1.290x faster on Average; 1.251x faster on Ward | undo revert; keep flat route |
 
 ## Current Readiness
 
@@ -57,8 +61,11 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `fsci-special` `jnjnp_zeros` correctness | guarded | `jnyn_and_jnjnp_zeros_match_scipy` and `derivative_bessel_zeros_match_scipy_reference_points` passed via rch |
 | `fsci-special` lint/build gate | partial | `cargo check -p fsci-special --benches` and benchmark-file rustfmt passed; clippy `-D warnings` stopped on existing `fsci-integrate`/`fsci-linalg` dependency lints |
 | `fsci-fft` lint/build gate | guarded | `cargo check -p fsci-fft --all-targets`, focused CSD/rfft tests, and `cargo clippy -p fsci-fft --all-targets -- -D warnings` passed; broad rustfmt remains blocked by pre-existing file-wide drift |
+| `fsci-cluster` linkage performance | measured loss plus internal keep | flat arena is 1.128x faster than the legacy nested helper on Average and 1.019x on Ward, but 1.385-1.497x slower than SciPy |
+| `fsci-cluster` linkage correctness | guarded | filtered linkage tests passed via rch (28 unit, 9 metamorphic); SciPy-backed `diff_cluster_linkage_from_distances` conformance passed locally |
+| `fsci-cluster` lint/build gate | partial | `cargo check -p fsci-cluster --benches` passed; fmt blocked on existing `perf_isomap.rs` drift and clippy blocked on existing `fsci-linalg` dependency lints |
 | rch SciPy oracle parity | blocked on worker image | `vmi1152480` and `vmi1227854` lacked `scipy`; local same-host oracle supplied the head-to-head ratios |
-| Release readiness | partial | two linalg perf clusters, one `fsci-opt` L-BFGS-B reject, one `fsci-special` measured SciPy loss, and one `fsci-fft` CSD reject verified; other code-first perf ledger entries still need gauntlet conversion |
+| Release readiness | partial | two linalg perf clusters, one `fsci-opt` L-BFGS-B reject, one `fsci-special` measured SciPy loss, one `fsci-fft` CSD reject, and one `fsci-cluster` linkage measured SciPy loss verified; other code-first perf ledger entries still need gauntlet conversion |
 
 ## Pending Gauntlet Backlog
 

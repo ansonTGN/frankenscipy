@@ -1,5 +1,45 @@
 # Performance Release-Readiness Scorecard
 
+## 2026-06-19 - fsci-cluster linkage flat-arena gauntlet
+
+- Agent: cod-a / MistyBirch
+- Bead: `frankenscipy-va60h`
+- Decision: KEEP the flat row-major linkage arena as an internal win, but mark
+  the full `linkage` routine as a SciPy LOSS on the measured rows. Score for
+  this sub-cluster: 3/5.
+- Artifact:
+  `tests/artifacts/perf/2026-06-19-va60h-linkage-gauntlet/`
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| Rust per-crate compile | PASS | `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a cargo check -p fsci-cluster --benches` passed; existing `perf_kmeans.rs` warning remains |
+| Criterion focused bench | PASS | `va60h_gauntlet_linkage` group only; local SciPy oracle in the same benchmark process |
+| SciPy head-to-head oracle | PASS | Python 3.13.7, NumPy 2.4.3, SciPy 1.17.1, `scipy.cluster.hierarchy.linkage` |
+| Targeted cluster tests | PASS | `cargo test -p fsci-cluster linkage -- --nocapture` passed via rch: 28 unit tests and 9 metamorphic tests |
+| Linkage conformance | PASS | `FSCI_REQUIRE_SCIPY_ORACLE=1 cargo test -p fsci-conformance --test diff_cluster_linkage_from_distances -- --nocapture` passed locally |
+| Touched-file formatting | PASS | `rustfmt --edition 2024 --check crates/fsci-cluster/benches/cluster_bench.rs crates/fsci-cluster/src/lib.rs` |
+| Crate formatting | BLOCKED | `cargo fmt -p fsci-cluster --check` stopped on existing `crates/fsci-cluster/src/bin/perf_isomap.rs` formatting drift |
+| Clippy `-D warnings` | BLOCKED | `cargo clippy -p fsci-cluster --benches -- -D warnings` stopped on existing `fsci-linalg` dependency lints before this benchmark file was linted |
+
+| Workload / route | Mean | Ratio | Verdict |
+| --- | ---: | ---: | --- |
+| Rust current flat `linkage(Average)`, n=800 d=4 | 6.1713 ms | 1.385x slower than SciPy | SciPy loss, internal keep |
+| Rust legacy nested helper `linkage(Average)`, n=800 d=4 | 6.9616 ms | current flat is 1.128x faster | internal win |
+| SciPy `linkage(method="average")`, n=800 d=4 | 4.4550 ms | 1.00x oracle | reference |
+| Rust current flat `linkage(Ward)`, n=800 d=4 | 7.5250 ms | 1.497x slower than SciPy | SciPy loss, internal neutral/win |
+| Rust legacy nested helper `linkage(Ward)`, n=800 d=4 | 7.6707 ms | current flat is 1.019x faster | internal neutral/win |
+| SciPy `linkage(method="ward")`, n=800 d=4 | 5.0256 ms | 1.00x oracle | reference |
+
+Readiness notes:
+
+- A manual production revert probe was run and then undone: the nested-route
+  probe measured 9.0669 ms on Average and 9.1589 ms on Ward, while the flat
+  route measured 7.0279 ms and 7.3221 ms in the same post-revert run.
+- The flat arena should stay because reverting it makes the production route
+  slower, but this is not release-speed parity against original SciPy.
+- Future linkage work should target the algorithmic gap with SciPy's compiled
+  linkage implementation rather than another full-square matrix layout lever.
+
 ## 2026-06-19 - fsci-special jnjnp_zeros bracket-reuse gauntlet
 
 - Agent: cod-a / MistyBirch

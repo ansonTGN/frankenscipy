@@ -1,0 +1,26 @@
+   Compiling fsci-cluster v0.1.0 (/data/projects/frankenscipy/crates/fsci-cluster)
+warning: unnecessary parentheses around closure body
+  --> crates/fsci-cluster/src/bin/perf_kmeans.rs:15:26
+   |
+15 |                 .map(|j| ((i as f64 * 0.013 + j as f64 * 0.7).sin() + (i % 50) as f64 * 0.1))
+   |                          ^                                                                 ^
+   |
+   = note: `#[warn(unused_parens)]` (part of `#[warn(unused)]`) on by default
+help: remove these parentheses
+   |
+15 -                 .map(|j| ((i as f64 * 0.013 + j as f64 * 0.7).sin() + (i % 50) as f64 * 0.1))
+15 +                 .map(|j| (i as f64 * 0.013 + j as f64 * 0.7).sin() + (i % 50) as f64 * 0.1)
+   |
+
+warning: `fsci-cluster` (bin "perf_kmeans") generated 1 warning (run `cargo fix --bin "perf_kmeans" -p fsci-cluster` to apply 1 suggestion)
+    Finished `bench` profile [optimized] target(s) in 5.85s
+     Running benches/cluster_bench.rs (/data/projects/.rch-targets/frankenscipy-cod-a/release/deps/cluster_bench-38108ba4e0ea8744)
+Gnuplot not found, using plotters backend
+Benchmarking va60h_gauntlet_linkage/scipy_original/average_n800_d4
+Benchmarking va60h_gauntlet_linkage/scipy_original/average_n800_d4: Warming up for 3.0000 s
+Benchmarking va60h_gauntlet_linkage/scipy_original/average_n800_d4: Collecting 10 samples in estimated 5.8525 s (220 iterations)
+Benchmarking va60h_gauntlet_linkage/scipy_original/average_n800_d4: Analyzing
+va60h_gauntlet_linkage/scipy_original/average_n800_d4
+                        time:   [4.4546 ms 4.7161 ms 4.9905 ms]
+                        change: [−8.9259% −0.9939% +7.0354%] (p = 0.83 > 0.05)
+                        No change in performance detected.

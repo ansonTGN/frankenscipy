@@ -1,0 +1,12 @@
+Diff in /data/projects/frankenscipy/crates/fsci-cluster/src/bin/perf_isomap.rs:117:
+     let iso = landmark_isomap(&data, 2, kgraph, m, 7).expect("landmark_isomap");
+     assert_eq!(iso.embedding.len(), n);
+     println!("landmark_isomap embedded n={n} to 2-D ({m} landmarks, k-NN={kgraph})");
+[31m-    println!("GOLDEN landmark_isomap embedding digest = {:016x}", digest(&iso.embedding));
+[m[32m+    println!(
+[m[32m+        "GOLDEN landmark_isomap embedding digest = {:016x}",
+[m[32m+        digest(&iso.embedding)
+[m[32m+    );
+[m
+     // Larger case to exercise the O(n^2) k-NN build (the parallelized stage).
+     {

@@ -287,22 +287,44 @@ Local original-SciPy oracle (`python3 docs/perf_oracle_fft_csd.py --reps 120
   `Vec<Vec<f64>>` inter-cluster distance matrix with one row-major `Vec<f64>`
   arena and stride indexing; fill that arena directly from observations or
   condensed precomputed distances for the non-Centroid/Median methods.
-- Status: pending batch-test. This is a code-first commit per campaign
-  instruction; only local `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a
-  cargo check -p fsci-cluster` is expected before commit.
-- Correctness guard: `linkage_flat_core_matches_precomputed_condensed_contract`
-  plus existing SciPy reference and inactive-cluster regression coverage for
-  `linkage` / `linkage_from_distances`.
-- Benchmark guard: compare `cargo run --profile release-perf -p fsci-cluster
-  --bin perf_linkage` against the pre-change commit on the same worker/target
-  dir, with emphasis on Ward/Average linkage at n>=800 where the row-major arena
-  should reduce row-allocation and pointer-chasing overhead.
-- Retry condition: keep only if same-worker focused linkage timings show a
-  stable win outside noise with byte-identical linkage rows; if flat indexing
-  loses to the old nested rows due multiply/index overhead or cache effects,
-  reject this exact full-square arena formulation and do not retry without a
-  profile showing `agglomerate_nnarray` row traversal or allocation is again a
-  top-5 cluster hotspot.
+- Status: measured gauntlet complete on 2026-06-19. Decision: KEEP the flat
+  arena as an internal win, but record the full routine as a SciPy LOSS on this
+  workload. A direct production revert probe showed the nested route would be
+  slower on both measured rows, so no revert remains in the release candidate.
+- Artifact:
+  `tests/artifacts/perf/2026-06-19-va60h-linkage-gauntlet/`
+- Correctness guard: benchmark setup asserted current flat rows are
+  byte-identical to the benchmark-local legacy nested NN-array route; filtered
+  `fsci-cluster linkage` tests passed via rch (28 unit tests, 9 metamorphic
+  tests), including `linkage_flat_core_matches_precomputed_condensed_contract`;
+  `FSCI_REQUIRE_SCIPY_ORACLE=1 cargo test -p fsci-conformance --test
+  diff_cluster_linkage_from_distances -- --nocapture` passed locally against
+  SciPy 1.17.1.
+- Benchmark command: `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a
+  cargo bench -p fsci-cluster --bench cluster_bench --
+  va60h_gauntlet_linkage --noplot`.
+
+| Workload / route | Mean | Ratio | Verdict |
+| --- | ---: | ---: | --- |
+| Rust current flat `linkage(Average)`, n=800 d=4 | 6.1713 ms | 1.385x slower than SciPy | SciPy loss, internal keep |
+| Rust legacy nested helper `linkage(Average)`, n=800 d=4 | 6.9616 ms | current flat is 1.128x faster | internal win |
+| SciPy `scipy.cluster.hierarchy.linkage(method="average")`, n=800 d=4 | 4.4550 ms | 1.00x oracle | reference |
+| Rust current flat `linkage(Ward)`, n=800 d=4 | 7.5250 ms | 1.497x slower than SciPy | SciPy loss, internal neutral/win |
+| Rust legacy nested helper `linkage(Ward)`, n=800 d=4 | 7.6707 ms | current flat is 1.019x faster | internal neutral/win |
+| SciPy `scipy.cluster.hierarchy.linkage(method="ward")`, n=800 d=4 | 5.0256 ms | 1.00x oracle | reference |
+
+- Revert probe: manually reverting production to nested rows and rerunning the
+  same Criterion group showed the flat route faster than the reverted production
+  route by 1.290x on Average and 1.251x on Ward. The revert was therefore
+  undone before commit.
+- Gate notes: `cargo check -p fsci-cluster --benches` passed with an existing
+  `perf_kmeans.rs` warning. `cargo fmt -p fsci-cluster --check` is blocked by
+  existing `perf_isomap.rs` formatting drift; `cargo clippy -p fsci-cluster
+  --benches -- -D warnings` is blocked by existing `fsci-linalg` dependency
+  lints before this benchmark file is linted.
+- Next route: if release parity against SciPy is required for hierarchical
+  clustering, route deeper into the algorithmic gap with SciPy's compiled
+  linkage implementation rather than retrying full-square arena layout changes.
 
 ## 2026-06-18 - frankenscipy-8l8r1.118 - coherence chunk-local spectra accumulator
 

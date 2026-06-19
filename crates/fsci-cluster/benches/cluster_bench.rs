@@ -1,5 +1,9 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use fsci_cluster::{gaussian_mixture, kmeans, kmeans2};
+use fsci_cluster::{LinkageMethod, gaussian_mixture, kmeans, kmeans2, linkage};
+use std::hint::black_box;
+use std::io::Write;
+use std::process::{Command, Stdio};
+use std::time::Duration;
 
 /// Deterministic blobs: `n` points in `d` dims drawn around 4 cluster centres.
 fn blobs(n: usize, d: usize) -> Vec<Vec<f64>> {
@@ -14,6 +18,216 @@ fn blobs(n: usize, d: usize) -> Vec<Vec<f64>> {
                 .collect()
         })
         .collect()
+}
+
+fn sq_dist_bench(a: &[f64], b: &[f64]) -> f64 {
+    a.iter().zip(b).map(|(x, y)| (x - y) * (x - y)).sum()
+}
+
+fn legacy_agglo_nearest(
+    inter_dist: &[Vec<f64>],
+    active: &[bool],
+    i: usize,
+    total: usize,
+) -> (usize, f64) {
+    let mut best_j = i;
+    let mut best_d = f64::INFINITY;
+    for j in (i + 1)..total {
+        if active[j] && inter_dist[i][j] < best_d {
+            best_d = inter_dist[i][j];
+            best_j = j;
+        }
+    }
+    (best_j, best_d)
+}
+
+fn legacy_agglomerate_nnarray(
+    n: usize,
+    mut inter_dist: Vec<Vec<f64>>,
+    method: LinkageMethod,
+) -> Vec<[f64; 4]> {
+    let total = 2 * n - 1;
+    let mut active = vec![false; total];
+    active[..n].fill(true);
+    let mut cluster_size = vec![1usize; total];
+    let mut nn = vec![0usize; total];
+    let mut d_nn = vec![f64::INFINITY; total];
+    for i in 0..n {
+        let (j, d) = legacy_agglo_nearest(&inter_dist, &active, i, total);
+        nn[i] = j;
+        d_nn[i] = d;
+    }
+
+    let mut result = Vec::with_capacity(n - 1);
+    for step in 0..n - 1 {
+        let new_id = n + step;
+
+        let mut min_d = f64::INFINITY;
+        let mut mi = 0;
+        for i in 0..new_id {
+            if active[i] && d_nn[i] < min_d {
+                min_d = d_nn[i];
+                mi = i;
+            }
+        }
+        let mj = nn[mi];
+
+        let new_size = cluster_size[mi] + cluster_size[mj];
+        result.push([mi as f64, mj as f64, min_d, new_size as f64]);
+
+        active[mi] = false;
+        active[mj] = false;
+        active[new_id] = true;
+        cluster_size[new_id] = new_size;
+
+        for k in 0..new_id {
+            if !active[k] {
+                continue;
+            }
+            let d_ki = inter_dist[k][mi];
+            let d_kj = inter_dist[k][mj];
+            let new_dist = match method {
+                LinkageMethod::Single => d_ki.min(d_kj),
+                LinkageMethod::Complete => d_ki.max(d_kj),
+                LinkageMethod::Average => {
+                    let ni = cluster_size[mi] as f64;
+                    let nj = cluster_size[mj] as f64;
+                    (ni * d_ki + nj * d_kj) / (ni + nj)
+                }
+                LinkageMethod::Ward => {
+                    let ni = cluster_size[mi] as f64;
+                    let nj = cluster_size[mj] as f64;
+                    let nk = cluster_size[k] as f64;
+                    let nt = ni + nj + nk;
+                    (((nk + ni) * d_ki * d_ki + (nk + nj) * d_kj * d_kj - nk * min_d * min_d) / nt)
+                        .max(0.0)
+                        .sqrt()
+                }
+                LinkageMethod::Weighted => 0.5 * (d_ki + d_kj),
+                LinkageMethod::Centroid => {
+                    let ni = cluster_size[mi] as f64;
+                    let nj = cluster_size[mj] as f64;
+                    let nt = ni + nj;
+                    let alpha_i = ni / nt;
+                    let alpha_j = nj / nt;
+                    let beta = -(ni * nj) / (nt * nt);
+                    (alpha_i * d_ki * d_ki + alpha_j * d_kj * d_kj + beta * min_d * min_d)
+                        .max(0.0)
+                        .sqrt()
+                }
+                LinkageMethod::Median => (0.5 * d_ki * d_ki + 0.5 * d_kj * d_kj
+                    - 0.25 * min_d * min_d)
+                    .max(0.0)
+                    .sqrt(),
+            };
+            inter_dist[k][new_id] = new_dist;
+            inter_dist[new_id][k] = new_dist;
+        }
+
+        d_nn[new_id] = f64::INFINITY;
+        nn[new_id] = new_id;
+
+        for k in 0..new_id {
+            if !active[k] {
+                continue;
+            }
+            if nn[k] == mi || nn[k] == mj {
+                let (j, d) = legacy_agglo_nearest(&inter_dist, &active, k, total);
+                nn[k] = j;
+                d_nn[k] = d;
+            } else if inter_dist[k][new_id] < d_nn[k] {
+                d_nn[k] = inter_dist[k][new_id];
+                nn[k] = new_id;
+            }
+        }
+    }
+
+    result
+}
+
+fn legacy_linkage_nested(data: &[Vec<f64>], method: LinkageMethod) -> Vec<[f64; 4]> {
+    let n = data.len();
+    let total = 2 * n - 1;
+    let mut inter_dist = vec![vec![f64::INFINITY; total]; total];
+    for i in 0..n {
+        inter_dist[i][i] = 0.0;
+        for j in i + 1..n {
+            let d = sq_dist_bench(&data[i], &data[j]).sqrt();
+            inter_dist[i][j] = d;
+            inter_dist[j][i] = d;
+        }
+    }
+    legacy_agglomerate_nnarray(n, inter_dist, method)
+}
+
+fn assert_linkage_bits_eq(left: &[[f64; 4]], right: &[[f64; 4]]) {
+    assert_eq!(left.len(), right.len());
+    for (a, b) in left.iter().zip(right) {
+        for (&x, &y) in a.iter().zip(b) {
+            assert_eq!(x.to_bits(), y.to_bits());
+        }
+    }
+}
+
+fn scipy_linkage_duration(n: usize, d: usize, method: &str, iters: u64) -> Duration {
+    let script = r#"
+import math
+import sys
+import time
+import numpy as np
+from scipy.cluster.hierarchy import linkage
+
+n = int(sys.argv[1])
+d = int(sys.argv[2])
+method = sys.argv[3]
+iters = int(sys.argv[4])
+data = np.array([
+    [
+        (i % 4) * 5.0 + math.sin(i * (j + 1) * 0.013) * 0.5 + ((i + j) % 7) * 0.05
+        for j in range(d)
+    ]
+    for i in range(n)
+], dtype=np.float64)
+
+start = time.perf_counter()
+acc = 0.0
+for _ in range(iters):
+    z = linkage(data, method=method)
+    acc += float(z[0, 2])
+elapsed = time.perf_counter() - start
+print(f"{elapsed:.17g} {acc:.17g}")
+"#;
+    let mut child = Command::new("python3")
+        .arg("-")
+        .arg(n.to_string())
+        .arg(d.to_string())
+        .arg(method)
+        .arg(iters.to_string())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn SciPy linkage oracle");
+    child
+        .stdin
+        .as_mut()
+        .expect("SciPy stdin")
+        .write_all(script.as_bytes())
+        .expect("write SciPy linkage oracle script");
+    let output = child.wait_with_output().expect("run SciPy linkage oracle");
+    assert!(
+        output.status.success(),
+        "SciPy linkage oracle failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("SciPy stdout is utf8");
+    let seconds: f64 = stdout
+        .split_whitespace()
+        .next()
+        .expect("SciPy elapsed seconds")
+        .parse()
+        .expect("parse SciPy elapsed seconds");
+    Duration::from_secs_f64(seconds)
 }
 
 /// kmeans (Lloyd) and kmeans2 (double-buffered Lloyd loop, frankenscipy-4ylee).
@@ -43,7 +257,7 @@ fn bench_gmm(c: &mut Criterion) {
 /// Hierarchical clustering: NN-chain linkage + cophenetic distances (the cophenet
 /// member-list move-instead-of-clone win, frankenscipy-jphzn).
 fn bench_hierarchical(c: &mut Criterion) {
-    use fsci_cluster::{LinkageMethod, cophenet, linkage};
+    use fsci_cluster::cophenet;
     let data = blobs(400, 4);
     let z = linkage(&data, LinkageMethod::Average).expect("linkage");
     let mut group = c.benchmark_group("hierarchical");
@@ -51,6 +265,38 @@ fn bench_hierarchical(c: &mut Criterion) {
         b.iter(|| linkage(&data, LinkageMethod::Average))
     });
     group.bench_function("cophenet/n400", |b| b.iter(|| cophenet(&z)));
+    group.finish();
+}
+
+/// frankenscipy-va60h gauntlet: current flat row-major linkage arena against
+/// the pre-optimization nested-row NN-array route and the original SciPy API.
+fn bench_va60h_linkage_gauntlet(c: &mut Criterion) {
+    let mut group = c.benchmark_group("va60h_gauntlet_linkage");
+    group.sample_size(10);
+
+    for &(method, method_name) in &[
+        (LinkageMethod::Average, "average"),
+        (LinkageMethod::Ward, "ward"),
+    ] {
+        let n = 800usize;
+        let d = 4usize;
+        let data = blobs(n, d);
+        let current = linkage(&data, method).expect("current linkage");
+        let legacy = legacy_linkage_nested(&data, method);
+        assert_linkage_bits_eq(&current, &legacy);
+
+        let workload = format!("{method_name}_n{n}_d{d}");
+        group.bench_function(BenchmarkId::new("rust_current_flat", &workload), |b| {
+            b.iter(|| black_box(linkage(black_box(&data), method).expect("linkage")))
+        });
+        group.bench_function(BenchmarkId::new("rust_legacy_nested", &workload), |b| {
+            b.iter(|| black_box(legacy_linkage_nested(black_box(&data), method)))
+        });
+        group.bench_function(BenchmarkId::new("scipy_original", &workload), |b| {
+            b.iter_custom(|iters| scipy_linkage_duration(n, d, method_name, iters))
+        });
+    }
+
     group.finish();
 }
 
@@ -104,6 +350,7 @@ criterion_group!(
     bench_kmeans,
     bench_gmm,
     bench_hierarchical,
+    bench_va60h_linkage_gauntlet,
     bench_affinity_propagation,
     bench_silhouette
 );

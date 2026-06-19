@@ -1,0 +1,295 @@
+   Compiling libc v0.2.185
+   Compiling typenum v1.20.0
+   Compiling foldhash v0.2.0
+   Compiling memchr v2.8.0
+   Compiling allocator-api2 v0.2.21
+   Compiling getrandom v0.3.4
+   Compiling once_cell v1.21.4
+   Compiling log v0.4.29
+   Compiling subtle v2.6.1
+   Compiling linux-raw-sys v0.12.1
+   Compiling smallvec v1.15.1
+   Compiling unicode-segmentation v1.13.2
+   Compiling scopeguard v1.2.0
+   Compiling cpufeatures v0.2.17
+   Compiling web-time v1.1.0
+   Compiling unicode-width v0.2.2
+   Compiling pin-project-lite v0.2.17
+   Compiling base64ct v1.8.3
+   Compiling bumpalo v3.20.2
+   Compiling opaque-debug v0.3.1
+   Compiling const-oid v0.9.6
+   Compiling cmov v0.5.3
+   Compiling rustc-hash v2.1.2
+   Compiling str_indices v0.4.4
+   Compiling const-oid v0.10.2
+   Compiling ftui-i18n v0.3.1
+   Compiling lazy_static v1.5.0
+   Compiling either v1.15.0
+   Compiling thread_local v1.1.9
+   Compiling futures-io v0.3.32
+   Compiling data-encoding v2.11.0
+   Compiling winnow v1.0.2
+   Compiling nu-ansi-term v0.50.3
+   Compiling serde_core v1.0.228
+   Compiling zmij v1.0.21
+   Compiling zerocopy v0.8.48
+   Compiling lock_api v0.4.14
+   Compiling crossbeam-utils v0.8.21
+   Compiling bytes v1.11.1
+   Compiling futures-core v0.3.32
+   Compiling parking v2.2.1
+   Compiling unty-next v0.1.1
+   Compiling crc32fast v1.5.0
+   Compiling slab v0.4.12
+   Compiling toml_writer v1.1.1+spec-1.1.0
+   Compiling hex v0.4.3
+   Compiling base64 v0.22.1
+   Compiling fsci-constants v0.1.0 (/data/projects/frankenscipy/crates/fsci-constants)
+   Compiling fsci-odr v0.1.0 (/data/projects/frankenscipy/crates/fsci-odr)
+   Compiling num-traits v0.2.19
+   Compiling matrixmultiply v0.3.10
+   Compiling arc-swap v1.9.1
+   Compiling tracing-core v0.1.36
+   Compiling ropey v1.6.1
+   Compiling memoffset v0.9.1
+   Compiling sharded-slab v0.1.7
+   Compiling fsci-conformance v0.1.0 (/data/projects/frankenscipy/crates/fsci-conformance)
+   Compiling hashbrown v0.17.0
+   Compiling blake3 v1.8.4
+   Compiling zeroize v1.8.2
+   Compiling pem-rfc7468 v0.7.0
+   Compiling ctutils v0.4.2
+   Compiling hashbrown v0.16.1
+   Compiling thiserror v2.0.18
+   Compiling futures-lite v2.6.1
+   Compiling pin-project v1.1.11
+   Compiling rustix v1.1.4
+   Compiling convert_case v0.10.0
+   Compiling unicode-display-width v0.3.0
+   Compiling der v0.7.10
+   Compiling toml_parser v1.1.2+spec-1.1.0
+   Compiling crossbeam-epoch v0.9.18
+   Compiling crossbeam-queue v0.3.12
+   Compiling derive_more-impl v2.1.1
+   Compiling prost v0.14.4
+   Compiling tracing v0.1.44
+   Compiling tracing-log v0.2.0
+   Compiling tracing-subscriber v0.3.23
+   Compiling crossbeam-deque v0.8.6
+   Compiling indexmap v2.14.0
+   Compiling lru v0.16.4
+   Compiling generic-array v0.14.7
+   Compiling hybrid-array v0.4.10
+   Compiling num-complex v0.4.6
+   Compiling num-integer v0.1.46
+   Compiling approx v0.5.1
+   Compiling rayon-core v1.13.0
+   Compiling rmp v0.8.15
+   Compiling derive_more v2.1.1
+   Compiling num-rational v0.4.2
+   Compiling simba v0.9.1
+   Compiling spki v0.7.3
+   Compiling rayon v1.12.0
+   Compiling crypto-common v0.2.1
+   Compiling block-buffer v0.12.0
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling getrandom v0.2.17
+   Compiling errno v0.3.14
+   Compiling parking_lot_core v0.9.12
+   Compiling mio v1.2.0
+   Compiling getrandom v0.4.2
+   Compiling nix v0.31.2
+   Compiling socket2 v0.6.3
+   Compiling wait-timeout v0.2.1
+   Compiling pkcs8 v0.10.2
+   Compiling signal-hook-registry v1.4.8
+   Compiling rand_core v0.6.4
+   Compiling rand_core v0.9.5
+   Compiling rand v0.10.1
+   Compiling parking_lot v0.12.5
+   Compiling signal-hook v0.3.18
+   Compiling signal-hook v0.4.4
+   Compiling crypto-common v0.1.7
+   Compiling rand_xorshift v0.4.0
+   Compiling rand v0.9.4
+   Compiling digest v0.10.7
+   Compiling universal-hash v0.5.1
+   Compiling cipher v0.4.4
+   Compiling aead v0.5.2
+   Compiling polyval v0.6.2
+   Compiling poly1305 v0.8.0
+   Compiling signal-hook-mio v0.2.5
+   Compiling signature v2.2.0
+   Compiling curve25519-dalek v4.1.3
+   Compiling sha2 v0.10.9
+   Compiling hmac v0.12.1
+   Compiling digest v0.11.2
+   Compiling aes v0.8.4
+   Compiling chacha20 v0.9.1
+   Compiling ctr v0.9.2
+   Compiling ghash v0.5.1
+   Compiling ed25519 v2.2.3
+   Compiling signatory v0.27.1
+   Compiling hkdf v0.12.4
+   Compiling sha1 v0.11.0
+   Compiling hmac v0.13.0
+   Compiling sha2 v0.11.0
+   Compiling chacha20poly1305 v0.10.1
+   Compiling serde v1.0.228
+   Compiling serde_json v1.0.149
+   Compiling semver v1.0.28
+   Compiling serde_spanned v1.1.1
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling aes-gcm v0.10.3
+   Compiling toml v1.1.2+spec-1.1.0
+   Compiling ed25519-dalek v2.2.0
+   Compiling franken-kernel v0.3.4
+   Compiling rmp-serde v1.3.1
+   Compiling bincode-next v2.1.0
+   Compiling fsci-runtime v0.1.0 (/data/projects/frankenscipy/crates/fsci-runtime)
+   Compiling franken-evidence v0.3.4
+   Compiling crossterm v0.29.0
+   Compiling tempfile v3.27.0
+   Compiling polling v3.11.0
+   Compiling sysinfo v0.33.1
+   Compiling franken-decision v0.3.4
+   Compiling rusty-fork v0.3.1
+   Compiling ahash v0.8.12
+   Compiling ppv-lite86 v0.2.21
+   Compiling fsci-fft v0.1.0 (/data/projects/frankenscipy/crates/fsci-fft)
+   Compiling fsci-opt v0.1.0 (/data/projects/frankenscipy/crates/fsci-opt)
+   Compiling fsci-io v0.1.0 (/data/projects/frankenscipy/crates/fsci-io)
+   Compiling ftui-core v0.3.1
+   Compiling rand_chacha v0.3.1
+   Compiling rand_chacha v0.9.0
+   Compiling proptest v1.11.0
+   Compiling rand v0.8.6
+   Compiling nkeys v0.4.5
+   Compiling ftui-render v0.3.1
+   Compiling ftui-layout v0.3.1
+   Compiling ftui-a11y v0.3.1
+   Compiling asupersync v0.3.4
+   Compiling nalgebra v0.34.2
+   Compiling ftui-style v0.3.1
+   Compiling ftui-backend v0.3.1
+   Compiling ftui-text v0.3.1
+   Compiling ftui-runtime v0.3.1
+   Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
+   Compiling fsci-integrate v0.1.0 (/data/projects/frankenscipy/crates/fsci-integrate)
+   Compiling fsci-arrayapi v0.1.0 (/data/projects/frankenscipy/crates/fsci-arrayapi)
+   Compiling ftui-widgets v0.3.1
+   Compiling fsci-sparse v0.1.0 (/data/projects/frankenscipy/crates/fsci-sparse)
+   Compiling fsci-special v0.1.0 (/data/projects/frankenscipy/crates/fsci-special)
+   Compiling fsci-cluster v0.1.0 (/data/projects/frankenscipy/crates/fsci-cluster)
+   Compiling fsci-signal v0.1.0 (/data/projects/frankenscipy/crates/fsci-signal)
+warning: variable does not need to be mutable
+    --> crates/fsci-special/src/convenience.rs:5667:9
+     |
+5667 |     let mut x = x.abs(); // cos is even
+     |         ----^
+     |         |
+     |         help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `su1` is never read
+    --> crates/fsci-special/src/orthopoly.rs:3291:19
+     |
+3291 |     let mut su1 = 0.0_f64;
+     |                   ^^^^^^^ this value is reassigned later and never used
+...
+3296 |     su1 = df[1] * r1;
+     |     ---------------- `su1` is overwritten here before the previous value is read
+     |
+     = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling fsci-spatial v0.1.0 (/data/projects/frankenscipy/crates/fsci-spatial)
+   Compiling ftui v0.3.1
+   Compiling fsci-interpolate v0.1.0 (/data/projects/frankenscipy/crates/fsci-interpolate)
+warning: value assigned to `added` is never read
+   --> crates/fsci-interpolate/src/surfit.rs:771:25
+    |
+771 |         let mut added = false;
+    |                         ^^^^^ this value is reassigned later and never used
+...
+836 |                 added = true;
+    |                 ------------ `added` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `iband1` is never read
+   --> crates/fsci-interpolate/src/sphere.rs:182:22
+    |
+182 |     let mut iband1 = 0usize;
+    |                      ^^^^^^ this value is reassigned later and never used
+...
+285 |         iband1 = iband - 1;
+    |         ------------------ `iband1` is overwritten here before the previous value is read
+
+warning: value assigned to `iband1` is never read
+   --> crates/fsci-interpolate/src/sphere.rs:285:9
+    |
+285 |         iband1 = iband - 1;
+    |         ^^^^^^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+588 |     iband1 = iband_eff - 1;
+    |     ---------------------- `iband1` is overwritten here before the previous value is read
+
+warning: value assigned to `nrint` is never read
+   --> crates/fsci-interpolate/src/sphere.rs:189:21
+    |
+189 |     let mut nrint = 0usize;
+    |                     ^^^^^^ this value is reassigned later and never used
+...
+222 |         nrint = ntt + npp;
+    |         ----------------- `nrint` is overwritten here before the previous value is read
+
+warning: value assigned to `j0` is never read
+   --> crates/fsci-interpolate/src/sphere_grid.rs:283:17
+    |
+283 |                 j0 += 1;
+    |                 ^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: fields `nx`, `ny`, and `fp` are never read
+   --> crates/fsci-interpolate/src/surfit.rs:412:5
+    |
+411 | struct FpsurfResult {
+    |        ------------ fields in this struct
+412 |     nx: usize,
+    |     ^^
+413 |     ny: usize,
+    |     ^^
+...
+417 |     fp: f64,
+    |     ^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `nt`, `np`, and `fp` are never read
+  --> crates/fsci-interpolate/src/sphere.rs:19:5
+   |
+18 | struct SphereResult {
+   |        ------------ fields in this struct
+19 |     nt: usize,
+   |     ^^
+20 |     np: usize,
+   |     ^^
+...
+24 |     fp: f64,
+   |     ^^
+
+   Compiling fsci-stats v0.1.0 (/data/projects/frankenscipy/crates/fsci-stats)
+   Compiling fsci-ndimage v0.1.0 (/data/projects/frankenscipy/crates/fsci-ndimage)
+warning: `fsci-interpolate` (lib) generated 7 warnings
+warning: `fsci-special` (lib) generated 2 warnings (run `cargo fix --lib -p fsci-special` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 40s
+     Running tests/diff_cluster_linkage_from_distances.rs (/data/projects/.rch-targets/frankenscipy-cod-a/debug/deps/diff_cluster_linkage_from_distances-77dbdfc472383520)
+
+running 1 test
+test diff_cluster_linkage_from_distances ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s
