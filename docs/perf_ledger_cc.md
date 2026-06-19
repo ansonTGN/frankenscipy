@@ -34,6 +34,9 @@ regressions are reverted. Entries also routed to MistyBirch for the canonical me
 | kmeans Lloyd early-stop | kmeans k4 n2000 | 2104.7 µs* | 357.4 µs | **5.9× faster** | *vs scipy kmeans2 fixed-iter | ✅ KEEP (early-stop) |
 | correlate tap-table (e3r7e) | correlate 5x5 256² | 933.7 µs | 1099 µs | **0.85× (1.18× slower)** | byte-identical | ✅ KEEP (parity) |
 | gaussian_filter (NOT mine) | gaussian σ=2 256² | 1143.0 µs | 3238 µs | **0.35× (2.83× slower)** | separable but slow 1D kernel | ⚠️ gap → owner |
+| spmv_csr (serial, baseline) | SpMV n=100 nnz=500 | 3.45 µs | 0.81 µs | **4.26× faster** | scipy Python dispatch overhead | ✅ small-n win |
+| spmv_csr (serial, baseline) | SpMV n=1000 nnz=10k | 8.14 µs | 17.97 µs | **0.45× (2.2× slower)** | scalar kernel vs scipy C | ⚠️ scale gap |
+| spmv_csr (serial, baseline) | SpMV n=10000 nnz=100k | 131.6 µs | 197.5 µs | **0.67× (1.5× slower)** | gap narrows w/ n | ⚠️ scale gap |
 
 ## Detail
 
@@ -132,6 +135,20 @@ Oracle `docs/perf_oracle_ndimage.py` (scipy.ndimage, 256² image).
   gap is a slow 1D convolution kernel vs scipy's tuned C `correlate1d` — a SIMD/inner-
   loop opportunity (same class as kmeans2/pdist), not a parallelization. Noted for the
   ndimage owner; not reverted (not mine, not a regression).
+
+### Sparse SpMV — `spmv_csr` (serial baseline) — small-n WIN, scale LOSS
+Oracle: scipy.sparse.random CSR `.dot(x)` (same n/density; SpMV time≈O(nnz)).
+`spmv_csr` is a plain serial row-sweep (NOT the parallel internal `csr_matvec`).
+- **n=100 nnz=500: fsci 0.81 µs vs scipy 3.45 µs = 4.26× FASTER.** At tiny sizes
+  scipy's Python/numpy dispatch overhead (~µs) dwarfs the actual SpMV; fsci is a
+  direct Rust call with none. Real advantage for many-small-SpMV workloads.
+- **n=1000/10000: fsci 2.2× / 1.5× SLOWER** (17.97 vs 8.14 µs; 197.5 vs 131.6 µs).
+  scipy's C SpMV kernel out-throughputs fsci's scalar row-sweep; the gap narrows with
+  n (overhead amortizes). Same SIMD-class inner-kernel gap as pdist/kmeans2/gaussian.
+- **Nuance for release:** fsci's zero-overhead calls WIN on small/repeated ops where
+  scipy pays Python tax; scipy's vectorized C WINS on large single kernels. Not a
+  regression, not a parallelization issue. SpMV is a candidate for a SIMD/unrolled
+  row-sweep if large sparse problems matter.
 
 ## Release-readiness summary (CrimsonForge beads, as of this round)
 
