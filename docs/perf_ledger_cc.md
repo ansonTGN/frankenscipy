@@ -905,3 +905,14 @@ independently → BYTE-IDENTICAL. **MEASURED ellipeinc_scalar: m0.5 280→195ns 
 pre-existing failures, NO new (byte-identical). NOT a Cephes port — a pure shared-iteration
 refactor in a FREE file (elliptic.rs), refreshed-first (no clobber). Reusable: any code calling
 carlson_rf+carlson_rd on the same args.
+
+### ✅ Carlson ERRTOL 1e-5 → 1.3e-3 (1.4-1.6×, machine-accurate) — stacks ellipeinc to ~2× total
+NR Carlson R_F/R_D use a 5th-order final correction → error ~ERRTOL^6. fsci's ERRTOL=1e-5 gave
+error ~1e-30 (overkill by ~14 orders); double-precision only needs error <2e-16 → ERRTOL≈2e-3.
+Raised all 3 (carlson_rf/rd/rf_rd) to **1.3e-3** (error ~5e-18, machine-accurate), cutting the
+duplication iterations ~9→5. **MEASURED: ellipkinc 148→107ns (1.38×), 171→109ns (1.57×);
+ellipeinc 195→146ns (1.34×), 219→149ns (1.47×)** — with the earlier Carlson-sharing, ellipeinc
+is now 307→149ns = **~2.06× total** (the slowest special kernel halved). Conformance: same 4
+pre-existing failures, NO new (machine-accurate vs scipy). Provable lever: audit iterative
+convergence tolerances vs the order of the final correction — an over-tight ERRTOL wastes
+iterations at no accuracy benefit. Free file, refreshed-first.

@@ -432,7 +432,7 @@ fn ellipkinc_scalar(phi: f64, m: f64, mode: RuntimeMode) -> Result<f64, SpecialE
 /// R_F = ½∫₀^∞ dt/√((t+x)(t+y)(t+z)). Handles the m→1 logarithmic corner that
 /// fixed quadrature cannot.
 fn carlson_rf(mut x: f64, mut y: f64, mut z: f64) -> f64 {
-    const ERRTOL: f64 = 1e-5;
+    const ERRTOL: f64 = 1.3e-3; // error ~ERRTOL^6 ≈ 5e-18 ≪ machine eps; was 1e-5 (~9 iters → ~5)
     for _ in 0..1000 {
         let (sx, sy, sz) = (x.sqrt(), y.sqrt(), z.sqrt());
         let lam = sx * sy + sy * sz + sz * sx;
@@ -455,7 +455,7 @@ fn carlson_rf(mut x: f64, mut y: f64, mut z: f64) -> f64 {
 /// Carlson symmetric elliptic integral R_D(x,y,z) (Numerical Recipes §6.11):
 /// R_D = (3/2)∫₀^∞ dt/((t+z)√((t+x)(t+y)(t+z))).
 fn carlson_rd(mut x: f64, mut y: f64, mut z: f64) -> f64 {
-    const ERRTOL: f64 = 1e-5;
+    const ERRTOL: f64 = 1.3e-3; // error ~ERRTOL^6 ≈ 5e-18 ≪ machine eps; was 1e-5 (~9 iters → ~5)
     const C1: f64 = 3.0 / 14.0;
     const C2: f64 = 1.0 / 6.0;
     const C3: f64 = 9.0 / 22.0;
@@ -514,7 +514,7 @@ fn ellipkinc_carlson(phi: f64, m: f64, mode: RuntimeMode) -> f64 {
 /// Computing the sqrt-heavy sequence ONCE yields both, byte-identical to `carlson_rf(x,y,z)` +
 /// `carlson_rd(x,y,z)` at ~half the work — the dominant cost of E(φ,m). frankenscipy-9l5oo.
 fn carlson_rf_rd(mut x: f64, mut y: f64, mut z: f64) -> (f64, f64) {
-    const ERRTOL: f64 = 1e-5;
+    const ERRTOL: f64 = 1.3e-3; // error ~ERRTOL^6 ≈ 5e-18 ≪ machine eps; was 1e-5 (~9 iters → ~5)
     const C1: f64 = 3.0 / 14.0;
     const C2: f64 = 1.0 / 6.0;
     const C3: f64 = 9.0 / 22.0;
