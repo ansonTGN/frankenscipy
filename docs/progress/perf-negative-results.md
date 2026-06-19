@@ -52,6 +52,62 @@ condition so dead ends are not repeated casually.
   cached cross-order recurrences, or a true heap-streamed global zero
   enumerator that preserves the exact SciPy output ordering.
 
+## 2026-06-19 - frankenscipy-8l8r1.123 - jnjnp_zeros cutoff-driven generator
+
+- Agent: cod-b / MistyBirch
+- Lever: add a cutoff-driven triangular generator for `jnjnp_zeros(nt >= 16)`.
+  Instead of growing a rectangular order-by-serial root grid, it estimates a
+  global retained-zero cutoff, emits only `J_n` and `J_n'` roots below that
+  cutoff, and accepts only when both omitted-root frontiers are past the actual
+  retained cutoff. The old rectangular frontier stays as fallback.
+- Graveyard/artifact route tested: output-sensitive generation, monotone
+  frontier certificate, candidate-count collapse before root polishing, and
+  rollback of a public-helper refactor after a non-shipping comparator row
+  looked suspicious.
+- Decision: KEEP as a measured internal win, route residual SciPy loss deeper.
+  No revert.
+- Artifact:
+  `tests/artifacts/perf/frankenscipy-cod-b-jnjnp-cutoff/EVIDENCE.md`
+- Baseline/candidate command:
+  `RCH_REQUIRE_REMOTE=1 RCH_WORKER=ovh-b CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b rch exec -- cargo bench -p fsci-special --bench special_bench -- acoco_gauntlet_jnjnp_zeros --noplot`
+- SciPy oracle command:
+  local Python timing of `scipy.special.jnjnp_zeros` because rch worker `ovh-b`
+  could not import `scipy.special`.
+- Same-worker internal A/B on rch worker `ovh-b`:
+
+  | Workload | Baseline current mean | Candidate current mean | Candidate/baseline | Verdict |
+  | --- | ---: | ---: | ---: | --- |
+  | `jnjnp_zeros(nt=64)` | 3.6486 ms | 1.5856 ms | 0.435x time, 2.30x faster | keep |
+  | `jnjnp_zeros(nt=128)` | 6.6226 ms | 2.9035 ms | 0.438x time, 2.28x faster | keep |
+
+- Local SciPy oracle (`scipy.special.jnjnp_zeros`, Python 3.13.7, NumPy 2.4.3,
+  SciPy 1.17.1):
+
+  | Workload | Candidate Rust mean | SciPy median | Candidate/SciPy | Verdict |
+  | --- | ---: | ---: | ---: | --- |
+  | `jnjnp_zeros(nt=64)` | 1.5856 ms | 427.47 us | 3.71x slower | residual loss |
+  | `jnjnp_zeros(nt=128)` | 2.9035 ms | 789.23 us | 3.68x slower | residual loss |
+
+- SciPy win/loss/neutral: `0/2/0`.
+- Same-worker internal keep/loss/neutral: `2/0/0`.
+- Correctness/conformance guards:
+  - PASS: `RCH_REQUIRE_REMOTE=1 RCH_WORKER=ovh-b CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b rch exec -- cargo test -p fsci-special jnjnp -- --nocapture`
+    (`3 passed; 0 failed; 1109 filtered out`).
+  - PASS: `FSCI_REQUIRE_SCIPY_ORACLE=1 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b cargo test -p fsci-conformance --test diff_special_bessel_zeros -- --nocapture`
+    (`1 passed; 0 failed`).
+  - PASS: `RCH_REQUIRE_REMOTE=1 RCH_WORKER=ovh-b CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b rch exec -- cargo check -p fsci-special --all-targets`.
+  - BLOCKED: scoped clippy `-D warnings` stops on existing `fsci-integrate`
+    and `fsci-linalg` dependency lints before reaching this patch.
+  - BLOCKED: broad rustfmt and touched-file rustfmt remain blocked by
+    pre-existing formatting drift outside this patch.
+- Negative evidence: output-sensitive cutoff generation is worthwhile but not
+  sufficient; Rust still loses to SciPy by about 3.7x. Do not repeat envelope
+  constant tuning without a fresh profile proving candidate generation still
+  dominates.
+- Retry condition: route deeper to lower-constant Bessel/derivative evaluation,
+  cross-order recurrence caches, or a Specfun-style global zero enumerator or
+  code-generated root kernel that preserves the exact SciPy ordering contract.
+
 ## 2026-06-19 - frankenscipy-8l8r1.117 - sparse random rounded-empty path
 
 - Agent: cod-b / MistyBirch

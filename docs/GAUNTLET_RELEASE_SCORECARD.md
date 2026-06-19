@@ -18,6 +18,8 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 
 | Bead | Cluster | Realistic workload | Rust result | SciPy result | Ratio | Decision |
 | --- | --- | --- | ---: | ---: | ---: | --- |
+| `frankenscipy-8l8r1.123` | `jnjnp_zeros` cutoff-driven generator | `scipy.special.jnjnp_zeros(nt=64)` equivalent | 1.5856 ms | 427.47 us | 3.71x slower | keep 2.30x internal win; route deeper |
+| `frankenscipy-8l8r1.123` | `jnjnp_zeros` cutoff-driven generator | `scipy.special.jnjnp_zeros(nt=128)` equivalent | 2.9035 ms | 789.23 us | 3.68x slower | keep 2.28x internal win; route deeper |
 | `frankenscipy-96n2y` | `jnjnp_zeros` tighter frontier seed | `scipy.special.jnjnp_zeros(nt=64)` equivalent | 2.2230 ms | 424.10 us | 5.24x slower | keep 2.12x internal win; route deeper |
 | `frankenscipy-96n2y` | `jnjnp_zeros` tighter frontier seed | `scipy.special.jnjnp_zeros(nt=128)` equivalent | 6.1605 ms | 799.97 us | 7.70x slower | keep 1.38x internal win; route deeper |
 | `frankenscipy-x9ckc` | `jnjnp_zeros` guarded root-cost refinement | `scipy.special.jnjnp_zeros(nt=64)` equivalent | 4.6666 ms | 439.49 us | 10.62x slower | keep 1.17x internal win; route deeper |
@@ -54,6 +56,7 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `frankenscipy-01lxz` | `jnjnp_zeros` output-sensitive frontier | Fixed `nt + 2` by `nt + 2` candidate rectangle | 17.82x faster at `nt=64`; 50.77x faster at `nt=128` | keep current despite SciPy loss |
 | `frankenscipy-acoco` | `jnjnp_zeros` bracket reuse | Pre-optimization duplicate `jnp_zeros` bracketing route | 1.26x faster at `nt=64`; 1.33x faster at `nt=128` | keep current despite SciPy loss |
 | `frankenscipy-96n2y` | `jnjnp_zeros` tighter frontier seed and dimension-specific expansion | Guarded root-cost route from `frankenscipy-x9ckc` | 2.12x faster at `nt=64`; 1.38x faster at `nt=128` on same-worker `hz1` | keep current despite SciPy loss |
+| `frankenscipy-8l8r1.123` | `jnjnp_zeros` cutoff-driven generator | Tighter rectangular frontier seed from `frankenscipy-96n2y` | 2.30x faster at `nt=64`; 2.28x faster at `nt=128` on same-worker `ovh-b` | keep current despite SciPy loss |
 | `frankenscipy-8l8r1.116` | Full-complex CSD route | rfft CSD route | 1.123x faster on 4096; rfft wins 2.107x on 65536 but loses to SciPy rfft oracle | revert rfft route |
 | `frankenscipy-va60h` | Flat row-major linkage arena | Legacy nested-row NN-array helper | 1.128x faster on Average; 1.019x faster on Ward | keep current despite SciPy loss |
 | `frankenscipy-va60h` | Flat row-major linkage arena | Reverted production nested route probe | 1.290x faster on Average; 1.251x faster on Ward | undo revert; keep flat route |
@@ -76,8 +79,8 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | FFT CSD performance | measured reject | rfft route regressed 4096 internally and was 1.42-1.75x slower than the equivalent SciPy rfft formula; full-complex route restored |
 | FFT CSD correctness | guarded | full-complex equivalence guard retained; final fsci-fft gates recorded in `docs/progress/perf-release-readiness-scorecard.md` |
 | `fsci-opt` lint/build gate | guarded | `cargo check -p fsci-opt --all-targets`, `cargo fmt -p fsci-opt --check`, and `cargo clippy -p fsci-opt --all-targets -- -D warnings` passed |
-| `fsci-special` `jnjnp_zeros` performance | measured loss plus internal keep | tighter frontier seed is 2.12x faster at `nt=64` and 1.38x faster at `nt=128` than the guarded root-cost route on same-worker `hz1`, but still 5.24-7.70x slower than SciPy |
-| `fsci-special` `jnjnp_zeros` correctness | guarded | `jnjnp_adaptive_envelope_matches_oversized_reference`, `jnjnp_frontier_matches_scipy_bench_cutoffs`, and `jnyn_and_jnjnp_zeros_match_scipy` passed via rch |
+| `fsci-special` `jnjnp_zeros` performance | measured loss plus internal keep | cutoff-driven generator is 2.30x faster at `nt=64` and 2.28x faster at `nt=128` than the tighter rectangular frontier on same-worker `ovh-b`, but still 3.68-3.71x slower than SciPy |
+| `fsci-special` `jnjnp_zeros` correctness | guarded | `jnjnp_adaptive_envelope_matches_oversized_reference`, `jnjnp_frontier_matches_scipy_bench_cutoffs`, and `jnyn_and_jnjnp_zeros_match_scipy` passed via rch; live SciPy `diff_special_bessel_zeros` conformance passed locally |
 | `fsci-special` lint/build gate | partial | `cargo check -p fsci-special --all-targets` passed; clippy `-D warnings` stopped on existing `fsci-integrate`/`fsci-linalg` dependency lints; broad rustfmt/touched-file rustfmt remain blocked by pre-existing formatting drift outside this patch |
 | `fsci-fft` lint/build gate | guarded | `cargo check -p fsci-fft --all-targets`, focused CSD/rfft tests, and `cargo clippy -p fsci-fft --all-targets -- -D warnings` passed; broad rustfmt remains blocked by pre-existing file-wide drift |
 | `fsci-cluster` linkage performance | measured loss plus internal keep | flat arena is 1.128x faster than the legacy nested helper on Average and 1.019x on Ward, but 1.385-1.497x slower than SciPy |
@@ -88,7 +91,7 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `fsci-spatial` `pdist` correctness | guarded | focused `pdist` tests passed via rch (10 passed), full `fsci-spatial` lib suite passed via rch (206 passed, 2 ignored) |
 | `fsci-spatial` lint/build gate | partial | `cargo check -p fsci-spatial --all-targets` passed; conformance is blocked by unrelated `e2e_sparse` compile error, clippy by existing `fsci-linalg` lints, and fmt by pre-existing `fsci-spatial` rustfmt drift |
 | rch SciPy oracle parity | blocked on worker image | `vmi1152480` and `vmi1227854` lacked `scipy`; local same-host oracle supplied the head-to-head ratios |
-| Release readiness | partial | two linalg perf clusters, one `fsci-signal` coherence win, one `fsci-opt` L-BFGS-B reject, one `fsci-special` measured SciPy-loss/internal-keep frontier win, one `fsci-fft` CSD reject, one `fsci-cluster` linkage measured SciPy loss, one `fsci-ndimage` gaussian reject, and one `fsci-spatial` `pdist` internal keep verified; other code-first perf ledger entries still need gauntlet conversion |
+| Release readiness | partial | two linalg perf clusters, one `fsci-signal` coherence win, one `fsci-opt` L-BFGS-B reject, one `fsci-special` measured SciPy-loss/internal-keep cutoff win, one `fsci-fft` CSD reject, one `fsci-cluster` linkage measured SciPy loss, one `fsci-ndimage` gaussian reject, and one `fsci-spatial` `pdist` internal keep verified; other code-first perf ledger entries still need gauntlet conversion |
 
 ## Pending Gauntlet Backlog
 

@@ -4824,6 +4824,45 @@ pub fn jn_zeros(n: u32, k: usize) -> Vec<f64> {
     out
 }
 
+fn refine_jn_zero_at(n: u32, ki: usize, prev_zero: f64) -> f64 {
+    let n_f = n as f64;
+    let four_n_sq = 4.0 * n_f * n_f;
+    let mu = (4.0 * ki as f64 + 2.0 * n_f - 1.0) * std::f64::consts::PI / 4.0;
+    let inv_mu = 1.0 / mu;
+    let inv_mu2 = inv_mu * inv_mu;
+    let mcmahon = mu
+        - (four_n_sq - 1.0) / (8.0 * mu)
+        - (four_n_sq - 1.0) * (28.0 * four_n_sq - 31.0) / 384.0 * inv_mu * inv_mu2;
+    let initial = if ki == 1 && n >= 5 {
+        olver_jn_first_zero(n_f)
+    } else if ki >= 2 {
+        mcmahon.max(prev_zero + 0.5 * std::f64::consts::PI)
+    } else {
+        mcmahon
+    };
+    let floor = if ki >= 2 { prev_zero + 1.0e-6 } else { 1.0e-6 };
+    bracket_and_refine_jn_zero(n, initial, floor, 0.5, (n_f * 0.25).max(20.0))
+}
+
+fn jn_zeros_until(n: u32, cutoff: f64) -> (Vec<f64>, f64) {
+    if !cutoff.is_finite() {
+        return (Vec::new(), f64::INFINITY);
+    }
+
+    let mut out = Vec::new();
+    let mut prev_zero = 0.0_f64;
+    let max_serial = cutoff.ceil().max(1.0) as usize + 64;
+    for ki in 1..=max_serial {
+        let zero = refine_jn_zero_at(n, ki, prev_zero);
+        if zero > cutoff {
+            return (out, zero);
+        }
+        out.push(zero);
+        prev_zero = zero;
+    }
+    (out, f64::INFINITY)
+}
+
 /// Jahnke–Emden Lambda function `Λ_vi(x) = Γ(vi+1) J_vi(x) / (x/2)^vi` and its
 /// derivative for the orders `vi = v − ⌊v⌋, 1 + v − ⌊v⌋, …, v`, returned as
 /// `(values, derivatives)`.
@@ -4906,6 +4945,29 @@ pub fn jnjnp_zeros(nt: usize) -> (Vec<f64>, Vec<i32>, Vec<i32>, Vec<i32>) {
         return (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     }
 
+    if nt >= 16 {
+        let max_envelope = nt + 2;
+        let mut cutoff = (2.0 * (nt as f64).sqrt()).max(6.0);
+        for _ in 0..4 {
+            let n_limit = (cutoff.ceil() as usize + 2).min(max_envelope);
+            let (mut cands, serial_frontier, order_frontier) =
+                jnjnp_zero_candidates_below_cutoff(cutoff, n_limit, max_envelope);
+            if cands.len() >= nt {
+                sort_jnjnp_candidates(&mut cands);
+                let actual_cutoff = cands[nt - 1].0;
+                if serial_frontier > actual_cutoff && order_frontier > actual_cutoff {
+                    return collect_jnjnp_candidates(&cands, nt);
+                }
+                cutoff = cutoff.max(actual_cutoff);
+            }
+            cutoff = cutoff * 1.35 + 2.0;
+        }
+    }
+
+    jnjnp_zeros_rectangular_frontier(nt)
+}
+
+fn jnjnp_zeros_rectangular_frontier(nt: usize) -> (Vec<f64>, Vec<i32>, Vec<i32>, Vec<i32>) {
     let max_envelope = nt + 2;
     let root = (nt as f64).sqrt().ceil() as usize;
     let mut per = ((root + 1) / 2 + 3).clamp(1, max_envelope);
@@ -4948,6 +5010,85 @@ pub fn jnjnp_zeros(nt: usize) -> (Vec<f64>, Vec<i32>, Vec<i32>, Vec<i32>) {
         per = next_per;
         n_max = next_n_max;
     }
+}
+
+fn jnp_zeros_from_function_zeros_until(
+    n: u32,
+    cutoff: f64,
+    function_zeros: &[f64],
+    function_frontier: f64,
+) -> (Vec<f64>, f64) {
+    debug_assert!(n > 0);
+
+    let mut out = Vec::new();
+    for idx in 0..=function_zeros.len() {
+        let hi_root = if idx < function_zeros.len() {
+            function_zeros[idx]
+        } else {
+            function_frontier
+        };
+        if !hi_root.is_finite() {
+            return (out, f64::INFINITY);
+        }
+        let lo = if idx == 0 {
+            1.0e-6
+        } else {
+            function_zeros[idx - 1] + 1.0e-6
+        };
+        let hi = hi_root - 1.0e-6;
+        if hi <= lo {
+            return (out, hi_root);
+        }
+        let zero = refine_bracketed_jnp_zero(n, lo, hi);
+        if zero > cutoff {
+            return (out, zero);
+        }
+        out.push(zero);
+        if idx == function_zeros.len() {
+            return (out, hi_root);
+        }
+    }
+    (out, f64::INFINITY)
+}
+
+fn jnjnp_zero_candidates_below_cutoff(
+    cutoff: f64,
+    n_limit: usize,
+    max_envelope: usize,
+) -> (Vec<(f64, i32, i32, i32)>, f64, f64) {
+    let mut cands: Vec<(f64, i32, i32, i32)> = Vec::new();
+    let mut serial_frontier = f64::INFINITY;
+    cands.push((0.0, 0, 0, 1)); // J_0'(0) = 0
+
+    let order_limit = n_limit.min(max_envelope);
+    for n in 0..=order_limit as u32 {
+        let (jn, jn_frontier) = jn_zeros_until(n, cutoff);
+        serial_frontier = serial_frontier.min(jn_frontier);
+        for (i, &x) in jn.iter().enumerate() {
+            cands.push((x, n as i32, (i + 1) as i32, 0));
+        }
+
+        let (jp, jp_frontier) = if n == 0 {
+            jn_zeros_until(1, cutoff)
+        } else {
+            jnp_zeros_from_function_zeros_until(n, cutoff, &jn, jn_frontier)
+        };
+        serial_frontier = serial_frontier.min(jp_frontier);
+        for (i, &x) in jp.iter().enumerate() {
+            cands.push((x, n as i32, (i + 1) as i32, 1));
+        }
+    }
+
+    let order_frontier = if order_limit >= max_envelope {
+        f64::INFINITY
+    } else {
+        let omitted_order = (order_limit + 1) as u32;
+        let jn_first = refine_jn_zero_at(omitted_order, 1, 0.0);
+        let jnp_first = refine_bracketed_jnp_zero(omitted_order, 1.0e-6, jn_first - 1.0e-6);
+        jn_first.min(jnp_first)
+    };
+
+    (cands, serial_frontier, order_frontier)
 }
 
 fn jnjnp_zero_candidates_with_frontier(
