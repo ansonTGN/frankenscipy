@@ -328,6 +328,18 @@ tolerance-OK since gaussian isn't chaotic), but that's shared kernel code. Also 
 `uniform_filter` already O(1) running-sum, `correlate1d`/`convolve1d` already specialized
 1D-axis — the ndimage filters are otherwise well-optimized; the residual is SIMD-kernel.
 
+### ✅ griddata / LinearND 46.5× faster than scipy + barycentric precompute (9l5oo lever)
+Oracle `/tmp/oracle_griddata.py` (scipy.interpolate.griddata linear, 576 pts / 1024
+queries, same data as bench_scattered). **fsci griddata 118.3 µs vs scipy 5507 µs =
+46.5× FASTER** (eval-only `linear_nd_eval_many` 59.8 µs). The big ratio is fsci's
+low-overhead Rust vs scipy's Python griddata + Qhull-setup-per-call. ON TOP of that I
+applied the precompute-per-element-predicate lever to `Delaunay2D::find_simplex`:
+precompute each simplex's query-invariant barycentric basis (point a + Gram matrix
+(d00,d01,d11) + denom) once in `new()`, so the grid-restricted point-location scan does
+only the v2-dependent work per query instead of rebuilding the Gram matrix per
+(query, candidate). BYTE-IDENTICAL (`SimplexBary::weights` = `barycentric` same float
+ops/order), conformance interpolate **227/0**. Monotone eval speedup. KEEP.
+
 ### ✅✅ Delaunay LOSS → WIN (frankenscipy-9l5oo) — biggest gap FLIPPED
 The gauntlet's only complexity-class loss is now a WIN. Root cause was the bad-triangle
 scan calling `point_in_circumcircle` (full in-circle determinant + `cross` orientation +

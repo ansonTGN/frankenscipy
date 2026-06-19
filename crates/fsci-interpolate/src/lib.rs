@@ -3184,7 +3184,66 @@ pub struct Delaunay2D {
     pub simplices: Vec<(usize, usize, usize)>,
     pub neighbors: Vec<[Option<usize>; 3]>,
     simplex_bounds: Vec<SimplexBounds>,
+    /// Per-simplex query-invariant barycentric basis, precomputed once so the
+    /// point-location scan doesn't rebuild each simplex's Gram matrix per query.
+    simplex_bary: Vec<SimplexBary>,
     grid: Option<SimplexGrid>,
+}
+
+/// Precomputed query-invariant barycentric basis for one simplex — point `a` and the
+/// edge-vector Gram matrix `(d00,d01,d11)` with its determinant `denom`. Hoists the
+/// per-(query,simplex) recomputation out of `find_simplex`; `weights()` is byte-
+/// identical to `barycentric` (same float ops in the same order). frankenscipy-9l5oo.
+#[derive(Clone, Copy, Debug)]
+struct SimplexBary {
+    ax: f64,
+    ay: f64,
+    v0x: f64,
+    v0y: f64,
+    v1x: f64,
+    v1y: f64,
+    d00: f64,
+    d01: f64,
+    d11: f64,
+    denom: f64,
+    degenerate: bool,
+}
+
+impl SimplexBary {
+    fn for_simplex(a: (f64, f64), b: (f64, f64), c: (f64, f64)) -> Self {
+        let (v0x, v0y, v1x, v1y) = (b.0 - a.0, b.1 - a.1, c.0 - a.0, c.1 - a.1);
+        let d00 = v0x * v0x + v0y * v0y;
+        let d01 = v0x * v1x + v0y * v1y;
+        let d11 = v1x * v1x + v1y * v1y;
+        let denom = d00 * d11 - d01 * d01;
+        SimplexBary {
+            ax: a.0,
+            ay: a.1,
+            v0x,
+            v0y,
+            v1x,
+            v1y,
+            d00,
+            d01,
+            d11,
+            denom,
+            degenerate: denom.abs() < 1e-30,
+        }
+    }
+
+    #[inline]
+    fn weights(&self, p: (f64, f64)) -> (f64, f64, f64) {
+        if self.degenerate {
+            return (f64::NAN, f64::NAN, f64::NAN);
+        }
+        let v2x = p.0 - self.ax;
+        let v2y = p.1 - self.ay;
+        let d20 = v2x * self.v0x + v2y * self.v0y;
+        let d21 = v2x * self.v1x + v2y * self.v1y;
+        let l2 = (self.d11 * d20 - self.d01 * d21) / self.denom;
+        let l3 = (self.d00 * d21 - self.d01 * d20) / self.denom;
+        (1.0 - l2 - l3, l2, l3)
+    }
 }
 
 /// Uniform-grid spatial index over the (margin-padded) simplex bounding boxes.
@@ -3399,11 +3458,16 @@ impl Delaunay2D {
             .collect();
         let neighbors = compute_simplex_neighbors(&simplices);
         let grid = SimplexGrid::build(&simplex_bounds);
+        let simplex_bary: Vec<SimplexBary> = simplices
+            .iter()
+            .map(|&(a, b, c)| SimplexBary::for_simplex(points[a], points[b], points[c]))
+            .collect();
         Ok(Self {
             points: points.to_vec(),
             simplices,
             neighbors,
             simplex_bounds,
+            simplex_bary,
             grid,
         })
     }
@@ -3418,9 +3482,7 @@ impl Delaunay2D {
                     if !self.simplex_bounds[idx].may_contain(query) {
                         continue;
                     }
-                    let (a, b, c) = self.simplices[idx];
-                    let (l1, l2, l3) =
-                        barycentric(self.points[a], self.points[b], self.points[c], query);
+                    let (l1, l2, l3) = self.simplex_bary[idx].weights(query);
                     if l1 >= -1e-10 && l2 >= -1e-10 && l3 >= -1e-10 {
                         return Some((idx, l1, l2, l3));
                     }
@@ -3432,11 +3494,11 @@ impl Delaunay2D {
     }
 
     fn find_simplex_linear(&self, query: (f64, f64)) -> Option<(usize, f64, f64, f64)> {
-        for (idx, &(a, b, c)) in self.simplices.iter().enumerate() {
+        for idx in 0..self.simplices.len() {
             if !self.simplex_bounds[idx].may_contain(query) {
                 continue;
             }
-            let (l1, l2, l3) = barycentric(self.points[a], self.points[b], self.points[c], query);
+            let (l1, l2, l3) = self.simplex_bary[idx].weights(query);
             if l1 >= -1e-10 && l2 >= -1e-10 && l3 >= -1e-10 {
                 return Some((idx, l1, l2, l3));
             }
