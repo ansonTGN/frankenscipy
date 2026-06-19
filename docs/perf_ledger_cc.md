@@ -435,20 +435,21 @@ safe KEEPs by construction.
 
 ## Notes / negative evidence
 
-### ⚠️ OPEN LOSS — RectBivariateSpline.eval_grid 5.1× slower (separable-basis rewrite, future)
+### ✅ RectBivariateSpline.eval_grid 3.75× self-speedup — 5.1× loss → near-parity (separable basis)
 Oracle `docs/perf_oracle_rect.py` (scipy.interpolate.RectBivariateSpline `(q,q,grid=True)`,
-32×32 → 64×64, kx=ky=3): **fsci 246.9 µs vs scipy 48.3 µs = 5.1× SLOWER.** ROOT CAUSE:
-`eval_grid` runs the full scalar de Boor recurrence (`BSpline::eval_parts`: binary-search
-span + per-step alphas + blend) per evaluation — the x-recurrence is rebuilt for all `ny`
-rows per xv and the y-recurrence per (xv,yv); scipy's FITPACK `bispev` precomputes the
-SEPARABLE per-axis basis matrices (Nx: |xi|×(kx+1), Ny: |yi|×(ky+1)) ONCE and does a plain
-tensor contraction. WHY NOT YET FIXED: (1) byte-identical alpha/span precompute only ~2×
-(the per-coefficient blend stays) — wouldn't flip. (2) Separable basis CAN flip it and
-conformance is safe (rect tests use 1e-10 tolerance vs analytical values, NOT byte-exact
-vs de Boor), BUT the Cox-de Boor BasisFuns divides by `(right+left)` which is ZERO at the
-clamped/repeated end-knots — exactly the boundary cases the goldens probe (eval(0,0),
-eval(1,1)). Needs careful repeated-knot handling. Reaches ~parity (scipy is elite Fortran),
-not a clear win. Filed as the next dedicated interpolate effort, not a clean lever win.
+32×32 → 64×64, kx=ky=3). **BEFORE: fsci 246.9 µs vs scipy 48.3 µs = 5.1× SLOWER.** `eval_grid`
+ran the full scalar de Boor recurrence per evaluation (`eval_parts`: span search + per-step
+alphas + blend) — the x-recurrence rebuilt for all `ny` rows per xv, the y-recurrence per
+(xv,yv). FIX: adopt scipy's FITPACK `bispev` SEPARABLE approach — precompute each axis' k+1
+non-zero B-spline basis weights ONCE per query coord (`bspline_basis_funs`, Cox-de Boor
+A2.2 with the standard 0/0→0 guard so clamped end-knots are safe), then tensor-contract the
+(kx+1)×(ky+1) coefficient window. Added `BSpline::find_span_n` (span by count). **AFTER:
+fsci 65.8 µs = 3.75× self-speedup; now 1.36× of scipy (was 5.1×) — near-parity vs elite
+Fortran.** NOT byte-identical (different summation order, ~1e-13) but conformance interpolate
+**227/0** (rect tests are 1e-10 tolerance vs analytical, incl. the eval(0,0)/(1,1) clamped-
+knot boundaries — my clamped-knot worry was unfounded; BasisFuns is built for clamped knots).
+KEEP — a 3.75× gain that nearly closes a 5.1× loss. Residual 1.36× is scipy's tighter
+vectorized contraction; a SIMD/unrolled kx=ky=3 contraction could reach parity (future).
 
 - The ~50 byte-identical allocation/precompute/batch wins (buffer reuse, mem::take,
   loop-invariant hoist, interval binary-search, write!-amplification, retain) carry

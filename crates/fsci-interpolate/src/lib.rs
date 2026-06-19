@@ -1207,7 +1207,12 @@ impl BSpline {
     }
 
     fn find_span_parts(t: &[f64], c: &[f64], k: usize, x: f64) -> usize {
-        let n = c.len();
+        Self::find_span_n(t, c.len(), k, x)
+    }
+
+    /// Knot-span search by coefficient count `n` (same convention as `find_span_parts`),
+    /// so the separable `eval_grid` can find the span without a coefficient slice.
+    fn find_span_n(t: &[f64], n: usize, k: usize, x: f64) -> usize {
         if x <= t[k] {
             return k;
         }
@@ -2358,6 +2363,31 @@ fn bspline_find_interval(t: &[f64], x: f64, n: usize) -> Option<usize> {
     } else {
         None // x > t[n], past the knot span
     }
+}
+
+/// The `k+1` non-zero B-spline basis values `N_{span-k..span}(x)` (Cox-de Boor, The NURBS
+/// Book Algorithm A2.2). Returns a stack array indexed `[0..=k]` (k ≤ 5 for bivariate
+/// splines). The `denom != 0.0` guard applies the standard 0/0→0 convention for repeated
+/// knots; for clamped end-knots the denominators are positive span widths. Used by the
+/// separable `eval_grid` (scipy bispev approach) to precompute each axis' basis ONCE.
+fn bspline_basis_funs(t: &[f64], k: usize, x: f64, span: usize) -> [f64; 6] {
+    let mut n = [0.0f64; 6];
+    let mut left = [0.0f64; 6];
+    let mut right = [0.0f64; 6];
+    n[0] = 1.0;
+    for j in 1..=k {
+        left[j] = x - t[span + 1 - j];
+        right[j] = t[span + j] - x;
+        let mut saved = 0.0;
+        for r in 0..j {
+            let denom = right[r + 1] + left[j - r];
+            let temp = if denom != 0.0 { n[r] / denom } else { 0.0 };
+            n[r] = saved + right[r + 1] * temp;
+            saved = left[j - r] * temp;
+        }
+        n[j] = saved;
+    }
+    n
 }
 
 fn eval_basis_all(t: &[f64], x: f64, k: usize, n: usize) -> Vec<f64> {
@@ -7492,45 +7522,59 @@ impl RectBivariateSpline {
     ///
     /// Returns values at all combinations of xi and yi, shape `(len(xi), len(yi))`.
     pub fn eval_grid(&self, xi: &[f64], yi: &[f64]) -> Vec<Vec<f64>> {
-        let mut result = Vec::with_capacity(xi.len());
+        // Separable-basis (FITPACK bispev) grid evaluation: precompute each axis' k+1
+        // non-zero B-spline basis weights ONCE per query coordinate, then tensor-contract
+        // against the (kx+1)×(ky+1) coefficient window — instead of running the full
+        // scalar de Boor recurrence per (xv, yv) (which rebuilt the x-recurrence for all
+        // ny rows per xv and the y-recurrence per pair). Matches the de Boor value within
+        // ~1e-13 (same spline, different summation order). frankenscipy-9l5oo.
         let ny = self.coeffs.len();
-        let mut intermediate = vec![0.0; ny];
-        let mut x_scratch = vec![0.0; self.kx + 1];
-        let mut y_scratch = vec![0.0; self.ky + 1];
+        let nx = self.coeffs.first().map_or(0, Vec::len);
 
-        for &xv in xi {
-            if !xv.is_finite() {
-                result.push(vec![f64::NAN; yi.len()]);
-                continue;
-            }
+        // y-axis bases (span + weights) precomputed once and reused for every xv.
+        let y_basis: Vec<Option<(usize, [f64; 6])>> = yi
+            .iter()
+            .map(|&yv| {
+                if !yv.is_finite() {
+                    return None;
+                }
+                let yc = yv.clamp(self.y_bounds.0, self.y_bounds.1);
+                let span = BSpline::find_span_n(&self.ty, ny, self.ky, yc);
+                Some((span, bspline_basis_funs(&self.ty, self.ky, yc, span)))
+            })
+            .collect();
 
-            let xi_clamped = xv.clamp(self.x_bounds.0, self.x_bounds.1);
-            for (slot, row) in intermediate.iter_mut().zip(&self.coeffs) {
-                *slot =
-                    BSpline::eval_parts(&self.tx, row, self.kx, true, xi_clamped, &mut x_scratch);
-            }
+        xi.iter()
+            .map(|&xv| {
+                if !xv.is_finite() {
+                    return vec![f64::NAN; yi.len()];
+                }
+                let xc = xv.clamp(self.x_bounds.0, self.x_bounds.1);
+                let x_span = BSpline::find_span_n(&self.tx, nx, self.kx, xc);
+                let x_w = bspline_basis_funs(&self.tx, self.kx, xc, x_span);
+                let x_lo = x_span - self.kx;
 
-            result.push(
-                yi.iter()
-                    .map(|&yv| {
-                        if !yv.is_finite() {
+                y_basis
+                    .iter()
+                    .map(|yb| {
+                        let Some((y_span, y_w)) = yb else {
                             return f64::NAN;
+                        };
+                        let y_lo = y_span - self.ky;
+                        let mut val = 0.0;
+                        for q in 0..=self.ky {
+                            let row = &self.coeffs[y_lo + q];
+                            let mut inner = 0.0;
+                            for p in 0..=self.kx {
+                                inner += x_w[p] * row[x_lo + p];
+                            }
+                            val += y_w[q] * inner;
                         }
-                        let yi_clamped = yv.clamp(self.y_bounds.0, self.y_bounds.1);
-                        BSpline::eval_parts(
-                            &self.ty,
-                            &intermediate,
-                            self.ky,
-                            true,
-                            yi_clamped,
-                            &mut y_scratch,
-                        )
+                        val
                     })
-                    .collect(),
-            );
-        }
-
-        result
+                    .collect()
+            })
+            .collect()
     }
 
     /// Evaluate the partial derivative d^(dx+dy)f / dx^dx dy^dy.
