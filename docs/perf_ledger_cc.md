@@ -315,6 +315,19 @@ map_coordinates all share the path); the residual ~4× order=1 gap is the genera
 rewrite, not the weight arithmetic (the direct-weights micro-opt was measured ~0-gain
 and reverted). order=3 is already a release-ready near-parity result.
 
+### gaussian_filter gap DIAGNOSED (refined negative evidence)
+Dug into the 2.83× gaussian loss. fsci `gaussian_filter` is SEPARABLE (per-axis 1D),
+already uses the fast `convolve1d_along_axis` for inner axes (parallel across slabs),
+and only falls back to general `convolve` for the OUTERMOST axis (1 slab). BUT the key
+fact: **scipy.ndimage is single-threaded, and fsci's gaussian runs on 64 threads yet is
+still 2.83× slower** → fsci's per-element 1D-convolution KERNEL is ~10–60× slower than
+scipy's C (parallelism masks it to 2.83×). So the gap is NOT the outer-axis handling or
+parallelization — it's the inner dot-product kernel, same SIMD-class gap as pdist/SpMV.
+Fix = SIMD-vectorize `convolve1d_along_axis`'s window·weights dot product (conformance
+tolerance-OK since gaussian isn't chaotic), but that's shared kernel code. Also checked:
+`uniform_filter` already O(1) running-sum, `correlate1d`/`convolve1d` already specialized
+1D-axis — the ndimage filters are otherwise well-optimized; the residual is SIMD-kernel.
+
 ## BOLD-VERIFY phase outcome (implemented levers, not just measured)
 
 This phase moved from MEASURING gaps to FIXING them, conformance-gated via `cargo test`:
