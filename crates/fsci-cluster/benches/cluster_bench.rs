@@ -83,11 +83,28 @@ fn bench_affinity_propagation(c: &mut Criterion) {
     group.finish();
 }
 
+/// Silhouette score — O(n²) all-pairs, parallelized per-anchor. Small + large n to
+/// check the parallel gate doesn't regress small inputs. Head-to-head vs
+/// sklearn.metrics.silhouette_score (docs/perf_oracle_silhouette.py).
+fn bench_silhouette(c: &mut Criterion) {
+    use fsci_cluster::silhouette_score;
+    let mut group = c.benchmark_group("silhouette");
+    for &n in &[500usize, 2000] {
+        let data = blobs(n, 4);
+        let labels: Vec<usize> = (0..n).map(|i| i % 4).collect();
+        group.bench_function(BenchmarkId::from_parameter(n), |b| {
+            b.iter(|| silhouette_score(&data, &labels))
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_kmeans,
     bench_gmm,
     bench_hierarchical,
-    bench_affinity_propagation
+    bench_affinity_propagation,
+    bench_silhouette
 );
 criterion_main!(benches);

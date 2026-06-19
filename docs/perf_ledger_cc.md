@@ -45,6 +45,8 @@ regressions are reverted. Entries also routed to MistyBirch for the canonical me
 | savetxt write! (d1uxy) | savetxt 500×20 | 4208 µs | 631.6 µs | **6.66× faster** | vs numpy.savetxt (Python) | ✅ KEEP |
 | KDTree build (select_nth) | cKDTree build n=4096 3-D | 767.8 µs | 809.5 µs | 0.95× (parity) | vs scipy ELITE C | ✅ KEEP |
 | KDTree query dual-tree parallel (9k50g) | cKDTree query 4096 pts | 2032.8 µs | 1756.7 µs | **1.16× faster** | beats single-threaded C | ✅ KEEP |
+| silhouette per-anchor parallel | silhouette n=500 d=4 | 2064 µs | 720.8 µs | **2.86× faster** | no small-n regression | ✅ KEEP |
+| silhouette per-anchor parallel | silhouette n=2000 d=4 | 32928 µs | 3113.5 µs | **10.6× faster** | scales w/ n | ✅ KEEP |
 
 ## Detail
 
@@ -208,6 +210,16 @@ is one of scipy's most-optimized C structures — the hardest target in this sui
 WINS on the parallelizable half. This narrows the "irregular-kernel loss" further: the
 losses are specific to SpMV-gather and pdist's tight C inner loop, NOT tree/spatial
 structures generally. KEEP both. Conformance green.
+
+### Silhouette score (per-anchor parallel) — ✅ KEEP (win, regression-hunt NEGATIVE)
+Oracle `docs/perf_oracle_silhouette.py` (sklearn.metrics.silhouette_score, blobs).
+**fsci 2.86×→10.6× FASTER:** n=500 720.8 µs vs sklearn 2064 µs; n=2000 3113.5 µs vs
+32928 µs. Ran this specifically to HUNT for a second over-eager-parallelization
+regression (like interpolate) — found NONE: the per-anchor work is O(n·d) (heavy,
+unlike interpolate's ~30 flops), so the parallel gate is well-calibrated and even
+n=500 wins 2.86×. The ratio grows with n (parallel scales). KEEP. This negative
+regression-hunt result is itself evidence: the cluster/spatial parallelizations are
+correctly gated; interpolate was the lone over-eager case (already reverted).
 
 ## Release-readiness summary (CrimsonForge beads, as of this round)
 
