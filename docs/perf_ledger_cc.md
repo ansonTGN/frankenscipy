@@ -49,6 +49,8 @@ regressions are reverted. Entries also routed to MistyBirch for the canonical me
 | silhouette per-anchor parallel | silhouette n=2000 d=4 | 32928 µs | 3113.5 µs | **10.6× faster** | scales w/ n | ✅ KEEP |
 | ndimage zoom (kernel, NOT my opt) | zoom 2× 256² order=1 | 4842 µs | 85950 µs | **0.06× (17.7× SLOWER)** | order=1 slower than order=3! | ⚠️ LOSS → bead |
 | ndimage zoom (kernel, NOT my opt) | zoom 2× 256² order=3 | 14053 µs | 31573 µs | **0.45× (2.25× slower)** | generic spline-weight kernel | ⚠️ LOSS → bead |
+| kendalltau inversion-count O(n log n) | kendalltau n=2048 | 597 µs | 230.4 µs | **2.59× faster** | scipy fixed overhead | ✅ KEEP |
+| kendalltau inversion-count O(n log n) | kendalltau n=4096 | 537 µs | 552.4 µs | 0.97× (parity) | both O(n log n) at scale | ✅ KEEP |
 
 ## Detail
 
@@ -244,6 +246,15 @@ hoist any per-pixel weight setup. Honest LOSS recorded.
   INTERP_SCRATCH borrow + generic B-spline weight path dominates — overhead that is
   amortized away by order=3's heavier interpolation. Fix = add an order≤1 fast path
   (direct linear weights, no thread_local borrow per pixel). Bead `wm14d` confirmed.
+
+### kendalltau (inversion-count O(n log n)) — ✅ KEEP (win small-n, parity at scale)
+Oracle `docs/perf_oracle_kendall.py` (scipy.stats.kendalltau, same x/y). fsci **2.59×
+faster at n=2048** (230.4 vs 597 µs) but **parity at n=4096** (552.4 vs 537 µs, 0.97×).
+scipy has a ~500 µs fixed overhead (array conversion + tie-handling setup) that
+dominates at smaller n; at n=4096 both O(n log n) merge-sort kernels converge. Honest
+read: fsci's algorithmic kernel MATCHES scipy's C (parity at scale) and WINS where
+scipy's per-call overhead dominates — the same low-overhead advantage seen in
+SpMV-small/Rotation/transform. KEEP. Conformance green.
 
 ## Release-readiness summary (CrimsonForge beads, as of this round)
 
