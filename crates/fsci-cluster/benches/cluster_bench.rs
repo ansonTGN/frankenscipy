@@ -1,4 +1,4 @@
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use fsci_cluster::{gaussian_mixture, kmeans, kmeans2};
 
 /// Deterministic blobs: `n` points in `d` dims drawn around 4 cluster centres.
@@ -26,13 +26,17 @@ fn bench_kmeans(c: &mut Criterion) {
     group.finish();
 }
 
-/// Gaussian-mixture EM (per-point logp/log_norm hoisted, frankenscipy-5ufms).
+/// Gaussian-mixture EM. n=1000 is below the E-step work-gate (serial path);
+/// n=5000/20000 exercise the parallel E-step (frankenscipy-yw7ts). Sizes mirror
+/// docs/perf_oracle_gmm.py for the sklearn head-to-head.
 fn bench_gmm(c: &mut Criterion) {
-    let data = blobs(1000, 3);
     let mut group = c.benchmark_group("gmm");
-    group.bench_function("k3/n1000", |b| {
-        b.iter(|| gaussian_mixture(&data, 3, 50, 1e-4, 1e-6, 42))
-    });
+    for &(n, d, k) in &[(1000usize, 3usize, 3usize), (5000, 8, 5), (20000, 16, 8)] {
+        let data = blobs(n, d);
+        group.bench_function(BenchmarkId::new("diag", format!("n{n}_d{d}_k{k}")), |b| {
+            b.iter(|| gaussian_mixture(&data, k, 50, 1e-4, 1e-6, 42))
+        });
+    }
     group.finish();
 }
 
