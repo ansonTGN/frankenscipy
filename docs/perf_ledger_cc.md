@@ -37,6 +37,8 @@ regressions are reverted. Entries also routed to MistyBirch for the canonical me
 | spmv_csr (serial, baseline) | SpMV n=100 nnz=500 | 3.45 µs | 0.81 µs | **4.26× faster** | scipy Python dispatch overhead | ✅ small-n win |
 | spmv_csr (serial, baseline) | SpMV n=1000 nnz=10k | 8.14 µs | 17.97 µs | **0.45× (2.2× slower)** | scalar kernel vs scipy C | ⚠️ scale gap |
 | spmv_csr (serial, baseline) | SpMV n=10000 nnz=100k | 131.6 µs | 197.5 µs | **0.67× (1.5× slower)** | gap narrows w/ n | ⚠️ scale gap |
+| gaussian_kde evaluate_many parallel | KDE n=1000 eval 1000 pts | 19090 µs | 1062 µs | **18.0× faster** | heavy per-pt → scales | ✅ KEEP |
+| gaussian_kde evaluate_many parallel | KDE n=5000 eval 5000 pts | 201197 µs | 11959 µs | **16.8× faster** | — | ✅ KEEP |
 
 ## Detail
 
@@ -149,6 +151,17 @@ Oracle: scipy.sparse.random CSR `.dot(x)` (same n/density; SpMV time≈O(nnz)).
   scipy pays Python tax; scipy's vectorized C WINS on large single kernels. Not a
   regression, not a parallelization issue. SpMV is a candidate for a SIMD/unrolled
   row-sweep if large sparse problems matter.
+
+### Gaussian KDE evaluate_many (parallel) — ✅ KEEP (marquee win)
+Oracle `docs/perf_oracle_kde.py` (scipy.stats.gaussian_kde, scott bw, n=1000/5000
+1-D, evaluate at n points). **fsci 17–18× FASTER:** n=1000 1.06 ms vs scipy 19.09 ms;
+n=5000 11.96 ms vs scipy 201.2 ms. KDE evaluation is O(m·n_data) with HEAVY per-point
+work (a full sum over the dataset per query) — exactly the profile where the ordered-
+slots parallelization pays off, the mirror image of the (reverted) interpolate case
+(~30 flops/point). scipy's gaussian_kde is a non-vectorized Python/broadcast path,
+which fsci's parallel Rust crushes. **This is the cleanest validation of the gauntlet's
+central lesson: parallelize HEAVY per-element work (KDE ✅), not cheap (interpolate ❌).**
+KEEP. Conformance green.
 
 ## Release-readiness summary (CrimsonForge beads, as of this round)
 
