@@ -370,6 +370,30 @@ around n≈3–4k; the full jump-and-walk O(n log n) rewrite (now safety-netted 
 property test) is the future lever to win at ALL sizes. But at realistic small-medium
 sizes fsci now DOMINATES.
 
+## Ndimage crate — filter/morphology sweep vs scipy (2026-06-19)
+fsci vs scipy.ndimage (256² / 160² images):
+
+| function | fsci | scipy | ratio |
+|---|---|---|---|
+| median_filter 160² s7 | 1.84 ms | 6.03 ms | **3.28× faster** |
+| median_filter 160² s15 | 9.32 ms | 26.46 ms | **2.84× faster** |
+| minimum_filter 256² s7 | 2.24 ms | 0.99 ms | 0.44× (2.26× slower, OPEN) |
+| minimum_filter 256² s15 | 1.84 ms | 1.01 ms | 0.55× (1.82× slower, OPEN) |
+| binary_erosion 256² s7 | 2.20 ms | 0.60 ms | **0.27× (3.7× slower, OPEN)** |
+| binary_erosion 256² s15 | 2.22 ms | 0.81 ms | 0.36× (2.76× slower, OPEN) |
+
+median is a big WIN. minimum_filter + binary_erosion are CONSTANT-FACTOR losses: both go
+through `separable_minmax_filter` → `minmax_filter_along_axis`, already an O(1)/pixel
+monotonic-deque sliding min (flat across window size, confirmed), so the gap is Rust-deque
+overhead vs scipy's specialized C, NOT algorithm. RADICAL LEVER (future, substantial):
+**binary_erosion/dilation on a binary image should bit-pack** (64 px/u64; horizontal =
+`s` shift-ANDs per word, vertical = `s` word-ANDs per row) → ~10-30× over the float deque,
+would FLIP both binary-morph losses to wins. scipy's NI_BinaryErosion is a specialized
+binary path; fsci runs the general float min-filter on booleanized data. Byte-identical
+(same 0/1 output). Needs exact window-origin-semantics matching with the deque path —
+high-risk multi-cycle, filed as a focused future effort, not started blind. minimum_filter
+(float) has no bit-pack lever; its constant factor needs SIMD on the deque (hard).
+
 ## Cluster crate — head-to-head sweep vs scipy (2026-06-19)
 fsci vs scipy.cluster.hierarchy: **cophenet n400 206µs vs 290µs = 1.40× faster** (WIN);
 **linkage_average n400 1.847ms vs 1.655ms = 1.12× slower** (near-parity, OPEN). GMM/
