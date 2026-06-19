@@ -406,8 +406,18 @@ fsci vs scipy.ndimage (256² / 160² images):
 | median_filter 160² s15 | 9.32 ms | 26.46 ms | **2.84× faster** |
 | minimum_filter 256² s7 | 2.24 ms | 0.99 ms | 0.44× (2.26× slower, OPEN) |
 | minimum_filter 256² s15 | 1.84 ms | 1.01 ms | 0.55× (1.82× slower, OPEN) |
-| binary_erosion 256² s7 | 2.20 ms | 0.60 ms | **0.27× (3.7× slower, OPEN)** |
-| binary_erosion 256² s15 | 2.22 ms | 0.81 ms | 0.36× (2.76× slower, OPEN) |
+| binary_erosion 256² s7 (IMPROVED) | 1.81 ms | 0.60 ms | 0.33× (3.0× slower, was 3.7×) |
+| binary_erosion 256² s15 (IMPROVED) | 1.62 ms | 0.81 ms | 0.50× (2.0× slower, was 2.76×) |
+
+### ✅ binary_erosion 1.2–1.4× self-speedup — specialized running-count (shipped, partial)
+binary_erosion ran a float min-filter (monotonic deque + `total_cmp` per pixel) on the
+booleanized image. Added `binary_erode_separable`: per-axis sliding-window AND via a
+running COUNT of zeros (out-of-bounds = 0 = a zero, matching the Constant-0 min border).
+For binary data this is BYTE-IDENTICAL (min==1 ⇔ no zero in window) but replaces the deque
++ total_cmp with two integer count updates per pixel. **2.20→1.81 ms (s7), 2.22→1.62 ms
+(s15) = 1.2–1.4× self-speedup**, conformance ndimage **296/0**. Monotone op-reduction (kept).
+Still 2–3× slower than scipy's bit-level NI_BinaryErosion — the remaining gap needs the
+bit-pack lever (64 px/u64 shift-AND), filed as the future full flip.
 
 median is a big WIN. minimum_filter + binary_erosion are CONSTANT-FACTOR losses: both go
 through `separable_minmax_filter` → `minmax_filter_along_axis`, already an O(1)/pixel

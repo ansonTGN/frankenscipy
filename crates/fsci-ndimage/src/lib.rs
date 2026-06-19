@@ -3925,6 +3925,55 @@ fn binary_dilation_origin_reflection(size: usize) -> i64 {
     (size as i64 - 1) - 2 * (size as i64 / 2)
 }
 
+/// Specialized separable binary erosion: per-axis sliding-window AND via a running count
+/// of zeros (out-of-bounds counts as a zero, matching the Constant-0 min-filter border).
+/// For binary (0/1) data this is byte-identical to the float min-filter (`min == 1` ⇔ no
+/// zero in the window) but replaces the per-pixel monotonic deque + `total_cmp` with two
+/// integer count updates. frankenscipy-9l5oo.
+fn binary_erode_separable(bin: &NdArray, size: usize) -> NdArray {
+    let mut cur = bin.clone();
+    for axis in 0..bin.ndim() {
+        cur = binary_erode_along_axis(&cur, axis, size);
+    }
+    cur
+}
+
+fn binary_erode_along_axis(arr: &NdArray, axis: usize, size: usize) -> NdArray {
+    let n = arr.shape[axis] as i64;
+    let stride = arr.strides[axis];
+    let shape_axis = arr.shape[axis];
+    let size_i = size as i64;
+    let lo = size_i / 2; // window left extent (origin 0), matching minmax_filter_along_axis
+    let total = arr.size();
+    let mut out = NdArray::zeros(arr.shape.clone());
+    for flat in 0..total {
+        if !(flat / stride).is_multiple_of(shape_axis) {
+            continue;
+        }
+        let base = flat;
+        let is_zero = |p: i64| -> bool {
+            !(0..n).contains(&p) || arr.data[base + (p as usize) * stride] == 0.0
+        };
+        // Window for output `a` is the input range [a-lo, a-lo+size-1]; seed from a=0.
+        let mut count_zeros: i64 = 0;
+        for p in (-lo)..(-lo + size_i) {
+            if is_zero(p) {
+                count_zeros += 1;
+            }
+        }
+        for a in 0..n {
+            out.data[base + (a as usize) * stride] = if count_zeros == 0 { 1.0 } else { 0.0 };
+            if is_zero(a - lo) {
+                count_zeros -= 1;
+            }
+            if is_zero(a - lo + size_i) {
+                count_zeros += 1;
+            }
+        }
+    }
+    out
+}
+
 fn binary_erosion_once_with_origins(current: &NdArray, size: usize, origins: &[i64]) -> NdArray {
     // Binary erosion is a minimum filter over the booleanized image with a
     // constant-0 border: O(N * ndim) separable sliding-window min instead of the
@@ -3932,11 +3981,7 @@ fn binary_erosion_once_with_origins(current: &NdArray, size: usize, origins: &[i
     // origin so the kernel window (and origin validation) match exactly.
     if binary_morph_origins_all_zero(origins) {
         let bin = booleanized_binary(current);
-        if let Ok(result) =
-            separable_minmax_filter(&bin, size, &[0], BoundaryMode::Constant, 0.0, false)
-        {
-            return result;
-        }
+        return binary_erode_separable(&bin, size);
     }
 
     let ndim = current.ndim();
