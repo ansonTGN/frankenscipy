@@ -465,6 +465,14 @@ vectorized C. EMPIRICALLY CONFIRMED (attempted no-NaN-gated shift-min, REVERTED 
 caught it. A correct vectorized version needs the f64→monotonic-i64 transform + SIMD i64 min,
 which is AVX-512-only (AVX2 lacks `vpminsq`) → not portable. NO clean lever; the conformance
 gate prevented shipping a subtly-wrong (signed-zero) result.
+DEFINITIVE (2nd attempt, REVERTED clean): the SIGNED-ZERO-CORRECT version — shift-min on the
+ordered-i64 (`f64::total_cmp`'s own monotonic transform `bits ^ ((bits>>63 as u64)>>1)`, an
+involution) — IS byte-identical for all inputs (296/0, signed-zero test passes). But PERF
+REGRESSES: s7 ~same (2.21 vs 2.24 ms), s15 SLOWER (2.40 vs 1.84), s31 much SLOWER (3.72 vs
+1.89). The i64 min/max didn't autovectorize on AVX2 (no `vpminsq`), so the O(s·n) shift loses
+to the deque's amortized O(1). CONCLUSION: the monotonic-deque IS the optimal portable scalar
+algorithm for float window min/max; beating scipy needs explicit C-style SIMD (vpminsq/AVX-512
+or hand-written AVX2 compare+blend on the i64 reps). Float minmax CLOSED — no portable lever.
 DEAD-END (reverted clean, 296/0): rewrote `minmax_filter_along_axis` to the correlate1d
 slab pattern + parallelize over outer slabs (byte-identical). REGRESSED ~1.5-2× even after
 hoisting the per-slab VecDeque alloc to per-thread reuse. At 256² the filter is below the
