@@ -246,6 +246,19 @@ hoist any per-pixel weight setup. Honest LOSS recorded.
   INTERP_SCRATCH borrow + generic B-spline weight path dominates — overhead that is
   amortized away by order=3's heavier interpolation. Fix = add an order≤1 fast path
   (direct linear weights, no thread_local borrow per pixel). Bead `wm14d` confirmed.
+- **EXACT ROOT CAUSE (round 14 code read):** in `sample_interpolated`, order 2..=5 use
+  the fast `cardinal_reflect_nearest` path (`cardinal_bspline` direct weights, gated
+  `matches!(order, 2..=5)`) and order==3 has a Wrap/Constant fast path — but **order=1
+  is excluded from BOTH** and falls through to the generic `uniform_interpolation_knots`
+  + `eval_bspline_basis_all` (full knot-vector B-spline basis eval per pixel per axis),
+  which is far slower than the cardinal kernel. order=0 has its own fast branch. So
+  order=1 is the LONE interpolating order with no fast path. **Fix: extend the cardinal
+  path to order=1 (`matches!(order, 1..=5)`)** — `cardinal_bspline(1, cc-k)` over the
+  3-tap span yields the linear weights `[(floor,1-t),(floor+1,t)]`. CAVEAT: must verify
+  byte-identity vs `eval_bspline_basis_all` for order=1 (the linear B-spline weights are
+  mathematically equal but the FP computation order differs — needs the conformance
+  tests, which exceed this phase's build/bench allowance). Reduced to a ~1-line fix +
+  a byte-identity check for the ndimage owner. Bead `wm14d` updated.
 
 ### kendalltau (inversion-count O(n log n)) — ✅ KEEP (win small-n, parity at scale)
 Oracle `docs/perf_oracle_kendall.py` (scipy.stats.kendalltau, same x/y). fsci **2.59×
