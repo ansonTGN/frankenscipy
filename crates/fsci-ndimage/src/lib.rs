@@ -4021,18 +4021,61 @@ fn binary_erosion_once_with_origins(current: &NdArray, size: usize, origins: &[i
     output
 }
 
+/// Specialized separable binary dilation: per-axis sliding-window OR via a running count of
+/// ones (out-of-bounds contributes nothing, matching the Constant-0 max-filter border which
+/// uses the reflected structuring-element origin). Byte-identical to the float max-filter for
+/// binary data (`max == 1` ⇔ at least one one in the window). frankenscipy-9l5oo.
+fn binary_dilate_separable(bin: &NdArray, size: usize) -> NdArray {
+    let refl = binary_dilation_origin_reflection(size);
+    let mut cur = bin.clone();
+    for axis in 0..bin.ndim() {
+        cur = binary_dilate_along_axis(&cur, axis, size, refl);
+    }
+    cur
+}
+
+fn binary_dilate_along_axis(arr: &NdArray, axis: usize, size: usize, origin: i64) -> NdArray {
+    let n = arr.shape[axis] as i64;
+    let stride = arr.strides[axis];
+    let shape_axis = arr.shape[axis];
+    let size_i = size as i64;
+    let lo = size_i / 2 + origin; // matches minmax_filter_along_axis window for this origin
+    let total = arr.size();
+    let mut out = NdArray::zeros(arr.shape.clone());
+    for flat in 0..total {
+        if !(flat / stride).is_multiple_of(shape_axis) {
+            continue;
+        }
+        let base = flat;
+        let is_one = |p: i64| -> bool {
+            (0..n).contains(&p) && arr.data[base + (p as usize) * stride] == 1.0
+        };
+        let mut count_ones: i64 = 0;
+        for p in (-lo)..(-lo + size_i) {
+            if is_one(p) {
+                count_ones += 1;
+            }
+        }
+        for a in 0..n {
+            out.data[base + (a as usize) * stride] = if count_ones > 0 { 1.0 } else { 0.0 };
+            if is_one(a - lo) {
+                count_ones -= 1;
+            }
+            if is_one(a - lo + size_i) {
+                count_ones += 1;
+            }
+        }
+    }
+    out
+}
+
 fn binary_dilation_once_with_origins(current: &NdArray, size: usize, origins: &[i64]) -> NdArray {
     // Binary dilation is a maximum filter over the booleanized image with a
     // constant-0 border, using the reflected structuring element. Gated to the
     // default all-zero origin; the equivalence test pins the reflection offset.
     if binary_morph_origins_all_zero(origins) {
         let bin = booleanized_binary(current);
-        let refl = binary_dilation_origin_reflection(size);
-        if let Ok(result) =
-            separable_minmax_filter(&bin, size, &[refl], BoundaryMode::Constant, 0.0, true)
-        {
-            return result;
-        }
+        return binary_dilate_separable(&bin, size);
     }
 
     let ndim = current.ndim();

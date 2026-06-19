@@ -417,7 +417,13 @@ For binary data this is BYTE-IDENTICAL (min==1 ⇔ no zero in window) but replac
 + total_cmp with two integer count updates per pixel. **2.20→1.81 ms (s7), 2.22→1.62 ms
 (s15) = 1.2–1.4× self-speedup**, conformance ndimage **296/0**. Monotone op-reduction (kept).
 Still 2–3× slower than scipy's bit-level NI_BinaryErosion — the remaining gap needs the
-bit-pack lever (64 px/u64 shift-AND), filed as the future full flip.
+bit-pack lever (64 px/u64 shift-AND), filed as the future full flip. SAME lever applied to
+`binary_dilation` (`binary_dilate_separable`: running count of ONES > 0, origin-aware lo =
+size/2 + refl to match the reflected-SE max-filter; even sizes use refl=−1): byte-identical
+**296/0**, dilation ~1.84/1.64 ms (same ~1.2–1.4× self-speedup). Dilation is still 3–6.6×
+slower than scipy (279/521 µs — the mostly-set bench image favours scipy's algorithm); same
+bit-pack lever needed to flip. Both binary-morph paths now use the simpler integer-count
+kernel; the float deque remains for non-default origins + float minmax.
 
 median is a big WIN. minimum_filter + binary_erosion are CONSTANT-FACTOR losses: both go
 through `separable_minmax_filter` → `minmax_filter_along_axis`, already an O(1)/pixel
