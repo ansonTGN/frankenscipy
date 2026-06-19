@@ -50,5 +50,38 @@ fn bench_hierarchical(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_kmeans, bench_gmm, bench_hierarchical);
+/// Affinity propagation — the O(n²)-per-iteration responsibility/availability
+/// message passing (responsibility update parallelized, frankenscipy-yw7ts).
+fn bench_affinity_propagation(c: &mut Criterion) {
+    use fsci_cluster::affinity_propagation;
+    let n = 300usize;
+    let data = blobs(n, 4);
+    // Negative squared-euclidean similarity (sklearn AP default).
+    let sim: Vec<Vec<f64>> = (0..n)
+        .map(|i| {
+            (0..n)
+                .map(|j| {
+                    -data[i]
+                        .iter()
+                        .zip(&data[j])
+                        .map(|(a, b)| (a - b).powi(2))
+                        .sum::<f64>()
+                })
+                .collect()
+        })
+        .collect();
+    let mut group = c.benchmark_group("affinity_propagation");
+    group.bench_function("n300", |b| {
+        b.iter(|| affinity_propagation(&sim, -50.0, 0.9, 80, 15))
+    });
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_kmeans,
+    bench_gmm,
+    bench_hierarchical,
+    bench_affinity_propagation
+);
 criterion_main!(benches);
