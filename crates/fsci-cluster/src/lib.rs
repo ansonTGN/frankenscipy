@@ -2636,32 +2636,76 @@ pub fn gaussian_mixture(
         }
 
         // E-step: responsibilities + total log-likelihood (log-sum-exp per point).
-        let mut total_ll = 0.0;
-        for (i, row) in data.iter().enumerate() {
-            let mut maxlp = f64::NEG_INFINITY;
-            for c in 0..k {
-                let mut s = log_norm[c];
-                for j in 0..d {
-                    let diff = row[j] - means[c][j];
-                    s -= 0.5 * diff * diff / covariances[c][j].max(FLOOR);
+        // Each point's resp row and per-point log-likelihood are independent, so
+        // split the points across threads into ordered slots; total_ll is then the
+        // SAME ordered sum of the SAME per-point lse values (serial reduce after) ->
+        // byte-identical to the serial loop. The block scope drops the borrowing
+        // closure before the M-step mutates means/covariances. frankenscipy-yw7ts.
+        let total_ll: f64 = {
+            let mut lse = vec![0.0f64; n];
+            // Per-point E-step into a caller-provided logp scratch; returns lse.
+            let e_step_point = |row: &[f64], logp: &mut [f64], resp_i: &mut [f64]| -> f64 {
+                let mut maxlp = f64::NEG_INFINITY;
+                for c in 0..k {
+                    let mut s = log_norm[c];
+                    for j in 0..d {
+                        let diff = row[j] - means[c][j];
+                        s -= 0.5 * diff * diff / covariances[c][j].max(FLOOR);
+                    }
+                    logp[c] = s;
+                    if s > maxlp {
+                        maxlp = s;
+                    }
                 }
-                logp[c] = s;
-                if s > maxlp {
-                    maxlp = s;
+                let mut sumexp = 0.0;
+                for lp in logp.iter_mut() {
+                    *lp = (*lp - maxlp).exp();
+                    sumexp += *lp;
                 }
+                let inv = 1.0 / sumexp;
+                for c in 0..k {
+                    resp_i[c] = logp[c] * inv;
+                }
+                maxlp + sumexp.ln()
+            };
+            let nthreads_e = if n.saturating_mul(k).saturating_mul(d) < (1 << 16) || n < 2 {
+                1
+            } else {
+                std::thread::available_parallelism()
+                    .map(|c| c.get())
+                    .unwrap_or(1)
+                    .min(n)
+            };
+            if nthreads_e <= 1 {
+                for ((row, resp_i), lse_i) in
+                    data.iter().zip(resp.iter_mut()).zip(lse.iter_mut())
+                {
+                    *lse_i = e_step_point(row, &mut logp, resp_i);
+                }
+            } else {
+                let chunk = n.div_ceil(nthreads_e);
+                let e_step_point = &e_step_point;
+                std::thread::scope(|scope| {
+                    for ((resp_chunk, lse_chunk), data_chunk) in resp
+                        .chunks_mut(chunk)
+                        .zip(lse.chunks_mut(chunk))
+                        .zip(data.chunks(chunk))
+                    {
+                        scope.spawn(move || {
+                            let mut logp_local = vec![0.0f64; k];
+                            for ((row, resp_i), lse_i) in data_chunk
+                                .iter()
+                                .zip(resp_chunk.iter_mut())
+                                .zip(lse_chunk.iter_mut())
+                            {
+                                *lse_i = e_step_point(row, &mut logp_local, resp_i);
+                            }
+                        });
+                    }
+                });
             }
-            let mut sumexp = 0.0;
-            for lp in logp.iter_mut() {
-                *lp = (*lp - maxlp).exp();
-                sumexp += *lp;
-            }
-            let lse = maxlp + sumexp.ln();
-            total_ll += lse;
-            let inv = 1.0 / sumexp;
-            for c in 0..k {
-                resp[i][c] = logp[c] * inv;
-            }
-        }
+            lse.iter().sum()
+        };
         log_likelihood = total_ll / n as f64;
         if (log_likelihood - old_ll).abs() < tol {
             break;
