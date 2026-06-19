@@ -336,6 +336,33 @@ condition so dead ends are not repeated casually.
   dominates, reject this exact wide-`pinv` formulation and do not retry unless
   profiles put wide full-row-rank SVD work back in the top linalg hotspot list.
 
+## 2026-06-19 - frankenscipy-u0ucw - Wide pinv diagonal rcond gate
+
+- Agent: cod-a / MistyBirch
+- Lever: remove the pre-Cholesky symmetric eigensolve from the full-row-rank
+  wide `pinv` route. `pinv` does not expose singular values, so the fast path
+  now uses the same diagonal rcond sanity estimate as the tall Cholesky route,
+  then relies on Cholesky plus the existing streaming `A A^+ ~= I_rows`
+  certificate as the fail-closed acceptance test. The old eigenspectrum gate
+  stays behind `FSCI_DISABLE_WIDE_PINV_DIAG_RCOND_GATE` and
+  `DISABLE_WIDE_PINV_DIAG_RCOND_GATE` for same-binary A/B.
+- Status: pending batch-test. This is a code-first commit per campaign
+  instruction; only local `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a
+  cargo check -p fsci-linalg` is expected before commit.
+- Correctness guard:
+  `wide_pinv_diag_rcond_gate_matches_eigen_gate_and_rejects_rank_loss` compares
+  the diagonal-gated and eigengated pseudo-inverse outputs on a full-row-rank
+  wide matrix and verifies an exact rank-deficient wide matrix still rejects.
+- Benchmark guard: same-binary Criterion group `u0ucw_wide_pinv` now compares
+  `_normal_equation_cholesky`, `_eigen_rcond_gate`, and `_svd_fallback` on
+  500x1000 and 1000x2000 full-row-rank wide workloads.
+- Retry condition: keep only if same-worker `u0ucw_wide_pinv` timings improve
+  versus `_eigen_rcond_gate` without rank, pseudo-inverse tolerance,
+  left-inverse certificate, or rcond-estimate audit regressions; if the
+  eigenspectrum was not a measurable cost, reject this exact diagonal-rcond
+  shortcut and do not retry unless profiles put `AA^T` symmetric eigensolve
+  back in the top wide-`pinv` hotspot list.
+
 ## 2026-06-18 - frankenscipy-va60h - MDS streamed double-centering
 
 - Agent: cod-a / MistyBirch

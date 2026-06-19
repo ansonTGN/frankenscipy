@@ -11293,6 +11293,12 @@ pub static DISABLE_WIDE_LSTSQ_ROW_STREAMING: std::sync::atomic::AtomicBool =
 #[doc(hidden)]
 pub static DISABLE_WIDE_PINV_CHOLESKY: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
+/// Runtime switch to force full-row-rank wide `pinv` through the older
+/// eigenspectrum rcond gate before the Cholesky solve. Defaults off.
+/// `#[doc(hidden)]`; internal.
+#[doc(hidden)]
+pub static DISABLE_WIDE_PINV_DIAG_RCOND_GATE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 /// Loose conditioning sanity floor for the solve-only normal-equations lstsq
 /// route: spectra below this rcond are hopeless even with refinement, so we
 /// fall back to the public thin-SVD route. Real acceptance is governed by the
@@ -11371,6 +11377,14 @@ fn wide_pinv_cholesky_disabled() -> bool {
     }
     static ENV: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ENV.get_or_init(|| std::env::var_os("FSCI_DISABLE_WIDE_PINV_CHOLESKY").is_some())
+}
+
+fn wide_pinv_diag_rcond_gate_disabled() -> bool {
+    if DISABLE_WIDE_PINV_DIAG_RCOND_GATE.load(std::sync::atomic::Ordering::Relaxed) {
+        return true;
+    }
+    static ENV: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENV.get_or_init(|| std::env::var_os("FSCI_DISABLE_WIDE_PINV_DIAG_RCOND_GATE").is_some())
 }
 
 fn pinv_full_rank_tall_cholesky(
@@ -11509,6 +11523,24 @@ fn pinv_full_rank_wide_cholesky_with_min_rows(
     rtol: f64,
     min_rows: usize,
 ) -> Option<FullRankTallPinvResult> {
+    pinv_full_rank_wide_cholesky_with_min_rows_impl(
+        a,
+        matrix,
+        atol,
+        rtol,
+        min_rows,
+        wide_pinv_diag_rcond_gate_disabled(),
+    )
+}
+
+fn pinv_full_rank_wide_cholesky_with_min_rows_impl(
+    a: &[Vec<f64>],
+    matrix: &DMatrix<f64>,
+    atol: f64,
+    rtol: f64,
+    min_rows: usize,
+    force_eigen_rcond_gate: bool,
+) -> Option<FullRankTallPinvResult> {
     if wide_pinv_cholesky_disabled() {
         return None;
     }
@@ -11527,31 +11559,56 @@ fn pinv_full_rank_wide_cholesky_with_min_rows(
     }
 
     let gram = symmetric_row_gram_matrix_from_rows(a, rows, cols)?;
+    let mut max_diag = 0.0_f64;
+    let mut min_diag = f64::MAX;
     for idx in 0..rows {
         let diag = gram[(idx, idx)];
         if diag <= 0.0 || !diag.is_finite() {
             return None;
         }
+        max_diag = max_diag.max(diag);
+        min_diag = min_diag.min(diag);
     }
-
-    let eigen = gram.clone().symmetric_eigen();
-    let mut max_eig = 0.0_f64;
-    let mut min_eig = f64::MAX;
-    for &lambda in eigen.eigenvalues.iter() {
-        if !lambda.is_finite() || lambda <= 0.0 {
-            return None;
-        }
-        max_eig = max_eig.max(lambda);
-        min_eig = min_eig.min(lambda);
-    }
-    if max_eig <= 0.0 || min_eig <= 0.0 {
+    if max_diag <= 0.0 || min_diag <= 0.0 {
         return None;
     }
 
-    let max_s = max_eig.sqrt();
-    let min_s = min_eig.sqrt();
-    let threshold = atol + rtol * max_s;
-    if min_s <= threshold || min_s / max_s < FULL_RANK_TALL_LSTSQ_MIN_RCOND {
+    let rcond_estimate = if force_eigen_rcond_gate {
+        let eigen = gram.clone().symmetric_eigen();
+        let mut max_eig = 0.0_f64;
+        let mut min_eig = f64::MAX;
+        for &lambda in eigen.eigenvalues.iter() {
+            if !lambda.is_finite() || lambda <= 0.0 {
+                return None;
+            }
+            max_eig = max_eig.max(lambda);
+            min_eig = min_eig.min(lambda);
+        }
+        if max_eig <= 0.0 || min_eig <= 0.0 {
+            return None;
+        }
+        let max_s = max_eig.sqrt();
+        let min_s = min_eig.sqrt();
+        let threshold = atol + rtol * max_s;
+        if min_s <= threshold || min_s / max_s < FULL_RANK_TALL_LSTSQ_MIN_RCOND {
+            return None;
+        }
+        min_s / max_s
+    } else {
+        // `pinv` does not return singular values, so the pre-solve gate only
+        // needs a cheap conditioning sanity estimate. Cholesky plus the
+        // streaming left-inverse certificate below remains the acceptance test.
+        let max_s_estimate = max_diag.sqrt();
+        let min_s_estimate = min_diag.sqrt();
+        let threshold = atol + rtol * max_s_estimate;
+        if min_s_estimate <= threshold
+            || min_s_estimate / max_s_estimate < FULL_RANK_TALL_LSTSQ_MIN_RCOND
+        {
+            return None;
+        }
+        min_s_estimate / max_s_estimate
+    };
+    if !rcond_estimate.is_finite() || rcond_estimate <= 0.0 {
         return None;
     }
 
@@ -11575,7 +11632,7 @@ fn pinv_full_rank_wide_cholesky_with_min_rows(
     Some(FullRankTallPinvResult {
         pseudo_inverse,
         rank: rows,
-        rcond_estimate: min_s / max_s,
+        rcond_estimate,
     })
 }
 
@@ -19672,6 +19729,56 @@ mod tests {
             &rows_from_dmatrix(&reference),
             1e-7,
             1e-7,
+        );
+    }
+
+    #[test]
+    fn wide_pinv_diag_rcond_gate_matches_eigen_gate_and_rejects_rank_loss() {
+        let rows = 9;
+        let cols = 18;
+        let matrix_rows: Vec<Vec<f64>> = (0..rows)
+            .map(|row| {
+                (0..cols)
+                    .map(|col| {
+                        let diagonal = if row == col { 10.0 + row as f64 } else { 0.0 };
+                        let smooth = ((row * 23 + col * 31 + 13) % 71) as f64 / 157.0;
+                        diagonal + smooth
+                    })
+                    .collect()
+            })
+            .collect();
+        let matrix = dmatrix_from_rows(&matrix_rows).expect("matrix rows");
+        let rtol = (rows.max(cols) as f64) * f64::EPSILON;
+
+        let diag_gate =
+            pinv_full_rank_wide_cholesky_with_min_rows_impl(&matrix_rows, &matrix, 0.0, rtol, 1, false)
+                .expect("diagonal rcond gate route");
+        let eigen_gate =
+            pinv_full_rank_wide_cholesky_with_min_rows_impl(&matrix_rows, &matrix, 0.0, rtol, 1, true)
+                .expect("eigenspectrum rcond gate route");
+        assert_eq!(diag_gate.rank, eigen_gate.rank);
+        assert!(diag_gate.rcond_estimate.is_finite());
+        assert!(diag_gate.rcond_estimate > 0.0);
+        assert_close_matrix(
+            &diag_gate.pseudo_inverse,
+            &eigen_gate.pseudo_inverse,
+            1e-12,
+            1e-12,
+        );
+
+        let mut rank_deficient_rows = matrix_rows.clone();
+        rank_deficient_rows[rows - 1] = rank_deficient_rows[0].clone();
+        let rank_deficient = dmatrix_from_rows(&rank_deficient_rows).expect("rank-deficient rows");
+        assert!(
+            pinv_full_rank_wide_cholesky_with_min_rows_impl(
+                &rank_deficient_rows,
+                &rank_deficient,
+                0.0,
+                rtol,
+                1,
+                false,
+            )
+            .is_none()
         );
     }
 

@@ -411,10 +411,18 @@ fn bench_u0ucw_wide_pinv(c: &mut Criterion) {
         let a = make_underdetermined(rows, cols);
         group.bench_function(format!("{rows}x{cols}_normal_equation_cholesky"), |bencher| {
             fsci_linalg::DISABLE_WIDE_PINV_CHOLESKY.store(false, Relaxed);
+            fsci_linalg::DISABLE_WIDE_PINV_DIAG_RCOND_GATE.store(false, Relaxed);
             bencher.iter(|| pinv(&a, PinvOptions::default()).unwrap());
+        });
+        group.bench_function(format!("{rows}x{cols}_eigen_rcond_gate"), |bencher| {
+            fsci_linalg::DISABLE_WIDE_PINV_CHOLESKY.store(false, Relaxed);
+            fsci_linalg::DISABLE_WIDE_PINV_DIAG_RCOND_GATE.store(true, Relaxed);
+            bencher.iter(|| pinv(&a, PinvOptions::default()).unwrap());
+            fsci_linalg::DISABLE_WIDE_PINV_DIAG_RCOND_GATE.store(false, Relaxed);
         });
         group.bench_function(format!("{rows}x{cols}_svd_fallback"), |bencher| {
             fsci_linalg::DISABLE_WIDE_PINV_CHOLESKY.store(true, Relaxed);
+            fsci_linalg::DISABLE_WIDE_PINV_DIAG_RCOND_GATE.store(false, Relaxed);
             bencher.iter(|| pinv(&a, PinvOptions::default()).unwrap());
             fsci_linalg::DISABLE_WIDE_PINV_CHOLESKY.store(false, Relaxed);
         });
