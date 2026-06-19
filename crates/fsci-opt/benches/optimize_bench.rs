@@ -255,6 +255,28 @@ fn bench_least_squares(c: &mut Criterion) {
             );
         });
     });
+
+    let xs: Vec<f64> = (0..128).map(|i| i as f64 * 0.05).collect();
+    let truth = [2.0_f64, 0.7, 0.25, -0.03];
+    let ys: Vec<f64> = xs
+        .iter()
+        .map(|&x| truth[0] * (-truth[1] * x).exp() + truth[2] + truth[3] * x)
+        .collect();
+    group.bench_function("exp_linear_curve_128", |b| {
+        b.iter(|| {
+            let residuals = |p: &[f64]| {
+                xs.iter()
+                    .zip(ys.iter())
+                    .map(|(&x, &y)| p[0] * (-p[1] * x).exp() + p[2] + p[3] * x - y)
+                    .collect::<Vec<_>>()
+            };
+            let _ = least_squares(
+                residuals,
+                &[1.0, 0.5, 0.0, 0.0],
+                LeastSquaresOptions::default(),
+            );
+        });
+    });
     group.finish();
 }
 

@@ -174,8 +174,15 @@ where
     // the top of every iteration — on a rejected step (mu ratchets up, common for hard /
     // ill-conditioned problems) only `mu`/`nu` change, so the rebuild was redundant. Byte-
     // identical: jtj/jtr are deterministic functions of (jac, r).
-    let mut jtj = jtj_matrix(&jac);
-    let mut jtr = jt_vec(&jac, &r);
+    let mut jtj = Vec::new();
+    let mut jtr = Vec::new();
+    jtj_matrix_into(&jac, &mut jtj);
+    jt_vec_into(&jac, &r, &mut jtr);
+    let mut damped_normal = Vec::new();
+    let mut cholesky_low = Vec::new();
+    let mut solve_y = Vec::new();
+    let mut step = Vec::new();
+    let mut jstep = Vec::new();
 
     // Initial damping parameter (Marquardt strategy)
     let mut mu = 1.0e-3 * max_diag_jtj(&jac);
@@ -214,7 +221,16 @@ where
         }
 
         // Solve (J^T J + mu I) * step = -J^T r
-        let step = solve_damped_normal_equations(&jtj, &jtr, mu, n);
+        solve_damped_normal_equations_into(
+            &jtj,
+            &jtr,
+            mu,
+            n,
+            &mut damped_normal,
+            &mut cholesky_low,
+            &mut solve_y,
+            &mut step,
+        );
 
         let step_norm = l2_norm(&step);
         let x_norm = l2_norm(&x);
@@ -242,7 +258,7 @@ where
 
         // Gain ratio (actual reduction / predicted reduction)
         let predicted_reduction = {
-            let jstep = mat_vec(&jac, &step);
+            mat_vec_into(&jac, &step, &mut jstep);
             -dot_vec(&jtr, &step) - 0.5 * dot_vec(&jstep, &jstep)
         };
 
@@ -295,8 +311,8 @@ where
                 );
                 nfev += n;
                 njev += 1;
-                jtj = jtj_matrix(&jac);
-                jtr = jt_vec(&jac, &r);
+                jtj_matrix_into(&jac, &mut jtj);
+                jt_vec_into(&jac, &r, &mut jtr);
 
                 // Decrease damping
                 mu *= f64::max(1.0 / 3.0, 1.0 - (2.0 * rho - 1.0).powi(3));
@@ -513,6 +529,16 @@ fn l2_norm(v: &[f64]) -> f64 {
     dot_vec(v, v).sqrt()
 }
 
+fn resize_square(matrix: &mut Vec<Vec<f64>>, n: usize) {
+    if matrix.len() != n {
+        matrix.resize_with(n, Vec::new);
+    }
+    for row in matrix.iter_mut() {
+        row.resize(n, 0.0);
+        row.fill(0.0);
+    }
+}
+
 /// Compute finite-difference Jacobian into fixed-shape scratch.
 fn finite_diff_jacobian_into<F>(
     residuals: &F,
@@ -549,8 +575,15 @@ fn finite_diff_jacobian_into<F>(
 
 /// Compute J^T * J (n x n).
 fn jtj_matrix(jac: &[Vec<f64>]) -> Vec<Vec<f64>> {
+    let mut jtj = Vec::new();
+    jtj_matrix_into(jac, &mut jtj);
+    jtj
+}
+
+/// Compute J^T * J (n x n) into fixed-shape scratch.
+fn jtj_matrix_into(jac: &[Vec<f64>], jtj: &mut Vec<Vec<f64>>) {
     let n = jac.first().map_or(0, Vec::len);
-    let mut jtj = vec![vec![0.0; n]; n];
+    resize_square(jtj, n);
     for row in jac {
         for i in 0..n {
             for j in i..n {
@@ -562,24 +595,26 @@ fn jtj_matrix(jac: &[Vec<f64>]) -> Vec<Vec<f64>> {
             }
         }
     }
-    jtj
 }
 
-/// Compute J^T * v.
-fn jt_vec(jac: &[Vec<f64>], v: &[f64]) -> Vec<f64> {
+/// Compute J^T * v into fixed-shape scratch.
+fn jt_vec_into(jac: &[Vec<f64>], v: &[f64], result: &mut Vec<f64>) {
     let n = jac.first().map_or(0, Vec::len);
-    let mut result = vec![0.0; n];
+    result.resize(n, 0.0);
+    result.fill(0.0);
     for (row, &vi) in jac.iter().zip(v.iter()) {
         for (j, &jval) in row.iter().enumerate() {
             result[j] += jval * vi;
         }
     }
-    result
 }
 
-/// Compute J * v.
-fn mat_vec(jac: &[Vec<f64>], v: &[f64]) -> Vec<f64> {
-    jac.iter().map(|row| dot_vec(row, v)).collect()
+/// Compute J * v into fixed-shape scratch.
+fn mat_vec_into(jac: &[Vec<f64>], v: &[f64], result: &mut Vec<f64>) {
+    result.resize(jac.len(), 0.0);
+    for (out, row) in result.iter_mut().zip(jac.iter()) {
+        *out = dot_vec(row, v);
+    }
 }
 
 /// Max diagonal element of J^T * J.
@@ -600,28 +635,55 @@ fn max_diag_jtj(jac: &[Vec<f64>]) -> f64 {
     max_val
 }
 
-/// Solve (A + mu * I) * x = -b via Cholesky-like approach.
+/// Solve (A + mu * I) * x = -b into fixed-shape scratch.
 /// Falls back to diagonal if matrix is singular.
-fn solve_damped_normal_equations(jtj: &[Vec<f64>], jtr: &[f64], mu: f64, n: usize) -> Vec<f64> {
-    // Build damped matrix
-    let mut a = jtj.to_vec();
+fn solve_damped_normal_equations_into(
+    jtj: &[Vec<f64>],
+    jtr: &[f64],
+    mu: f64,
+    n: usize,
+    a: &mut Vec<Vec<f64>>,
+    low: &mut Vec<Vec<f64>>,
+    y: &mut Vec<f64>,
+    step: &mut Vec<f64>,
+) {
+    resize_square(a, n);
+    for (dst_row, src_row) in a.iter_mut().zip(jtj.iter()) {
+        dst_row.copy_from_slice(src_row);
+    }
     for (i, row) in a.iter_mut().enumerate() {
         row[i] += mu;
     }
 
     // Solve via Cholesky decomposition
-    if let Some(step) = cholesky_solve(&a, jtr, n) {
-        // Return -step (we solve A*step = -jtr, but passed jtr not -jtr)
-        step.iter().map(|v| -v).collect()
+    if cholesky_decompose_into(a, n, low) {
+        cholesky_solve_with_l_into(low, jtr, n, y, step);
+        // Return -step (we solve A*step = -jtr, but passed jtr not -jtr).
+        for value in step.iter_mut() {
+            *value = -*value;
+        }
     } else {
         // Fallback: diagonal solve
-        (0..n).map(|i| -jtr[i] / (jtj[i][i] + mu)).collect()
+        step.resize(n, 0.0);
+        for i in 0..n {
+            step[i] = -jtr[i] / (jtj[i][i] + mu);
+        }
     }
 }
 
 /// Compute Cholesky decomposition A = L * L^T.
 fn cholesky_decompose(a: &[Vec<f64>], n: usize) -> Option<Vec<Vec<f64>>> {
-    let mut low = vec![vec![0.0; n]; n];
+    let mut low = Vec::new();
+    if cholesky_decompose_into(a, n, &mut low) {
+        Some(low)
+    } else {
+        None
+    }
+}
+
+/// Compute Cholesky decomposition A = L * L^T into fixed-shape scratch.
+fn cholesky_decompose_into(a: &[Vec<f64>], n: usize, low: &mut Vec<Vec<f64>>) -> bool {
+    resize_square(low, n);
     for i in 0..n {
         for j in 0..=i {
             let mut sum = a[i][j];
@@ -630,7 +692,7 @@ fn cholesky_decompose(a: &[Vec<f64>], n: usize) -> Option<Vec<Vec<f64>>> {
             }
             if i == j {
                 if sum <= 0.0 {
-                    return None; // Not positive definite
+                    return false; // Not positive definite
                 }
                 low[i][j] = sum.sqrt();
             } else {
@@ -638,13 +700,27 @@ fn cholesky_decompose(a: &[Vec<f64>], n: usize) -> Option<Vec<Vec<f64>>> {
             }
         }
     }
-    Some(low)
+    true
 }
 
 /// Solve L * L^T * x = b given L.
 fn cholesky_solve_with_l(low: &[Vec<f64>], b: &[f64], n: usize) -> Vec<f64> {
+    let mut y = Vec::new();
+    let mut x = Vec::new();
+    cholesky_solve_with_l_into(low, b, n, &mut y, &mut x);
+    x
+}
+
+/// Solve L * L^T * x = b given L into fixed-shape scratch.
+fn cholesky_solve_with_l_into(
+    low: &[Vec<f64>],
+    b: &[f64],
+    n: usize,
+    y: &mut Vec<f64>,
+    x: &mut Vec<f64>,
+) {
     // Forward substitution: L * y = b
-    let mut y = vec![0.0; n];
+    y.resize(n, 0.0);
     for i in 0..n {
         let mut sum = b[i];
         for j in 0..i {
@@ -654,7 +730,7 @@ fn cholesky_solve_with_l(low: &[Vec<f64>], b: &[f64], n: usize) -> Vec<f64> {
     }
 
     // Back substitution: L^T * x = y
-    let mut x = vec![0.0; n];
+    x.resize(n, 0.0);
     for i in (0..n).rev() {
         let mut sum = y[i];
         for j in (i + 1)..n {
@@ -662,13 +738,6 @@ fn cholesky_solve_with_l(low: &[Vec<f64>], b: &[f64], n: usize) -> Vec<f64> {
         }
         x[i] = sum / low[i][i];
     }
-    x
-}
-
-/// Cholesky decomposition and solve: A * x = b.
-fn cholesky_solve(a: &[Vec<f64>], b: &[f64], n: usize) -> Option<Vec<f64>> {
-    let low = cholesky_decompose(a, n)?;
-    Some(cholesky_solve_with_l(&low, b, n))
 }
 
 /// Compute parameter covariance matrix from Jacobian.

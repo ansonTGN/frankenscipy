@@ -4,6 +4,30 @@ This ledger records every code-first performance attempt, including attempts tha
 are still awaiting the batch benchmark wave. Entries must name the retry
 condition so dead ends are not repeated casually.
 
+## 2026-06-19 - frankenscipy-y1mzk - least_squares LM normal-equation scratch
+
+- Agent: cod-b / MistyBirch
+- Lever: keep the `least_squares` Levenberg-Marquardt algorithm on the same
+  residual/Jacobian path while reusing fixed-shape scratch for `J^T J`,
+  `J^T r`, the damped normal-equation matrix, Cholesky factor, forward/backward
+  solve vectors, and `J*step` predicted-reduction work.
+- Status: pending batch-test. This is a code-first commit per campaign
+  instruction; local `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b
+  cargo check -p fsci-opt` is the pre-commit gate.
+- Correctness guard: existing `least_squares`, `curve_fit`, and `leastsq`
+  coverage exercises convergence and covariance paths; the helper preserves
+  residual evaluation order, finite-difference values, LM damping updates,
+  fallback diagonal solve semantics, and `nfev`/`njev`/`nit` accounting.
+- Benchmark guard: Criterion `least_squares/rosenbrock_residual`,
+  `least_squares/exp_curve_64`, and new `least_squares/exp_linear_curve_128`
+  rows quantify the scratch-reuse path against the allocation-heavy original.
+- Retry condition: keep only if same-worker focused `fsci-opt` least-squares /
+  curve-fit timings improve without convergence, cost, parameter, Jacobian, or
+  counter drift; if timings are neutral/slower, reject this exact LM
+  normal-equation scratch formulation and do not retry unless allocation
+  profiles put damped normal-equation matrix/Cholesky/`J*step` scratch back in
+  the top-5 `fsci-opt` hotspots.
+
 ## 2026-06-19 - frankenscipy-szky7 - least_squares fixed-shape Jacobian scratch
 
 - Agent: cod-b / MistyBirch
