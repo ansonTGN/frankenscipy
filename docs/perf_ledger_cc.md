@@ -90,6 +90,25 @@ not vs scipy; implied serial ≈ 3.4–6.5 ms at n=512 → fsci's pure-Rust pdis
 spatial owner.** Recommendation: raise the pdist gate well above 2¹⁸ AND/OR a faster
 inner kernel (scipy uses tuned C). Honest LOSS recorded.
 
+## Release-readiness summary (CrimsonForge beads, as of this round)
+
+5 beads measured head-to-head vs scipy/sklearn (release, 64 cores, multi-agent load):
+- **3 KEEP (wins):** GMM E-step parallel (4–11×), distribution pdf_many/pmf_many
+  (3–98×). These are release-ready marquee wins.
+- **1 KEEP (parity):** AP responsibility parallel (1.03–1.28× vs sklearn; the
+  parallelization itself is a real 2× internal). Acceptable; not a differentiator.
+- **1 REVERT:** interpolate `evaluate_many` parallel (0.88× regression) — reverted,
+  byte-identical hoist preserved.
+- **1 LOSS (not mine):** spatial pdist 2.7–9× slower than scipy → bead `nm8ex`
+  filed for the spatial owner (over-eager gate + slow serial kernel).
+
+**Cross-cutting lesson for release:** parallelize only HEAVY per-element work. The
+work-gate threshold must scale with the COST of the work unit, not just its count —
+2¹⁶ gaussian/exp evals (GMM) is worth parallelizing; 2¹⁶ flops (interpolate, pdist
+low-dim) is not. Gates expressed as raw `count·dim` flop-products fire too early for
+cheap kernels. Recommend auditing every `< 1 << 1x` parallel gate in the codebase
+against the per-element op cost.
+
 ## Notes / negative evidence
 - The ~50 byte-identical allocation/precompute/batch wins (buffer reuse, mem::take,
   loop-invariant hoist, interval binary-search, write!-amplification, retain) carry
