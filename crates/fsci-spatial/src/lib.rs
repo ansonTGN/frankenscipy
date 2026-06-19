@@ -2155,6 +2155,10 @@ impl Delaunay {
         all_points.push(((min_x + max_x) / 2.0, max_y + margin * dy));
 
         let mut triangles = vec![(n, n + 1, n + 2)];
+        // Circumcircles kept parallel to `triangles` so the bad scan tests dist²<r²
+        // instead of a per-pair in-circle determinant. frankenscipy-9l5oo.
+        let mut circ: Vec<(f64, f64, f64)> =
+            vec![circumcircle_of(all_points[n], all_points[n + 1], all_points[n + 2])];
         // Per-point scratch hoisted out of the insertion loop and cleared each pass
         // (both are fully rebuilt every point -> byte-identical), saving 2n Vec
         // allocations. frankenscipy-8d2z2.
@@ -2163,8 +2167,10 @@ impl Delaunay {
         for p_idx in 0..n {
             let point = all_points[p_idx];
             bad.clear();
-            for (t_idx, &(a, b, c)) in triangles.iter().enumerate() {
-                if point_in_circumcircle(all_points[a], all_points[b], all_points[c], point) {
+            for (t_idx, &(cx, cy, r2)) in circ.iter().enumerate() {
+                let ddx = point.0 - cx;
+                let ddy = point.1 - cy;
+                if ddx * ddx + ddy * ddy < r2 {
                     bad.push(t_idx);
                 }
             }
@@ -2191,9 +2197,11 @@ impl Delaunay {
             bad.sort_unstable();
             for &idx in bad.iter().rev() {
                 triangles.swap_remove(idx);
+                circ.swap_remove(idx);
             }
             for &(e0, e1) in &boundary {
                 triangles.push((p_idx, e0, e1));
+                circ.push(circumcircle_of(all_points[p_idx], all_points[e0], all_points[e1]));
             }
         }
 
@@ -2262,6 +2270,26 @@ fn point_in_circumcircle(a: (f64, f64), b: (f64, f64), c: (f64, f64), d: (f64, f
         + (ax * ax + ay * ay) * (bx * cy - by * cx);
     let orient = cross(a, b, c);
     if orient > 0.0 { det > 0.0 } else { det < 0.0 }
+}
+
+/// Circumcircle (center_x, center_y, radius²) of a non-degenerate triangle. Precomputed
+/// once per triangle so the Bowyer-Watson bad-triangle scan tests `dist² < r²` (~5 flops)
+/// instead of recomputing the full in-circle determinant + orientation per (point,
+/// triangle) pair (~20 flops). For non-degenerate points this is the same in/out verdict
+/// as `point_in_circumcircle`; cocircular boundary cases agree (det=0 ⇔ dist²=r², both
+/// excluded by the strict `<`). frankenscipy-9l5oo.
+fn circumcircle_of(a: (f64, f64), b: (f64, f64), c: (f64, f64)) -> (f64, f64, f64) {
+    let (ax, ay) = a;
+    let (bx, by) = b;
+    let (cx, cy) = c;
+    let d = 2.0 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+    let a2 = ax * ax + ay * ay;
+    let b2 = bx * bx + by * by;
+    let c2 = cx * cx + cy * cy;
+    let ux = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d;
+    let uy = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d;
+    let r2 = (ax - ux) * (ax - ux) + (ay - uy) * (ay - uy);
+    (ux, uy, r2)
 }
 
 fn triangle_has_edge(a: usize, b: usize, c: usize, e0: usize, e1: usize) -> bool {

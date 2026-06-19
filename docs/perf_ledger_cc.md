@@ -53,8 +53,8 @@ regressions are reverted. Entries also routed to MistyBirch for the canonical me
 | ndimage rotate order=1 (shares wm14d fix) | rotate 30° 256² order=1 | 1991 µs | 8733 µs | **0.23× (4.4× slower)** | residual machinery gap (was ~17×) | ⚠️ residual gap |
 | kendalltau inversion-count O(n log n) | kendalltau n=2048 | 597 µs | 230.4 µs | **2.59× faster** | scipy fixed overhead | ✅ KEEP |
 | kendalltau inversion-count O(n log n) | kendalltau n=4096 | 537 µs | 552.4 µs | 0.97× (parity) | both O(n log n) at scale | ✅ KEEP |
-| Delaunay Bowyer-Watson (8d2z2 hoist) | Delaunay n=1000 2-D | 1980 µs | 6534 µs | **0.30× (3.3× slower)** | O(n²) point-location | ⚠️ COMPLEXITY gap → bead |
-| Delaunay Bowyer-Watson (8d2z2 hoist) | Delaunay n=2000 2-D | 4488 µs | 26311 µs | **0.17× (5.9× slower)** | scales O(n²) vs Qhull O(n log n) | ⚠️ COMPLEXITY gap → bead |
+| Delaunay precompute circumcircles (9l5oo) | Delaunay n=1000 2-D | 1980 µs | 898 µs | **2.2× FASTER** — was 0.30× (3.3× slower) | cheaper bad-test | ✅ WIN (7.3× self-speedup) |
+| Delaunay precompute circumcircles (9l5oo) | Delaunay n=2000 2-D | 4488 µs | 3257 µs | **1.38× FASTER** — was 0.17× (5.9× slower) | O(n²) const-factor crushed | ✅ WIN (8.1× self-speedup) |
 
 ## Detail
 
@@ -327,6 +327,22 @@ Fix = SIMD-vectorize `convolve1d_along_axis`'s window·weights dot product (conf
 tolerance-OK since gaussian isn't chaotic), but that's shared kernel code. Also checked:
 `uniform_filter` already O(1) running-sum, `correlate1d`/`convolve1d` already specialized
 1D-axis — the ndimage filters are otherwise well-optimized; the residual is SIMD-kernel.
+
+### ✅✅ Delaunay LOSS → WIN (frankenscipy-9l5oo) — biggest gap FLIPPED
+The gauntlet's only complexity-class loss is now a WIN. Root cause was the bad-triangle
+scan calling `point_in_circumcircle` (full in-circle determinant + `cross` orientation +
+3 `all_points[]` lookups, ~20 flops) for EVERY (point, triangle) pair. Fix: precompute
+each triangle's circumcircle (center, radius²) once at creation, kept in a `circ` Vec
+parallel to `triangles`; the scan becomes `dist² < r²` (~5 flops). **MEASURED: n=1000
+6.53→0.90 ms (7.3× self-speedup, 2.2× FASTER than scipy Qhull); n=2000 26.3→3.26 ms
+(8.1×, 1.38× FASTER than Qhull).** A 3.3–5.9× LOSS flipped to a 1.4–2.2× WIN. Conformance:
+spatial 263 passed / 0 failed (incl. the empty-circumcircle property test shipped in
+`96a37a83` + the cocircular-square goldens — the explicit `dist²<r²` agrees with the
+determinant on these inputs; cocircular boundary cases agree via det=0 ⇔ dist²=r²).
+NOTE: still O(n²) (the constant just dropped ~8×), so Qhull's O(n log n) overtakes
+around n≈3–4k; the full jump-and-walk O(n log n) rewrite (now safety-netted by the
+property test) is the future lever to win at ALL sizes. But at realistic small-medium
+sizes fsci now DOMINATES.
 
 ## BOLD-VERIFY phase outcome (implemented levers, not just measured)
 
