@@ -5,11 +5,11 @@ use std::{
     time::Duration,
 };
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use fsci_linalg::{
-    det, eigh, inv, lstsq, matmul, pinv, randomized_eigh, solve, solve_banded, solve_triangular,
     DecompOptions, InvOptions, LstsqOptions, MatrixAssumption, PinvOptions, SolveOptions,
-    TriangularSolveOptions,
+    TriangularSolveOptions, det, eigh, inv, lstsq, matmul, pinv, randomized_eigh, solve,
+    solve_banded, solve_triangular,
 };
 use fsci_runtime::RuntimeMode;
 
@@ -385,22 +385,14 @@ fn bench_baseline_lstsq(c: &mut Criterion) {
 }
 
 fn bench_u0ucw_wide_lstsq(c: &mut Criterion) {
-    use std::sync::atomic::Ordering::Relaxed;
-
     let mut group = c.benchmark_group("u0ucw_wide_lstsq");
     group.sample_size(10);
     group.measurement_time(Duration::from_secs(3));
     for &(rows, cols) in &[(500usize, 1000usize), (1000, 2000)] {
         let a = make_underdetermined(rows, cols);
         let b = make_rhs(rows);
-        group.bench_function(format!("{rows}x{cols}_row_streaming"), |bencher| {
-            fsci_linalg::DISABLE_WIDE_LSTSQ_ROW_STREAMING.store(false, Relaxed);
-            bencher.iter(|| lstsq(&a, &b, LstsqOptions::default()).unwrap());
-        });
         group.bench_function(format!("{rows}x{cols}_materialized_transpose"), |bencher| {
-            fsci_linalg::DISABLE_WIDE_LSTSQ_ROW_STREAMING.store(true, Relaxed);
             bencher.iter(|| lstsq(&a, &b, LstsqOptions::default()).unwrap());
-            fsci_linalg::DISABLE_WIDE_LSTSQ_ROW_STREAMING.store(false, Relaxed);
         });
     }
     group.finish();
@@ -515,6 +507,69 @@ fn scipy_pinv_available() -> bool {
     child.wait().is_ok_and(|status| status.success())
 }
 
+fn scipy_lstsq_duration(rows: usize, cols: usize, iters: u64) -> Option<Duration> {
+    let script = r#"
+import sys
+import time
+import numpy as np
+import scipy.linalg as la
+
+rows = int(sys.argv[1])
+cols = int(sys.argv[2])
+iters = int(sys.argv[3])
+i = np.arange(rows, dtype=np.float64)[:, None]
+j = np.arange(cols, dtype=np.float64)[None, :]
+a = 1.0 / (np.abs(i - j) + 1.0)
+d = np.arange(rows)
+a[d, d] = rows * 2.0
+b = np.arange(1, rows + 1, dtype=np.float64)
+la.lstsq(a, b, check_finite=False)
+start = time.perf_counter()
+checksum = 0.0
+for _ in range(iters):
+    x, residuals, rank, s = la.lstsq(a, b, check_finite=False)
+    checksum += float(x[0]) + float(rank)
+elapsed = time.perf_counter() - start
+if not np.isfinite(checksum):
+    raise SystemExit("non-finite checksum")
+print(f"{elapsed:.17f}")
+"#;
+    let mut child = Command::new("python3")
+        .args([
+            "-",
+            &rows.to_string(),
+            &cols.to_string(),
+            &iters.to_string(),
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn scipy lstsq oracle");
+    child
+        .stdin
+        .as_mut()
+        .expect("open scipy lstsq oracle stdin")
+        .write_all(script.as_bytes())
+        .expect("write scipy lstsq oracle script");
+    let output = child
+        .wait_with_output()
+        .expect("wait for scipy lstsq oracle");
+    if !output.status.success() {
+        eprintln!(
+            "scipy lstsq oracle failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return None;
+    }
+    let stdout = String::from_utf8(output.stdout).expect("utf8 scipy lstsq timing");
+    let seconds: f64 = stdout
+        .trim()
+        .parse()
+        .expect("parse scipy lstsq timing seconds");
+    Some(Duration::from_secs_f64(seconds))
+}
+
 fn bench_u0ucw_gauntlet_scipy_pinv(c: &mut Criterion) {
     use std::sync::atomic::Ordering::Relaxed;
 
@@ -551,6 +606,33 @@ fn bench_u0ucw_gauntlet_scipy_pinv(c: &mut Criterion) {
         });
     } else {
         eprintln!("skipping 500x1000_scipy_pinv: python3 cannot import scipy.linalg");
+    }
+    group.finish();
+}
+
+fn bench_u0ucw_gauntlet_scipy_lstsq(c: &mut Criterion) {
+    const ROWS: usize = 500;
+    const COLS: usize = 1000;
+    let a = make_underdetermined(ROWS, COLS);
+    let b = make_rhs(ROWS);
+    let mut group = c.benchmark_group("u0ucw_gauntlet_scipy_lstsq");
+    group.sample_size(10);
+    group.warm_up_time(Duration::from_secs(1));
+    group.measurement_time(Duration::from_secs(5));
+    group.bench_function("500x1000_rust_current_materialized_transpose", |bencher| {
+        bencher.iter(|| {
+            black_box(lstsq(black_box(&a), black_box(&b), LstsqOptions::default())).unwrap()
+        });
+    });
+    if scipy_pinv_available() {
+        group.bench_function("500x1000_scipy_lstsq", |bencher| {
+            bencher.iter_custom(|iters| {
+                scipy_lstsq_duration(ROWS, COLS, iters)
+                    .expect("scipy lstsq oracle should run after availability check")
+            });
+        });
+    } else {
+        eprintln!("skipping 500x1000_scipy_lstsq: python3 cannot import scipy.linalg");
     }
     group.finish();
 }
@@ -660,6 +742,7 @@ criterion_group!(
     bench_u0ucw_wide_lstsq,
     bench_u0ucw_wide_pinv,
     bench_u0ucw_gauntlet_scipy_pinv,
+    bench_u0ucw_gauntlet_scipy_lstsq,
     bench_baseline_pinv
 );
 

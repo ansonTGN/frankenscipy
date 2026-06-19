@@ -380,28 +380,42 @@ condition so dead ends are not repeated casually.
 ## 2026-06-19 - frankenscipy-u0ucw - Wide lstsq row-streamed normal equations
 
 - Agent: cod-a / MistyBirch
-- Lever: route full-row-rank wide `lstsq` normal-equation products through the
-  caller's row-major input: form `A A^T` from contiguous row dot products and
-  compute `A^T y` / `A^T dy` by streaming rows once, avoiding the old
-  materialized `A^T` matrix. `FSCI_DISABLE_WIDE_LSTSQ_ROW_STREAMING` and
-  `DISABLE_WIDE_LSTSQ_ROW_STREAMING` keep the old path available for same-binary
-  A/B benchmarks.
-- Status: pending batch-test. This is a code-first commit per campaign
-  instruction; only local `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a
-  cargo check -p fsci-linalg` is expected before commit.
-- Correctness guard: `wide_normal_equation_row_helpers_match_nalgebra_products`
-  compares row-streamed `A A^T` and `A^T rhs` against the previous materialized
-  transpose products; the existing wide `lstsq` Cholesky/refinement acceptance
-  gate still falls back to SVD on conditioning or refinement uncertainty.
-- Benchmark guard: same-binary Criterion group `u0ucw_wide_lstsq` compares
-  `_row_streaming` against `_materialized_transpose` on 500x1000 and 1000x2000
-  full-row-rank wide workloads.
-- Retry condition: keep only if same-worker `u0ucw_wide_lstsq` timings improve
-  without rank, singular-value, min-norm, residual, or public `lstsq` tolerance
-  drift; if row streaming is neutral/slower due to nalgebra's transpose/multiply
-  kernels winning on wide shapes, reject this exact row-streamed wide formulation
-  and do not retry unless allocation or cache profiles put wide-route `A^T`
-  materialization back in the top linalg hotspot list.
+- Lever tested: route full-row-rank wide `lstsq` normal-equation products
+  through the caller's row-major input: form `A A^T` from contiguous row dot
+  products and compute `A^T y` / `A^T dy` by streaming rows once, avoiding the
+  materialized `A^T` matrix.
+- Decision: REVERT. The row-streamed candidate is slower than the prior
+  materialized transpose route on the same `rch` worker. The retained current
+  materialized route remains much faster than original SciPy on the realistic
+  500x1000 workload, so the regression is in the code-first micro-lever rather
+  than in the public algorithm choice.
+- Artifact: `tests/artifacts/perf/2026-06-19-u0ucw-wide-lstsq-gauntlet/`
+- Commands:
+  - `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a cargo bench -p fsci-linalg --bench linalg_bench -- u0ucw_gauntlet_scipy_lstsq --noplot`
+  - `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a cargo bench -p fsci-linalg --bench linalg_bench -- u0ucw_gauntlet_scipy_lstsq --noplot`
+
+| Route | Environment | Criterion mean | Ratio | Verdict |
+| --- | --- | ---: | ---: | --- |
+| Rust row-streamed `A A^T` + `A^T y` | `rch` worker `vmi1227854` | 139.965 ms | 0.966x vs materialized | loss, reverted |
+| Rust materialized `A^T` pre-revert | `rch` worker `vmi1227854` | 135.206 ms | 1.00x internal reference | keep old route |
+| Rust current materialized `A^T` after revert | local SciPy host | 109.370 ms | 11.46x faster than SciPy | keep |
+| SciPy `scipy.linalg.lstsq(check_finite=False)` | local Python 3.13.7 / NumPy 2.4.3 / SciPy 1.17.1 | 1.253347 s | 1.00x oracle | reference |
+
+- Conformance/correctness guard:
+  - PASS: `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a cargo check -p fsci-linalg --benches`
+  - PASS: `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a cargo test -p fsci-linalg wide_pinv -- --nocapture`
+  - PASS: `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a cargo test -p fsci-linalg public_wide_min_norm_lstsq_route_perf_probe --release -- --ignored --nocapture`
+  - The release probe reported `shape=256x512`, `lstsq_speedup=15.571283`,
+    and `lstsq_max_abs_diff=3.38840067115597776e-13` against the reference
+    route.
+- Infrastructure note: `vmi1227854` did not have SciPy importable, so the
+  row-streaming-vs-materialized loss uses remote same-worker Rust A/B evidence,
+  while the ratio-vs-SciPy row uses the local host with SciPy installed.
+- Retry condition: do not retry this exact row-streamed wide `lstsq`
+  formulation unless allocation or cache profiles put wide-route `A^T`
+  materialization back in the top linalg hotspot list and a same-worker A/B run
+  beats the materialized route by at least 10% without rank, singular-value,
+  min-norm, residual, or public `lstsq` tolerance drift.
 
 ## 2026-06-19 - frankenscipy-u0ucw - Wide pinv normal-equation Cholesky TRSM
 

@@ -1,5 +1,44 @@
 # Performance Release-Readiness Scorecard
 
+## 2026-06-19 - fsci-linalg wide lstsq row-streaming gauntlet
+
+- Agent: cod-a / MistyBirch
+- Bead: `frankenscipy-u0ucw`
+- Decision: REVERT row-streamed wide `lstsq`; KEEP current materialized
+  normal-equation route. Score for this sub-cluster: 4/5.
+- Artifact: `tests/artifacts/perf/2026-06-19-u0ucw-wide-lstsq-gauntlet/`
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| Rust per-crate compile | PASS | `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a cargo check -p fsci-linalg --benches` |
+| Criterion focused bench | PASS | same-worker row-streaming vs materialized A/B on `vmi1227854`; local SciPy row for original-SciPy ratio |
+| SciPy head-to-head oracle | PASS | SciPy 1.17.1 / NumPy 2.4.3, `scipy.linalg.lstsq(check_finite=False)` |
+| Targeted linalg tests | PASS | `wide_pinv` filtered tests passed, preserving the surviving row-major wide `pinv` helpers |
+| Release route probe | PASS | ignored release probe reported `lstsq_max_abs_diff=3.38840067115597776e-13` |
+| Changed bench formatting | PASS | `rustfmt --edition 2024 --check crates/fsci-linalg/benches/linalg_bench.rs` |
+| Direct `src/lib.rs` formatting | BLOCKED | file-wide pre-existing rustfmt drift outside this revert; broad-formatting would create unrelated churn in the shared checkout |
+| Clippy `-D warnings` | BLOCKED | pre-existing `src/lib.rs` lints plus concurrent `src/cossin.rs` excessive-precision lints; no row-streaming revert-specific issue identified |
+
+| Workload / route | Mean | Ratio | Verdict |
+| --- | ---: | ---: | --- |
+| Rust row-streamed wide `lstsq`, 500x1000 | 139.965 ms | 0.966x vs materialized | loss, reverted |
+| Rust materialized wide `lstsq`, 500x1000 | 135.206 ms | 1.035x vs row-streamed | keep old route |
+| Rust current materialized wide `lstsq`, 500x1000 | 109.370 ms | 11.46x vs SciPy | keep |
+| SciPy `scipy.linalg.lstsq`, 500x1000 | 1.253347 s | 1.00x oracle | reference |
+
+Readiness notes:
+
+- The negative result is specific to replacing the wide `lstsq` materialized
+  transpose products with row streaming. It does not invalidate the public wide
+  normal-equation route, which remains faster than SciPy on the measured
+  workload.
+- `rch exec -- env CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a cargo clippy -p fsci-linalg --benches -- -D warnings`
+  currently fails on existing lints unrelated to the measured revert, including
+  `needless_range_loop` / `needless_borrow` rows in `src/lib.rs` and
+  excessive-precision rows in concurrently modified `src/cossin.rs`.
+- Future retries need a fresh allocation/cache profile and a same-worker >10%
+  win over the materialized route before this formulation should be reconsidered.
+
 ## 2026-06-19 - fsci-opt least_squares scratch cluster
 
 - Agent: cod-b / MistyBirch

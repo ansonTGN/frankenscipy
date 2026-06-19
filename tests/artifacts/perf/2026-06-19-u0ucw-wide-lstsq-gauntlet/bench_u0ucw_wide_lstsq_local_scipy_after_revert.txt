@@ -1,0 +1,31 @@
+   Compiling fsci-linalg v0.1.0 (/data/projects/frankenscipy/crates/fsci-linalg)
+warning: variable does not need to be mutable
+ --> crates/fsci-linalg/src/bin/perf_control.rs:7:13
+  |
+7 |         let mut mk = |rr: &mut dyn FnMut()->f64| { let m: Vec<Vec<f64>> = (0..n).map(|_| (0..n).map(|_| rr()).collect()).collect(); m };
+  |             ----^^
+  |             |
+  |             help: remove this `mut`
+  |
+  = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `fsci-linalg` (bin "perf_control") generated 1 warning (run `cargo fix --bin "perf_control" -p fsci-linalg` to apply 1 suggestion)
+    Finished `bench` profile [optimized] target(s) in 13.96s
+     Running benches/linalg_bench.rs (/data/projects/.rch-targets/frankenscipy-cod-a/release/deps/linalg_bench-8e540e7f3f5611de)
+Gnuplot not found, using plotters backend
+Benchmarking u0ucw_gauntlet_scipy_lstsq/500x1000_rust_current_materialized_transpose
+Benchmarking u0ucw_gauntlet_scipy_lstsq/500x1000_rust_current_materialized_transpose: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 5.0s. You may wish to increase target time to 5.9s or enable flat sampling.
+Benchmarking u0ucw_gauntlet_scipy_lstsq/500x1000_rust_current_materialized_transpose: Collecting 10 samples in estimated 5.8865 s (55 iterations)
+Benchmarking u0ucw_gauntlet_scipy_lstsq/500x1000_rust_current_materialized_transpose: Analyzing
+u0ucw_gauntlet_scipy_lstsq/500x1000_rust_current_materialized_transpose
+                        time:   [107.02 ms 108.64 ms 110.18 ms]
+Benchmarking u0ucw_gauntlet_scipy_lstsq/500x1000_scipy_lstsq
+Benchmarking u0ucw_gauntlet_scipy_lstsq/500x1000_scipy_lstsq: Warming up for 1.0000 s
+
+Warning: Unable to complete 10 samples in 5.0s. You may wish to increase target time to 21.5s.
+Benchmarking u0ucw_gauntlet_scipy_lstsq/500x1000_scipy_lstsq: Collecting 10 samples in estimated 21.459 s (10 iterations)
+Benchmarking u0ucw_gauntlet_scipy_lstsq/500x1000_scipy_lstsq: Analyzing
+u0ucw_gauntlet_scipy_lstsq/500x1000_scipy_lstsq
+                        time:   [809.71 ms 1.2533 s 1.7069 s]
