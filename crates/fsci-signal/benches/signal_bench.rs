@@ -1,8 +1,8 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use fsci_signal::{
-    ConvolveMode, FindPeaksCwtOptions, FirWindow, SosSection, coherence, csd, cwt, fftconvolve,
+    ConvolveMode, DetrendType, FindPeaksCwtOptions, FirWindow, SosSection, coherence, csd, cwt, fftconvolve,
     filtfilt, find_peaks_cwt, firls, firwin, freqz, lfilter, medfilt, mfcc, order_filter, remez,
-    ricker, sosfilt, welch,
+    detrend, hilbert, ricker, sosfilt, welch,
 };
 use std::hint::black_box;
 use std::io::Write;
@@ -398,6 +398,23 @@ fn bench_mfcc(c: &mut Criterion) {
     });
 }
 
+fn bench_detrend_hilbert(c: &mut Criterion) {
+    use criterion::BenchmarkId;
+    let mut group = c.benchmark_group("detrend_hilbert");
+    for &n in &[200_000usize] {
+        let x: Vec<f64> = (0..n)
+            .map(|i| (i as f64) * 0.001 + (i as f64 * 0.02).sin() * 3.0 + (i % 13) as f64 * 0.1)
+            .collect();
+        group.bench_function(BenchmarkId::new("detrend_linear", n), |b| {
+            b.iter(|| detrend(black_box(&x), DetrendType::Linear).expect("detrend"))
+        });
+        group.bench_function(BenchmarkId::new("hilbert", n), |b| {
+            b.iter(|| hilbert(black_box(&x)).expect("hilbert"))
+        });
+    }
+    group.finish();
+}
+
 fn bench_find_peaks_cwt(c: &mut Criterion) {
     let mut group = c.benchmark_group("find_peaks_cwt");
     let n = 5000usize;
@@ -417,6 +434,7 @@ fn bench_find_peaks_cwt(c: &mut Criterion) {
 
 criterion_group!(
     benches,
+    bench_detrend_hilbert,
     bench_find_peaks_cwt,
     bench_mfcc,
     bench_freqz,

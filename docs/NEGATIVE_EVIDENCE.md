@@ -1119,3 +1119,26 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
 ### RESUME sweep — confirmed walls / already-optimal (no action)
 - interpolate CubicSpline/Pchip/Akima eval (~4.6 ms/50k) and special gamma/erf
   (~3 ms/200k) are fast scipy C — low headroom. jv array (above) dominates.
+
+## 2026-06-20 - detrend WIN 21.6x + hilbert LOSS 2.5x (FFT mixed-radix wall) - RESUME inline
+
+- Agent: cc / MistyBirch. Added a `detrend_hilbert` bench (both were uncovered).
+
+| op (n=200k) | fsci | scipy | result |
+| --- | ---: | ---: | --- |
+| detrend linear | 0.370 ms | 7.99 ms | **21.6x FASTER** |
+| hilbert        | 20.4 ms  | 8.14 ms | **2.5x SLOWER (loss)** |
+
+- **detrend** WIN: fsci uses an O(N) single-pass closed form (centered-x normal
+  equations), vs scipy's numpy lstsq overhead. Already optimal; no source change.
+- **hilbert** LOSS: rooted in the FFT mixed-radix wall, NOT the hilbert logic.
+  n=200000 = 2^6·5^5; fsci does two full complex FFTs and its radix-5 path is
+  ~2.5x slower than pocketfft (cf. the documented fft-mid-size gap; power-of-2
+  sizes are ~1.08x). A partial lever (rfft for the real forward transform) would
+  save only ~25-40% (inverse FFT still full) — does not close 2.5x. NOT pursued:
+  the fix is in the FFT crate (radix-5/mixed-radix speed, a known hard wall), and
+  analytic_signal has an OPEN correctness bead (k6li3, odd-length Nyquist bin) — do
+  not edit hilbert from a perf angle and risk colliding with that fix. Documented
+  as an FFT-wall loss; the bench tracks it.
+- Other signal ops this sweep are fast scipy C / fsci-competitive: savgol_filter
+  (3.96 ms), peak_prominences (4.66 ms), peak_widths (5.76 ms).
