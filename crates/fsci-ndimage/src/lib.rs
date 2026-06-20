@@ -209,7 +209,6 @@ fn gaussian_filter_2d_reflect_order0(input: &NdArray, sigma: f64) -> Result<NdAr
     let kernel_len = kernel.len();
     let row_sources = reflect_convolve1d_sources(rows, kernel_len);
     let col_sources = reflect_convolve1d_sources(cols, kernel_len);
-    let mut scratch = vec![0.0; input.size()];
     let mut output = vec![0.0; input.size()];
     let nthreads = ndimage_filter_thread_count(input.size(), kernel_len)
         .min(rows)
@@ -221,10 +220,12 @@ fn gaussian_filter_2d_reflect_order0(input: &NdArray, sigma: f64) -> Result<NdAr
     let input_data = &input.data;
     let kernel = kernel.as_slice();
     let row_sources = row_sources.as_slice();
+    let col_sources = col_sources.as_slice();
     std::thread::scope(|scope| {
-        for (chunk_idx, scratch_chunk) in scratch.chunks_mut(row_chunk * cols).enumerate() {
+        for (chunk_idx, output_chunk) in output.chunks_mut(row_chunk * cols).enumerate() {
             let start_row = chunk_idx * row_chunk;
             scope.spawn(move || {
+                let mut scratch_chunk = vec![0.0; output_chunk.len()];
                 for (local_row, scratch_row) in scratch_chunk.chunks_mut(cols).enumerate() {
                     let row = start_row + local_row;
                     let row_plan = &row_sources[row * kernel_len..(row + 1) * kernel_len];
@@ -259,18 +260,10 @@ fn gaussian_filter_2d_reflect_order0(input: &NdArray, sigma: f64) -> Result<NdAr
                         }
                     }
                 }
-            });
-        }
-    });
 
-    let scratch_data = scratch.as_slice();
-    let col_sources = col_sources.as_slice();
-    std::thread::scope(|scope| {
-        for (chunk_idx, output_chunk) in output.chunks_mut(row_chunk * cols).enumerate() {
-            let start_row = chunk_idx * row_chunk;
-            scope.spawn(move || {
+                let scratch_data = scratch_chunk.as_slice();
                 for (local_row, output_row) in output_chunk.chunks_mut(cols).enumerate() {
-                    let row_base = (start_row + local_row) * cols;
+                    let row_base = local_row * cols;
                     for (col, slot) in output_row.iter_mut().enumerate() {
                         let col_plan = &col_sources[col * kernel_len..(col + 1) * kernel_len];
                         if axpy {

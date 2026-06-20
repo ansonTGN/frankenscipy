@@ -4,6 +4,75 @@ This ledger records every code-first performance attempt, including attempts tha
 are still awaiting the batch benchmark wave. Entries must name the retry
 condition so dead ends are not repeated casually.
 
+## 2026-06-20 - frankenscipy-8l8r1.132 - ndimage gaussian_filter tile-local scratch
+
+- Agent: cod-a / BlackThrush
+- Lever kept: change the 2-D `BoundaryMode::Reflect`, order-0 Gaussian fast
+  path from a full-image scratch plus two scoped thread barriers into a
+  tile-local scratch pass. Each worker row chunk computes the vertical
+  cache-planned AXPY pass into a thread-local scratch tile and immediately runs
+  the horizontal pass into the output chunk.
+- Graveyard/artifact route tested: cache-blocked separable layout and
+  communication/data-movement reduction, after scalar reflect tap peeling,
+  full-image scratch, and pure AXPY/tap-folding families left a residual SciPy
+  loss.
+- Decision: KEEP. Same-worker Criterion on `hz2` improves
+  `gaussian_sigma2/256` from `1.9819 ms` to `1.2274 ms` (`1.61x` faster) and
+  flips the row from `1.34x` slower than SciPy to `1.20x` faster than SciPy.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-cod-a-gaussian-tile-scratch/EVIDENCE.md`
+- rch baseline command:
+  `AGENT_NAME=BlackThrush RCH_REQUIRE_REMOTE=1 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo bench -p fsci-ndimage --bench ndimage_bench -- correlate_gaussian/gaussian_sigma2/256 --sample-size 10 --measurement-time 1 --warm-up-time 1`
+- rch candidate command:
+  `AGENT_NAME=BlackThrush RCH_REQUIRE_REMOTE=1 RCH_WORKER=hz2 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo bench -p fsci-ndimage --bench ndimage_bench -- correlate_gaussian/gaussian_sigma2/256 --sample-size 10 --measurement-time 1 --warm-up-time 1`
+- Current-route A/B profile command:
+  `AGENT_NAME=BlackThrush RCH_REQUIRE_REMOTE=1 RCH_WORKER=hz2 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo test -p fsci-ndimage gaussian_2d_axpy_ab_timing --release -- --ignored --nocapture`
+- SciPy oracle command:
+  `AGENT_NAME=BlackThrush python3 docs/perf_oracle_ndimage.py`
+
+Benchmark evidence:
+
+| Workload / route | Worker | Mean | Interval / value | Ratio / verdict |
+| --- | --- | ---: | ---: | --- |
+| Current Rust `ce1857ab` | `hz2` | 1.9819 ms | [1.8484, 2.2050] ms | baseline; 1.34x slower than SciPy |
+| Tile-local scratch candidate | `hz2` | 1.2274 ms | [1.1564, 1.2960] ms; Criterion change -40.721% | 1.61x faster than current; 1.20x faster than SciPy |
+| Same-process gather toggle | `hz2` | 2760.0 us | one binary, interleaved | current-route profile arm |
+| Same-process AXPY toggle | `hz2` | 2430.3 us | one binary, interleaved | 1.14x faster than gather |
+| SciPy `ndimage.gaussian_filter` | local SciPy oracle | 1.47367 ms | p50 | oracle |
+
+Win/loss/neutral:
+
+- Same-worker candidate versus current: `1/0/0`.
+- Final candidate versus SciPy oracle: `1/0/0`.
+- Prior final-source Gaussian score was `0/1/0`; this closes the tracked
+  `gaussian_sigma2/256` loss.
+
+Correctness/conformance guards:
+
+- PASS: rch focused Gaussian suite:
+  `cargo test -p fsci-ndimage gaussian --lib -- --nocapture` =
+  31 passed / 0 failed / 1 ignored.
+- PASS: local live SciPy conformance:
+  `FSCI_REQUIRE_SCIPY_ORACLE=1 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a-local cargo test -p fsci-conformance --test diff_ndimage_gaussian_filter -- --nocapture`
+  = 1 passed / 0 failed.
+- PASS: rch per-crate compile:
+  `cargo check -p fsci-ndimage --all-targets` passed on `vmi1149989`;
+  unrelated existing warnings remained in `fsci-interpolate` and `diff_geom`.
+- PASS: `git diff --check`.
+- PASS: changed-file UBS scan exited 0 with 0 critical findings; existing
+  broad warnings in `crates/fsci-ndimage/src/lib.rs` remain inventory.
+- BLOCKED: `cargo fmt -p fsci-ndimage -- --check` remains blocked by
+  pre-existing formatting drift in `ndimage_bench.rs`, `diff_fourier.rs`, and
+  older `src/lib.rs` hunks outside this change.
+- BLOCKED: `cargo clippy -p fsci-ndimage --all-targets -- -D warnings` stopped
+  before this patch on existing `fsci-linalg` dependency lints
+  (`needless_range_loop` and `needless_borrow`).
+
+Retry condition: do not retry full-image scratch plus two-barrier separable
+layout for this path. Future work must target smaller residual overhead such
+as fixed-radius/source-plan specialization or plan caching, and must retain
+same-worker proof.
+
 ## 2026-06-20 - frankenscipy-8l8r1.131 - sparse eigsh projected-residual certificate
 
 - Agent: cod-a / BlackThrush

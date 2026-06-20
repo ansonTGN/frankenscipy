@@ -6,6 +6,35 @@ This file exists as the BOLD-VERIFY entry point requested for measured
 win/loss/neutral summaries. Keep detailed attempt records in the canonical
 ledger above so the project has one source of truth.
 
+## 2026-06-20 - frankenscipy-8l8r1.132 - gaussian_filter tile-local scratch
+
+- Agent: cod-a / BlackThrush
+- Decision: KEEP the tile-local scratch/cache-blocked separable pass for 2-D
+  Reflect/order-0 `gaussian_filter`. The vertical pass now writes each worker
+  row chunk into a local scratch tile and immediately runs the horizontal pass
+  from that hot tile, removing the full-image scratch buffer and the second
+  scoped thread barrier.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-cod-a-gaussian-tile-scratch/EVIDENCE.md`
+- Same-worker internal score versus current: `1/0/0`.
+- Strict SciPy score for final source: `1/0/0`; this flips the tracked
+  `gaussian_sigma2/256` row from loss to win.
+
+| Workload | Current Rust | Final Rust | SciPy oracle | Verdict |
+| --- | ---: | ---: | ---: | --- |
+| `gaussian_sigma2/256`, 2-D Reflect | 1.9819 ms | 1.2274 ms | 1.47367 ms | keep: 1.61x faster than current; Rust 1.20x faster than SciPy |
+
+Guards: focused Gaussian tests and live SciPy conformance pass; rch
+`cargo check -p fsci-ndimage --all-targets`, `git diff --check`, and changed-file
+UBS pass. Full formatting and strict clippy remain blocked by pre-existing
+`fsci-ndimage` rustfmt drift and `fsci-linalg` dependency clippy lints,
+respectively.
+
+Negative evidence: do not retry the full-image scratch plus two scoped thread
+barriers for this fast path. The remaining plausible work is smaller constant
+factor cleanup: source-plan caching, fixed-radius specialization, or deeper
+fused/tiled source-plan work with same-worker proof.
+
 ## 2026-06-20 - frankenscipy-8l8r1.131 - sparse eigsh projected residual certificate
 
 - Agent: cod-a / BlackThrush

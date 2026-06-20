@@ -1,5 +1,45 @@
 # Performance Release-Readiness Scorecard
 
+## 2026-06-20 - fsci-ndimage gaussian_filter tile-local scratch gauntlet
+
+- Agent: cod-a / BlackThrush
+- Bead: `frankenscipy-8l8r1.132`
+- Decision: KEEP. The tile-local scratch/cache-blocked separable pass removes
+  the full-image scratch buffer and the second scoped thread barrier from the
+  2-D Reflect/order-0 Gaussian fast path. Same-worker `hz2` evidence flips
+  `gaussian_sigma2/256` from a SciPy loss to a SciPy win.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-cod-a-gaussian-tile-scratch/EVIDENCE.md`
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| rch same-worker baseline | PASS | current `ce1857ab` on `hz2`: 1.9819 ms mean, [1.8484, 2.2050] ms |
+| rch same-worker candidate | PASS | tile-local scratch on `hz2`: 1.2274 ms mean, [1.1564, 1.2960] ms; Criterion reported -40.721% mean change |
+| SciPy oracle | PASS | local SciPy `ndimage.gaussian_filter sigma=2 256x256`: 1.47367 ms p50 |
+| Current-route A/B profile | PASS | same-process interleaved gather 2760.0 us vs AXPY 2430.3 us on `hz2`; confirms the old remaining route was still buffer/barrier dominated after AXPY |
+| Focused gaussian guard | PASS | `cargo test -p fsci-ndimage gaussian --lib -- --nocapture` via rch: 31 passed / 0 failed / 1 ignored |
+| Local live SciPy conformance | PASS | `FSCI_REQUIRE_SCIPY_ORACLE=1 cargo test -p fsci-conformance --test diff_ndimage_gaussian_filter -- --nocapture`: 1 passed / 0 failed |
+| Per-crate compile | PASS | `cargo check -p fsci-ndimage --all-targets` passed via rch `vmi1149989`; unrelated existing warnings remained in `fsci-interpolate` and `diff_geom` |
+| Diff hygiene | PASS | `git diff --check` |
+| Changed-file UBS | PASS | `ubs crates/fsci-ndimage/src/lib.rs` exited 0 with 0 critical findings; broad warnings remain inventory |
+| Full crate formatting | BLOCKED | `cargo fmt -p fsci-ndimage -- --check` is blocked by pre-existing drift in `ndimage_bench.rs`, `diff_fourier.rs`, and older `src/lib.rs` hunks outside this change |
+| Clippy `-D warnings` | BLOCKED | `cargo clippy -p fsci-ndimage --all-targets -- -D warnings` stopped before this patch on existing `fsci-linalg` dependency lints (`needless_range_loop`, `needless_borrow`) |
+
+| Workload / route | Mean | Ratio | Verdict |
+| --- | ---: | ---: | --- |
+| Current Rust `gaussian_sigma2/256` | 1.9819 ms | 1.34x slower than SciPy | prior current |
+| Final Rust tile-local scratch | 1.2274 ms | 1.61x faster than current; 1.20x faster than SciPy | keep |
+| SciPy `ndimage.gaussian_filter` sigma=2 256x256 | 1.47367 ms | 1.00x oracle | reference |
+
+Readiness notes:
+
+- This is the cache-blocked/tile-local layout the prior Gaussian negative
+  evidence requested. It keeps the same reflected source plans and tolerance
+  behavior; only scratch lifetime/layout changes.
+- Do not retry the full-image scratch plus two-barrier separable layout. Future
+  attempts should target fixed-radius/source-plan specialization or plan
+  caching, and keep the same-worker acceptance rule.
+
 ## 2026-06-20 - fsci-cluster linkage row-pack gauntlet
 
 - Agent: cod-a / BlackThrush
