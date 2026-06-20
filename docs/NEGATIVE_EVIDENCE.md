@@ -493,3 +493,27 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
   location. NEXT (perf_precompute_per_element_predicate): a uniform grid over
   triangle bboxes would make EACH query O(1) (the scan is still O(num_simplices)
   cheap bbox checks) — a further flip, but find_simplex_many already dominates.
+
+## 2026-06-20 - Delaunay find_simplex_many GRID index - WIN (14.7-16.4x faster than scipy, byte-identical)
+
+- Agent: cc / MistyBirch
+- Decision: **KEEP**. Stacked a uniform spatial grid on `find_simplex_many`
+  (the precompute-per-element-predicate lever from [[perf_precompute_per_element_predicate]]):
+  bin each triangle, in ASCENDING index order, into every grid cell its padded
+  bbox overlaps; a query scans only its own cell's (sorted) candidate list and
+  returns the first containing triangle. The cell list is a superset of every
+  triangle whose padded bbox contains the query point, so the lowest-index hit is
+  **bit-for-bit identical** to the O(num_simplices) bbox linear scan. Degenerate /
+  small (ns<64) inputs use g=1 (single cell = the full scan). g=ceil(sqrt(ns)),
+  capped 1024. Proven by the existing `delaunay_find_simplex_many_matches_per_point`
+  (interior/exterior/on-vertex); full fsci-spatial lib suite 212/0.
+
+| Workload (50000 queries) | bbox scan (prev) | + GRID | grid gain | vs scipy |
+| --- | ---: | ---: | ---: | ---: |
+| npts=2000 | 13.95 ms | 2.57 ms | **5.4x** | 37.7 ms → **14.7x faster** |
+| npts=5000 | 21.9 ms  | 4.00 ms | **5.5x** | 65.6 ms → **16.4x faster** |
+
+- Cumulative: the original single-point linear scan was ~30-48x SLOWER than scipy
+  (1.1-3.1s); find_simplex_many + grid is now **14.7-16.4x FASTER** — a ~450-770x
+  swing, byte-identical. Each query is now O(1) (cell candidates) instead of
+  O(num_simplices). Feeds griddata / LinearND point location.

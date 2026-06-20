@@ -2940,8 +2940,50 @@ impl Delaunay {
         let points = &self.points;
         let simplices = &self.simplices;
         let bb = &bboxes;
+
+        // Uniform grid over the points' bbox. Each triangle is binned (in ASCENDING
+        // index order, so every cell list stays sorted) into every cell its padded
+        // bbox overlaps; a query then scans only its own cell's candidate list and
+        // returns the first (= lowest-index) containing triangle. That cell list is a
+        // superset of every triangle whose padded bbox contains the query point, so
+        // the result is bit-for-bit identical to the O(num_simplices) bbox linear
+        // scan. Degenerate / small inputs use g=1 (one cell = the full scan).
+        let (mut gminx, mut gminy, mut gmaxx, mut gmaxy) =
+            (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+        for &(x, y) in points {
+            gminx = gminx.min(x);
+            gmaxx = gmaxx.max(x);
+            gminy = gminy.min(y);
+            gmaxy = gmaxy.max(y);
+        }
+        let degenerate = !(gmaxx > gminx) || !(gmaxy > gminy) || !gminx.is_finite();
+        let g: usize = if ns >= 64 && !degenerate {
+            ((ns as f64).sqrt().ceil()).clamp(1.0, 1024.0) as usize
+        } else {
+            1
+        };
+        let inv_cw = if g > 1 { g as f64 / (gmaxx - gminx) } else { 0.0 };
+        let inv_ch = if g > 1 { g as f64 / (gmaxy - gminy) } else { 0.0 };
+        let cell_x = move |x: f64| -> usize {
+            (((x - gminx) * inv_cw) as isize).clamp(0, g as isize - 1) as usize
+        };
+        let cell_y = move |y: f64| -> usize {
+            (((y - gminy) * inv_ch) as isize).clamp(0, g as isize - 1) as usize
+        };
+        let mut cells: Vec<Vec<u32>> = vec![Vec::new(); g * g];
+        for idx in 0..ns {
+            let (lx, hx, ly, hy) = bb[idx];
+            for cy in cell_y(ly)..=cell_y(hy) {
+                let row = cy * g;
+                for cx in cell_x(lx)..=cell_x(hx) {
+                    cells[row + cx].push(idx as u32);
+                }
+            }
+        }
+        let cells = &cells;
         let eval = move |q: (f64, f64)| -> Option<(usize, f64, f64, f64)> {
-            for idx in 0..ns {
+            for &idx in &cells[cell_y(q.1) * g + cell_x(q.0)] {
+                let idx = idx as usize;
                 let (lx, hx, ly, hy) = bb[idx];
                 if q.0 < lx || q.0 > hx || q.1 < ly || q.1 > hy {
                     continue;
