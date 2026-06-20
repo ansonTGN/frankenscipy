@@ -123,9 +123,13 @@ fn bench_splines(c: &mut Criterion) {
     let cubic = CubicSplineStandalone::new(&x, &y, SplineBc::Natural).expect("cubic spline");
     let pchip = PchipInterpolator::new(&x, &y).expect("pchip");
 
+    let x_big = query_1d(100_000);
     let mut group = c.benchmark_group("splines");
     group.bench_function("cubic_eval_many/1024x4096", |b| {
         b.iter(|| cubic.eval_many(&x_new))
+    });
+    group.bench_function("cubic_eval_many/1024x100000", |b| {
+        b.iter(|| cubic.eval_many(&x_big))
     });
     group.bench_function("pchip_eval_many/1024x4096", |b| {
         b.iter(|| pchip.eval_many(&x_new))

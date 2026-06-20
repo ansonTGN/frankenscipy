@@ -384,3 +384,16 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
   same-thread-count loss is ever found.)
 - Action: added `bench_pdist_highdim` (n/d ∈ {1000/64, 2000/64, 1000/128,
   2000/16}) so this winning regime has permanent regression coverage.
+
+## 2026-06-20 - CubicSpline eval_many 100k - MEASURED WIN (fsci 7.1x faster), coverage added
+
+- Agent: cc / MistyBirch
+- MEASURED (rch vs scipy.interpolate.CubicSpline.__call__): scipy evals 100k
+  query points (1024-knot spline) in **5985 us**; fsci `CubicSplineStandalone::
+  eval_many` does it in **843 us = 7.1x faster** (4096 pts: 81 us). Sequential Rust
+  (binary search + cubic per point) already beats scipy's per-call Python/numpy
+  overhead by 7x — not a gap. Parallelizing the query loop is NOT pursued (already
+  winning; and a prior NdPPoly/BPoly evaluate_many parallel attempt was REVERTED at
+  0.88x — query-parallel doesn't pay for this cheap per-point kernel).
+- Action: extended `bench_splines` with a 100k-point case so the large-batch
+  eval regime (was only 4096) has regression coverage.
