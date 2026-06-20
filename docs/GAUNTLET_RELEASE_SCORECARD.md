@@ -15,6 +15,8 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `frankenscipy-u0ucw` | Wide `lstsq` current materialized normal equations after row-stream revert | 500x1000 full-row-rank dense `scipy.linalg.lstsq` equivalent | 109.369915 ms | 1.253347 s | 11.46x faster | keep current, reject row-stream lever |
 | `frankenscipy-nm8ex` | Dim-4 `pdist` SIMD-across-pairs (SoA), serial n≤2048 / parallel above | `scipy.spatial.distance.pdist` euclidean d=4, n=256→4096 | 48.5us / 167us / 666us / 2.86ms / 13.2ms | 85.3us / 303us / 1.20ms / 4.65ms / 51.1ms | **1.76 / 1.82 / 1.80 / 1.63 / 3.87x faster** | keep — was 1.14-1.37x slower (and 2.4x slower at n=1024 via over-spawn); bit-identical |
 | `frankenscipy-nm8ex` | Dim-4 `pdist` SIMD-across-pairs (SoA), serial n≤2048 / parallel above | `scipy.spatial.distance.pdist` cosine d=4, n=256→4096 | 40.7us / 148us / 549us / 2.53ms / 13.1ms | 76.8us / 275us / 1.08ms / 4.23ms / 48.3ms | **1.89 / 1.86 / 1.97 / 1.67 / 3.69x faster** | keep — was 1.31-1.63x slower; bit-identical |
+| `frankenscipy-nm8ex` | Dim-4 `cdist` SoA SIMD-across-columns + 16-thread cap | `scipy.spatial.distance.cdist` euclidean d=4, 1000×1000 / 2000×500 | 1.99ms / 2.23ms | 2.17ms / 2.19ms | **1.09x faster / parity** | keep — was 2.6x slower (over-spawn 64 thr); bandwidth-bound, cap16; bit-identical |
+| `frankenscipy-nm8ex` | Dim-4 `cdist` SoA SIMD-across-columns + 16-thread cap | `scipy.spatial.distance.cdist` cosine d=4, 1000×1000 / 2000×500 | 1.76ms / 2.20ms | 2.03ms / 2.03ms | **1.15x faster / parity** | keep — 11.3x self-speedup; bit-identical |
 
 ## Measured Losses / Internal Keeps
 

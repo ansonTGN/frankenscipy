@@ -1494,3 +1494,32 @@ Local original-SciPy oracle (`python3 docs/perf_oracle_fft_csd.py --reps 120
 - Note: the residual `cdist_thread_count` over-spawn (CrimsonForge's finding,
   `work < 1<<18` spawns ~64 threads) still affects the generic cdist path (no
   bench); coordinate before retuning that shared gate.
+
+## 2026-06-19 - frankenscipy-nm8ex - dim-4 cdist SoA SIMD + 16-thread cap — closes 2.4-2.6x scipy loss to parity/1.15x WIN
+
+- Agent: cod-a / MistyBirch
+- cdist Euclidean/Cosine at d=4 had NO fast path (generic scalar `metric_distance`
+  arm) AND over-spawned ~64 threads for memory-bandwidth-bound work: na=nb=1000
+  d=4 was 5.7ms vs scipy 2.2ms (2.6x SLOWER).
+- Lever 1: dim-4 fast paths vectorize each output ROW across xb columns (SoA, lane
+  k = column j+k) so the dependent per-pair sqrt/divide pipeline across SIMD lanes
+  (same lever as pdist). BIT-identical to the generic arm at d=4.
+- Lever 2 (the unlock): cap the dim-4 cdist parallel path at **16 workers**. The
+  kernel is bandwidth-bound (~40 bytes traffic per 8-byte output), so ~16 threads
+  saturate memory bandwidth; 32/64 only contend. Measured cap sweep on na=nb=1000:
+  cap8 2.2ms, **cap16 1.8-2.0ms**, cap32 3.7ms, cap64 4.6ms. This is the cdist
+  analogue of pdist's over-spawn finding (CrimsonForge's `cdist_thread_count`).
+- Status: **MEASURED WIN** (was 2.4-2.6x loss → now parity-to-1.15x faster):
+
+  | Workload | Rust before | Rust after | SciPy | After vs SciPy |
+  | --- | ---: | ---: | ---: | ---: |
+  | cdist eucl 1000×1000 d4 | 5.72 ms | 1.99 ms | 2.17 ms | 1.09x faster |
+  | cdist eucl 2000×500 d4 | 5.17 ms | 2.23 ms | 2.19 ms | parity |
+  | cdist cos 1000×1000 d4 | — | 1.76 ms | 2.03 ms | 1.15x faster |
+  | cdist cos 2000×500 d4 | — | 2.20 ms | 2.03 ms | parity |
+- Gate `cdist_dim4_fast_paths_match_metric_distance` (serial+parallel+zero-norm NaN,
+  to_bits). 208 lib tests green; clippy -D warnings (lib+bins) clean. Commit `02e057ce`.
+- REJECTED sub-lever: `with_capacity`+`extend_from_slice` single-write (to avoid the
+  `vec![0.0;nb]` zero-init) REGRESSED 4.56→5.59ms — `alloc_zeroed` gives lazy zero
+  pages (~free) and `copy_to_slice` is a direct store, while `extend` adds per-chunk
+  Vec-growth overhead. Kept `vec![0.0;nb]` + `copy_to_slice`.
