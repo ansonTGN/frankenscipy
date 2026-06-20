@@ -40,7 +40,7 @@ fn bench_transform_batch(c: &mut Criterion) {
 fn bench_pdist(c: &mut Criterion) {
     use fsci_spatial::{DistanceMetric, pdist};
     let mut group = c.benchmark_group("pdist");
-    for &n in &[256usize, 512] {
+    for &n in &[256usize, 512, 1024, 2048, 4096] {
         let data: Vec<Vec<f64>> = (0..n)
             .map(|i| {
                 let t = i as f64;

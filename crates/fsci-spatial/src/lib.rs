@@ -516,8 +516,13 @@ pub fn pdist(x: &[Vec<f64>], metric: DistanceMetric) -> Result<Vec<f64>, Spatial
     }
 
     let total = n * (n - 1) / 2;
+    // The vectorized dim-4 Euclidean/Cosine serial kernel (SIMD across pairs) beats SciPy
+    // ~1.5-2.2x and stays compute-bound up to n≈2048; below that crossover the parallel
+    // path loses to its own thread-spawn cost (e.g. n=1024: serial 0.67ms vs spawning ~64
+    // threads 2.8ms). Above it the O(n²) memory-bound work amortizes the spawn and the
+    // parallel fill wins (n=4096: 13ms vs 43ms serial). Measured same-box, see nm8ex.
     let nthreads = if dim == 4
-        && n <= 512
+        && n <= 2048
         && matches!(metric, DistanceMetric::Euclidean | DistanceMetric::Cosine)
     {
         1
@@ -604,46 +609,59 @@ fn dim4_soa(x: &[[f64; 4]]) -> [Vec<f64>; 4] {
     c
 }
 
-fn pdist_fill_euclidean4(x: &[[f64; 4]], n: usize, total: usize, nthreads: usize) -> Vec<f64> {
-    if nthreads <= 1 {
-        // SIMD across pairs: lane k of a chunk holds pair (i, start+j+k). Per lane the
-        // squared sum d0²+d1²+d2²+d3² and its sqrt are evaluated in the same left-to-right
-        // order as the scalar `sqeuclidean4(..).sqrt()`, so the result is BIT-identical to
-        // the scalar helper while the 8-wide `vsqrtpd` chunk pipelines the sqrts.
-        use std::simd::{Simd, StdFloat};
-        const L: usize = 8;
-        let [c0, c1, c2, c3] = dim4_soa(x);
-        let mut result = vec![0.0_f64; total];
-        let mut pos = 0usize;
-        for i in 0..n {
-            let a0 = Simd::<f64, L>::splat(c0[i]);
-            let a1 = Simd::<f64, L>::splat(c1[i]);
-            let a2 = Simd::<f64, L>::splat(c2[i]);
-            let a3 = Simd::<f64, L>::splat(c3[i]);
-            let row = n - 1 - i;
-            let start = i + 1;
-            let mut j = 0usize;
-            while j + L <= row {
-                let s = start + j;
-                let d0 = a0 - Simd::<f64, L>::from_slice(&c0[s..s + L]);
-                let d1 = a1 - Simd::<f64, L>::from_slice(&c1[s..s + L]);
-                let d2 = a2 - Simd::<f64, L>::from_slice(&c2[s..s + L]);
-                let d3 = a3 - Simd::<f64, L>::from_slice(&c3[s..s + L]);
-                let sq = d0 * d0 + d1 * d1 + d2 * d2 + d3 * d3;
-                sq.sqrt().copy_to_slice(&mut result[pos + j..pos + j + L]);
-                j += L;
-            }
-            while j < row {
-                result[pos + j] = sqeuclidean4(&x[i], &x[start + j]).sqrt();
-                j += 1;
-            }
-            pos += row;
+/// SIMD-across-pairs fill of the Euclidean dim-4 condensed distances for rows `r0..r1`
+/// into `seg` (exactly the pairs of those rows, contiguous, row r0 first). Lane k of a
+/// chunk holds pair (i, start+j+k); per lane the squared sum d0²+d1²+d2²+d3² and its sqrt
+/// run in the same left-to-right order as scalar `sqeuclidean4(..).sqrt()`, so output is
+/// BIT-identical while the 8-wide `vsqrtpd` chunk pipelines the otherwise-serial sqrts.
+fn fill_euclidean4_rows(
+    x: &[[f64; 4]],
+    c: &[Vec<f64>; 4],
+    n: usize,
+    r0: usize,
+    r1: usize,
+    seg: &mut [f64],
+) {
+    use std::simd::{Simd, StdFloat};
+    const L: usize = 8;
+    let (c0, c1, c2, c3) = (&c[0], &c[1], &c[2], &c[3]);
+    let mut pos = 0usize;
+    for i in r0..r1 {
+        let a0 = Simd::<f64, L>::splat(c0[i]);
+        let a1 = Simd::<f64, L>::splat(c1[i]);
+        let a2 = Simd::<f64, L>::splat(c2[i]);
+        let a3 = Simd::<f64, L>::splat(c3[i]);
+        let row = n - 1 - i;
+        let start = i + 1;
+        let mut j = 0usize;
+        while j + L <= row {
+            let s = start + j;
+            let d0 = a0 - Simd::<f64, L>::from_slice(&c0[s..s + L]);
+            let d1 = a1 - Simd::<f64, L>::from_slice(&c1[s..s + L]);
+            let d2 = a2 - Simd::<f64, L>::from_slice(&c2[s..s + L]);
+            let d3 = a3 - Simd::<f64, L>::from_slice(&c3[s..s + L]);
+            let sq = d0 * d0 + d1 * d1 + d2 * d2 + d3 * d3;
+            sq.sqrt().copy_to_slice(&mut seg[pos + j..pos + j + L]);
+            j += L;
         }
+        while j < row {
+            seg[pos + j] = sqeuclidean4(&x[i], &x[start + j]).sqrt();
+            j += 1;
+        }
+        pos += row;
+    }
+}
+
+fn pdist_fill_euclidean4(x: &[[f64; 4]], n: usize, total: usize, nthreads: usize) -> Vec<f64> {
+    let c = dim4_soa(x);
+    let mut result = vec![0.0_f64; total];
+    if nthreads <= 1 {
+        fill_euclidean4_rows(x, &c, n, 0, n, &mut result);
         return result;
     }
-    let mut result = vec![0.0_f64; total];
     let bounds = pdist_row_bounds(n, nthreads);
     let offset = |r: usize| -> usize { r * (n - 1) - r * (r.saturating_sub(1)) / 2 };
+    let c = &c;
     std::thread::scope(|scope| {
         let mut rest: &mut [f64] = &mut result;
         let mut prev = 0usize;
@@ -654,19 +672,69 @@ fn pdist_fill_euclidean4(x: &[[f64; 4]], n: usize, total: usize, nthreads: usize
             prev = offset(r1);
             let (seg, tail) = rest.split_at_mut(take);
             rest = tail;
-            scope.spawn(move || {
-                let mut local = 0usize;
-                for i in r0..r1 {
-                    let xi = &x[i];
-                    for xj in &x[i + 1..] {
-                        seg[local] = sqeuclidean4(xi, xj).sqrt();
-                        local += 1;
-                    }
-                }
-            });
+            scope.spawn(move || fill_euclidean4_rows(x, c, n, r0, r1, seg));
         }
     });
     result
+}
+
+/// SIMD-across-pairs fill of the Cosine dim-4 condensed distances for rows `r0..r1` into
+/// `seg`. Lane k holds pair (i, start+j+k); per lane `1 - dot/(ni·nj)` and the
+/// denom==0 ⇒ NaN guard run identically to the scalar form, so output is BIT-identical
+/// while the 8-wide `vdivpd` chunk pipelines the dependent divisions (cosine bottleneck).
+fn fill_cosine4_rows(
+    x: &[[f64; 4]],
+    c: &[Vec<f64>; 4],
+    norms: &[f64],
+    n: usize,
+    r0: usize,
+    r1: usize,
+    seg: &mut [f64],
+) {
+    use std::simd::{Select, Simd, cmp::SimdPartialEq};
+    const L: usize = 8;
+    let (c0, c1, c2, c3) = (&c[0], &c[1], &c[2], &c[3]);
+    let one = Simd::<f64, L>::splat(1.0);
+    let zero = Simd::<f64, L>::splat(0.0);
+    let nan = Simd::<f64, L>::splat(f64::NAN);
+    let mut pos = 0usize;
+    for i in r0..r1 {
+        let a0 = Simd::<f64, L>::splat(c0[i]);
+        let a1 = Simd::<f64, L>::splat(c1[i]);
+        let a2 = Simd::<f64, L>::splat(c2[i]);
+        let a3 = Simd::<f64, L>::splat(c3[i]);
+        let ni = Simd::<f64, L>::splat(norms[i]);
+        let row = n - 1 - i;
+        let start = i + 1;
+        let mut j = 0usize;
+        while j + L <= row {
+            let s = start + j;
+            let b0 = Simd::<f64, L>::from_slice(&c0[s..s + L]);
+            let b1 = Simd::<f64, L>::from_slice(&c1[s..s + L]);
+            let b2 = Simd::<f64, L>::from_slice(&c2[s..s + L]);
+            let b3 = Simd::<f64, L>::from_slice(&c3[s..s + L]);
+            let nj = Simd::<f64, L>::from_slice(&norms[s..s + L]);
+            let denom = ni * nj;
+            let dot = a0 * b0 + a1 * b1 + a2 * b2 + a3 * b3;
+            let val = one - dot / denom;
+            denom
+                .simd_eq(zero)
+                .select(nan, val)
+                .copy_to_slice(&mut seg[pos + j..pos + j + L]);
+            j += L;
+        }
+        while j < row {
+            let s = start + j;
+            let denom = norms[i] * norms[s];
+            seg[pos + j] = if denom == 0.0 {
+                f64::NAN
+            } else {
+                1.0 - dot4(&x[i], &x[s]) / denom
+            };
+            j += 1;
+        }
+        pos += row;
+    }
 }
 
 fn pdist_fill_cosine4(
@@ -676,64 +744,15 @@ fn pdist_fill_cosine4(
     total: usize,
     nthreads: usize,
 ) -> Vec<f64> {
-    let pair = |i: usize, j: usize| {
-        let denom = norms[i] * norms[j];
-        if denom == 0.0 {
-            f64::NAN
-        } else {
-            1.0 - dot4(&x[i], &x[j]) / denom
-        }
-    };
+    let c = dim4_soa(x);
+    let mut result = vec![0.0_f64; total];
     if nthreads <= 1 {
-        // SIMD across pairs: lane k holds pair (i, start+j+k). Per lane `1 - dot/(ni·nj)`
-        // and the denom==0 ⇒ NaN guard are evaluated identically to the scalar `pair`, so
-        // the output is BIT-identical while the 8-wide `vdivpd` chunk pipelines the
-        // otherwise-serial dependent divisions (the cosine bottleneck).
-        use std::simd::{Select, Simd, cmp::SimdPartialEq};
-        const L: usize = 8;
-        let [c0, c1, c2, c3] = dim4_soa(x);
-        let one = Simd::<f64, L>::splat(1.0);
-        let zero = Simd::<f64, L>::splat(0.0);
-        let nan = Simd::<f64, L>::splat(f64::NAN);
-        let mut result = vec![0.0_f64; total];
-        let mut pos = 0usize;
-        for i in 0..n {
-            let a0 = Simd::<f64, L>::splat(c0[i]);
-            let a1 = Simd::<f64, L>::splat(c1[i]);
-            let a2 = Simd::<f64, L>::splat(c2[i]);
-            let a3 = Simd::<f64, L>::splat(c3[i]);
-            let ni = Simd::<f64, L>::splat(norms[i]);
-            let row = n - 1 - i;
-            let start = i + 1;
-            let mut j = 0usize;
-            while j + L <= row {
-                let s = start + j;
-                let b0 = Simd::<f64, L>::from_slice(&c0[s..s + L]);
-                let b1 = Simd::<f64, L>::from_slice(&c1[s..s + L]);
-                let b2 = Simd::<f64, L>::from_slice(&c2[s..s + L]);
-                let b3 = Simd::<f64, L>::from_slice(&c3[s..s + L]);
-                let nj = Simd::<f64, L>::from_slice(&norms[s..s + L]);
-                let denom = ni * nj;
-                let dot = a0 * b0 + a1 * b1 + a2 * b2 + a3 * b3;
-                let val = one - dot / denom;
-                denom
-                    .simd_eq(zero)
-                    .select(nan, val)
-                    .copy_to_slice(&mut result[pos + j..pos + j + L]);
-                j += L;
-            }
-            while j < row {
-                result[pos + j] = pair(i, start + j);
-                j += 1;
-            }
-            pos += row;
-        }
+        fill_cosine4_rows(x, &c, norms, n, 0, n, &mut result);
         return result;
     }
-    let mut result = vec![0.0_f64; total];
     let bounds = pdist_row_bounds(n, nthreads);
     let offset = |r: usize| -> usize { r * (n - 1) - r * (r.saturating_sub(1)) / 2 };
-    let pair = &pair;
+    let c = &c;
     std::thread::scope(|scope| {
         let mut rest: &mut [f64] = &mut result;
         let mut prev = 0usize;
@@ -744,15 +763,7 @@ fn pdist_fill_cosine4(
             prev = offset(r1);
             let (seg, tail) = rest.split_at_mut(take);
             rest = tail;
-            scope.spawn(move || {
-                let mut local = 0usize;
-                for i in r0..r1 {
-                    for j in (i + 1)..n {
-                        seg[local] = pair(i, j);
-                        local += 1;
-                    }
-                }
-            });
+            scope.spawn(move || fill_cosine4_rows(x, c, norms, n, r0, r1, seg));
         }
     });
     result
@@ -6213,6 +6224,43 @@ mod tests {
             assert_eq!(got.len(), want.len());
             for (k, (&g, &w)) in got.iter().zip(&want).enumerate() {
                 assert_eq!(g.to_bits(), w.to_bits(), "pdist mismatch at {k} {metric:?}");
+            }
+        }
+    }
+
+    /// The vectorized dim-4 Euclidean/Cosine fast paths must stay BIT-identical to the
+    /// scalar metric helper at a size above the serial gate (n>512), where rows are split
+    /// across worker threads — exercising the `r0>0` mid-triangle offset of the SIMD
+    /// row-filler that the n=32 serial gate does not reach.
+    #[test]
+    fn pdist_dim4_parallel_matches_metric_helpers() {
+        let n = 600;
+        let x: Vec<Vec<f64>> = (0..n)
+            .map(|i| {
+                let t = i as f64;
+                vec![
+                    (t * 0.11).sin(),
+                    (t * 0.07).cos(),
+                    t * 0.003,
+                    (t * 0.17).sin() - 0.25,
+                ]
+            })
+            .collect();
+        for metric in [DistanceMetric::Euclidean, DistanceMetric::Cosine] {
+            let got = pdist(&x, metric).expect("pdist dim4 parallel fast path");
+            let mut want = Vec::with_capacity(n * (n - 1) / 2);
+            for i in 0..n {
+                for j in (i + 1)..n {
+                    want.push(metric_distance(&x[i], &x[j], metric));
+                }
+            }
+            assert_eq!(got.len(), want.len());
+            for (k, (&g, &w)) in got.iter().zip(&want).enumerate() {
+                assert_eq!(
+                    g.to_bits(),
+                    w.to_bits(),
+                    "dim4 parallel pdist mismatch at {k} {metric:?}"
+                );
             }
         }
     }
