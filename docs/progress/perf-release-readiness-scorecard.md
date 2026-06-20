@@ -1,5 +1,52 @@
 # Performance Release-Readiness Scorecard
 
+## 2026-06-20 - fsci-ndimage label mean flat-accumulator gauntlet
+
+- Agent: cod-a / MistyBirch
+- Bead: `frankenscipy-8l8r1.125`
+- Decision: KEEP the flat `mean(labels,index)` accumulator as an internal win,
+  but mark the routine as a SciPy LOSS on the measured rows. Score for this
+  sub-cluster: 3/5.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-label-stats-flat-mean/EVIDENCE.md`
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| Rust per-crate compile | PASS | `RCH_REQUIRE_REMOTE=1 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo check -p fsci-ndimage --all-targets`; existing `fsci-interpolate` and `diff_geom` warnings remain |
+| Focused reduction tests | PASS | `cargo test -p fsci-ndimage measurement_reduction_wrappers -- --nocapture` via rch: 2 passed / 0 failed |
+| Full ndimage lib tests | PASS | `cargo test -p fsci-ndimage --lib -- --nocapture` via rch: 240 passed / 0 failed |
+| Same-binary A/B | PASS | `perf_label_stats` compares old O(N*K), previous bucketed O(N+K), and flat O(N+K) in one optimized binary; mismatches 0/0 |
+| SciPy head-to-head oracle | PASS | local SciPy 1.17.1 via `docs/perf_oracle_label_stats.py`; final source remains 3.7-4.7x slower |
+| Touched-file formatting | PASS | `rustfmt --edition 2024 --check crates/fsci-ndimage/src/lib.rs crates/fsci-ndimage/src/bin/perf_label_stats.rs` |
+| Diff hygiene | PASS | `git diff --check -- crates/fsci-ndimage/src/lib.rs crates/fsci-ndimage/src/bin/perf_label_stats.rs` |
+| Changed-file UBS scan | PASS | `ubs` exited 0; no critical issues; broad warning inventory left untouched |
+| Clippy `-D warnings` | BLOCKED | `cargo clippy -p fsci-ndimage --lib -- -D warnings` stopped before this crate on existing `fsci-linalg` dependency lints outside this patch |
+
+| Workload / route | Mean | Ratio | Verdict |
+| --- | ---: | ---: | --- |
+| Rust flat mean, N=65536 K=512 | 590.978 us | 3.72x slower than SciPy; 1.77x faster than prior bucketed Rust | SciPy loss, internal keep |
+| Rust prior bucketed mean, N=65536 K=512 | 1.047 ms | flat is 1.77x faster | internal baseline |
+| SciPy `ndimage.mean`, N=65536 K=512 | 159 us | 1.00x oracle | reference |
+| Rust flat mean, N=262144 K=1024 | 2.568 ms | 4.13x slower than SciPy; 1.44x faster than prior bucketed Rust | SciPy loss, internal keep |
+| Rust prior bucketed mean, N=262144 K=1024 | 3.695 ms | flat is 1.44x faster | internal baseline |
+| SciPy `ndimage.mean`, N=262144 K=1024 | 622 us | 1.00x oracle | reference |
+| Rust flat mean, N=262144 K=2048 | 2.713 ms | 4.67x slower than SciPy; 1.53x faster than prior bucketed Rust | SciPy loss, internal keep |
+| Rust prior bucketed mean, N=262144 K=2048 | 4.140 ms | flat is 1.53x faster | internal baseline |
+| SciPy `ndimage.mean`, N=262144 K=2048 | 581 us | 1.00x oracle | reference |
+| Rust flat mean, N=589824 K=4096 | 6.951 ms | 4.12x slower than SciPy; 1.69x faster than prior bucketed Rust | SciPy loss, internal keep |
+| Rust prior bucketed mean, N=589824 K=4096 | 11.760 ms | flat is 1.69x faster | internal baseline |
+| SciPy `ndimage.mean`, N=589824 K=4096 | 1.688 ms | 1.00x oracle | reference |
+
+Readiness notes:
+
+- This is a real constant-factor win over the prior O(N+K) implementation, not
+  a SciPy parity claim. The final source scores `0/4/0` against SciPy and
+  `4/0/0` against the previous Rust bucketed route.
+- Future label-stat work should target the remaining per-element lookup and
+  accumulation constants: dense label lookup for compact integer labels,
+  sorted-label remapping, or SIMD/cache-tiled accumulation. Reintroducing
+  grouped `Vec<Vec<f64>>` materialization for `mean` is negative evidence.
+
 ## 2026-06-19 - fsci-signal coherence fused-Welch gauntlet
 
 - Agent: cod-b / MistyBirch

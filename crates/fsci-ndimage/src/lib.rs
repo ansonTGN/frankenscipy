@@ -5011,16 +5011,6 @@ fn measurement_label_groups(
         None => vec![Vec::new()],
     };
 
-    // Canonical key for exact f64 label equality: +0.0 and -0.0 must hash the
-    // same (they compare equal), every other value keeps its bit pattern.
-    let label_key = |x: f64| -> u64 {
-        if x == 0.0 {
-            0.0f64.to_bits()
-        } else {
-            x.to_bits()
-        }
-    };
-
     match index {
         Some(index) => {
             // Build a label -> first-position map once (O(K)), then bucket each
@@ -5033,11 +5023,11 @@ fn measurement_label_groups(
                 std::collections::HashMap::with_capacity(index.len());
             for (pos, &wanted_label) in index.iter().enumerate() {
                 label_to_pos
-                    .entry(label_key(wanted_label as f64))
+                    .entry(measurement_label_key(wanted_label as f64))
                     .or_insert(pos);
             }
             for (&value, &label_value) in input.data.iter().zip(&labels.data) {
-                if let Some(&pos) = label_to_pos.get(&label_key(label_value)) {
+                if let Some(&pos) = label_to_pos.get(&measurement_label_key(label_value)) {
                     groups[pos].push(value);
                 }
             }
@@ -5052,6 +5042,73 @@ fn measurement_label_groups(
     }
 
     Ok(groups)
+}
+
+fn measurement_label_key(x: f64) -> u64 {
+    if x == 0.0 {
+        0.0f64.to_bits()
+    } else {
+        x.to_bits()
+    }
+}
+
+fn measurement_label_mean(
+    input: &NdArray,
+    labels: Option<&NdArray>,
+    index: Option<&[usize]>,
+) -> Result<Vec<f64>, NdimageError> {
+    let Some(labels) = labels else {
+        return Ok(vec![mean_of_values(&input.data)]);
+    };
+    if input.shape != labels.shape {
+        return Err(NdimageError::DimensionMismatch(format!(
+            "input shape {:?} != labels shape {:?}",
+            input.shape, labels.shape
+        )));
+    }
+
+    let (mut sums, mut counts) = match index {
+        Some(index) => (vec![0.0; index.len()], vec![0usize; index.len()]),
+        None => (vec![0.0], vec![0usize]),
+    };
+
+    match index {
+        Some(index) => {
+            let mut label_to_pos: std::collections::HashMap<u64, usize> =
+                std::collections::HashMap::with_capacity(index.len());
+            for (pos, &wanted_label) in index.iter().enumerate() {
+                label_to_pos
+                    .entry(measurement_label_key(wanted_label as f64))
+                    .or_insert(pos);
+            }
+            for (&value, &label_value) in input.data.iter().zip(&labels.data) {
+                if let Some(&pos) = label_to_pos.get(&measurement_label_key(label_value)) {
+                    sums[pos] += value;
+                    counts[pos] += 1;
+                }
+            }
+        }
+        None => {
+            for (&value, &label_value) in input.data.iter().zip(&labels.data) {
+                if label_value != 0.0 {
+                    sums[0] += value;
+                    counts[0] += 1;
+                }
+            }
+        }
+    }
+
+    Ok(sums
+        .into_iter()
+        .zip(counts)
+        .map(|(sum, count)| {
+            if count == 0 {
+                f64::NAN
+            } else {
+                sum / count as f64
+            }
+        })
+        .collect())
 }
 
 fn measurement_label_value_positions(
@@ -5079,25 +5136,17 @@ fn measurement_label_value_positions(
     // See `measurement_label_groups`: one-time label -> first-position map turns
     // the per-element O(K) `position` scan into an O(1) lookup (O(N + K) total),
     // byte-identical via the canonical ±0.0 key and `or_insert` first-wins.
-    let label_key = |x: f64| -> u64 {
-        if x == 0.0 {
-            0.0f64.to_bits()
-        } else {
-            x.to_bits()
-        }
-    };
-
     match index {
         Some(index) => {
             let mut label_to_pos: std::collections::HashMap<u64, usize> =
                 std::collections::HashMap::with_capacity(index.len());
             for (pos, &wanted_label) in index.iter().enumerate() {
                 label_to_pos
-                    .entry(label_key(wanted_label as f64))
+                    .entry(measurement_label_key(wanted_label as f64))
                     .or_insert(pos);
             }
             for (flat, (&value, &label_value)) in input.data.iter().zip(&labels.data).enumerate() {
-                if let Some(&pos) = label_to_pos.get(&label_key(label_value)) {
+                if let Some(&pos) = label_to_pos.get(&measurement_label_key(label_value)) {
                     groups[pos].push((value, flat));
                 }
             }
@@ -5261,10 +5310,7 @@ pub fn mean(
     labels: Option<&NdArray>,
     index: Option<&[usize]>,
 ) -> Result<Vec<f64>, NdimageError> {
-    Ok(measurement_label_groups(input, labels, index)?
-        .iter()
-        .map(|values| mean_of_values(values))
-        .collect())
+    measurement_label_mean(input, labels, index)
 }
 
 /// Mean of values in labeled regions.

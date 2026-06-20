@@ -4,6 +4,50 @@ This ledger records every code-first performance attempt, including attempts tha
 are still awaiting the batch benchmark wave. Entries must name the retry
 condition so dead ends are not repeated casually.
 
+## 2026-06-20 - frankenscipy-8l8r1.125 - label mean flat accumulator
+
+- Agent: cod-a / MistyBirch
+- Lever: specialize `ndimage.mean(input, labels, index)` so it streams once into
+  flat `sum` and `count` arrays instead of materializing one `Vec<f64>` bucket
+  per requested label before dividing. The duplicate-index and exact label
+  equality semantics remain the same: the shared canonical label key preserves
+  `+0.0 == -0.0`, `NaN` bit identity, and first-position wins for duplicate
+  `index` entries.
+- Decision: KEEP as a measured internal win. The route is still a measured
+  SciPy loss, so this is not release-speed parity.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-label-stats-flat-mean/EVIDENCE.md`
+- Correctness guards (GREEN):
+  - `cargo test -p fsci-ndimage measurement_reduction_wrappers -- --nocapture`
+    via rch: **2 passed / 0 failed**.
+  - `cargo test -p fsci-ndimage --lib -- --nocapture` via rch:
+    **240 passed / 0 failed**.
+  - Same-binary `perf_label_stats` asserted **0 bit-mismatches** versus both the
+    old linear-scan route and the previous bucketed O(N+K) route on every row.
+- Benchmark (`/data/projects/.rch-targets/frankenscipy-cod-a/release/perf_label_stats`
+  for same-host Rust A/B; SciPy oracle `docs/perf_oracle_label_stats.py`,
+  local SciPy 1.17.1):
+
+  | N | K | previous bucketed O(N+K) | flat mean | internal speedup | SciPy `ndimage.mean` | flat vs SciPy |
+  | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+  | 65536 | 512 | 1.047 ms | 590.978 us | 1.77x | 159 us | 3.72x slower |
+  | 262144 | 1024 | 3.695 ms | 2.568 ms | 1.44x | 622 us | 4.13x slower |
+  | 262144 | 2048 | 4.140 ms | 2.713 ms | 1.53x | 581 us | 4.67x slower |
+  | 589824 | 4096 | 11.760 ms | 6.951 ms | 1.69x | 1.688 ms | 4.12x slower |
+
+- SciPy win/loss/neutral for final source: `0/4/0`.
+- Same-binary internal keep/loss/neutral versus prior bucketed route: `4/0/0`.
+- Negative evidence: removing bucket materialization for `mean` cuts another
+  30-44% from the Rust path, but the compiled SciPy implementation is still
+  3.7-4.7x faster. The remaining cost is now per-element HashMap lookup plus
+  scalar accumulation overhead, not group allocation.
+- Retry condition: do not retry another `Vec<Vec<f64>>` grouping variant for
+  `mean`. Next attempts need a materially different constant-factor lever:
+  dense lookup tables for small contiguous labels, sorted-label remapping,
+  specialized integer-label paths, SIMD/cache-tiled accumulation, or another
+  profiled route that beats the flat accumulator in the same binary while
+  preserving SciPy-observable label semantics.
+
 ## 2026-06-19 - frankenscipy-label-stats - label-indexed measurement O(N*K)->O(N+K)
 
 - Agent: cc / MistyBirch
