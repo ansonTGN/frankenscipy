@@ -96,6 +96,44 @@ Readiness notes:
   row-major copy.
 - Same-worker internal score is `2/0/0`; strict SciPy score is `0/2/0`.
 
+## 2026-06-20 - fsci-opt linear_sum_assignment touched-set dual update gauntlet
+
+- Agent: cod-a / BlackThrush
+- Bead: `frankenscipy-8l8r1.136`
+- Decision: REJECT/REVERT. Sparse touched-row/touched-column dual updates made
+  the dense LSAP path slower; no source diff remains.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-cod-a-lsap-touched-sets/EVIDENCE.md`
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| rch same-worker baseline | PASS | `hz2`: n=500 21.121 ms; n=1000 135.72 ms |
+| rch same-worker touched-set candidate | FAIL | `hz2`: n=500 26.212 ms; n=1000 167.30 ms |
+| SciPy oracle | LOSS | local SciPy 1.17.1 p50: n=500 19.101180 ms; n=1000 127.840366 ms |
+| Source revert | PASS | `git diff --exit-code -- crates/fsci-opt/src/lib.rs` |
+| Focused assignment tests | PASS | rch `cargo test -p fsci-opt linear_sum_assignment --lib -- --nocapture`: 9 passed |
+| Per-crate release build | PASS | rch `cargo build --release -p fsci-opt` |
+| Live SciPy conformance | PASS | local `cargo test -p fsci-conformance --test diff_opt_linear_sum_assignment -- --nocapture`: 1 passed |
+| Diff hygiene | PASS | `git diff --check` |
+| Changed-file UBS | PASS | docs/artifact/beads-only scan exited 0; no recognizable code-language files |
+
+| Workload / route | Median | Ratio | Verdict |
+| --- | ---: | ---: | --- |
+| Current Rust n=500 | 21.121 ms | 1.11x slower than SciPy | current residual |
+| Touched-set Rust n=500 | 26.212 ms | 1.24x slower than current; 1.37x slower than SciPy | reject |
+| SciPy n=500 | 19.101180 ms | 1.00x oracle | reference |
+| Current Rust n=1000 | 135.72 ms | 1.06x slower than SciPy | current residual |
+| Touched-set Rust n=1000 | 167.30 ms | 1.23x slower than current; 1.31x slower than SciPy | reject |
+| SciPy n=1000 | 127.840366 ms | 1.00x oracle | reference |
+
+Readiness notes:
+
+- Current main has narrowed the LSAP gap relative to the earlier SAP scorecard,
+  but still does not dominate SciPy on these dense rows.
+- Do not retry touched-set dual updates for dense LSAP. The next credible
+  release-readiness route is dense layout/kernel work that removes row-vector
+  indirection without per-call copying.
+
 ## 2026-06-20 - fsci-cluster linkage compact active frontier gauntlet
 
 - Agent: cod-a / BlackThrush

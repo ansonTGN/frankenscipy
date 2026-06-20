@@ -43,6 +43,38 @@ queue storage for this contiguous Reflect route. Future filter1d work should
 move to non-contiguous axes, `size > line_len`, or missing SciPy max/min
 filter1d conformance coverage.
 
+## 2026-06-20 - frankenscipy-8l8r1.136 - linear_sum_assignment touched-set dual updates
+
+- Agent: cod-a / BlackThrush
+- Decision: REJECT/REVERT the touched-row/touched-column dual update variant
+  for the modified Jonker-Volgenant LSAP core. The attempt added sparse
+  `sr`/`sc` frontier vectors so dual updates would visit only reached rows and
+  columns, but dense workloads paid more for push/indirection than they saved
+  in branch scans.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-cod-a-lsap-touched-sets/EVIDENCE.md`
+- Source status: reverted before commit; `crates/fsci-opt/src/lib.rs` has no
+  remaining diff.
+- Same-worker touched-set versus current Rust score: `0/1/1`.
+- Strict touched-set versus SciPy 1.17.1 oracle score: `0/2/0`.
+- Current main versus this SciPy oracle snapshot remains `0/2/0`, but the gap
+  is now much narrower than the earlier scorecard: 1.11x and 1.06x slower.
+
+| Workload | Current Rust | Touched-set Rust | SciPy oracle | Verdict |
+| --- | ---: | ---: | ---: | --- |
+| `linear_sum_assignment/dense/500` | 21.121 ms | 26.212 ms | 19.101180 ms | reject: touched-set 1.24x slower than current; 1.37x slower than SciPy |
+| `linear_sum_assignment/dense/1000` | 135.72 ms | 167.30 ms | 127.840366 ms | reject: touched-set 1.23x slower than current; 1.31x slower than SciPy |
+
+Guards: exact source revert check, rch focused assignment tests
+(`9 passed`), rch `cargo build --release -p fsci-opt`, local live SciPy
+`diff_opt_linear_sum_assignment` conformance (`1 passed`), diff hygiene, and
+changed-file UBS on the docs/artifact/beads-only closeout all passed.
+
+Negative evidence: do not retry touched-row/touched-column dual updates for
+dense LSAP. The remaining credible strict-SciPy work is a deeper dense storage
+or LAP-kernel layout change, not sparse frontier bookkeeping inside the current
+row-vector route.
+
 ## 2026-06-20 - frankenscipy-zl4m5 - linear_sum_assignment SAP route
 
 - Agent: cod-a / BlackThrush

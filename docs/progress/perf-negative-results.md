@@ -171,6 +171,65 @@ dense matrix storage API. The remaining strict SciPy gap is likely row
 indirection and Rust scalar-loop constant factor, not the old Hungarian
 complexity route.
 
+## 2026-06-20 - frankenscipy-8l8r1.136 - optimize linear_sum_assignment touched-set dual updates
+
+- Agent: cod-a / BlackThrush
+- Lever tested and reverted: track `touched_rows` and `touched_cols` in the
+  shortest augmenting path scratch state, then update only those dual variables
+  instead of scanning every row and column in `sr`/`sc`.
+- Graveyard/artifact route tested: sparse frontier / branch-elimination inside
+  the dense LSAP augmenting path loop.
+- Decision: REJECT. The candidate regressed n=1000 significantly and had no
+  n=500 win. The source was reverted before commit.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-cod-a-lsap-touched-sets/EVIDENCE.md`
+- Baseline command:
+  `AGENT_NAME=BlackThrush RCH_REQUIRE_REMOTE=1 RCH_WORKER=vmi1152480 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo bench -p fsci-opt --bench optimize_bench -- linear_sum_assignment --noplot --sample-size 10 --warm-up-time 1 --measurement-time 2`
+  (rch selected worker `hz2`).
+- Candidate command:
+  `AGENT_NAME=BlackThrush RCH_REQUIRE_REMOTE=1 RCH_WORKER=hz2 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo bench -p fsci-opt --bench optimize_bench -- linear_sum_assignment --noplot --sample-size 10 --warm-up-time 1 --measurement-time 2`.
+
+Benchmark evidence:
+
+| Workload / route | Median | Interval / value | Ratio / verdict |
+| --- | ---: | ---: | --- |
+| Current Rust `linear_sum_assignment/dense/500` | 21.121 ms | [20.818, 21.891] ms on `hz2` | 1.11x slower than SciPy |
+| Touched-set Rust `linear_sum_assignment/dense/500` | 26.212 ms | [25.820, 26.799] ms on `hz2` | rejected: 1.24x slower than current; 1.37x slower than SciPy |
+| SciPy 1.17.1 `linear_sum_assignment` n=500 | 19.101180 ms | local p50 on matching NumPy cost matrix | oracle |
+| Current Rust `linear_sum_assignment/dense/1000` | 135.72 ms | [131.24, 141.09] ms on `hz2` | 1.06x slower than SciPy |
+| Touched-set Rust `linear_sum_assignment/dense/1000` | 167.30 ms | [166.58, 168.11] ms on `hz2` | rejected: 1.23x slower than current; 1.31x slower than SciPy |
+| SciPy 1.17.1 `linear_sum_assignment` n=1000 | 127.840366 ms | local p50 on matching NumPy cost matrix | oracle |
+
+Win/loss/neutral:
+
+- Touched-set candidate versus current Rust: `0/1/1` (n=1000 significant
+  regression; n=500 no statistical win and worse point estimate).
+- Touched-set candidate versus SciPy oracle: `0/2/0`.
+- Current main source versus this local SciPy snapshot: `0/2/0`, with the
+  residual gap narrowed to 1.11x and 1.06x.
+
+Correctness/conformance guards:
+
+- PASS: exact source revert check:
+  `git diff --exit-code -- crates/fsci-opt/src/lib.rs`.
+- PASS: rch focused assignment unit tests:
+  `cargo test -p fsci-opt linear_sum_assignment --lib -- --nocapture` =
+  9 passed / 0 failed on worker `vmi1264463`.
+- PASS: rch per-crate release build:
+  `cargo build --release -p fsci-opt`.
+- PASS: local live SciPy conformance:
+  `cargo test -p fsci-conformance --test diff_opt_linear_sum_assignment -- --nocapture`
+  = 1 passed / 0 failed.
+- PASS: `git diff --check`.
+- PASS: changed-file UBS on the docs/artifact/beads-only closeout exited 0
+  with no recognizable code-language files to scan.
+
+Retry condition: do not retry touched-row/touched-column dual updates for
+dense LSAP. The branch scan is not the dominant cost at these sizes, and the
+frontier bookkeeping hurts locality. Future LSAP work should target true dense
+layout ownership or a lower-level LAP kernel that removes row-vector
+indirection without per-call copying.
+
 ## 2026-06-20 - frankenscipy-8l8r1.133 - cluster linkage compact active frontier
 
 - Agent: cod-a / BlackThrush
