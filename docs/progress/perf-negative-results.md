@@ -4,6 +4,58 @@ This ledger records every code-first performance attempt, including attempts tha
 are still awaiting the batch benchmark wave. Entries must name the retry
 condition so dead ends are not repeated casually.
 
+## 2026-06-20 - frankenscipy-oi8hq - ndimage zoom order=1 no-prefilter fast path
+
+- Agent: cod-b / MistyBirch
+- Lever: for 2-D `BoundaryMode::Reflect`, `order=1` `zoom`, skip
+  `prefilter_spline_coefficients` and the padded coefficient image entirely.
+  Precompute row/column linear supports in the original image coordinate domain
+  and run the existing fixed four-load bilinear sum directly over `input.data`.
+- Graveyard/artifact route tested: remove constant-factor setup work from a hot
+  small-kernel path, exploit separability, eliminate redundant copy/padding, and
+  preserve the same basis weights/operation order as the generic padded sampler.
+- Decision: KEEP. The previous `frankenscipy-wm14d` SciPy loss is now a
+  measured SciPy win. No revert.
+- Artifact:
+  `tests/artifacts/perf/frankenscipy-oi8hq-zoom-order1-no-prefilter-EVIDENCE.md`
+- Baseline/final Rust command:
+  `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b rch exec -- cargo bench -p fsci-ndimage --bench ndimage_bench -- zoom/2x_256/1 --noplot --sample-size 10 --measurement-time 1 --warm-up-time 1`
+- SciPy oracle command:
+  `python3 docs/perf_oracle_zoom.py`
+- Benchmark evidence:
+
+  | Workload | Time | Host / worker | Verdict |
+  | --- | ---: | --- | --- |
+  | Prepatch residual current, `zoom/2x_256/order=1` | 8.8419 ms mean (`[7.5432, 8.8419, 9.7257] ms`) | rch `hz2` | baseline |
+  | Final source, `zoom/2x_256/order=1` | 1.2219 ms mean (`[1.0624, 1.2219, 1.5189] ms`) | rch `vmi1149989` | keep |
+  | SciPy `ndimage.zoom(256x256, 2x, order=1)` | 4.86171 ms median | local SciPy 1.17.1 | Rust 3.98x faster |
+
+- SciPy win/loss/neutral for final source: `1/0/0`.
+- Internal baseline note: the final Rust row is `7.24x` faster than the
+  prepatch rerun (`8.8419 / 1.2219`) and `6.52x` faster than the previous
+  `frankenscipy-wm14d` residual row (`7.9684 / 1.2219`), but those are
+  cross-worker routing-strength comparisons, not same-worker A/B claims.
+- Correctness/conformance guards:
+  - PASS: `rustfmt --edition 2024 --check crates/fsci-ndimage/src/lib.rs`.
+  - PASS: `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b rch exec -- cargo check -p fsci-ndimage --all-targets`
+    on rch `hz1` with existing unrelated warnings.
+  - PASS: `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b rch exec -- cargo test -p fsci-ndimage zoom_ --lib -- --nocapture`
+    on rch `ovh-a`: `6 passed; 0 failed; 235 filtered out`.
+  - PASS: focused bit-equivalence guard
+    `zoom_order_one_reflect_fast_path_matches_generic_sampler_bits`.
+  - PASS: `FSCI_REQUIRE_SCIPY_ORACLE=1 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b cargo test -p fsci-conformance --test diff_ndimage_zoom -- --nocapture`:
+    `1 passed; 0 failed`.
+  - PASS: changed-file `ubs` exited 0; broad pre-existing
+    `fsci-ndimage` warnings remained inventory only.
+  - BLOCKED: `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b rch exec -- cargo clippy -p fsci-ndimage --all-targets -- -D warnings`
+    stopped before this patch on existing `fsci-linalg` dependency lints
+    (`needless_range_loop`, `needless_borrow`).
+- Negative evidence: padding/copying spline coefficients for order-1 reflect
+  zoom is not worth keeping on the hot path. Do not retry scheduler-only or
+  padded-coefficient variants for this row without a fresh profile; route next
+  to order-3 zoom, SIMD/tiled row interpolation, or another measured ndimage
+  loss.
+
 ## 2026-06-20 - frankenscipy-fa62u - label mean cheap dense probe
 
 - Agent: cod-b / MistyBirch

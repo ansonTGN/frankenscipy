@@ -1,5 +1,42 @@
 # Performance Release-Readiness Scorecard
 
+## 2026-06-20 - fsci-ndimage zoom order=1 no-prefilter gauntlet
+
+- Agent: cod-b / MistyBirch
+- Bead: `frankenscipy-oi8hq`
+- Decision: KEEP. The direct-original-image order-1 reflect zoom path closes
+  the previous `frankenscipy-wm14d` residual SciPy loss. Score for this
+  sub-cluster is now `1/0/0` against SciPy.
+- Artifact:
+  `tests/artifacts/perf/frankenscipy-oi8hq-zoom-order1-no-prefilter-EVIDENCE.md`
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| rch release benchmark | PASS | final source `zoom/2x_256/1` on rch `vmi1149989`: 1.2219 ms mean (`[1.0624, 1.2219, 1.5189] ms`) |
+| Baseline rerun | PASS | prepatch residual current on rch `hz2`: 8.8419 ms mean (`[7.5432, 8.8419, 9.7257] ms`); cross-worker routing comparison only |
+| SciPy head-to-head oracle | PASS | local SciPy 1.17.1 `ndimage.zoom(256x256, 2x, order=1)` median 4.86171 ms; Rust final is 3.98x faster |
+| Focused zoom tests | PASS | `cargo test -p fsci-ndimage zoom_ --lib -- --nocapture` via rch `ovh-a`: 6 passed / 0 failed |
+| Local live SciPy conformance | PASS | `FSCI_REQUIRE_SCIPY_ORACLE=1 cargo test -p fsci-conformance --test diff_ndimage_zoom -- --nocapture`: 1 passed / 0 failed |
+| Per-crate compile | PASS | `cargo check -p fsci-ndimage --all-targets` via rch `hz1`; unrelated dependency/bin warnings remain |
+| Touched-file formatting | PASS | `rustfmt --edition 2024 --check crates/fsci-ndimage/src/lib.rs` |
+| Diff/UBS hygiene | PASS | `git diff --check` passed; changed-file `ubs` exited 0 with no critical issues |
+| Clippy `-D warnings` | BLOCKED | `cargo clippy -p fsci-ndimage --all-targets -- -D warnings` stopped in existing `fsci-linalg` dependency lints before this patch |
+
+| Workload / route | Mean / median | Ratio | Verdict |
+| --- | ---: | ---: | --- |
+| Rust final no-prefilter path, `zoom/2x_256/order=1` | 1.2219 ms | 3.98x faster than SciPy; 7.24x faster than prepatch residual rerun across rch workers | SciPy win |
+| SciPy `ndimage.zoom(256x256, 2x, order=1)` | 4.86171 ms | 1.00x oracle | reference |
+| Rust prepatch residual current | 8.8419 ms | 1.82x slower than current SciPy oracle | superseded |
+
+Readiness notes:
+
+- The order-1 reflect path no longer materializes a padded coefficient image.
+  It computes the same linear basis supports over the original image and keeps
+  the fixed four-load bilinear pixel loop.
+- This row is now done enough for release-readiness accounting. Future ndimage
+  work should move to order-3 zoom, row SIMD/tile geometry, or the remaining
+  label/distance-transform constant-factor gaps.
+
 ## 2026-06-20 - fsci-ndimage label mean cheap dense-probe gauntlet
 
 - Agent: cod-b / MistyBirch
