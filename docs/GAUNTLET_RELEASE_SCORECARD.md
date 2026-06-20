@@ -11,6 +11,8 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | Bead | Cluster | Realistic workload | Rust result | SciPy result | Ratio | Decision |
 | --- | --- | --- | ---: | ---: | ---: | --- |
 | `frankenscipy-8l8r1.118` | Fused signal coherence | `scipy.signal.coherence`, 65536 samples, Hann window 1024/512 overlap | 2.191980 ms | 18.961613 ms | 8.65x faster | keep |
+| `frankenscipy-8l8r1.119/.121` | BDF streamed scaled RMS norms | `solve_ivp(method=BDF)` stiff diagonal decay, n=64 | 1.959287 ms | 26.351239 ms | 13.45x faster | keep BDF stream helper; 1.040x internal win on same-worker BDF64 |
+| `frankenscipy-8l8r1.119/.121` | BDF streamed scaled RMS norms | `solve_ivp(method=BDF)` stiff diagonal decay, n=128 | 11.052293 ms | 29.334903 ms | 2.65x faster | keep; internal A/B neutral on same-worker BDF128 |
 | `frankenscipy-u0ucw` | Wide `pinv` Cholesky TRSM + diagonal rcond gate | 500x1000 full-row-rank dense `scipy.linalg.pinv` equivalent | 183.699926 ms | 7.257573 s | 39.51x faster | keep |
 | `frankenscipy-u0ucw` | Wide `lstsq` current materialized normal equations after row-stream revert | 500x1000 full-row-rank dense `scipy.linalg.lstsq` equivalent | 109.369915 ms | 1.253347 s | 11.46x faster | keep current, reject row-stream lever |
 | `frankenscipy-nm8ex` | Dim-4 `pdist` SIMD-across-pairs (SoA), serial n≤2048 / parallel above | `scipy.spatial.distance.pdist` euclidean d=4, n=256→4096 | 48.5us / 167us / 666us / 2.86ms / 13.2ms | 85.3us / 303us / 1.20ms / 4.65ms / 51.1ms | **1.76 / 1.82 / 1.80 / 1.63 / 3.87x faster** | keep — was 1.14-1.37x slower (and 2.4x slower at n=1024 via over-spawn); bit-identical |
@@ -47,6 +49,7 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `frankenscipy-nm8ex` | Spatial `pdist` dim-4 (was serial gate / flat row staging) | All 4 dim-4 workloads (eucl/cos × 256/512) | — | — | **GAP CLOSED → now 1.86-2.21x FASTER** | **WIN** — SIMD-across-pairs (SoA) `595eceb5` pipelines the dependent per-pair sqrt/div; bit-identical; promoted to Measured Keeps |
 | `frankenscipy-va60h` | Linkage flat row-major distance arena | `scipy.cluster.hierarchy.linkage(method="average")`, n=800 d=4 | 6.1713 ms | 4.4550 ms | 1.385x slower | keep internal flat arena; route deeper |
 | `frankenscipy-va60h` | Linkage flat row-major distance arena | `scipy.cluster.hierarchy.linkage(method="ward")`, n=800 d=4 | 7.5250 ms | 5.0256 ms | 1.497x slower | keep internal flat arena; route deeper |
+| `frankenscipy-zpunl` | Restored Radau route after stream-norm reject | `solve_ivp(method=Radau)` stiff diagonal decay, n=64 | 70.176946 ms | 35.156708 ms | 2.00x slower | route deeper into Radau stage/LU constants |
 
 ## Measured Rejects
 
@@ -66,6 +69,8 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `frankenscipy-bpzha` | Solver-owned RK scratch double-buffer variants | `solve_ivp RK45` Lorenz on rch `hz2`, repeats=3000 | 23.402816 us/call | 21.951172 us/call parent | reject and revert |
 | `frankenscipy-bpzha` | Solver-owned RK scratch double-buffer variants | `solve_ivp RK45` Lorenz on rch `hz1`, repeats=3000 | 31.335899 us/call | 28.621224 us/call parent | reject and revert |
 | `frankenscipy-bpzha` | Solver-owned RK scratch double-buffer variants | `solve_ivp RK45` Lorenz on rch `ovh-a`, repeats=3000 | 32.037205 us/call | 20.597014 us/call parent | reject and revert |
+| `frankenscipy-8l8r1.120` | Radau streamed scaled RMS norms | `radau-stiff32` same-worker `hz2` | 14.971402 ms | 12.586935 ms parent | reject and revert |
+| `frankenscipy-8l8r1.120` | Radau streamed scaled RMS norms | `radau-stiff64` same-worker `hz2` | 81.492956 ms | 78.394828 ms parent | reject and revert |
 
 ## Internal Regression Gates
 
@@ -86,6 +91,8 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `frankenscipy-va60h` | Flat row-major linkage arena | Legacy nested-row NN-array helper | 1.128x faster on Average; 1.019x faster on Ward | keep current despite SciPy loss |
 | `frankenscipy-va60h` | Flat row-major linkage arena | Reverted production nested route probe | 1.290x faster on Average; 1.251x faster on Ward | undo revert; keep flat route |
 | `frankenscipy-8l8r1.118` | Fused signal coherence | Compositional `csd(x,y)` + `csd(x,x)` + `csd(y,y)` route | 2.98x faster locally; 2.80x faster on rch `hz1` | keep fused route |
+| `frankenscipy-8l8r1.119/.121` | BDF streamed scaled RMS norms | Pre-stream BDF norm materialization | BDF64 1.040x faster; BDF128 0.991x neutral on same-worker `hz2` | keep BDF stream helper |
+| `frankenscipy-8l8r1.120` | Restored Radau collected scaled-vector route | Radau streamed scaled RMS candidate | candidate regressed same-worker `hz2` Radau32 1.19x and Radau64 1.04x | reject and revert streamed Radau norms |
 | `frankenscipy-nm8ex` | Dim-4 Euclidean/Cosine direct serial `pdist` kernels | Generic metric-dispatch/reduction/threaded path | 5.54-29.51x faster on same-worker `hz2` | keep current despite SciPy loss |
 | `frankenscipy-x9ckc` | `jnjnp_zeros` guarded direct integer-order root polishing | Generic strict-mode bracketed zero route after output frontier | 1.17x faster at `nt=64`; 1.20x faster at `nt=128` on same-worker `hz1` | keep current despite SciPy loss |
 | `frankenscipy-fo9cj` | Restored sparse Arnoldi `Vec<Vec>` basis and allocating matvec closure | Row-major basis arena plus mutable operator scratch | 1.19-1.41x faster on `eigsh`; candidate `svds` movement only 0.99-1.06x | reject arena/scratch route |
@@ -131,6 +138,8 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `fsci-sparse` lint/build gate | partial | `cargo check -p fsci-sparse --all-targets`, focused sparse tests, `cargo clippy -p fsci-sparse --all-targets --no-deps -- -D warnings`, UBS, and `git diff --check` passed; rch SciPy conformance blocked by missing worker SciPy and rustfmt by pre-existing file-wide drift |
 | `fsci-integrate` RK performance | measured reject plus restored SciPy wins | RK scratch double-buffer was reverted after paired same-worker/fresh-worker rows finished 1 win / 3 losses / 0 neutral; restored parent route remains 77.64x faster than SciPy on exponential and 72.97x faster on Lorenz |
 | `fsci-integrate` RK correctness | guarded | scratch candidate passed focused RK and IVP `e2e_ivp` checks before rejection; final source ships no RK code change |
+| `fsci-integrate` BDF/Radau stiff performance | measured keep plus measured reject | BDF streamed RMS helper kept; Radau streamed RMS rejected/reverted. Final stiff suite is `3/1/0` vs SciPy: BDF64 13.45x faster, BDF128 2.65x faster, Radau32 3.28x faster, Radau64 2.00x slower |
+| `fsci-integrate` BDF/Radau correctness | guarded | `cargo test -p fsci-integrate bdf --lib` 16/0, `cargo test -p fsci-integrate radau --lib` 2/0, and `cargo test -p fsci-conformance --test e2e_ivp` 11/0 passed via rch |
 | `fsci-integrate` lint/build gate | partial | scratch candidate `cargo check -p fsci-integrate --all-targets` passed; final source ships no RK lint surface, while crate clippy remains blocked by unrelated existing `api.rs`/`quad.rs` lints |
 | rch SciPy oracle parity | blocked on worker image | `vmi1152480` and `vmi1227854` lacked `scipy`; local same-host oracle supplied the head-to-head ratios |
 | Release readiness | partial | two linalg perf clusters, one `fsci-signal` coherence win, one `fsci-opt` L-BFGS-B reject, one `fsci-special` measured SciPy-loss/internal-keep cutoff win plus one top-k reject, one `fsci-fft` CSD reject, one `fsci-cluster` linkage measured SciPy loss, one `fsci-ndimage` gaussian reject, one `fsci-spatial` `pdist` internal keep, one `fsci-sparse` Arnoldi reject, and one `fsci-integrate` RK scratch reject verified; other code-first perf ledger entries still need gauntlet conversion |

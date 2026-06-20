@@ -1190,22 +1190,24 @@ the same ODE/tolerance shape:
 - Lever: replace `newton_bdf`'s per-Newton-iteration temporary
   `collect::<Vec<_>>()` for `dy[j] / scale[j]` with an allocation-free streamed
   scaled RMS helper over the LU solve vector and scale slice.
-- Status: pending batch-test. This is a code-first commit per campaign
-  instruction; only local `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a
-  cargo check -p fsci-integrate` is expected before commit.
+- Status: measured gauntlet complete on 2026-06-20. Decision: KEEP. Same-worker
+  `hz2` BDF64 improved from 2390.435500 us to 2298.069000 us (1.040x faster);
+  BDF128 was neutral/noise at 12032.349600 us baseline vs 12138.374200 us
+  candidate (0.991x). Step counters and checksum stayed unchanged.
+- Artifact:
+  `tests/artifacts/perf/frankenscipy-8l8r1-119-121-integrate-stiff-stream-norms/EVIDENCE.md`.
 - Correctness guard: `rms_norm_scaled_matches_collected_reference` proves the
   streamed helper is bit-identical to the old collect-then-`rms_norm` path for
-  the same scaled values, while existing BDF tests cover solver convergence and
-  validation semantics.
-- Benchmark guard: compare focused stiff `solve_ivp(method=BDF)` workloads
-  against the pre-change commit on the same worker/target dir, especially
-  medium/high-dimensional states where Newton iterations dominate allocation
-  churn.
-- Retry condition: keep only if same-worker focused BDF timings improve without
-  step-count, final-state, tolerance, or failure-mode drift; if the streamed
-  helper is neutral/slower, reject this exact norm helper and do not retry
-  unless allocation profiles show BDF Newton scaled-vector churn is again a
-  top-5 integrate hotspot.
+  the same scaled values. `cargo test -p fsci-integrate bdf --lib --
+  --nocapture` passed via rch: 16 passed / 0 failed. `cargo test -p
+  fsci-conformance --test e2e_ivp -- --nocapture` passed via rch: 11 passed / 0
+  failed.
+- SciPy head-to-head for final source after Radau revert: BDF64 1959.286800 us
+  Rust on rch `ovh-a` vs 26351.239008 us local SciPy (13.45x faster); BDF128
+  11052.293000 us Rust vs 29334.902694 us SciPy (2.65x faster).
+- Retry condition: do not retry BDF scaled-vector allocation work unless a fresh
+  profile puts it back in the top integrate hotspots. The next BDF work should
+  be deeper than this micro-allocation.
 
 ## 2026-06-18 - frankenscipy-8l8r1.120 - Radau streamed scaled RMS norms
 
@@ -1213,21 +1215,26 @@ the same ODE/tolerance shape:
 - Lever: replace Radau's per-step scaled-vector materialization for Newton
   correction norms and embedded error norms with streamed scaled RMS
   accumulation over the LU solve output and scale slices.
-- Status: pending batch-test. This is a code-first commit per campaign
-  instruction; only local `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a
-  cargo check -p fsci-integrate` is expected before commit.
-- Correctness guard: `streamed_scaled_norms_match_collected_reference` proves
-  the streamed error norm and stage-major Newton correction norm match the old
-  collect-then-`rms_norm` path bit-for-bit for the same scaled values; existing
-  Radau stiff-solver tests cover convergence and validation semantics.
-- Benchmark guard: compare focused stiff `solve_ivp(method=Radau)` workloads
-  against the pre-change commit on the same worker/target dir, especially
-  medium/high-dimensional states and rejected-step stabilised error estimates.
-- Retry condition: keep only if same-worker focused Radau timings improve
-  without `nfev`, `njev`, `nlu`, accepted-step, final-state, tolerance, or
-  rejection-pattern drift; if streamed norms are neutral/slower, reject this
-  exact formulation and do not retry unless allocation profiles show Radau
-  scaled-norm Vec churn is again a top-5 integrate hotspot.
+- Status: measured gauntlet complete on 2026-06-20. Decision: REJECT and
+  REVERT. Same-worker `hz2` Radau32 regressed from 12586.934900 us baseline to
+  14971.401500 us candidate (0.841x); Radau64 regressed from 78394.827700 us to
+  81492.956400 us (0.962x). `nfev/njev/nlu` and checksums stayed unchanged, so
+  this was a constant-factor regression in the norm formulation rather than a
+  different solver path.
+- Artifact:
+  `tests/artifacts/perf/frankenscipy-8l8r1-119-121-integrate-stiff-stream-norms/EVIDENCE.md`.
+- Correctness guard after revert: `cargo test -p fsci-integrate radau --lib --
+  --nocapture` passed via rch: 2 passed / 0 failed. `cargo test -p
+  fsci-conformance --test e2e_ivp -- --nocapture` passed via rch: 11 passed / 0
+  failed.
+- SciPy head-to-head for final source after revert: Radau32 10191.487800 us Rust
+  on rch `ovh-a` vs 33444.223704 us local SciPy (3.28x faster); Radau64
+  70176.946400 us Rust vs 35156.708304 us SciPy (2.00x slower). Final
+  stiff-suite score: `3/1/0` vs SciPy.
+- Retry condition: do not retry this streamed scaled-RMS formulation. The
+  remaining Radau64 SciPy loss is tracked in `frankenscipy-zpunl` and should
+  target Radau stage linear algebra/LU reuse, DMatrix/DVector assembly,
+  stage-major cache layout, or structured-Jacobian exploitation.
 
 ## 2026-06-18 - frankenscipy-8l8r1.121 - BDF streamed step/order error norms
 
@@ -1235,21 +1242,22 @@ the same ODE/tolerance shape:
 - Lever: reuse the BDF streamed scaled RMS helper for accepted-step error norms
   and order-minus/order-plus selection norms, removing three temporary
   coefficient-scaled error vectors that existed only to call `rms_norm`.
-- Status: pending batch-test. This is a code-first commit per campaign
-  instruction; only local `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a
-  cargo check -p fsci-integrate` is expected before commit.
+- Status: measured gauntlet complete on 2026-06-20. Decision: KEEP with BDF
+  `.119`. Same-worker `hz2` BDF64 improved 1.040x and BDF128 was neutral/noise
+  at 0.991x; no step-counter or checksum drift was observed.
+- Artifact:
+  `tests/artifacts/perf/frankenscipy-8l8r1-119-121-integrate-stiff-stream-norms/EVIDENCE.md`.
 - Correctness guard: `rms_norm_scaled_matches_collected_reference` now covers
   both direct scaled vectors and coefficient-scaled error vectors with
-  bit-identical results to the old collect-then-`rms_norm` path; existing BDF
-  tests cover convergence, validation, and order-adaptation behavior.
-- Benchmark guard: compare focused stiff `solve_ivp(method=BDF)` workloads
-  against the pre-change commit on the same worker/target dir, emphasizing
-  variable-order adaptation at medium/high dimension.
-- Retry condition: keep only if same-worker focused BDF timings improve without
-  order-choice, step-count, final-state, tolerance, or rejection drift; if this
-  streaming order-error formulation is neutral/slower, reject it and do not
-  retry unless allocation profiles show BDF error-norm Vec churn remains a top
-  integrate hotspot.
+  bit-identical results to the old collect-then-`rms_norm` path. `cargo test -p
+  fsci-integrate bdf --lib -- --nocapture` passed via rch: 16 passed / 0
+  failed.
+- SciPy head-to-head for final source after Radau revert: `bdf-stiff64` and
+  `bdf-stiff128` both remain SciPy wins (13.45x and 2.65x faster,
+  respectively).
+- Retry condition: do not retry another BDF order-error norm materialization
+  micro-lever without a fresh allocation profile. Future BDF work should focus
+  on algorithm/linear-solve costs or larger state layouts.
 
 ## 2026-06-18 - frankenscipy-8l8r1.118 - CSD chunk-local cross-spectrum accumulator
 

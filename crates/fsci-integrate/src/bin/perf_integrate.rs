@@ -6,6 +6,9 @@
 //! Usage:
 //!   `perf_integrate lorenz <repeats>`
 //!   `perf_integrate exponential <repeats>`
+//!   `perf_integrate bdf-stiff64 <repeats>`
+//!   `perf_integrate radau-stiff32 <repeats>`
+//!   `perf_integrate stiff-suite <repeats>`
 //!   `perf_integrate golden [path]`
 
 use std::fmt::Write as _;
@@ -55,6 +58,30 @@ fn lorenz_options<'a>(y0: &'a [f64; 3]) -> SolveIvpOptions<'a> {
     }
 }
 
+fn stiff_decay_rhs(_t: f64, y: &[f64]) -> Vec<f64> {
+    let denom = y.len().saturating_sub(1).max(1) as f64;
+    y.iter()
+        .enumerate()
+        .map(|(idx, &value)| {
+            let rate = 1.0 + 999.0 * (idx as f64 / denom);
+            -rate * value
+        })
+        .collect()
+}
+
+fn stiff_decay_options<'a>(y0: &'a [f64], method: SolverKind, t_bound: f64) -> SolveIvpOptions<'a> {
+    SolveIvpOptions {
+        t_span: (0.0, t_bound),
+        y0,
+        method,
+        rtol: 1e-6,
+        atol: ToleranceValue::Scalar(1e-8),
+        max_step: f64::INFINITY,
+        mode: RuntimeMode::Strict,
+        ..Default::default()
+    }
+}
+
 fn solve_exponential() -> SolveIvpResult {
     let y0 = [1.0];
     let opts = exponential_options(&y0);
@@ -67,6 +94,13 @@ fn solve_lorenz() -> SolveIvpResult {
     let opts = lorenz_options(&y0);
     let mut rhs = lorenz;
     solve_ivp(&mut rhs, &opts).expect("solve lorenz")
+}
+
+fn solve_stiff_decay(method: SolverKind, n: usize, t_bound: f64) -> SolveIvpResult {
+    let y0 = vec![1.0; n];
+    let opts = stiff_decay_options(&y0, method, t_bound);
+    let mut rhs = stiff_decay_rhs;
+    solve_ivp(&mut rhs, &opts).expect("solve stiff decay")
 }
 
 fn write_result(output: &mut String, label: &str, result: &SolveIvpResult) {
@@ -110,6 +144,16 @@ fn golden_text() -> String {
         &solve_exponential(),
     );
     write_result(&mut output, "lorenz-rk45-no-output", &solve_lorenz());
+    write_result(
+        &mut output,
+        "stiff64-bdf-no-output",
+        &solve_stiff_decay(SolverKind::Bdf, 64, 0.5),
+    );
+    write_result(
+        &mut output,
+        "stiff32-radau-no-output",
+        &solve_stiff_decay(SolverKind::Radau, 32, 0.25),
+    );
     output
 }
 
@@ -129,10 +173,16 @@ fn timed_mode(mode: &str, repeats: usize) {
     let t0 = Instant::now();
     let mut checksum = 0.0_f64;
     let mut nfev = 0usize;
+    let mut njev = 0usize;
+    let mut nlu = 0usize;
     for _ in 0..repeats {
         let result = match mode {
             "lorenz" => solve_lorenz(),
             "exponential" => solve_exponential(),
+            "bdf-stiff64" => solve_stiff_decay(SolverKind::Bdf, 64, 0.5),
+            "bdf-stiff128" => solve_stiff_decay(SolverKind::Bdf, 128, 0.35),
+            "radau-stiff32" => solve_stiff_decay(SolverKind::Radau, 32, 0.25),
+            "radau-stiff64" => solve_stiff_decay(SolverKind::Radau, 64, 0.2),
             _ => unreachable!("validated mode"),
         };
         checksum += result
@@ -143,14 +193,27 @@ fn timed_mode(mode: &str, repeats: usize) {
             .sum::<f64>()
             + result.t.iter().copied().sum::<f64>();
         nfev += result.nfev;
+        njev += result.njev;
+        nlu += result.nlu;
         black_box(&result);
     }
     let elapsed = t0.elapsed();
     let total_ms = elapsed.as_secs_f64() * 1e3;
     let per_call_us = elapsed.as_secs_f64() * 1e6 / repeats as f64;
     println!(
-        "{{\"mode\":\"{mode}\",\"repeats\":{repeats},\"total_ms\":{total_ms:.3},\"per_call_us\":{per_call_us:.6},\"nfev\":{nfev},\"checksum\":{checksum:.12e}}}",
+        "{{\"mode\":\"{mode}\",\"repeats\":{repeats},\"total_ms\":{total_ms:.3},\"per_call_us\":{per_call_us:.6},\"nfev\":{nfev},\"njev\":{njev},\"nlu\":{nlu},\"checksum\":{checksum:.12e}}}",
     );
+}
+
+fn timed_suite(repeats: usize) {
+    for mode in [
+        "bdf-stiff64",
+        "bdf-stiff128",
+        "radau-stiff32",
+        "radau-stiff64",
+    ] {
+        timed_mode(mode, repeats);
+    }
 }
 
 fn main() {
@@ -162,7 +225,21 @@ fn main() {
         return;
     }
 
-    if mode != "lorenz" && mode != "exponential" {
+    if mode == "stiff-suite" {
+        let repeats = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(20);
+        timed_suite(repeats);
+        return;
+    }
+
+    if !matches!(
+        mode,
+        "lorenz"
+            | "exponential"
+            | "bdf-stiff64"
+            | "bdf-stiff128"
+            | "radau-stiff32"
+            | "radau-stiff64"
+    ) {
         eprintln!("unknown mode: {mode}");
         std::process::exit(2);
     }

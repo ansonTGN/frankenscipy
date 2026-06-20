@@ -1,5 +1,46 @@
 # Performance Release-Readiness Scorecard
 
+## 2026-06-20 - fsci-integrate stiff BDF/Radau stream-norm gauntlet
+
+- Agent: cod-a / MistyBirch
+- Beads: `frankenscipy-8l8r1.119`, `frankenscipy-8l8r1.120`,
+  `frankenscipy-8l8r1.121`
+- Decision: KEEP the BDF streamed scaled RMS work, REJECT and REVERT the Radau
+  streamed scaled RMS work. Final source scores `3/1/0` against SciPy on the
+  stiff suite; remaining loss is `radau-stiff64` and is tracked by
+  `frankenscipy-zpunl`.
+- Artifact:
+  `tests/artifacts/perf/frankenscipy-8l8r1-119-121-integrate-stiff-stream-norms/EVIDENCE.md`
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| Rust release benchmark | PASS | `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo run --release -p fsci-integrate --bin perf_integrate -- stiff-suite 10` |
+| Same-worker A/B | PASS | Baseline detached worktree at `d502c748` plus harness patch vs candidate on rch `hz2`; BDF64 1.040x faster, BDF128 neutral, Radau32/Radau64 regressed and were reverted |
+| SciPy head-to-head oracle | PASS | local SciPy oracle via `docs/perf_oracle_integrate_stiff.py`; final source wins BDF64/BDF128/Radau32 and loses Radau64 |
+| Focused BDF tests | PASS | `cargo test -p fsci-integrate bdf --lib -- --nocapture` via rch: 16 passed / 0 failed |
+| Focused Radau tests | PASS | `cargo test -p fsci-integrate radau --lib -- --nocapture` via rch: 2 passed / 0 failed |
+| IVP conformance | PASS | `cargo test -p fsci-conformance --test e2e_ivp -- --nocapture` via rch: 11 passed / 0 failed |
+| Crate compile | PASS | `cargo check -p fsci-integrate --all-targets` via rch |
+| Formatting | PASS | touched-file `rustfmt --edition 2024 --check` |
+| Diff hygiene | PASS | `git diff --check` |
+| Clippy `-D warnings` | BLOCKED | existing `fsci-integrate` lint debt outside touched files; filed `frankenscipy-3qjah` |
+
+| Workload / route | Final Rust | SciPy oracle | Ratio | Verdict |
+| --- | ---: | ---: | ---: | --- |
+| `bdf-stiff64` | 1959.286800 us | 26351.239008 us | 13.45x faster | SciPy win, internal keep |
+| `bdf-stiff128` | 11052.293000 us | 29334.902694 us | 2.65x faster | SciPy win, internal neutral/keep |
+| `radau-stiff32` | 10191.487800 us | 33444.223704 us | 3.28x faster | SciPy win after revert |
+| `radau-stiff64` | 70176.946400 us | 35156.708304 us | 2.00x slower | SciPy loss; route deeper |
+
+Readiness notes:
+
+- The Radau streamed-norm candidate was reverted because same-worker `hz2`
+  timings regressed Radau32 by 1.19x and Radau64 by 1.04x with unchanged
+  `nfev/njev/nlu` and checksum.
+- The remaining integrate performance work is not another scaled-RMS norm
+  micro-lever. It should target Radau stage linear algebra, LU reuse, allocation
+  in matrix/vector assembly, or structured-Jacobian exploitation.
+
 ## 2026-06-20 - fsci-ndimage label mean dense-lookup gauntlet
 
 - Agent: cod-a / MistyBirch
