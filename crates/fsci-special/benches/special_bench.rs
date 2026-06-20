@@ -2,7 +2,7 @@ use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use fsci_runtime::RuntimeMode;
 use fsci_special::{
     SpecialTensor, beta, ellipe, ellipeinc, ellipk, ellipkinc, erf, erfc, erfinv, gamma, gammainc,
-    gammaln, j0, j1, jn_zeros, jnjnp_zeros, jnp_zeros, rgamma, y0,
+    gammaln, j0, j1, jn_zeros, jv, jnjnp_zeros, jnp_zeros, rgamma, y0,
 };
 use std::f64::consts::PI;
 use std::hint::black_box;
@@ -208,6 +208,24 @@ fn bench_beta(c: &mut Criterion) {
         );
     }
 
+    group.finish();
+}
+
+fn bench_bessel_jv_array(c: &mut Criterion) {
+    // Array J_v(z): scalar order, large real vector — the par_map_indices fan-out
+    // path. Head-to-head vs scipy.special.jv(2, z) (~104 ms at n=200k).
+    let mut group = c.benchmark_group("special_bessel_jv_array");
+    for &n in &[50_000usize, 200_000] {
+        let zs: Vec<f64> = (0..n).map(|i| (i as f64 / n as f64) * 50.0 + 0.01).collect();
+        let z = SpecialTensor::RealVec(zs);
+        let order = SpecialTensor::RealScalar(2.0);
+        group.bench_function(BenchmarkId::new("v2", n), |b| {
+            b.iter(|| {
+                let out = jv(black_box(&order), black_box(&z), RuntimeMode::Strict).expect("jv");
+                black_box(out);
+            });
+        });
+    }
     group.finish();
 }
 
@@ -539,6 +557,7 @@ criterion_group!(
     bench_erfc,
     bench_erfinv,
     bench_beta,
+    bench_bessel_jv_array,
     bench_bessel_j,
     bench_bessel_y0,
     bench_complete_elliptic,

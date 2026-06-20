@@ -1099,3 +1099,23 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
   RectBivariateSpline (fast scipy C), wasserstein/energy (above). sz53j (claimed
   fsci-stats --tests compile break) is STALE — `cargo test -p fsci-stats --no-run`
   builds clean (0 errors).
+
+## 2026-06-20 - jv (array Bessel J_v) - MEASURED WIN 22.7x (coverage for the par_map fan-out)
+
+- Agent: cc / MistyBirch (RESUME inline)
+- The scalar bessel J was benched; the ARRAY path (scalar order, large real vector)
+  — which fans out across cores via par_map_indices (bessel_dispatch) — was not.
+  Added `special_bessel_jv_array`. No source change (already parallel).
+
+| jv(2, z) | fsci | scipy | vs scipy |
+| --- | ---: | ---: | --- |
+| n=50k  | 4.27 ms | ~26 ms (est) | ~6x faster |
+| n=200k | 4.59 ms | 104.5 ms | **22.7x faster** |
+
+- fsci is near-CONSTANT 50k→200k (4.27→4.59 ms): the parallel fan-out is core-bound,
+  so the win grows with n. Confirms the bessel-family parallel vein is harvested and
+  dominant; coverage protects it.
+
+### RESUME sweep — confirmed walls / already-optimal (no action)
+- interpolate CubicSpline/Pchip/Akima eval (~4.6 ms/50k) and special gamma/erf
+  (~3 ms/200k) are fast scipy C — low headroom. jv array (above) dominates.
