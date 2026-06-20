@@ -163,6 +163,28 @@ fn bench_distribution_batch(c: &mut Criterion) {
 /// Gaussian KDE evaluation at many points — each point is an O(n_data) sum over the
 /// dataset (heavy per-point work), parallelized in evaluate_many. Head-to-head vs
 /// scipy.stats.gaussian_kde (docs/perf_oracle_kde.py).
+fn bench_kde_nd(c: &mut Criterion) {
+    use fsci_stats::GaussianKdeNd;
+    let mut group = c.benchmark_group("gaussian_kde_nd");
+    let n = 2000usize;
+    let m = 5000usize;
+    let data: Vec<Vec<f64>> = (0..n)
+        .map(|i| {
+            let t = i as f64;
+            vec![(t * 0.017).sin(), (t * 0.0031).cos() * 2.0, (t * 0.011).sin() * 0.5]
+        })
+        .collect();
+    let kde = GaussianKdeNd::new(&data).expect("kde");
+    let q: Vec<Vec<f64>> = (0..m)
+        .map(|i| {
+            let t = i as f64;
+            vec![(t * 0.02).cos(), (t * 0.005).sin() * 2.0, (t * 0.013).cos() * 0.5]
+        })
+        .collect();
+    group.bench_function("d3_eval5k", |b| b.iter(|| kde.evaluate_many(black_box(&q))));
+    group.finish();
+}
+
 fn bench_kde(c: &mut Criterion) {
     use fsci_stats::GaussianKde;
     let mut group = c.benchmark_group("gaussian_kde");
@@ -301,6 +323,7 @@ criterion_group!(
     bench_somersd,
     bench_rand_index,
     bench_distribution_batch,
-    bench_kde
+    bench_kde,
+    bench_kde_nd
 );
 criterion_main!(benches);

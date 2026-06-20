@@ -34781,6 +34781,163 @@ impl GaussianKde {
     }
 }
 
+/// Multivariate Gaussian kernel density estimate.
+///
+/// Matches `scipy.stats.gaussian_kde(dataset)` for `d`-dimensional data using
+/// Scott's rule (the scipy default): bandwidth factor `n^(-1/(d+4))`, kernel
+/// covariance `factor² · cov(data, ddof=1)` (numpy `np.cov(bias=False)`). The
+/// density at a query `q` is
+/// `(1/n) Σ_i (2π)^(-d/2) |C|^(-1/2) exp(-½ (q-x_i)ᵀ C⁻¹ (q-x_i))`,
+/// evaluated stably via the Cholesky factor `C = L Lᵀ` (so
+/// `(q-x_i)ᵀ C⁻¹ (q-x_i) = ‖L⁻¹(q-x_i)‖²` and `|C|^(1/2) = Π L_ii`), exactly as
+/// scipy's `gaussian_kde` does with `cho_factor`.
+pub struct GaussianKdeNd {
+    /// Data points: `n` rows of `d` coordinates.
+    dataset: Vec<Vec<f64>>,
+    /// Dimensionality.
+    d: usize,
+    /// Lower-triangular Cholesky factor of the kernel covariance (`d×d`).
+    chol: Vec<Vec<f64>>,
+    /// `(2π)^(-d/2) / Π L_ii / n` — the per-kernel normalizer times `1/n`.
+    norm: f64,
+}
+
+impl GaussianKdeNd {
+    /// Build a multivariate KDE from `dataset` (rows = points, cols = dims),
+    /// using Scott's rule. Returns `None` for empty input, `n < 2` (no ddof=1
+    /// covariance), ragged rows, or a non-positive-definite covariance.
+    pub fn new(dataset: &[Vec<f64>]) -> Option<Self> {
+        let n = dataset.len();
+        if n < 2 {
+            return None;
+        }
+        let d = dataset[0].len();
+        if d == 0 || dataset.iter().any(|p| p.len() != d) {
+            return None;
+        }
+        let nf = n as f64;
+
+        let mut mean = vec![0.0f64; d];
+        for p in dataset {
+            for (m, &v) in mean.iter_mut().zip(p.iter()) {
+                *m += v;
+            }
+        }
+        for m in &mut mean {
+            *m /= nf;
+        }
+
+        // Sample covariance (ddof=1), matching np.cov(bias=False).
+        let mut cov = vec![vec![0.0f64; d]; d];
+        for p in dataset {
+            for a in 0..d {
+                let da = p[a] - mean[a];
+                for b in 0..d {
+                    cov[a][b] += da * (p[b] - mean[b]);
+                }
+            }
+        }
+        let factor = nf.powf(-1.0 / (d as f64 + 4.0));
+        let f2 = factor * factor;
+        for row in &mut cov {
+            for c in row.iter_mut() {
+                *c = *c / (nf - 1.0) * f2;
+            }
+        }
+
+        // Cholesky (lower): C = L Lᵀ.
+        let mut chol = vec![vec![0.0f64; d]; d];
+        for i in 0..d {
+            for j in 0..=i {
+                let mut s = cov[i][j];
+                for k in 0..j {
+                    s -= chol[i][k] * chol[j][k];
+                }
+                if i == j {
+                    if s <= 0.0 {
+                        return None; // not positive definite
+                    }
+                    chol[i][j] = s.sqrt();
+                } else {
+                    chol[i][j] = s / chol[j][j];
+                }
+            }
+        }
+
+        let mut prod_diag = 1.0f64;
+        for (i, row) in chol.iter().enumerate() {
+            prod_diag *= row[i];
+        }
+        let norm = (2.0 * std::f64::consts::PI).powf(-(d as f64) / 2.0) / prod_diag / nf;
+
+        Some(Self {
+            dataset: dataset.to_vec(),
+            d,
+            chol,
+            norm,
+        })
+    }
+
+    /// Dimensionality of the data.
+    pub fn dim(&self) -> usize {
+        self.d
+    }
+
+    /// Evaluate the density at a single `d`-dimensional point.
+    pub fn evaluate(&self, q: &[f64]) -> f64 {
+        debug_assert_eq!(q.len(), self.d);
+        let d = self.d;
+        let mut y = vec![0.0f64; d];
+        let mut acc = 0.0f64;
+        for x in &self.dataset {
+            // Forward-substitution solve L y = (q - x); quad = ‖y‖².
+            let mut quad = 0.0f64;
+            for i in 0..d {
+                let mut s = q[i] - x[i];
+                let row = &self.chol[i];
+                for k in 0..i {
+                    s -= row[k] * y[k];
+                }
+                let yi = s / row[i];
+                y[i] = yi;
+                quad += yi * yi;
+            }
+            acc += (-0.5 * quad).exp();
+        }
+        acc * self.norm
+    }
+
+    /// Evaluate at many query points. Each point is an independent
+    /// O(n·d²) sum over the dataset, so for large `points × dataset` the work is
+    /// split across threads; the per-point value is the pure `evaluate`, so the
+    /// result is bit-identical to the sequential map (chunk order preserved).
+    pub fn evaluate_many(&self, points: &[Vec<f64>]) -> Vec<f64> {
+        let m = points.len();
+        let work = (m as u64)
+            .saturating_mul(self.dataset.len() as u64)
+            .saturating_mul(self.d as u64);
+        let threads = std::thread::available_parallelism()
+            .map(|c| c.get())
+            .unwrap_or(1)
+            .min(m);
+        if work < 1 << 18 || threads <= 1 || m < 4 {
+            return points.iter().map(|q| self.evaluate(q)).collect();
+        }
+        let mut out = vec![0.0f64; m];
+        let chunk = m.div_ceil(threads);
+        std::thread::scope(|scope| {
+            for (pchunk, ochunk) in points.chunks(chunk).zip(out.chunks_mut(chunk)) {
+                scope.spawn(move || {
+                    for (q, slot) in pchunk.iter().zip(ochunk) {
+                        *slot = self.evaluate(q);
+                    }
+                });
+            }
+        });
+        out
+    }
+}
+
 /// Compute the Shannon entropy of a discrete probability distribution.
 ///
 /// Matches `scipy.stats.entropy(pk, base)`.
@@ -57892,6 +58049,62 @@ mod tests {
             "identical groups should give pvalue=1, got {}",
             result.pvalue
         );
+    }
+
+    #[test]
+    fn gaussian_kde_nd_matches_scipy_reference_values() {
+        // scipy.stats.gaussian_kde golden (Scott's rule, ddof=1 cov):
+        // d=2 dataset (scipy shape (2,6)) -> 6 points of dim 2.
+        let d2: Vec<Vec<f64>> = {
+            let a = [0.1, 1.2, 0.5, -0.3, 0.8, 1.5];
+            let b = [2.0, -1.0, 0.3, 0.7, -0.5, 1.1];
+            (0..6).map(|i| vec![a[i], b[i]]).collect()
+        };
+        let kde2 = GaussianKdeNd::new(&d2).expect("d2 kde");
+        let q2 = [vec![0.0, 0.5], vec![1.0, -0.5], vec![-0.2, 0.9]];
+        let expect2 = [0.128_877_710_107_463_02, 0.162_818_491_090_337_3, 0.111_632_652_013_513_33];
+        let got2 = kde2.evaluate_many(&q2);
+        for (g, e) in got2.iter().zip(&expect2) {
+            assert!((g - e).abs() < 1e-12, "d2 KDE: got {g}, expected {e}");
+        }
+        // single-point path agrees with the batch path.
+        assert!((kde2.evaluate(&q2[1]) - expect2[1]).abs() < 1e-12);
+
+        // d=3 dataset (scipy shape (3,7)) -> 7 points of dim 3.
+        let d3: Vec<Vec<f64>> = {
+            let a = [0.1, 1.2, 0.5, -0.3, 0.8, 1.5, 0.2];
+            let b = [2.0, -1.0, 0.3, 0.7, -0.5, 1.1, 0.0];
+            let c = [0.5, 0.6, -0.4, 1.0, 0.2, -0.8, 0.3];
+            (0..7).map(|i| vec![a[i], b[i], c[i]]).collect()
+        };
+        let kde3 = GaussianKdeNd::new(&d3).expect("d3 kde");
+        let q3 = [vec![0.0, 0.5, 0.2], vec![1.0, -0.5, 0.4]];
+        let expect3 = [0.112_546_342_959_739_95, 0.098_149_053_592_738_77];
+        for (g, e) in kde3.evaluate_many(&q3).iter().zip(&expect3) {
+            assert!((g - e).abs() < 1e-12, "d3 KDE: got {g}, expected {e}");
+        }
+    }
+
+    #[test]
+    fn gaussian_kde_nd_evaluate_many_parallel_is_bit_identical() {
+        // Larger workload to trigger the threaded path; must match the serial map.
+        let n = 1500usize;
+        let mut state = 0xA5A5_1234_u64;
+        let mut nx = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let data: Vec<Vec<f64>> = (0..n).map(|_| vec![nx() * 4.0 - 2.0, nx() * 3.0, nx()]).collect();
+        let kde = GaussianKdeNd::new(&data).expect("kde");
+        let q: Vec<Vec<f64>> = (0..2000).map(|_| vec![nx() * 4.0 - 2.0, nx() * 3.0, nx()]).collect();
+        let par = kde.evaluate_many(&q);
+        let seq: Vec<f64> = q.iter().map(|p| kde.evaluate(p)).collect();
+        assert_eq!(par.len(), seq.len());
+        for (p, s) in par.iter().zip(&seq) {
+            assert_eq!(p.to_bits(), s.to_bits(), "parallel != serial");
+        }
     }
 
     #[test]

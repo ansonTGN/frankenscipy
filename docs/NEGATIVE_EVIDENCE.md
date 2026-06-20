@@ -1180,3 +1180,23 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
   uncertain rewrite of a shared conformance-critical crate (AoS→deinterleave +
   strided twiddle gathers may eat the gain) — documented as a hard future candidate,
   NOT attempted on spec. No source change this cycle.
+
+## 2026-06-20 - GaussianKdeNd (multivariate KDE) - NEW CAPABILITY + WIN 13.0x - RESUME inline
+
+- Agent: cc / MistyBirch. fsci's GaussianKde was 1-D only (`evaluate(x: f64)`) — a
+  genuine vs-scipy GAP (scipy gaussian_kde does d>1). Implemented `GaussianKdeNd`:
+  Scott's rule, ddof=1 covariance, Cholesky of the kernel covariance (stable
+  `‖L⁻¹(q-x_i)‖²` quadratic form + `|C|^½ = Π L_ii`, exactly as scipy's cho_factor),
+  parallel `evaluate_many` over query points.
+- Conformance: matches `scipy.stats.gaussian_kde` to **< 1e-12** at d=2 and d=3
+  (gaussian_kde_nd_matches_scipy_reference_values), and the threaded path is
+  bit-identical to the serial map (gaussian_kde_nd_evaluate_many_parallel_is_bit_identical).
+
+| gaussian_kde d=3, n_data=2000, m_query=5000 | fsci | scipy | vs scipy |
+| --- | ---: | ---: | --- |
+| evaluate_many | 8.92 ms | 115.66 ms | **13.0x faster** |
+
+- Closes a capability gap AND dominates: O(M·N·d²) Mahalanobis sums fan out across
+  cores in Rust vs scipy's vectorized-but-Python-bound path. Additive (new pub
+  struct); no change to the 1-D GaussianKde. The 5 failing zscore/mad/sklearn stats
+  tests are pre-existing/unrelated.
