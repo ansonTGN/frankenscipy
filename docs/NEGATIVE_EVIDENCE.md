@@ -593,3 +593,33 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
   path for distinct-x data (the count-based fast path is), and even when it is, the
   `select_nth`/median dominate the build. Don't parallelize the build alone. Only
   the bench (regression coverage) is kept.
+
+## 2026-06-20 - linear_sum_assignment - MEASURED LOSS 5.6-7.4x (algorithmic; LAPJV port is the fix)
+
+- Agent: cc / MistyBirch
+- Finding (MEASURED, rch vs scipy.optimize.linear_sum_assignment, continuous-cost
+  dense matrices to match scipy's uniform input — NOT tie-heavy, which masks it):
+
+| n×n | fsci | scipy | ratio |
+| --- | ---: | ---: | --- |
+| 500  | 40.4 ms | 7.2 ms  | **5.6x SLOWER** |
+| 1000 | 279 ms  | 37.6 ms | **7.4x SLOWER** |
+
+- Root cause is ALGORITHMIC, not memory: fsci's `hungarian_rectangular` is the
+  basic e-maxx O(n³) Hungarian — every augmenting step does an O(n) `used`-skipping
+  column rescan AND an O(n) delta sweep (`minv[col] -= delta` over all cols), and
+  `minv`/`used` are re-allocated per row. SciPy uses LAPJV (Crouse 2016):
+  column-reduction + augmenting-row-reduction WARMSTART (assigns most rows cheaply →
+  few expensive augmenting paths) with LAZY dual updates and a shrinking
+  remaining-column list.
+- REJECT (reverted, no-op): flattening the `&[Vec<f64>]` cost matrix to a
+  contiguous buffer + hoisting `u[row0]`/row-slice — measured 14.2→16.6 ms / 80→84
+  ms (slightly WORSE; the per-row Vecs weren't the bottleneck). The matrix layout is
+  not the gap.
+- FIX RECIPE (deferred — substantial, conformance-critical port): port scipy's exact
+  `rectangular_lsap.cpp` LAPJV. Byte-identity is SAFE for continuous costs (the
+  optimum is unique) — verify via cost-equality (sum) vs the current Hungarian, not
+  assignment-equality (ties give non-unique assignments). A cheaper byte-identical
+  partial: shrinking remaining-col list + LAZY delta (track a running offset instead
+  of the O(n) per-step `minv -= delta` sweep) + buffer reuse ≈ 2x. Filed as a bead.
+- Bench `linear_sum_assignment/dense` added (regression coverage; quantifies the gap).

@@ -8,7 +8,7 @@ use std::time::Duration;
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use fsci_opt::{
     LeastSquaresOptions, MinimizeOptions, OptimizeMethod, RootMethod, RootOptions, bfgs, bisect,
-    brenth, brentq, cg_pr_plus, lbfgsb, least_squares, powell, ridder,
+    brenth, brentq, cg_pr_plus, lbfgsb, least_squares, linear_sum_assignment, powell, ridder,
 };
 use fsci_runtime::RuntimeMode;
 
@@ -326,8 +326,33 @@ fn bench_least_squares(c: &mut Criterion) {
     group.finish();
 }
 
+/// Hungarian assignment — head-to-head vs scipy.optimize.linear_sum_assignment.
+fn bench_assignment(c: &mut Criterion) {
+    use criterion::BenchmarkId;
+    let mut group = c.benchmark_group("linear_sum_assignment");
+    for &n in &[500usize, 1000] {
+        let cost: Vec<Vec<f64>> = (0..n)
+            .map(|i| {
+                (0..n)
+                    .map(|j| {
+                        // LCG-based continuous values (few ties), matching scipy's uniform.
+                        let s = (i.wrapping_mul(1103515245).wrapping_add(j).wrapping_mul(12345)
+                            ^ (i.wrapping_mul(2654435761) >> 7)) as u64;
+                        (s as f64 / u64::MAX as f64) * (i % 9 + 1) as f64
+                    })
+                    .collect()
+            })
+            .collect();
+        group.bench_function(BenchmarkId::new("dense", n), |b| {
+            b.iter(|| linear_sum_assignment(std::hint::black_box(&cost)).expect("lsa"))
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
+    bench_assignment,
     bench_bfgs,
     bench_lbfgsb,
     bench_cg,
