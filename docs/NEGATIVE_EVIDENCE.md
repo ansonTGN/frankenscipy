@@ -305,3 +305,29 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
   filter1d residual vs SciPy (serial HGW's 4 passes + 3 buffers vs SciPy's single
   in-place pass) needs PASS FUSION (fewer streams over the line), not threads.
   The shipped serial routing (ce1857ab, 4-7x self-win) is kept as-is.
+
+## 2026-06-20 - rfft measured head-to-head vs numpy - MIXED (stale "loss" corrected; mid-size kernel wall)
+
+- Agent: cc / MistyBirch
+- Finding (MEASURED, rch vs numpy.fft.rfft same sizes): the believed "rfft ~1.73x
+  slower, no real-symmetry path" is STALE — `real_fft_specialized` already packs N
+  reals into an N/2-point complex FFT (irfft too). Real state is mixed:
+
+| n | fsci rfft | numpy.rfft | ratio |
+| ---: | ---: | ---: | --- |
+| 256   | 2.00 us | 4.24 us | **2.12x faster** |
+| 1024  | 6.54 us | 6.90 us | 1.05x (parity) |
+| 4096  | 27.2 us | 18.6 us | 0.68x (**1.46x slower**) |
+| 16384 | 122 us  | 77.8 us | 0.64x (**1.57x slower**) |
+| 65536 | 600 us  | 754 us  | **1.26x faster** |
+
+- fsci WINS small (overhead-light) and very-large; LOSES the mid pow2 range
+  (4096/16384) by ~1.5x. Root cause: the half-size complex FFT kernel quality
+  (fsci radix-2²/radix-4 vs pocketfft split-radix + cache blocking) — and the
+  obvious kernel levers (radix-8, four-step transpose) were already MEASURED and
+  REJECTED (cache thrash) in `perf_fft_radix4_stage_fusion`. So the mid-size rfft
+  loss is the known FFT-kernel wall, not a missing real-FFT path.
+- Action: EXPANDED `bench_rfft` to cover 256→65536 (was capped at 1024, which hid
+  this entire regime — a benchmark coverage gap). No source change; the residual
+  is documented as the FFT-kernel wall. Do NOT re-chase "native real-FFT" (done)
+  or radix-8/four-step (rejected); a real flip needs a split-radix kernel rewrite.

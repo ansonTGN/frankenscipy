@@ -89,7 +89,8 @@ fn bench_ifft(c: &mut Criterion) {
 fn bench_rfft(c: &mut Criterion) {
     let mut group = c.benchmark_group("fft_real");
 
-    for &n in SIZES_1D {
+    let sizes: &[usize] = &[256, 1024, 4096, 16384, 65536];
+    for &n in sizes {
         let input = make_real_input(n);
         group.bench_with_input(BenchmarkId::new("rfft", n), &input, |b, input| {
             let opts = default_opts();
