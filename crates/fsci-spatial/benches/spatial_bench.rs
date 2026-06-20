@@ -57,6 +57,9 @@ fn bench_pdist(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("euclidean", n), |b| {
             b.iter(|| pdist(&data, DistanceMetric::Euclidean))
         });
+        group.bench_function(BenchmarkId::new("chebyshev", n), |b| {
+            b.iter(|| pdist(&data, DistanceMetric::Chebyshev))
+        });
         group.bench_function(BenchmarkId::new("cosine", n), |b| {
             b.iter(|| pdist(&data, DistanceMetric::Cosine))
         });
@@ -97,19 +100,30 @@ fn bench_kdtree(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("query_many", format!("n{nn}_d{d}")), |b| {
             b.iter(|| t2.query_many(&qdata).expect("query_many"))
         });
-        group.bench_function(BenchmarkId::new("query_k_seq", format!("n{nn}_d{d}_k10")), |b| {
-            b.iter(|| qdata.iter().map(|q| t2.query_k(q, 10)).collect::<Vec<_>>())
-        });
-        group.bench_function(BenchmarkId::new("query_k_many", format!("n{nn}_d{d}_k10")), |b| {
-            b.iter(|| t2.query_k_many(&qdata, 10).expect("query_k_many"))
-        });
+        group.bench_function(
+            BenchmarkId::new("query_k_seq", format!("n{nn}_d{d}_k10")),
+            |b| b.iter(|| qdata.iter().map(|q| t2.query_k(q, 10)).collect::<Vec<_>>()),
+        );
+        group.bench_function(
+            BenchmarkId::new("query_k_many", format!("n{nn}_d{d}_k10")),
+            |b| b.iter(|| t2.query_k_many(&qdata, 10).expect("query_k_many")),
+        );
         if d <= 3 {
-            group.bench_function(BenchmarkId::new("ball_seq", format!("n{nn}_d{d}_r03")), |b| {
-                b.iter(|| qdata.iter().map(|q| t2.query_ball_point(q, 0.3)).collect::<Vec<_>>())
-            });
-            group.bench_function(BenchmarkId::new("ball_many", format!("n{nn}_d{d}_r03")), |b| {
-                b.iter(|| t2.query_ball_point_many(&qdata, 0.3).expect("ball_many"))
-            });
+            group.bench_function(
+                BenchmarkId::new("ball_seq", format!("n{nn}_d{d}_r03")),
+                |b| {
+                    b.iter(|| {
+                        qdata
+                            .iter()
+                            .map(|q| t2.query_ball_point(q, 0.3))
+                            .collect::<Vec<_>>()
+                    })
+                },
+            );
+            group.bench_function(
+                BenchmarkId::new("ball_many", format!("n{nn}_d{d}_r03")),
+                |b| b.iter(|| t2.query_ball_point_many(&qdata, 0.3).expect("ball_many")),
+            );
         }
     }
     group.finish();
@@ -123,11 +137,21 @@ fn bench_sparse_dm(c: &mut Criterion) {
     let mut group = c.benchmark_group("sparse_distance_matrix");
     for &(n, r) in &[(5000usize, 0.05f64), (10000, 0.04)] {
         let mk = |seed: f64| -> Vec<Vec<f64>> {
-            (0..n).map(|i| { let t = i as f64; vec![(t*0.0137+seed).sin()*0.5+0.5, (t*0.0291+seed).cos()*0.5+0.5] }).collect()
+            (0..n)
+                .map(|i| {
+                    let t = i as f64;
+                    vec![
+                        (t * 0.0137 + seed).sin() * 0.5 + 0.5,
+                        (t * 0.0291 + seed).cos() * 0.5 + 0.5,
+                    ]
+                })
+                .collect()
         };
         let a = KDTree::new(&mk(0.0)).expect("a");
         let b = KDTree::new(&mk(1.3)).expect("b");
-        group.bench_function(BenchmarkId::new("sdm", n), |bn| bn.iter(|| a.sparse_distance_matrix(&b, r).expect("sdm")));
+        group.bench_function(BenchmarkId::new("sdm", n), |bn| {
+            bn.iter(|| a.sparse_distance_matrix(&b, r).expect("sdm"))
+        });
     }
     group.finish();
 }
@@ -137,11 +161,17 @@ fn bench_find_simplex(c: &mut Criterion) {
     let mut group = c.benchmark_group("find_simplex");
     for &npts in &[2000usize, 5000] {
         let pts: Vec<(f64, f64)> = (0..npts)
-            .map(|i| { let t = i as f64; ((t * 0.137).sin() * 0.5 + 0.5, (t * 0.071).cos() * 0.5 + 0.5) })
+            .map(|i| {
+                let t = i as f64;
+                ((t * 0.137).sin() * 0.5 + 0.5, (t * 0.071).cos() * 0.5 + 0.5)
+            })
             .collect();
         let tri = Delaunay::new(&pts).expect("delaunay");
         let q: Vec<(f64, f64)> = (0..50000)
-            .map(|i| { let t = i as f64; ((t * 0.0191).fract(), (t * 0.0233).fract()) })
+            .map(|i| {
+                let t = i as f64;
+                ((t * 0.0191).fract(), (t * 0.0233).fract())
+            })
             .collect();
         group.bench_function(BenchmarkId::new("seq", npts), |b| {
             b.iter(|| q.iter().map(|&p| tri.find_simplex(p)).collect::<Vec<_>>())

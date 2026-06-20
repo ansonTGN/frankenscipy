@@ -6,6 +6,38 @@ This file exists as the BOLD-VERIFY entry point requested for measured
 win/loss/neutral summaries. Keep detailed attempt records in the canonical
 ledger above so the project has one source of truth.
 
+## 2026-06-20 - frankenscipy-i0ghz - pdist Chebyshev d4 SoA SIMD
+
+- Agent: cod-a / BlackThrush
+- Decision: KEEP. `pdist(..., Chebyshev)` now uses the existing dim-4
+  fixed-row/SoA SIMD-across-pairs route, with an explicit NaN mask to preserve
+  the scalar helper's NaN-propagating max fold. The tracked d4 gap closes from
+  a 12.60x SciPy loss in routing evidence to parity/slight win.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-cod-a-pdist-chebyshev-d4/EVIDENCE.md`
+- Strict final source versus local SciPy 1.17.1 oracle score across the sweep:
+  `8/6/0`. The target row is a keep; the remaining d16/d64 Chebyshev rows stay
+  negative evidence and should route to a higher-dimensional SIMD/blocking pass.
+
+| Workload | Final Rust | SciPy oracle | Verdict |
+| --- | ---: | ---: | --- |
+| `pdist/chebyshev/n512/d4` | 0.173 ms | 0.175 ms | keep: Rust 1.01x faster than SciPy |
+| Criterion `pdist/chebyshev/512` | 136.38 us median | 175 us oracle | keep: Rust 1.28x faster than SciPy |
+| `pdist/chebyshev/n512/d16` | 1.862 ms | 0.555 ms | loss: Rust 3.36x slower |
+| `pdist/chebyshev/n512/d64` | 5.767 ms | 2.133 ms | loss: Rust 2.70x slower |
+| `pdist/chebyshev/n2048/d64` | 71.833 ms | 39.290 ms | loss: Rust 1.83x slower |
+
+Guards: focused dim-4 bit-identity tests including NaN fold passed; spatial
+`pdist/cdist` live SciPy conformance passed; `cargo check -p fsci-spatial
+--all-targets`, `cargo clippy -p fsci-spatial --all-targets --no-deps -- -D
+warnings`, `cargo fmt --check -p fsci-spatial`, and `git diff --check` passed.
+Changed-file `ubs` was attempted and exited 1 on existing broad `fsci-spatial`
+test panic / unwrap / indexing findings, not on a new compiler or clippy issue.
+
+Negative evidence: do not spend another pass on dim-4 Chebyshev. The residual
+losses are d16/d64 Chebyshev, especially `n512/d16` and `n512/d64`; they need a
+generic-width chunked/SIMD max kernel, not another dim-4 specialization.
+
 ## 2026-06-20 - frankenscipy-8l8r1.138 - EDT fast-path background and 2-D feature layout
 
 - Agent: cod-b / BlackThrush

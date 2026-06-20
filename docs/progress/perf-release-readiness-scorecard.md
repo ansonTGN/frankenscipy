@@ -1,5 +1,49 @@
 # Performance Release-Readiness Scorecard
 
+## 2026-06-20 - fsci-spatial pdist Chebyshev d4 gauntlet
+
+- Agent: cod-a / BlackThrush
+- Bead: `frankenscipy-i0ghz`
+- Decision: KEEP. The dim-4 Chebyshev `pdist` path now uses the fixed-row SoA
+  SIMD-across-pairs kernel with an explicit NaN-propagating max mask. The
+  tracked d4 row closes from 12.60x slower than SciPy to parity/slight win.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-cod-a-pdist-chebyshev-d4/EVIDENCE.md`
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| rch routing baseline | PASS | `vmi1264463`: fresh pre-change target row `pdist/chebyshev/n512/d4 = 2.141 ms`; use only as routing evidence because final run used another worker |
+| rch final sweep | PASS | `hz1`: `pdist/chebyshev/n512/d4 = 0.173 ms`; full sweep score vs SciPy `8/6/0` |
+| Criterion bench | PASS | `vmi1227854`: `pdist/chebyshev/512` time `[129.52, 136.38, 141.62] us` |
+| SciPy oracle | PASS | local SciPy 1.17.1 / NumPy 2.4.3: target row `0.175 ms`; final Rust is 1.01x faster by sweep and 1.28x faster by Criterion median |
+| Focused bit-identity tests | PASS | rch `cargo test -p fsci-spatial pdist_dim4 --lib -- --nocapture`: 3 passed, including NaN fold fixture |
+| Live SciPy conformance | PASS | `cargo test -p fsci-conformance --test diff_spatial_pdist_cdist -- --nocapture`: 1 passed; RCH had no admissible worker and failed open locally |
+| Per-crate compile | PASS | rch `cargo check -p fsci-spatial --all-targets` |
+| Per-crate clippy | PASS | rch `cargo clippy -p fsci-spatial --all-targets --no-deps -- -D warnings`; same-file pre-existing lint blockers were fixed |
+| Per-crate formatting | PASS | `cargo fmt --check -p fsci-spatial` |
+| Diff hygiene | PASS | `git diff --check` |
+| Changed-file UBS | BLOCKED/EXISTING | `ubs` exited 1 on pre-existing broad `fsci-spatial` test panic / unwrap / direct-index findings in the touched file set; compiler, clippy, tests, conformance, format, and diff hygiene are green |
+
+| Workload | Final Rust | SciPy oracle | Ratio | Verdict |
+| --- | ---: | ---: | ---: | --- |
+| `pdist/chebyshev/n512/d4` sweep | 0.173 ms | 0.175 ms | 1.01x faster | keep |
+| `pdist/chebyshev/512` Criterion | 136.38 us | 175 us | 1.28x faster | keep |
+| `pdist/chebyshev/n512/d16` | 1.862 ms | 0.555 ms | 3.36x slower | residual loss |
+| `pdist/chebyshev/n512/d64` | 5.767 ms | 2.133 ms | 2.70x slower | residual loss |
+| `pdist/chebyshev/n2048/d64` | 71.833 ms | 39.290 ms | 1.83x slower | residual loss |
+
+Readiness notes:
+
+- Dim-4 Chebyshev is no longer the next spatial `pdist` target. Route future
+  Chebyshev work to d16/d64 generic-width SIMD/blocking and avoid repeating
+  the dim-4 specialization family.
+- The final source carries small same-file lint cleanup in older KDTree/Delaunay
+  code because `fsci-spatial --all-targets -- -D warnings` was otherwise
+  blocked before this patch.
+- UBS still needs a separate cleanup pass for existing `fsci-spatial` test
+  panic / unwrap / indexing debt; this patch did not introduce new unsafe code
+  and passed the stricter compiler/clippy/conformance gates above.
+
 ## 2026-06-20 - fsci-ndimage EDT constant-factor gauntlet
 
 - Agent: cod-b / BlackThrush

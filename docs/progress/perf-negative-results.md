@@ -4,6 +4,90 @@ This ledger records every code-first performance attempt, including attempts tha
 are still awaiting the batch benchmark wave. Entries must name the retry
 condition so dead ends are not repeated casually.
 
+## 2026-06-20 - frankenscipy-i0ghz - spatial pdist Chebyshev dim-4 SoA SIMD
+
+- Agent: cod-a / BlackThrush
+- Lever kept: add a guarded dim-4 `pdist` Chebyshev route that reuses the
+  existing fixed `[f64; 4]` staging plus SoA columns and SIMD-across-pairs row
+  fill. The SIMD max uses an explicit per-lane NaN mask so the scalar
+  `chebyshev` helper's `fold(0.0, nan-propagating max)` contract is preserved.
+- Graveyard/artifact route tested: data layout transposition, SIMD across
+  independent pair outputs, branchless masked max, and narrow shape
+  specialization rather than another parallelism knob.
+- Decision: KEEP. The tracked `pdist/chebyshev/n512/d4` row moves from the
+  prior routing evidence `2.192 ms` Rust / `0.174 ms` SciPy (12.60x slower) to
+  `0.173 ms` Rust / `0.175 ms` SciPy (1.01x faster). The broader sweep still
+  records d16/d64 Chebyshev losses as the next route.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-cod-a-pdist-chebyshev-d4/EVIDENCE.md`
+- Baseline command:
+  `AGENT_NAME=BlackThrush RCH_REQUIRE_REMOTE=1 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo run --release -p fsci-spatial --bin perf_pdist_sweep`
+  (`vmi1264463`; target row `2.141 ms`, cross-worker routing evidence only).
+- Candidate command:
+  `AGENT_NAME=BlackThrush RCH_REQUIRE_REMOTE=1 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo run --release -p fsci-spatial --bin perf_pdist_sweep`
+  (`hz1`; target row `0.173 ms`).
+- Criterion command:
+  `AGENT_NAME=BlackThrush RCH_REQUIRE_REMOTE=1 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo bench -p fsci-spatial --bench spatial_bench -- pdist/chebyshev/512 --noplot --sample-size 10 --warm-up-time 1 --measurement-time 2`
+  (`vmi1227854`; median `136.38 us`).
+- SciPy oracle command:
+  focused local oracle in `tests/artifacts/perf/2026-06-20-cod-a-pdist-chebyshev-d4/scipy_oracle_pdist_sweep.txt`,
+  SciPy 1.17.1 / NumPy 2.4.3.
+
+Benchmark evidence:
+
+| Workload | Final Rust | SciPy oracle | Ratio / verdict |
+| --- | ---: | ---: | --- |
+| `pdist/euclidean/n512/d4` | 0.234 ms | 0.306 ms | Rust 1.31x faster |
+| `pdist/cityblock/n512/d4` | 0.160 ms | 0.191 ms | Rust 1.19x faster |
+| `pdist/sqeuclidean/n512/d4` | 0.132 ms | 0.221 ms | Rust 1.67x faster |
+| `pdist/chebyshev/n512/d4` | 0.173 ms | 0.175 ms | Rust 1.01x faster |
+| `pdist/euclidean/n512/d16` | 1.140 ms | 0.756 ms | Rust 1.51x slower |
+| `pdist/cityblock/n512/d16` | 1.072 ms | 0.588 ms | Rust 1.82x slower |
+| `pdist/sqeuclidean/n512/d16` | 0.906 ms | 0.542 ms | Rust 1.67x slower |
+| `pdist/chebyshev/n512/d16` | 1.862 ms | 0.555 ms | Rust 3.36x slower |
+| `pdist/euclidean/n512/d64` | 2.223 ms | 2.180 ms | Rust 1.02x slower |
+| `pdist/cityblock/n512/d64` | 1.543 ms | 2.682 ms | Rust 1.74x faster |
+| `pdist/sqeuclidean/n512/d64` | 1.642 ms | 2.031 ms | Rust 1.24x faster |
+| `pdist/chebyshev/n512/d64` | 5.767 ms | 2.133 ms | Rust 2.70x slower |
+| `pdist/euclidean/n4096/d4` | 24.214 ms | 54.218 ms | Rust 2.24x faster |
+| `pdist/cosine/n4096/d4` | 20.823 ms | 51.827 ms | Rust 2.49x faster |
+| `pdist/chebyshev/n2048/d64` | 71.833 ms | 39.290 ms | Rust 1.83x slower |
+| `pdist/cityblock/n2048/d64` | 19.724 ms | 44.039 ms | Rust 2.23x faster |
+
+Win/loss/neutral:
+
+- Strict final Rust versus local SciPy oracle across scored sweep rows:
+  `8/6/0`.
+- Target row: KEEP (`pdist/chebyshev/n512/d4`, Rust 1.01x faster than SciPy by
+  sweep; 1.28x faster by Criterion median).
+- Cross-worker routing delta versus the fresh pre-change run: `2.141 ms ->
+  0.173 ms`; because RCH selected different workers, use this only as
+  keep-supporting route evidence, not same-worker proof.
+
+Correctness/conformance guards:
+
+- PASS: focused bit-identity tests via rch:
+  `cargo test -p fsci-spatial pdist_dim4 --lib -- --nocapture` = 3 passed,
+  including `pdist_dim4_chebyshev_fast_path_preserves_nan_fold`.
+- PASS: live SciPy conformance:
+  `cargo test -p fsci-conformance --test diff_spatial_pdist_cdist -- --nocapture`
+  = 1 passed. RCH had no admissible worker and failed open locally; unrelated
+  existing warnings appeared in other crates.
+- PASS: `cargo check -p fsci-spatial --all-targets` via rch.
+- PASS: `cargo clippy -p fsci-spatial --all-targets --no-deps -- -D warnings`
+  via rch after clearing same-file pre-existing lint blockers.
+- PASS: `cargo fmt --check -p fsci-spatial`.
+- PASS: `git diff --check`.
+- BLOCKED/EXISTING: changed-file `ubs` exited 1 on pre-existing broad
+  `fsci-spatial` test panic / unwrap / direct-index findings in the touched
+  file set. Compiler, clippy, focused tests, conformance, formatting, and diff
+  hygiene are green for this patch.
+
+Negative evidence: do not retry the dim-4 Chebyshev specialization family; that
+gap is closed. The next Chebyshev work should target the d16/d64 rows with a
+generic-width chunked/SIMD max kernel or a layout that avoids rebuilding SoA per
+metric call.
+
 ## 2026-06-20 - frankenscipy-8l8r1.138 - EDT fast-path background and 2-D feature layout
 
 - Agent: cod-b / BlackThrush

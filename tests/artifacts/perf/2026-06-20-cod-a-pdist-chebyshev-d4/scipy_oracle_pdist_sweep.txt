@@ -1,0 +1,21 @@
+Script started on 2026-06-20 16:25:25-04:00 [COMMAND="python3 - <<'PY' import time import numpy as np from scipy.spatial.distance import pdist   def data(n, dim):     i = np.arange(n, dtype=np.float64)[:, None]     k = np.arange(dim, dtype=np.float64)[None, :]     return np.sin(i * (0.1 + 0.01 * k))   def med_ms(fn, reps):     fn()     vals = []     for _ in range(reps):         t0 = time.perf_counter()         fn()         vals.append((time.perf_counter() - t0) * 1e3)     vals.sort()     return vals[len(vals)//2]  print('scipy_version', __import__('scipy').__version__) print('numpy_version', np.__version__) for n, dim, reps in [(512, 4, 80), (512, 16, 60), (512, 64, 40)]:     x = data(n, dim)     for name in ['euclidean', 'cityblock', 'sqeuclidean', 'chebyshev']:         ms = med_ms(lambda name=name, x=x: pdist(x, metric=name), reps)         print(f'scipy pdist/{name}/n{n}/d{dim}: {ms:.3f} ms') for n, dim, name, reps in [     (4096, 4, 'euclidean', 12),     (4096, 4, 'cosine', 12),     (2048, 64, 'chebyshev', 10),     (2048, 64, 'cityblock', 10), ]:     x = data(n, dim)     ms = med_ms(lambda name=name, x=x: pdist(x, metric=name), reps)     print(f'scipy[big] pdist/{name}/n{n}/d{dim}: {ms:.3f} ms') PY" <not executed on terminal>]
+scipy_version 1.17.1
+numpy_version 2.4.3
+scipy pdist/euclidean/n512/d4: 0.306 ms
+scipy pdist/cityblock/n512/d4: 0.191 ms
+scipy pdist/sqeuclidean/n512/d4: 0.221 ms
+scipy pdist/chebyshev/n512/d4: 0.175 ms
+scipy pdist/euclidean/n512/d16: 0.756 ms
+scipy pdist/cityblock/n512/d16: 0.588 ms
+scipy pdist/sqeuclidean/n512/d16: 0.542 ms
+scipy pdist/chebyshev/n512/d16: 0.555 ms
+scipy pdist/euclidean/n512/d64: 2.180 ms
+scipy pdist/cityblock/n512/d64: 2.682 ms
+scipy pdist/sqeuclidean/n512/d64: 2.031 ms
+scipy pdist/chebyshev/n512/d64: 2.133 ms
+scipy[big] pdist/euclidean/n4096/d4: 54.218 ms
+scipy[big] pdist/cosine/n4096/d4: 51.827 ms
+scipy[big] pdist/chebyshev/n2048/d64: 39.290 ms
+scipy[big] pdist/cityblock/n2048/d64: 44.039 ms
+
+Script done on 2026-06-20 16:25:28-04:00 [COMMAND_EXIT_CODE="0"]

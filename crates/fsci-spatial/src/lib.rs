@@ -192,6 +192,31 @@ fn sqsum4(x: &[f64; 4]) -> f64 {
     x[0] * x[0] + x[1] * x[1] + x[2] * x[2] + x[3] * x[3]
 }
 
+#[inline]
+fn chebyshev4(a: &[f64; 4], b: &[f64; 4]) -> f64 {
+    let mut max = 0.0_f64;
+    let d0 = (a[0] - b[0]).abs();
+    if d0.is_nan() {
+        return f64::NAN;
+    }
+    max = max.max(d0);
+    let d1 = (a[1] - b[1]).abs();
+    if d1.is_nan() {
+        return f64::NAN;
+    }
+    max = max.max(d1);
+    let d2 = (a[2] - b[2]).abs();
+    if d2.is_nan() {
+        return f64::NAN;
+    }
+    max = max.max(d2);
+    let d3 = (a[3] - b[3]).abs();
+    if d3.is_nan() {
+        return f64::NAN;
+    }
+    max.max(d3)
+}
+
 fn collect_dim4_points(x: &[Vec<f64>]) -> Vec<[f64; 4]> {
     x.iter()
         .map(|row| [row[0], row[1], row[2], row[3]])
@@ -529,6 +554,7 @@ pub fn pdist(x: &[Vec<f64>], metric: DistanceMetric) -> Result<Vec<f64>, Spatial
                 | DistanceMetric::Cosine
                 | DistanceMetric::SqEuclidean
                 | DistanceMetric::Cityblock
+                | DistanceMetric::Chebyshev
         ) {
         1
     } else {
@@ -552,6 +578,10 @@ pub fn pdist(x: &[Vec<f64>], metric: DistanceMetric) -> Result<Vec<f64>, Spatial
         DistanceMetric::Cityblock if dim == 4 => {
             let points = collect_dim4_points(x);
             pdist_fill_dim4(&points, n, total, nthreads, fill_cityblock4_rows)
+        }
+        DistanceMetric::Chebyshev if dim == 4 => {
+            let points = collect_dim4_points(x);
+            pdist_fill_dim4(&points, n, total, nthreads, fill_chebyshev4_rows)
         }
         DistanceMetric::Cosine if dim == 4 => {
             let points = collect_dim4_points(x);
@@ -857,6 +887,52 @@ fn fill_cityblock4_rows(
         }
         while j < row {
             seg[pos + j] = cityblock(&x[i], &x[start + j]);
+            j += 1;
+        }
+        pos += row;
+    }
+}
+
+/// SIMD-across-pairs fill of the Chebyshev (L∞) dim-4 condensed distances.
+/// The NaN mask preserves the scalar helper's `fold(0.0, nan-propagating max)` contract.
+fn fill_chebyshev4_rows(
+    x: &[[f64; 4]],
+    c: &[Vec<f64>; 4],
+    n: usize,
+    r0: usize,
+    r1: usize,
+    seg: &mut [f64],
+) {
+    use std::simd::{Select, Simd, cmp::SimdPartialEq, cmp::SimdPartialOrd, num::SimdFloat};
+    const L: usize = 8;
+    let (c0, c1, c2, c3) = (&c[0], &c[1], &c[2], &c[3]);
+    let nan = Simd::<f64, L>::splat(f64::NAN);
+    let mut pos = 0usize;
+    for i in r0..r1 {
+        let a0 = Simd::<f64, L>::splat(c0[i]);
+        let a1 = Simd::<f64, L>::splat(c1[i]);
+        let a2 = Simd::<f64, L>::splat(c2[i]);
+        let a3 = Simd::<f64, L>::splat(c3[i]);
+        let row = n - 1 - i;
+        let start = i + 1;
+        let mut j = 0usize;
+        while j + L <= row {
+            let s = start + j;
+            let d0 = (a0 - Simd::<f64, L>::from_slice(&c0[s..s + L])).abs();
+            let d1 = (a1 - Simd::<f64, L>::from_slice(&c1[s..s + L])).abs();
+            let d2 = (a2 - Simd::<f64, L>::from_slice(&c2[s..s + L])).abs();
+            let d3 = (a3 - Simd::<f64, L>::from_slice(&c3[s..s + L])).abs();
+            let any_nan = d0.simd_ne(d0) | d1.simd_ne(d1) | d2.simd_ne(d2) | d3.simd_ne(d3);
+            let m01 = d0.simd_gt(d1).select(d0, d1);
+            let m23 = d2.simd_gt(d3).select(d2, d3);
+            let max = m01.simd_gt(m23).select(m01, m23);
+            any_nan
+                .select(nan, max)
+                .copy_to_slice(&mut seg[pos + j..pos + j + L]);
+            j += L;
+        }
+        while j < row {
+            seg[pos + j] = chebyshev4(&x[i], &x[start + j]);
             j += 1;
         }
         pos += row;
@@ -2347,8 +2423,10 @@ impl KDTree {
         // pair occurs once), so the final order is independent of collection order.
         // Parallelize the outer query loop across `self`'s points (mirrors the
         // already-parallel `query_ball_tree` / `count_neighbors`); bit-identical.
+        type SparseTriplet = (usize, usize, f64);
+        type SparseTripletResult = Result<Vec<SparseTriplet>, SpatialError>;
         let op = &other_points;
-        let collect_chunk = |chunk_nodes: &[KDNode]| -> Result<Vec<(usize, usize, f64)>, SpatialError> {
+        let collect_chunk = |chunk_nodes: &[KDNode]| -> SparseTripletResult {
             let mut local = Vec::new();
             for node in chunk_nodes {
                 for other_index in other.query_ball_point(&node.point, max_distance)? {
@@ -2373,18 +2451,17 @@ impl KDTree {
         } else {
             let chunk = n.div_ceil(nthreads);
             let collect_chunk = &collect_chunk;
-            let parts: Vec<Result<Vec<(usize, usize, f64)>, SpatialError>> =
-                std::thread::scope(|scope| {
-                    let handles: Vec<_> = self
-                        .nodes
-                        .chunks(chunk)
-                        .map(|cn| scope.spawn(move || collect_chunk(cn)))
-                        .collect();
-                    handles
-                        .into_iter()
-                        .map(|h| h.join().expect("sparse_distance_matrix worker panicked"))
-                        .collect()
-                });
+            let parts: Vec<SparseTripletResult> = std::thread::scope(|scope| {
+                let handles: Vec<_> = self
+                    .nodes
+                    .chunks(chunk)
+                    .map(|cn| scope.spawn(move || collect_chunk(cn)))
+                    .collect();
+                handles
+                    .into_iter()
+                    .map(|h| h.join().expect("sparse_distance_matrix worker panicked"))
+                    .collect()
+            });
             let mut all = Vec::new();
             for part in parts {
                 all.extend(part?);
@@ -2951,10 +3028,7 @@ impl Delaunay {
     /// pad (`1e-8·extent`) safely dominates the `1e-10` barycentric tolerance, so
     /// a triangle is skipped only when it cannot contain the point; (2) the
     /// independent per-point scans are parallelized across the batch.
-    pub fn find_simplex_many(
-        &self,
-        queries: &[(f64, f64)],
-    ) -> Vec<Option<(usize, f64, f64, f64)>> {
+    pub fn find_simplex_many(&self, queries: &[(f64, f64)]) -> Vec<Option<(usize, f64, f64, f64)>> {
         let ns = self.simplices.len();
         let bboxes: Vec<(f64, f64, f64, f64)> = self
             .simplices
@@ -2982,22 +3056,36 @@ impl Delaunay {
         // superset of every triangle whose padded bbox contains the query point, so
         // the result is bit-for-bit identical to the O(num_simplices) bbox linear
         // scan. Degenerate / small inputs use g=1 (one cell = the full scan).
-        let (mut gminx, mut gminy, mut gmaxx, mut gmaxy) =
-            (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+        let (mut gminx, mut gminy, mut gmaxx, mut gmaxy) = (
+            f64::INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NEG_INFINITY,
+        );
         for &(x, y) in points {
             gminx = gminx.min(x);
             gmaxx = gmaxx.max(x);
             gminy = gminy.min(y);
             gmaxy = gmaxy.max(y);
         }
-        let degenerate = !(gmaxx > gminx) || !(gmaxy > gminy) || !gminx.is_finite();
+        let degenerate = !matches!(gmaxx.partial_cmp(&gminx), Some(std::cmp::Ordering::Greater))
+            || !matches!(gmaxy.partial_cmp(&gminy), Some(std::cmp::Ordering::Greater))
+            || !gminx.is_finite();
         let g: usize = if ns >= 64 && !degenerate {
             ((ns as f64).sqrt().ceil()).clamp(1.0, 1024.0) as usize
         } else {
             1
         };
-        let inv_cw = if g > 1 { g as f64 / (gmaxx - gminx) } else { 0.0 };
-        let inv_ch = if g > 1 { g as f64 / (gmaxy - gminy) } else { 0.0 };
+        let inv_cw = if g > 1 {
+            g as f64 / (gmaxx - gminx)
+        } else {
+            0.0
+        };
+        let inv_ch = if g > 1 {
+            g as f64 / (gmaxy - gminy)
+        } else {
+            0.0
+        };
         let cell_x = move |x: f64| -> usize {
             (((x - gminx) * inv_cw) as isize).clamp(0, g as isize - 1) as usize
         };
@@ -3005,8 +3093,7 @@ impl Delaunay {
             (((y - gminy) * inv_ch) as isize).clamp(0, g as isize - 1) as usize
         };
         let mut cells: Vec<Vec<u32>> = vec![Vec::new(); g * g];
-        for idx in 0..ns {
-            let (lx, hx, ly, hy) = bb[idx];
+        for (idx, &(lx, hx, ly, hy)) in bb.iter().enumerate().take(ns) {
             for cy in cell_y(ly)..=cell_y(hy) {
                 let row = cy * g;
                 for cx in cell_x(lx)..=cell_x(hx) {
@@ -6686,7 +6773,9 @@ mod tests {
         let ta = KDTree::new(&pa).expect("tree a");
         let tb = KDTree::new(&pb).expect("tree b");
         let r = 0.05;
-        let mut got = ta.sparse_distance_matrix_triplets(&tb, r).expect("triplets");
+        let mut got = ta
+            .sparse_distance_matrix_triplets(&tb, r)
+            .expect("triplets");
         let mut brute: Vec<(usize, usize, f64)> = Vec::new();
         let r_sq = r * r;
         for (i, a) in pa.iter().enumerate() {
@@ -6748,11 +6837,19 @@ mod tests {
         for &d in &[2usize, 3] {
             for &n in &[40usize, 800] {
                 let data: Vec<Vec<f64>> = (0..n)
-                    .map(|i| (0..d).map(|c| ((i * 19 + c * 7) as f64 * 0.5).sin()).collect())
+                    .map(|i| {
+                        (0..d)
+                            .map(|c| ((i * 19 + c * 7) as f64 * 0.5).sin())
+                            .collect()
+                    })
                     .collect();
                 let tree = KDTree::new(&data).expect("build");
                 let queries: Vec<Vec<f64>> = (0..n)
-                    .map(|i| (0..d).map(|c| ((i * 13 + c * 3) as f64 * 0.5 + 0.2).cos()).collect())
+                    .map(|i| {
+                        (0..d)
+                            .map(|c| ((i * 13 + c * 3) as f64 * 0.5 + 0.2).cos())
+                            .collect()
+                    })
                     .collect();
                 for &r in &[0.1f64, 0.5, 1.5] {
                     let batch = tree.query_ball_point_many(&queries, r).expect("batch");
@@ -6766,9 +6863,15 @@ mod tests {
         }
         let data: Vec<Vec<f64>> = (0..8).map(|i| vec![i as f64, (i * 2) as f64]).collect();
         let tree = KDTree::new(&data).expect("build");
-        assert!(tree.query_ball_point_many(&[vec![1.0, 2.0, 3.0]], 1.0).is_err());
+        assert!(
+            tree.query_ball_point_many(&[vec![1.0, 2.0, 3.0]], 1.0)
+                .is_err()
+        );
         assert!(tree.query_ball_point_many(&[vec![1.0, 2.0]], -1.0).is_err());
-        assert!(tree.query_ball_point_many(&[vec![f64::NAN, 0.0]], 1.0).is_err());
+        assert!(
+            tree.query_ball_point_many(&[vec![f64::NAN, 0.0]], 1.0)
+                .is_err()
+        );
     }
 
     #[test]
@@ -6776,11 +6879,19 @@ mod tests {
         for &d in &[2usize, 3, 8] {
             for &n in &[60usize, 1200] {
                 let data: Vec<Vec<f64>> = (0..n)
-                    .map(|i| (0..d).map(|c| ((i * 29 + c * 11) as f64 * 0.021).sin()).collect())
+                    .map(|i| {
+                        (0..d)
+                            .map(|c| ((i * 29 + c * 11) as f64 * 0.021).sin())
+                            .collect()
+                    })
                     .collect();
                 let tree = KDTree::new(&data).expect("build");
                 let queries: Vec<Vec<f64>> = (0..n)
-                    .map(|i| (0..d).map(|c| ((i * 23 + c * 5) as f64 * 0.017 + 0.3).cos()).collect())
+                    .map(|i| {
+                        (0..d)
+                            .map(|c| ((i * 23 + c * 5) as f64 * 0.017 + 0.3).cos())
+                            .collect()
+                    })
                     .collect();
                 for &k in &[1usize, 5, 12] {
                     let batch = tree.query_k_many(&queries, k).expect("query_k_many");
@@ -6800,7 +6911,10 @@ mod tests {
         let tree = KDTree::new(&data).expect("build");
         assert!(tree.query_k_many(&[vec![1.0, 2.0, 3.0]], 3).is_err());
         assert!(tree.query_k_many(&[vec![f64::NAN, 0.0]], 3).is_err());
-        assert_eq!(tree.query_k_many(&[vec![1.0, 2.0]], 0).unwrap(), vec![Vec::new()]);
+        assert_eq!(
+            tree.query_k_many(&[vec![1.0, 2.0]], 0).unwrap(),
+            vec![Vec::new()]
+        );
     }
 
     #[test]
@@ -6808,12 +6922,20 @@ mod tests {
         for &d in &[2usize, 3, 8] {
             for &n in &[50usize, 1500] {
                 let data: Vec<Vec<f64>> = (0..n)
-                    .map(|i| (0..d).map(|k| ((i * 31 + k * 7) as f64 * 0.019).sin()).collect())
+                    .map(|i| {
+                        (0..d)
+                            .map(|k| ((i * 31 + k * 7) as f64 * 0.019).sin())
+                            .collect()
+                    })
                     .collect();
                 let tree = KDTree::new(&data).expect("build");
                 // batch crosses the 512 parallel gate at n=1500
                 let queries: Vec<Vec<f64>> = (0..n)
-                    .map(|i| (0..d).map(|k| ((i * 17 + k * 13) as f64 * 0.023 + 0.5).cos()).collect())
+                    .map(|i| {
+                        (0..d)
+                            .map(|k| ((i * 17 + k * 13) as f64 * 0.023 + 0.5).cos())
+                            .collect()
+                    })
                     .collect();
                 let batch = tree.query_many(&queries).expect("query_many");
                 assert_eq!(batch.len(), queries.len());
@@ -7297,6 +7419,7 @@ mod tests {
             DistanceMetric::Cosine,
             DistanceMetric::SqEuclidean,
             DistanceMetric::Cityblock,
+            DistanceMetric::Chebyshev,
         ] {
             let got = pdist(&x, metric).expect("pdist dim4 parallel fast path");
             let mut want = Vec::with_capacity(n * (n - 1) / 2);
@@ -7334,6 +7457,7 @@ mod tests {
             DistanceMetric::Cosine,
             DistanceMetric::SqEuclidean,
             DistanceMetric::Cityblock,
+            DistanceMetric::Chebyshev,
         ] {
             let got = pdist(&x, metric).expect("pdist dim4 fast path");
             let mut want = Vec::with_capacity(x.len() * (x.len() - 1) / 2);
@@ -7350,6 +7474,34 @@ mod tests {
                     "dim4 pdist mismatch at {k} {metric:?}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn pdist_dim4_chebyshev_fast_path_preserves_nan_fold() {
+        let mut x: Vec<Vec<f64>> = (0..32)
+            .map(|i| {
+                let t = i as f64;
+                vec![
+                    (t * 0.11).sin(),
+                    (t * 0.07).cos(),
+                    t * 0.003,
+                    (t * 0.17).sin() - 0.25,
+                ]
+            })
+            .collect();
+        x[3][2] = f64::NAN;
+
+        let got = pdist(&x, DistanceMetric::Chebyshev).expect("pdist dim4 chebyshev");
+        let mut want = Vec::with_capacity(x.len() * (x.len() - 1) / 2);
+        for i in 0..x.len() {
+            for j in (i + 1)..x.len() {
+                want.push(metric_distance(&x[i], &x[j], DistanceMetric::Chebyshev));
+            }
+        }
+
+        for (k, (&g, &w)) in got.iter().zip(&want).enumerate() {
+            assert_eq!(g.to_bits(), w.to_bits(), "nan fold mismatch at {k}");
         }
     }
 
