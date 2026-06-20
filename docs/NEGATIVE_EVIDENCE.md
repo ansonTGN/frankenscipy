@@ -1158,3 +1158,25 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
   de_rosenbrock/rastrigin tests). Coverage protects the marquee lever; the same
   applies to basinhopping/dual_annealing/shgo/brute (all callback-bound, fsci has
   them). Confirms memory note: iterative-solver-over-user-function is the top win.
+
+## 2026-06-20 - FFT well-optimized (radix Winograd + native rfft) - hilbert/FFT gap is the C-SIMD wall, NOT a fixable radix
+
+- Agent: cc / MistyBirch (RESUME inline). Verified by reading transforms.rs — refines
+  the 2026-06-20 hilbert "radix-5 wall" note and OVERTURNS the stale memory claim
+  "rfft ~1.73x needs native real-FFT".
+- **rfft is already native**: even N uses the pack-two-reals→N/2-point complex FFT
+  (`real_fft_specialized`); only odd N keeps the full transform. The "needs native
+  real-FFT" note is STALE — do not re-implement it.
+- **Mixed-radix is already Winograd**: `mixed_radix_fft` has hand-written optimized
+  butterflies for p=2,3,4,5 (radix-4 fused; radix-5 uses the C1/C2/S1/S2 symmetry
+  form, ~17 mults not the naive 25). Only primes p>5 fall to a direct O(p²) DFT,
+  and large residual primes to Bluestein. So 200000=2^6·5^5 runs entirely on
+  optimized radix-2/4/5 passes — there is NO naive-radix inefficiency to fix.
+- Therefore the hilbert 2.5x (and any FFT-dependent) gap to scipy is the
+  **constant-factor wall**: pocketfft is hand-tuned C with SIMD + cache-blocked
+  butterfly kernels; fsci's are scalar safe Rust on AoS Complex64 tuples. The ONLY
+  remaining lever is SIMD-across-r butterflies (process 4 independent r per pass via
+  std::simd — bit-identical, each lane does the same scalar ops). That is a major,
+  uncertain rewrite of a shared conformance-critical crate (AoS→deinterleave +
+  strided twiddle gathers may eat the gain) — documented as a hard future candidate,
+  NOT attempted on spec. No source change this cycle.
