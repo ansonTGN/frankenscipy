@@ -163,6 +163,35 @@ fn bench_distribution_batch(c: &mut Criterion) {
 /// Gaussian KDE evaluation at many points — each point is an O(n_data) sum over the
 /// dataset (heavy per-point work), parallelized in evaluate_many. Head-to-head vs
 /// scipy.stats.gaussian_kde (docs/perf_oracle_kde.py).
+fn bench_mvt_pdf(c: &mut Criterion) {
+    use criterion::BenchmarkId;
+    use fsci_stats::MultivariateT;
+    let mut group = c.benchmark_group("multivariate_t_pdf");
+    let m = 100_000usize;
+    for &d in &[3usize, 10] {
+        let loc: Vec<f64> = (0..d).map(|i| (i as f64) * 0.1).collect();
+        let a: Vec<Vec<f64>> = (0..d)
+            .map(|i| (0..d).map(|j| ((i * 7 + j * 3) % 5) as f64 * 0.2 - 0.4).collect())
+            .collect();
+        let mut shape = vec![vec![0.0; d]; d];
+        for i in 0..d {
+            for j in 0..d {
+                let mut sv = 0.0;
+                for k in 0..d { sv += a[i][k] * a[j][k]; }
+                shape[i][j] = sv + if i == j { d as f64 } else { 0.0 };
+            }
+        }
+        let mvt = MultivariateT::new(&loc, &shape, 5.0).expect("mvt");
+        let q: Vec<Vec<f64>> = (0..m)
+            .map(|t| (0..d).map(|j| ((t * 13 + j * 17) % 1000) as f64 * 0.01 - 5.0).collect())
+            .collect();
+        group.bench_function(BenchmarkId::new("pdf_many", d), |b| {
+            b.iter(|| mvt.pdf_many(black_box(&q)).expect("pdf"))
+        });
+    }
+    group.finish();
+}
+
 fn bench_mvn_pdf(c: &mut Criterion) {
     use criterion::BenchmarkId;
     use fsci_stats::MultivariateNormal;
@@ -355,6 +384,7 @@ criterion_group!(
     bench_distribution_batch,
     bench_kde,
     bench_kde_nd,
-    bench_mvn_pdf
+    bench_mvn_pdf,
+    bench_mvt_pdf
 );
 criterion_main!(benches);

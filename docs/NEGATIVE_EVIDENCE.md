@@ -1224,3 +1224,23 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
   path lifts high-d to 3.62x while the common 2-D/3-D stays on the faster sequential
   path. The n<5 regression is exactly the "parallel gate must scale with per-element
   OP COST" lesson — gate on n, not raw work. Bench `multivariate_normal_pdf` added.
+
+## 2026-06-20 - MultivariateT::pdf_many/logpdf_many (new batch API) - WIN 1.84x (d=3) / 4.44x (d=10) vs scipy
+
+- Agent: cc / MistyBirch. MultivariateT had only scalar logpdf/pdf — many-point eval
+  meant mapping the scalar, recomputing 2 lgamma normalizer calls per point with no
+  parallelism. Added batch logpdf_many/pdf_many: hoist the lgamma+log_det normalizer
+  once, parallelize over points (n>=5 gated, same crossover as mvn — low n is
+  memory-bound). Bit-identical to mapping the scalar (same forward-subst Mahalanobis
+  + same const-term op order).
+- Correctness: matches scipy.stats.multivariate_t.pdf to <1e-12 (d=2 golden) and the
+  batch is to_bits-identical to the scalar logpdf (n=3 seq + 6-D/60k parallel tests);
+  3/3 mvt tests pass.
+
+| mvt.pdf, m=100k | fsci | scipy | vs scipy |
+| --- | ---: | ---: | --- |
+| d=3 (sequential, hoisted) | 3.42 ms | 6.29 ms | **1.84x faster** |
+| d=10 (parallel, n>=5)     | 3.94 ms | 17.49 ms | **4.44x faster** |
+
+- Purely additive (new batch methods); scalar path untouched. Same Cholesky+
+  Mahalanobis+parallel machinery as the mvn/KDE-nd wins this session.

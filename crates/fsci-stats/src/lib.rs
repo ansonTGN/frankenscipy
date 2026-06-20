@@ -7529,6 +7529,76 @@ impl MultivariateT {
         Ok(self.logpdf(x)?.exp())
     }
 
+    /// Log-density at many points. Bit-identical to mapping [`logpdf`](Self::logpdf)
+    /// but hoists the per-call `lgamma` normalizer (2 `ln_gamma` calls) out of the
+    /// loop and, for dimension `n >= 5`, fans the independent points across threads
+    /// (per-thread scratch buffers; the per-point arithmetic and order are
+    /// unchanged). Below n=5 the O(n²) solve is too cheap to amortize threads, so it
+    /// stays sequential (still faster than the per-point map thanks to the hoist).
+    pub fn logpdf_many(&self, xs: &[Vec<f64>]) -> Result<Vec<f64>, StatsError> {
+        let n = self.loc.len();
+        if xs.is_empty() {
+            return Ok(Vec::new());
+        }
+        for x in xs {
+            if x.len() != n {
+                return Err(StatsError::InvalidArgument(
+                    "x length must match dimension".to_string(),
+                ));
+            }
+        }
+        let p = n as f64;
+        let df = self.df;
+        let pi = std::f64::consts::PI;
+        // Hoisted constant: lgamma(½(df+p)) − lgamma(½df) − ½p(ln df + ln π) − ½log_det,
+        // evaluated in the same left-to-right order as the scalar `logpdf`.
+        let const_part = ln_gamma(0.5 * (df + p)) - ln_gamma(0.5 * df)
+            - 0.5 * p * (df.ln() + pi.ln())
+            - 0.5 * self.log_det;
+        let eval = |x: &[f64], centered: &mut [f64], solved: &mut [f64]| -> f64 {
+            for i in 0..n {
+                centered[i] = x[i] - self.loc[i];
+            }
+            for i in 0..n {
+                let sum = (0..i).map(|j| self.chol[i][j] * solved[j]).sum::<f64>();
+                solved[i] = (centered[i] - sum) / self.chol[i][i];
+            }
+            let maha: f64 = solved.iter().map(|v| v * v).sum();
+            const_part - 0.5 * (df + p) * (1.0 + maha / df).ln()
+        };
+
+        let m = xs.len();
+        let work = (m as u64).saturating_mul((n * n) as u64);
+        let threads = std::thread::available_parallelism()
+            .map(|c| c.get())
+            .unwrap_or(1)
+            .min(m);
+        if n < 5 || work < 1 << 18 || threads <= 1 || m < 4 {
+            let mut centered = vec![0.0; n];
+            let mut solved = vec![0.0; n];
+            return Ok(xs.iter().map(|x| eval(x, &mut centered, &mut solved)).collect());
+        }
+        let mut out = vec![0.0f64; m];
+        let chunk = m.div_ceil(threads);
+        std::thread::scope(|scope| {
+            for (xchunk, ochunk) in xs.chunks(chunk).zip(out.chunks_mut(chunk)) {
+                scope.spawn(move || {
+                    let mut centered = vec![0.0; n];
+                    let mut solved = vec![0.0; n];
+                    for (x, slot) in xchunk.iter().zip(ochunk) {
+                        *slot = eval(x, &mut centered, &mut solved);
+                    }
+                });
+            }
+        });
+        Ok(out)
+    }
+
+    /// Density at many points (`exp` of [`logpdf_many`](Self::logpdf_many)).
+    pub fn pdf_many(&self, xs: &[Vec<f64>]) -> Result<Vec<f64>, StatsError> {
+        Ok(self.logpdf_many(xs)?.into_iter().map(f64::exp).collect())
+    }
+
     /// Mean vector (defined as `loc` for `df > 1`).
     pub fn mean(&self) -> Vec<f64> {
         self.loc.clone()
@@ -45999,6 +46069,51 @@ mod tests {
         assert!((d.pdf(&[1.5, 2.5]).unwrap() - 0.0930430847783872).abs() < 1e-12);
         assert!((d.logpdf(&[1.5, 2.5]).unwrap() - (-2.3746926159216657)).abs() < 1e-12);
         assert_eq!(d.mean(), vec![1.0, 2.0]);
+    }
+
+    #[test]
+    fn multivariate_t_pdf_many_matches_scipy_and_scalar() {
+        // scipy.stats.multivariate_t(loc, shape, df).pdf golden.
+        let d = MultivariateT::new(&[0.5, -1.0], &[vec![1.3, 0.2], vec![0.2, 2.0]], 5.0).unwrap();
+        let q = vec![vec![0.0, 0.0], vec![1.5, -0.5], vec![-2.0, 3.0]];
+        let expect = [0.059_843_782_917_440_365, 0.058_107_856_245_668_67, 0.000_838_499_875_036_309_9];
+        let got = d.pdf_many(&q).expect("pdf_many");
+        for (g, e) in got.iter().zip(&expect) {
+            assert!((g - e).abs() < 1e-12, "mvt pdf_many: got {g}, expected {e}");
+        }
+        // batch == mapping the scalar (byte-identical).
+        let lp = d.logpdf_many(&q).expect("logpdf_many");
+        for (x, &b) in q.iter().zip(&lp) {
+            assert_eq!(b.to_bits(), d.logpdf(x).unwrap().to_bits(), "logpdf_many != logpdf");
+        }
+    }
+
+    #[test]
+    fn multivariate_t_logpdf_many_parallel_is_bit_identical() {
+        // 6-D, large input (n>=5 + work ≥ 2^18) to exercise the threaded path.
+        let dim = 6usize;
+        let loc: Vec<f64> = (0..dim).map(|i| 0.1 * i as f64 - 0.3).collect();
+        let mut shape = vec![vec![0.0f64; dim]; dim];
+        for i in 0..dim {
+            for j in 0..dim {
+                shape[i][j] = if i == j { 1.5 + i as f64 * 0.3 } else { 0.15 };
+            }
+        }
+        let d = MultivariateT::new(&loc, &shape, 4.0).unwrap();
+        let mut state = 0x1357_9BDF_u64;
+        let mut nx = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let pts: Vec<Vec<f64>> = (0..60_000)
+            .map(|_| (0..dim).map(|_| nx() * 6.0 - 3.0).collect())
+            .collect();
+        let batch = d.logpdf_many(&pts).expect("logpdf_many");
+        for (x, &b) in pts.iter().zip(&batch) {
+            assert_eq!(b.to_bits(), d.logpdf(x).unwrap().to_bits(), "parallel != serial");
+        }
     }
 
     #[test]
