@@ -698,3 +698,28 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
   inherently sequential. Don't parallelize the width loop; a real further win would
   need a parallel/restructured ridge tracker. fsci already dominates, so no source
   change ships.
+
+## 2026-06-20 - binned_statistic_2d accumulator fast path - WIN 1.2-1.32x self (4.1x vs scipy), byte-identical
+
+- Agent: cc / MistyBirch
+- Decision: **KEEP**. `binned_statistic_2d` materialized every point into a
+  `Vec<Vec<Vec<f64>>>` (one Vec per bin, 2500 for 50×50) even for count/sum/mean/
+  min/max — which need only running aggregates. Added an accumulator fast path
+  (flat count/sum/min/max arrays + a per-bin NaN flag) that skips the
+  materialization; median/std keep the materialize path (need all values / two-pass).
+- Correctness: **byte-for-bit identical** to the materialize-then-fold path —
+  per-bin sum accumulates in point (== push) order, nan-min/max is order-independent
+  with the NaN flag — proven by `binned_statistic_2d_fast_path_matches_materialize`
+  (count/sum/mean/min/max vs a brute-force reference incl. NaN values + empty bins).
+  Existing scipy-reference test still passes; no new failures (the 5 failing stats
+  tests — zscore_mad/sklearn helpers — fail identically on origin, unrelated).
+
+| stat (n=200k, 50×50) | materialize | accumulate | self | scipy | vs scipy |
+| --- | ---: | ---: | ---: | ---: | --- |
+| mean  | 5.42 ms | 4.10 ms | **1.32x** | 16.67 ms | 4.1x faster (was 3.1x) |
+| sum   | 4.88 ms | 4.00 ms | 1.22x | — | — |
+| count | 4.62 ms | 3.85 ms | 1.20x | — | — |
+
+- Modest at 50 bins (the binning floor/min loop dominates), but the win GROWS with
+  bin count (materialize allocates a Vec per bin → O(bins²) allocs + cache misses;
+  accumulate is flat). Strictly byte-identical structural cleanup, not a tweak.
