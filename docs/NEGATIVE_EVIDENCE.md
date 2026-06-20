@@ -172,3 +172,29 @@ documented `minimum/maximum_filter` 1.8-1.9x loss closes to near-parity (cross-b
 standalone ~1.1x; load-canceling A/B absolutes beat scipy). Reusable lever:
 **any monotonic-deque sliding-window extremum → van Herk block prefix/suffix +
 interior-direct (boundary-map only the ~window-1 edge cells).**
+
+## 2026-06-20 - gaussian_filter 2D reflect folded symmetric axpy - REJECT (bandwidth-bound)
+
+- Agent: cc / MistyBirch
+- Decision: **REJECT AND REVERT**. Reformulated `gaussian_filter_2d_reflect_order0`
+  to exploit the (bit-symmetric, order-0) kernel: fold symmetric pairs
+  `w[mid]*x[mid] + Σ w[mid±k]*(x[+k]+x[-k])` (scipy correlate1d order, halves the
+  multiplies) AND restructure the row (axis-0) pass as contiguous **axpy** passes
+  (stride-1, vectorizable) instead of the stride-`cols` gather, plus a
+  reflect-free interior axpy for the col pass.
+- Correctness: tolerance-equal to the gather-dot path (exact reordering of the
+  same operands; `max|gather-axpy| < 1e-10` across rows/cols/sigma) — proven, but
+  NOT byte-identical (reordered FP accumulation).
+- Measured (same-process atomic-toggle A/B, load-canceling): row-axpy alone
+  **1.16x**; + col-axpy interior **1.18x**. Below the 1.3x keep threshold.
+- Root cause: the 256×256×f64 separable pass streams ~512 KB twice — it is
+  **memory-bandwidth-bound**, not multiply-bound, so halving the FMAs and
+  vectorizing the inner loop cannot close the gap. The residual vs SciPy
+  (~1.13 ms) is constant-factor overhead (double buffering, two thread scopes,
+  source-plan precompute), not the inner dot.
+- Negative evidence: do NOT retry inner-loop fold / axpy / SIMD on the gaussian
+  separable pass — the bottleneck is memory traffic + per-call overhead. A real
+  flip needs a single fused streaming pass (fewer buffer touches) or a tiled
+  cache-blocking that keeps the working set resident, AND must clear ≥1.3x on a
+  same-process A/B. Consistent with the prior `6l77z`/`acdq2` direct-interior
+  rejects. Reverted to `0cf3cc42`; no source shipped.
