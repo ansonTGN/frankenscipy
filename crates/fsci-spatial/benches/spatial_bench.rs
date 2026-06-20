@@ -26,7 +26,9 @@ fn bench_transform_batch(c: &mut Criterion) {
     });
 
     let tf = RigidTransform::from_components([1.0, 2.0, 3.0], r);
-    group.bench_function("rigid/apply_many", |b| b.iter(|| tf.apply_many(&pts, false)));
+    group.bench_function("rigid/apply_many", |b| {
+        b.iter(|| tf.apply_many(&pts, false))
+    });
     group.bench_function("rigid/map_apply", |b| {
         b.iter(|| pts.iter().map(|&p| tf.apply(p, false)).collect::<Vec<_>>())
     });
@@ -44,7 +46,12 @@ fn bench_pdist(c: &mut Criterion) {
         let data: Vec<Vec<f64>> = (0..n)
             .map(|i| {
                 let t = i as f64;
-                vec![(t * 0.1).sin(), (t * 0.2).cos(), t * 0.001, (t * 0.05).sin()]
+                vec![
+                    (t * 0.1).sin(),
+                    (t * 0.2).cos(),
+                    t * 0.001,
+                    (t * 0.05).sin(),
+                ]
             })
             .collect();
         group.bench_function(BenchmarkId::new("euclidean", n), |b| {
@@ -79,12 +86,15 @@ fn bench_kdtree(c: &mut Criterion) {
 fn bench_delaunay(c: &mut Criterion) {
     use fsci_spatial::Delaunay;
     let mut group = c.benchmark_group("delaunay");
-    for &n in &[1000usize, 2000] {
+    for &n in &[1000usize, 2000, 4000, 8000] {
         // Deterministic scattered 2-D points (low-discrepancy-ish, no exact duplicates).
         let pts: Vec<(f64, f64)> = (0..n)
             .map(|i| {
                 let t = i as f64;
-                ((t * 0.6180339887).fract() * 100.0, (t * 0.4142135624).fract() * 100.0)
+                (
+                    (t * 0.6180339887).fract() * 100.0,
+                    (t * 0.4142135624).fract() * 100.0,
+                )
             })
             .collect();
         group.bench_function(BenchmarkId::from_parameter(n), |b| {

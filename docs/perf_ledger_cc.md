@@ -402,21 +402,22 @@ only the v2-dependent work per query instead of rebuilding the Gram matrix per
 (query, candidate). BYTE-IDENTICAL (`SimplexBary::weights` = `barycentric` same float
 ops/order), conformance interpolate **227/0**. Monotone eval speedup. KEEP.
 
-### ✅✅ Delaunay LOSS → WIN (frankenscipy-9l5oo) — biggest gap FLIPPED
-The gauntlet's only complexity-class loss is now a WIN. Root cause was the bad-triangle
-scan calling `point_in_circumcircle` (full in-circle determinant + `cross` orientation +
-3 `all_points[]` lookups, ~20 flops) for EVERY (point, triangle) pair. Fix: precompute
-each triangle's circumcircle (center, radius²) once at creation, kept in a `circ` Vec
-parallel to `triangles`; the scan becomes `dist² < r²` (~5 flops). **MEASURED: n=1000
-6.53→0.90 ms (7.3× self-speedup, 2.2× FASTER than scipy Qhull); n=2000 26.3→3.26 ms
-(8.1×, 1.38× FASTER than Qhull).** A 3.3–5.9× LOSS flipped to a 1.4–2.2× WIN. Conformance:
-spatial 263 passed / 0 failed (incl. the empty-circumcircle property test shipped in
-`96a37a83` + the cocircular-square goldens — the explicit `dist²<r²` agrees with the
-determinant on these inputs; cocircular boundary cases agree via det=0 ⇔ dist²=r²).
-NOTE: still O(n²) (the constant just dropped ~8×), so Qhull's O(n log n) overtakes
-around n≈3–4k; the full jump-and-walk O(n log n) rewrite (now safety-netted by the
-property test) is the future lever to win at ALL sizes. But at realistic small-medium
-sizes fsci now DOMINATES.
+### ✅✅ Delaunay LOSS → WIN/PARITY (frankenscipy-9l5oo) — large-n gap closed to parity
+The first pass flipped n=1000/2000 by precomputing circumcircles instead of calling the
+full in-circle determinant for every (point, triangle) pair. The 2026-06-20 cod-b pass
+expanded the gauntlet to n=4000/8000 and found the predicted crossover was real:
+pre-grid n=4000 14.935 ms vs scipy 9.50086 ms (1.57× slower), n=8000 55.761 ms vs
+20.62714 ms (2.70× slower). New lever: for n>=4096, stable triangle IDs plus a fixed
+grid over circumcircle bounding boxes. Each point checks only candidate circles in its
+cell and then applies the exact `dist² < r²` predicate; inactive stale IDs are skipped
+and an empty candidate lookup falls back to the full active scan. **MEASURED final:
+n=1000 0.754 ms vs scipy 1.933 ms (2.56× faster), n=2000 2.613 ms vs 4.550 ms
+(1.74× faster), n=4000 9.463 ms vs 9.501 ms (parity), n=8000 20.622 ms vs
+20.627 ms (parity). Score: 2 wins / 0 losses / 2 neutral.** Conformance/gates:
+spatial lib 208 passed / 0 failed / 2 ignored; e2e_spatial 16/0; check, clippy
+`-D warnings`, fmt, UBS clean for touched files. Remaining caution: this is still
+Bowyer-Watson with a grid candidate accelerator, not full Qhull-class history-DAG
+location; re-measure beyond n=8000 before claiming asymptotic dominance.
 
 ## IO crate — head-to-head vs numpy/scipy.io (2026-06-19) — fsci DOMINATES
 fsci vs numpy (loadtxt/savetxt) + scipy.io (mmread/mmwrite), in-memory:
@@ -723,15 +724,13 @@ This phase moved from MEASURING gaps to FIXING them, conformance-gated via `carg
   no gain (bottleneck is the general support-machinery, not the weight arithmetic).
 
 **Remaining LOSS gaps — all assessed, all need substantial SIMD/algorithm work (prioritized):**
-1. `9l5oo` Delaunay O(n²)→O(n log n) jump-and-walk locate — HIGHEST IMPACT (complexity
-   class), but multi-hour rewrite + triangle-order conformance risk.
-2. `nm8ex` pdist — needs SIMD distance kernel (the parallel path HELPS; the serial kernel
+1. `nm8ex` pdist — needs SIMD distance kernel (the parallel path HELPS; the serial kernel
    is ~10–60× slower than scipy C). NOT a gate fix.
-3. `9g6ku` kmeans2 — SIMD distance, but iterative/CHAOTIC so SIMD FP-reorder breaks
+2. `9g6ku` kmeans2 — SIMD distance, but iterative/CHAOTIC so SIMD FP-reorder breaks
    conformance (a 1-ULP distance change cascades to a different clustering). Needs the
    gemm-trick (≠ byte-identical) + tolerance acceptance.
-4. gaussian_filter 2.83× — specialized 1D-axis correlate (routes through shared `convolve`).
-5. geometric order=1 4× — specialized 2D bilinear bypassing the support machinery (low-ROI;
+3. gaussian_filter 2.83× — specialized 1D-axis correlate (routes through shared `convolve`).
+4. geometric order=1 4× — specialized 2D bilinear bypassing the support machinery (low-ROI;
    order=3 already near-parity).
 
 ## Release-readiness summary (CrimsonForge beads, as of this round)

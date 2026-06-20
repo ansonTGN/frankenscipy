@@ -48,6 +48,46 @@ Readiness notes:
   sorted-label remapping, fused integer-label generation from `label()`, SIMD
   accumulation over contiguous label spans, or cache-tiled sum/count reductions.
 
+## 2026-06-20 - fsci-spatial Delaunay circumcircle-grid gauntlet
+
+- Agent: cod-b / MistyBirch
+- Bead: `frankenscipy-9l5oo`
+- Decision: KEEP the n>=4096 circumcircle-grid candidate index. Score for this
+  sub-cluster: 4/5. It closes the measured 4000/8000 SciPy losses to parity, but
+  still needs a beyond-8000 re-test before claiming asymptotic dominance.
+- Artifact: inline in `docs/progress/perf-negative-results.md` and
+  `docs/perf_ledger_cc.md` (no new artifact directory).
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| SciPy head-to-head oracle | PASS | `python3 docs/perf_oracle_delaunay.py`, local SciPy 1.17.1, n=1000/2000/4000/8000 |
+| Criterion focused bench | PASS | `cargo bench -p fsci-spatial --bench spatial_bench -- delaunay --sample-size 10 --measurement-time 1 --warm-up-time 1` via rch |
+| Focused Delaunay tests | PASS | `cargo test -p fsci-spatial delaunay -- --nocapture`: 8 unit + 1 metamorphic pass |
+| Full spatial lib tests | PASS | `cargo test -p fsci-spatial --lib -- --nocapture`: 208 passed / 0 failed / 2 ignored |
+| Spatial conformance | PASS | `cargo test -p fsci-conformance --test e2e_spatial -- --nocapture`: 16/0 |
+| Check / clippy / fmt | PASS | `cargo check -p fsci-spatial --all-targets`; `cargo clippy -p fsci-spatial --all-targets --no-deps -- -D warnings`; `cargo fmt --check -p fsci-spatial` |
+| Changed-file UBS | PASS | `ubs crates/fsci-spatial/src/lib.rs crates/fsci-spatial/benches/spatial_bench.rs docs/perf_oracle_delaunay.py`; no criticals |
+
+| Workload / route | Mean | Ratio | Verdict |
+| --- | ---: | ---: | --- |
+| Rust current `Delaunay`, n=1000 | 754.03 us | 2.56x faster than SciPy | SciPy win |
+| SciPy `spatial.Delaunay`, n=1000 | 1.93258 ms | 1.00x oracle | reference |
+| Rust current `Delaunay`, n=2000 | 2.6129 ms | 1.74x faster than SciPy | SciPy win |
+| SciPy `spatial.Delaunay`, n=2000 | 4.54974 ms | 1.00x oracle | reference |
+| Rust current `Delaunay`, n=4000 | 9.4632 ms | parity with SciPy | neutral |
+| SciPy `spatial.Delaunay`, n=4000 | 9.50086 ms | 1.00x oracle | reference |
+| Rust current `Delaunay`, n=8000 | 20.622 ms | parity with SciPy | neutral |
+| SciPy `spatial.Delaunay`, n=8000 | 20.62714 ms | 1.00x oracle | reference |
+
+Readiness notes:
+
+- Score vs SciPy is 2 wins / 0 losses / 2 neutral on the scoped deterministic
+  2-D workload. The pre-grid expanded probe showed losses at 4000/8000; the
+  grid closes those rows to parity.
+- This is a candidate-pruning accelerator for Bowyer-Watson, not a full
+  randomized incremental/history-DAG point-location rewrite. Re-test at larger
+  n before routing remaining work as purely constant-factor.
+
 ## 2026-06-20 - fsci-ndimage label mean flat-accumulator gauntlet
 
 - Agent: cod-a / MistyBirch

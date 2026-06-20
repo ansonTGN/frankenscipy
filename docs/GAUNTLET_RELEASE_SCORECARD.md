@@ -1,6 +1,6 @@
 # Gauntlet Release Scorecard
 
-Last updated: 2026-06-19 by cod-a/cod-b / MistyBirch.
+Last updated: 2026-06-20 by cod-a/cod-b / MistyBirch.
 
 This scorecard tracks code-first performance work that has been converted into
 measured head-to-head evidence against the SciPy original. The detailed
@@ -20,6 +20,7 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `frankenscipy-nm8ex` | Dim-4 `pdist` SqEuclidean SoA SIMD-across-pairs | `scipy.spatial.distance.pdist` sqeuclidean d=4, n=512 | 0.102ms | 0.179ms | **1.75x faster** | keep — was 2.47ms (13x slower, over-spawn); 24x self; bit-identical |
 | `frankenscipy-nm8ex` | Dim-4 `pdist` Cityblock SoA SIMD-across-pairs | `scipy.spatial.distance.pdist` cityblock d=4, n=512 | 0.109ms | 0.190ms | **1.74x faster** | keep — was 2.49ms (13x slower); 23x self; bit-identical |
 | `frankenscipy-nm8ex` | `pdist` thread gate (all metrics): serial < 1<<20 work, cap 16 | over-spawn fix, n=512 (cityblock/sqeucl/chebyshev d4/d16/d64) | 0.7-2.2ms | (was 2.3-3.3ms 64-thr) | **1.3-3.6x self** (byte-identical) | keep — fixes 64-thread over-spawn for non-fast-path metrics |
+| `frankenscipy-9l5oo` | Delaunay circumcircle grid candidate index for n>=4096 | `scipy.spatial.Delaunay` deterministic 2-D points, n=1000/2000/4000/8000 | 0.754ms / 2.613ms / 9.463ms / 20.622ms | 1.933ms / 4.550ms / 9.501ms / 20.627ms | **2.56x / 1.74x faster; parity at 4000/8000** | keep — 4000/8000 loss closed to parity; score 2 wins / 0 losses / 2 neutral |
 
 ## Measured Losses / Internal Keeps
 

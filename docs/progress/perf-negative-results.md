@@ -1598,3 +1598,40 @@ Local original-SciPy oracle (`python3 docs/perf_oracle_fft_csd.py --reps 120
 - DEFERRED: chebyshev d4 (0.79ms vs scipy 0.18ms) — its NaN-propagating max fold
   needs careful SIMD replication (f64::max doesn't propagate NaN; the helper forces
   it). Left on the gate-fixed generic path.
+
+## 2026-06-20 - frankenscipy-9l5oo - Delaunay circumcircle grid closes large-n SciPy loss to parity
+
+- Agent: cod-b / MistyBirch
+- Baseline/routing: expanding `bench_delaunay` from n=1000/2000 to
+  n=1000/2000/4000/8000 showed the original issue text was stale at small sizes
+  but still real at larger sizes. Pre-grid rch probe on `hz1`: n=1000 1.0832 ms,
+  n=2000 3.9718 ms, n=4000 14.935 ms, n=8000 55.761 ms. Local SciPy 1.17.1 oracle:
+  n=1000 1.93258 ms, n=2000 4.54974 ms, n=4000 9.50086 ms, n=8000 20.62714 ms.
+  Result before this lever: wins at 1000/2000, losses of 1.57x/2.70x at 4000/8000.
+- Lever: for n>=4096, keep stable triangle IDs and index each active
+  circumcircle's bounding box into a fixed grid. Each inserted point checks only
+  the candidate circles in its cell, then runs the exact `dist2 < r2` predicate.
+  Removed triangles become inactive; stale grid IDs are skipped. If a grid lookup
+  ever returns no bad triangle, the code falls back to the full active scan.
+- Final head-to-head (`cargo bench -p fsci-spatial --bench spatial_bench -- delaunay
+  --sample-size 10 --measurement-time 1 --warm-up-time 1` via rch `ovh-a`; SciPy
+  oracle local):
+
+  | n | Rust after | SciPy | Ratio vs SciPy | Verdict |
+  | --- | ---: | ---: | ---: | --- |
+  | 1000 | 754.03 us | 1.93258 ms | 2.56x faster | win |
+  | 2000 | 2.6129 ms | 4.54974 ms | 1.74x faster | win |
+  | 4000 | 9.4632 ms | 9.50086 ms | parity | neutral |
+  | 8000 | 20.622 ms | 20.62714 ms | parity | neutral |
+
+- Score vs SciPy: **2 wins / 0 losses / 2 neutral**. The measured large-n losses
+  are closed to parity on the scoped deterministic 2-D workload. Remaining
+  negative evidence: this is still Bowyer-Watson with a fixed-grid candidate
+  accelerator, not a full Qhull-class randomized incremental/history-DAG locate;
+  re-test beyond n=8000 before claiming asymptotic dominance.
+- Gates: `cargo test -p fsci-spatial delaunay -- --nocapture` 8 unit + 1
+  metamorphic pass; full `cargo test -p fsci-spatial --lib -- --nocapture` 208
+  passed / 0 failed / 2 ignored; `cargo check -p fsci-spatial --all-targets`;
+  `cargo clippy -p fsci-spatial --all-targets --no-deps -- -D warnings`;
+  `cargo fmt --check -p fsci-spatial`; `ubs` on touched files; and
+  `cargo test -p fsci-conformance --test e2e_spatial -- --nocapture` 16/0.

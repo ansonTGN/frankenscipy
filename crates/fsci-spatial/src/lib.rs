@@ -529,8 +529,7 @@ pub fn pdist(x: &[Vec<f64>], metric: DistanceMetric) -> Result<Vec<f64>, Spatial
                 | DistanceMetric::Cosine
                 | DistanceMetric::SqEuclidean
                 | DistanceMetric::Cityblock
-        )
-    {
+        ) {
         1
     } else {
         pdist_thread_count(n, dim)
@@ -1195,7 +1194,9 @@ pub fn cdist_metric(
             // The d=4 kernel is memory-bandwidth-bound (≈40 bytes traffic per 8-byte output,
             // low arithmetic intensity), so ~16 threads saturate bandwidth; beyond that extra
             // workers only contend (measured: cap16 1.9ms vs cap64 4.6ms vs SciPy 2.2ms).
-            cdist_fill_rows(na, nthreads.min(16), |i| cdist_row_euclidean4(&xa4[i], &b_soa, nb))
+            cdist_fill_rows(na, nthreads.min(16), |i| {
+                cdist_row_euclidean4(&xa4[i], &b_soa, nb)
+            })
         }
         DistanceMetric::Cosine if dim == 4 => {
             let na_norm: Vec<f64> = xa.iter().map(|v| simd_sqsum(v).sqrt()).collect();
@@ -2670,61 +2671,11 @@ impl Delaunay {
         all_points.push((max_x + margin * dx, min_y - margin * dy));
         all_points.push(((min_x + max_x) / 2.0, max_y + margin * dy));
 
-        let mut triangles = vec![(n, n + 1, n + 2)];
-        // Circumcircles kept parallel to `triangles` so the bad scan tests dist²<r²
-        // instead of a per-pair in-circle determinant. frankenscipy-9l5oo.
-        let mut circ: Vec<(f64, f64, f64)> =
-            vec![circumcircle_of(all_points[n], all_points[n + 1], all_points[n + 2])];
-        // Per-point scratch hoisted out of the insertion loop and cleared each pass
-        // (both are fully rebuilt every point -> byte-identical), saving 2n Vec
-        // allocations. frankenscipy-8d2z2.
-        let mut bad: Vec<usize> = Vec::new();
-        let mut boundary: Vec<(usize, usize)> = Vec::new();
-        for p_idx in 0..n {
-            let point = all_points[p_idx];
-            bad.clear();
-            for (t_idx, &(cx, cy, r2)) in circ.iter().enumerate() {
-                let ddx = point.0 - cx;
-                let ddy = point.1 - cy;
-                if ddx * ddx + ddy * ddy < r2 {
-                    bad.push(t_idx);
-                }
-            }
-
-            boundary.clear();
-            for &t_idx in &bad {
-                let (a, b, c) = triangles[t_idx];
-                for &(e0, e1) in &[(a, b), (b, c), (c, a)] {
-                    if !bad.iter().any(|&other_idx| {
-                        other_idx != t_idx
-                            && triangle_has_edge(
-                                triangles[other_idx].0,
-                                triangles[other_idx].1,
-                                triangles[other_idx].2,
-                                e0,
-                                e1,
-                            )
-                    }) {
-                        boundary.push((e0, e1));
-                    }
-                }
-            }
-
-            bad.sort_unstable();
-            for &idx in bad.iter().rev() {
-                triangles.swap_remove(idx);
-                circ.swap_remove(idx);
-            }
-            for &(e0, e1) in &boundary {
-                triangles.push((p_idx, e0, e1));
-                circ.push(circumcircle_of(all_points[p_idx], all_points[e0], all_points[e1]));
-            }
-        }
-
-        let simplices: Vec<(usize, usize, usize)> = triangles
-            .into_iter()
-            .filter(|&(a, b, c)| a < n && b < n && c < n)
-            .collect();
+        let simplices = if n >= DELAUNAY_CIRCLE_GRID_THRESHOLD {
+            delaunay_triangulate_circle_grid(&all_points, n, min_x, min_y, dx, dy)
+        } else {
+            delaunay_triangulate_linear(&all_points, n)
+        };
         if simplices.is_empty() {
             return Err(qhull_error(
                 "QH6154 Qhull precision error: initial simplex is flat",
@@ -2750,6 +2701,238 @@ impl Delaunay {
             }
         }
         None
+    }
+}
+
+const DELAUNAY_CIRCLE_GRID_THRESHOLD: usize = 4096;
+
+fn delaunay_triangulate_linear(all_points: &[(f64, f64)], n: usize) -> Vec<(usize, usize, usize)> {
+    let mut triangles = vec![(n, n + 1, n + 2)];
+    // Circumcircles kept parallel to `triangles` so the bad scan tests dist²<r²
+    // instead of a per-pair in-circle determinant. frankenscipy-9l5oo.
+    let mut circ: Vec<(f64, f64, f64)> = vec![circumcircle_of(
+        all_points[n],
+        all_points[n + 1],
+        all_points[n + 2],
+    )];
+    // Per-point scratch hoisted out of the insertion loop and cleared each pass
+    // (both are fully rebuilt every point -> byte-identical), saving 2n Vec
+    // allocations. frankenscipy-8d2z2.
+    let mut bad: Vec<usize> = Vec::new();
+    let mut boundary: Vec<(usize, usize)> = Vec::new();
+    for p_idx in 0..n {
+        let point = all_points[p_idx];
+        bad.clear();
+        for (t_idx, &(cx, cy, r2)) in circ.iter().enumerate() {
+            let ddx = point.0 - cx;
+            let ddy = point.1 - cy;
+            if ddx * ddx + ddy * ddy < r2 {
+                bad.push(t_idx);
+            }
+        }
+
+        boundary.clear();
+        delaunay_collect_boundary(&triangles, &bad, &mut boundary);
+
+        bad.sort_unstable();
+        for &idx in bad.iter().rev() {
+            triangles.swap_remove(idx);
+            circ.swap_remove(idx);
+        }
+        for &(e0, e1) in &boundary {
+            triangles.push((p_idx, e0, e1));
+            circ.push(circumcircle_of(
+                all_points[p_idx],
+                all_points[e0],
+                all_points[e1],
+            ));
+        }
+    }
+
+    triangles
+        .into_iter()
+        .filter(|&(a, b, c)| a < n && b < n && c < n)
+        .collect()
+}
+
+fn delaunay_triangulate_circle_grid(
+    all_points: &[(f64, f64)],
+    n: usize,
+    min_x: f64,
+    min_y: f64,
+    dx: f64,
+    dy: f64,
+) -> Vec<(usize, usize, usize)> {
+    let mut triangles = vec![(n, n + 1, n + 2)];
+    let mut circ: Vec<(f64, f64, f64)> = vec![circumcircle_of(
+        all_points[n],
+        all_points[n + 1],
+        all_points[n + 2],
+    )];
+    let mut active = vec![true];
+    let mut grid = DelaunayCircleGrid::new(n, min_x, min_y, dx, dy);
+    grid.insert_circle(circ[0], 0);
+
+    let mut bad: Vec<usize> = Vec::new();
+    let mut boundary: Vec<(usize, usize)> = Vec::new();
+    for p_idx in 0..n {
+        let point = all_points[p_idx];
+        bad.clear();
+        grid.bad_triangles(point, &circ, &active, &mut bad);
+        if bad.is_empty() {
+            delaunay_scan_active_bad_triangles(point, &circ, &active, &mut bad);
+        }
+        bad.sort_unstable();
+        bad.dedup();
+
+        boundary.clear();
+        delaunay_collect_boundary(&triangles, &bad, &mut boundary);
+
+        for &idx in &bad {
+            active[idx] = false;
+        }
+        for &(e0, e1) in &boundary {
+            let triangle_idx = triangles.len();
+            let circle = circumcircle_of(all_points[p_idx], all_points[e0], all_points[e1]);
+            triangles.push((p_idx, e0, e1));
+            circ.push(circle);
+            active.push(true);
+            grid.insert_circle(circle, triangle_idx);
+        }
+    }
+
+    triangles
+        .into_iter()
+        .enumerate()
+        .filter_map(|(idx, (a, b, c))| {
+            (active[idx] && a < n && b < n && c < n).then_some((a, b, c))
+        })
+        .collect()
+}
+
+fn delaunay_scan_active_bad_triangles(
+    point: (f64, f64),
+    circ: &[(f64, f64, f64)],
+    active: &[bool],
+    bad: &mut Vec<usize>,
+) {
+    for (t_idx, &(cx, cy, r2)) in circ.iter().enumerate() {
+        if !active[t_idx] {
+            continue;
+        }
+        let ddx = point.0 - cx;
+        let ddy = point.1 - cy;
+        if ddx * ddx + ddy * ddy < r2 {
+            bad.push(t_idx);
+        }
+    }
+}
+
+fn delaunay_collect_boundary(
+    triangles: &[(usize, usize, usize)],
+    bad: &[usize],
+    boundary: &mut Vec<(usize, usize)>,
+) {
+    for &t_idx in bad {
+        let (a, b, c) = triangles[t_idx];
+        for &(e0, e1) in &[(a, b), (b, c), (c, a)] {
+            if !bad.iter().any(|&other_idx| {
+                other_idx != t_idx
+                    && triangle_has_edge(
+                        triangles[other_idx].0,
+                        triangles[other_idx].1,
+                        triangles[other_idx].2,
+                        e0,
+                        e1,
+                    )
+            }) {
+                boundary.push((e0, e1));
+            }
+        }
+    }
+}
+
+struct DelaunayCircleGrid {
+    min_x: f64,
+    min_y: f64,
+    inv_dx: f64,
+    inv_dy: f64,
+    dim: usize,
+    cells: Vec<Vec<usize>>,
+}
+
+impl DelaunayCircleGrid {
+    fn new(n: usize, min_x: f64, min_y: f64, dx: f64, dy: f64) -> Self {
+        let dim = ((n as f64).sqrt() as usize).clamp(16, 128);
+        Self {
+            min_x,
+            min_y,
+            inv_dx: dim as f64 / dx.max(1e-10),
+            inv_dy: dim as f64 / dy.max(1e-10),
+            dim,
+            cells: vec![Vec::new(); dim * dim],
+        }
+    }
+
+    fn insert_circle(&mut self, circle: (f64, f64, f64), triangle_idx: usize) {
+        let (cx, cy, r2) = circle;
+        if !cx.is_finite() || !cy.is_finite() || !r2.is_finite() || r2 < 0.0 {
+            return;
+        }
+        let r = r2.sqrt();
+        let x0 = self.cell_x(cx - r);
+        let x1 = self.cell_x(cx + r);
+        let y0 = self.cell_y(cy - r);
+        let y1 = self.cell_y(cy + r);
+        for y in y0..=y1 {
+            let row = y * self.dim;
+            for x in x0..=x1 {
+                self.cells[row + x].push(triangle_idx);
+            }
+        }
+    }
+
+    fn bad_triangles(
+        &self,
+        point: (f64, f64),
+        circ: &[(f64, f64, f64)],
+        active: &[bool],
+        bad: &mut Vec<usize>,
+    ) {
+        let cell = self.point_cell(point);
+        for &t_idx in &self.cells[cell] {
+            if !active[t_idx] {
+                continue;
+            }
+            let (cx, cy, r2) = circ[t_idx];
+            let ddx = point.0 - cx;
+            let ddy = point.1 - cy;
+            if ddx * ddx + ddy * ddy < r2 {
+                bad.push(t_idx);
+            }
+        }
+    }
+
+    fn point_cell(&self, point: (f64, f64)) -> usize {
+        self.cell_y(point.1) * self.dim + self.cell_x(point.0)
+    }
+
+    fn cell_x(&self, x: f64) -> usize {
+        clamp_delaunay_grid_cell((x - self.min_x) * self.inv_dx, self.dim)
+    }
+
+    fn cell_y(&self, y: f64) -> usize {
+        clamp_delaunay_grid_cell((y - self.min_y) * self.inv_dy, self.dim)
+    }
+}
+
+fn clamp_delaunay_grid_cell(scaled: f64, dim: usize) -> usize {
+    if scaled <= 0.0 {
+        0
+    } else if scaled >= dim as f64 {
+        dim - 1
+    } else {
+        scaled as usize
     }
 }
 
@@ -5755,11 +5938,7 @@ impl std::ops::Mul for RigidTransform {
 // ── RotationSpline helpers (faithful port of scipy._rotation_spline) ──────────
 
 fn rs_skew(x: [f64; 3]) -> [[f64; 3]; 3] {
-    [
-        [0.0, -x[2], x[1]],
-        [x[2], 0.0, -x[0]],
-        [-x[1], x[0], 0.0],
-    ]
+    [[0.0, -x[2], x[1]], [x[2], 0.0, -x[0]], [-x[1], x[0], 0.0]]
 }
 
 fn rs_matmul3(a: &[[f64; 3]; 3], b: &[[f64; 3]; 3]) -> [[f64; 3]; 3] {
@@ -5981,7 +6160,9 @@ impl RotationSpline {
         let nb = m - 1; // number of diagonal blocks (= n - 2)
         let sz = 3 * nb;
         // Block-tridiagonal system matrix (dense; the system is well-conditioned).
-        let d: Vec<f64> = (0..nb).map(|i| 4.0 * (1.0 / dt[i] + 1.0 / dt[i + 1])).collect();
+        let d: Vec<f64> = (0..nb)
+            .map(|i| 4.0 * (1.0 / dt[i] + 1.0 / dt[i + 1]))
+            .collect();
         let mut mat = vec![vec![0.0; sz]; sz];
         for (i, &di) in d.iter().enumerate() {
             for k in 0..3 {
@@ -6021,8 +6202,9 @@ impl RotationSpline {
 
         for _ in 0..Self::MAX_ITER {
             // rotvecs_dot = A · angular_rates over all m entries.
-            let rotvecs_dot: Vec<[f64; 3]> =
-                (0..m).map(|i| rs_matvec3(&a[i], angular_rates[i])).collect();
+            let rotvecs_dot: Vec<[f64; 3]> = (0..m)
+                .map(|i| rs_matvec3(&a[i], angular_rates[i]))
+                .collect();
             let mut rhs = vec![0.0; sz];
             for i in 0..nb {
                 let db = rs_angular_accel_nonlinear(rotvecs[i], rotvecs_dot[i]);
@@ -6048,8 +6230,9 @@ impl RotationSpline {
             }
         }
 
-        let rotvecs_dot: Vec<[f64; 3]> =
-            (0..m).map(|i| rs_matvec3(&a[i], angular_rates[i])).collect();
+        let rotvecs_dot: Vec<[f64; 3]> = (0..m)
+            .map(|i| rs_matvec3(&a[i], angular_rates[i]))
+            .collect();
         // angular_rates = vstack(angular_rate_first, angular_rates[:-1]).
         let mut final_rates = Vec::with_capacity(m);
         final_rates.push(angular_rate_first);
@@ -6137,7 +6320,12 @@ mod tests {
 
         let close3 = |a: [f64; 3], b: [f64; 3], msg: &str| {
             for k in 0..3 {
-                assert!((a[k] - b[k]).abs() < 1e-8, "{msg}[{k}]: {} vs {}", a[k], b[k]);
+                assert!(
+                    (a[k] - b[k]).abs() < 1e-8,
+                    "{msg}[{k}]: {} vs {}",
+                    a[k],
+                    b[k]
+                );
             }
         };
         let close_quat = |q: [f64; 4], w: [f64; 4], msg: &str| {
@@ -6201,7 +6389,11 @@ mod tests {
         for inverse in [false, true] {
             let batch = tf.apply_many(&pts, inverse);
             for (p, b) in pts.iter().zip(batch.iter()) {
-                assert_eq!(*b, tf.apply(*p, inverse), "apply_many({inverse}) != apply at {p:?}");
+                assert_eq!(
+                    *b,
+                    tf.apply(*p, inverse),
+                    "apply_many({inverse}) != apply at {p:?}"
+                );
             }
         }
     }
@@ -6210,7 +6402,12 @@ mod tests {
     fn rigid_transform_matches_scipy() {
         let close = |a: [f64; 3], b: [f64; 3], msg: &str| {
             for k in 0..3 {
-                assert!((a[k] - b[k]).abs() < 1e-9, "{msg}[{k}]: {} vs {}", a[k], b[k]);
+                assert!(
+                    (a[k] - b[k]).abs() < 1e-9,
+                    "{msg}[{k}]: {} vs {}",
+                    a[k],
+                    b[k]
+                );
             }
         };
         let r = Rotation::from_quat([
@@ -6241,7 +6438,11 @@ mod tests {
         let m = tf.as_matrix();
         let tf_rt = RigidTransform::from_matrix(m);
         close(tf_rt.translation(), tf.translation(), "matrix_rt_t");
-        close(tf_rt.apply(pt, false), tf.apply(pt, false), "matrix_rt_apply");
+        close(
+            tf_rt.apply(pt, false),
+            tf.apply(pt, false),
+            "matrix_rt_apply",
+        );
         assert_eq!(m[3], [0.0, 0.0, 0.0, 1.0]);
 
         // Composition: tf * tf2.
@@ -6301,8 +6502,16 @@ mod tests {
         let pts = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.5, 0.5)];
         let h = ConvexHull::new(&pts).expect("hull");
         assert_eq!(h.vertices.len(), 4, "interior point excluded");
-        assert!((h.area - 1.0).abs() < 1e-12, "area (scipy volume): {}", h.area);
-        assert!((h.perimeter - 4.0).abs() < 1e-12, "perimeter (scipy area): {}", h.perimeter);
+        assert!(
+            (h.area - 1.0).abs() < 1e-12,
+            "area (scipy volume): {}",
+            h.area
+        );
+        assert!(
+            (h.perimeter - 4.0).abs() < 1e-12,
+            "perimeter (scipy area): {}",
+            h.perimeter
+        );
     }
 
     #[test]
@@ -6348,7 +6557,10 @@ mod tests {
         );
         // Cylindrical direct + round-trip.
         let (rho, th, zc) = cartesian_to_cylindrical(3.0, 4.0, 5.0);
-        assert!((rho - 5.0).abs() < 1e-12 && (zc - 5.0).abs() < 1e-12, "c2cyl (3,4,5)");
+        assert!(
+            (rho - 5.0).abs() < 1e-12 && (zc - 5.0).abs() < 1e-12,
+            "c2cyl (3,4,5)"
+        );
         let (xx, yy, zz) = cylindrical_to_cartesian(rho, th, zc);
         assert!(
             (xx - 3.0).abs() < 1e-12 && (yy - 4.0).abs() < 1e-12 && (zz - 5.0).abs() < 1e-12,
@@ -6359,9 +6571,15 @@ mod tests {
     #[test]
     fn spatial_vector_helpers_match_analytic() {
         // Previously-untested spatial vector helpers vs analytic identities.
-        assert!((dot(&[1.0, 2.0, 3.0], &[4.0, 5.0, 6.0]) - 32.0).abs() < 1e-12, "dot");
+        assert!(
+            (dot(&[1.0, 2.0, 3.0], &[4.0, 5.0, 6.0]) - 32.0).abs() < 1e-12,
+            "dot"
+        );
         let u = normalize(&[3.0, 4.0]);
-        assert!((u[0] - 0.6).abs() < 1e-12 && (u[1] - 0.8).abs() < 1e-12, "normalize unit");
+        assert!(
+            (u[0] - 0.6).abs() < 1e-12 && (u[1] - 0.8).abs() < 1e-12,
+            "normalize unit"
+        );
         // angle between perpendicular vectors = pi/2.
         assert!(
             (angle_between(&[1.0, 0.0], &[0.0, 1.0]) - std::f64::consts::FRAC_PI_2).abs() < 1e-12,
@@ -6467,7 +6685,11 @@ mod tests {
         close(cityblock(&a, &b), 9.0, "cityblock");
         close(chebyshev(&a, &b), 4.0, "chebyshev");
         close(minkowski(&a, &b, 2.0), 5.385_164_807_134_504, "euclidean");
-        close(minkowski(&a, &b, 3.0), 4.626_065_009_182_741, "minkowski p3");
+        close(
+            minkowski(&a, &b, 3.0),
+            4.626_065_009_182_741,
+            "minkowski p3",
+        );
         close(cosine(&a, &b), 0.935_179_627_644_783_6, "cosine");
         close(correlation(&a, &b), 1.944_911_182_523_068, "correlation");
         close(canberra(&a, &b), 2.6, "canberra");
