@@ -6,6 +6,40 @@ This file exists as the BOLD-VERIFY entry point requested for measured
 win/loss/neutral summaries. Keep detailed attempt records in the canonical
 ledger above so the project has one source of truth.
 
+## 2026-06-20 - frankenscipy-8l8r1.138 - EDT fast-path background and 2-D feature layout
+
+- Agent: cod-b / BlackThrush
+- Decision: KEEP. `distance_transform_edt(return_indices=True)` no longer
+  materializes every background coordinate before the exact separable fast path,
+  and 2-D inputs fuse the final axis pass with row/column output
+  materialization. EDT math, axis order, and fallback semantics are unchanged.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-cod-b-edt-constant-factor/EVIDENCE.md`
+- Same-session lazy-background score versus current Rust on `vmi1293453`:
+  `4/0/0` (1.96x / 2.11x / 1.04x / 1.70x faster).
+- Comparable fused path versus prior `vmi1152480` Rust scorecard rows: `3/1/0`
+  because 192x192 is a small internal loss (`2.107 ms -> 2.166 ms`).
+- Strict post-cleanup final source versus local SciPy 1.17.1 oracle: `4/0/0`.
+
+| Workload | Final Rust | SciPy oracle | Verdict |
+| --- | ---: | ---: | --- |
+| 64x64 `return_indices` | 104.120 us | 186.092 us | keep: Rust 1.79x faster than SciPy |
+| 128x128 `return_indices` | 677.777 us | 769.172 us | keep: Rust 1.13x faster than SciPy |
+| 192x192 `return_indices` | 1.470 ms | 2.346150 ms | keep: Rust 1.60x faster than SciPy; comparable internal row was 0.97x vs prior Rust |
+| 256x256 `return_indices` | 3.486 ms | 4.438267 ms | keep: Rust 1.27x faster than SciPy |
+
+Guards: `perf_edt` isomorphism 0 mismatches / 10876 cells; focused EDT tests
+15/0; full ndimage lib tests 246/0 with 5 ignored; `cargo check -p
+fsci-ndimage --all-targets`; live SciPy EDT conformance 1/0; touched-file
+rustfmt; diff hygiene; changed-file UBS exits 0 with no critical issues. Full
+crate rustfmt remains blocked by pre-existing `ndimage_bench.rs` and
+`diff_fourier.rs` drift; clippy remains blocked before this patch on existing
+`fsci-linalg` lints.
+
+Negative evidence: do not retry full background-coordinate materialization as a
+fast-path eligibility test. The 192x192 internal row is a slight loss versus
+the prior Rust scorecard and must not be counted as an internal win.
+
 ## 2026-06-20 - frankenscipy-8l8r1.137 - linear_sum_assignment first-scan initialization
 
 - Agent: cod-b / BlackThrush

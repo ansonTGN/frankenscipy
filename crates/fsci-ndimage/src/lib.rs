@@ -6301,18 +6301,15 @@ pub fn distance_transform_edt_full(
     }
 
     let sampling = normalize_sampling(input.ndim(), sampling)?;
-    let backgrounds = background_coordinates(input);
+    let sampling_is_positive = sampling.iter().all(|&s| s.is_finite() && s > 0.0);
+    let has_background = input.data.contains(&0.0);
 
     // Fast path: distances-only with at least one background pixel. The exact
     // separable Felzenszwalb–Huttenlocher transform replaces the brute-force
     // O(foreground · background) scan with O(N · ndim) and is byte-identical
     // (see `edt_squared_felzenszwalb`). The all-foreground sentinel and the
     // index/tie-break semantics stay on the brute-force path below.
-    if return_distances
-        && !return_indices
-        && !backgrounds.is_empty()
-        && sampling.iter().all(|&s| s.is_finite() && s > 0.0)
-    {
+    if return_distances && !return_indices && has_background && sampling_is_positive {
         let squared = edt_squared_felzenszwalb(input, &sampling);
         let mut output = NdArray::zeros(input.shape.clone());
         for (flat, &value) in input.data.iter().enumerate() {
@@ -6335,10 +6332,14 @@ pub fn distance_transform_edt_full(
     // nearest background (it achieves the exact squared distance `squared`).
     // The all-foreground sentinel and non-finite sampling stay on the
     // brute-force path below. frankenscipy-9l5oo.
-    if return_indices
-        && !backgrounds.is_empty()
-        && sampling.iter().all(|&s| s.is_finite() && s > 0.0)
-    {
+    if return_indices && has_background && sampling_is_positive {
+        if input.ndim() == 2 {
+            return Ok(edt_2d_felzenszwalb_with_indices(
+                input,
+                &sampling,
+                return_distances,
+            ));
+        }
         let (squared, feat) = edt_squared_felzenszwalb_with_indices(input, &sampling);
         let mut distances = return_distances.then(|| NdArray::zeros(input.shape.clone()));
         let mut axis_indices = (0..input.ndim())
@@ -6385,6 +6386,8 @@ pub fn distance_transform_edt_full(
             indices: Some(axis_indices),
         });
     }
+
+    let backgrounds = background_coordinates(input);
 
     let mut distances = return_distances.then(|| NdArray::zeros(input.shape.clone()));
     let mut indices = return_indices.then(|| {
@@ -6914,6 +6917,114 @@ fn edt_squared_felzenszwalb_with_indices(
         });
     }
     (f, feat)
+}
+
+/// Two-dimensional feature transform that fuses the final axis pass with
+/// SciPy-style distance/index materialization. It preserves the generic
+/// separable axis order (axis 0, then axis 1) while avoiding one full `feat`
+/// flat-index writeback pass and the final per-cell div/mod projection.
+fn edt_2d_felzenszwalb_with_indices(
+    input: &NdArray,
+    sampling: &[f64],
+    return_distances: bool,
+) -> DistanceTransformEdtResult {
+    let n = input.data.len();
+    let rows = input.shape[0];
+    let cols = input.shape[1];
+    let mut f: Vec<f64> = input
+        .data
+        .iter()
+        .map(|&v| if v == 0.0 { 0.0 } else { f64::INFINITY })
+        .collect();
+    let mut feature_row = vec![0usize; n];
+
+    let mut line: Vec<f64> = Vec::new();
+    let mut d: Vec<f64> = Vec::new();
+    let mut v: Vec<usize> = Vec::new();
+    let mut z: Vec<f64> = Vec::new();
+    let mut w: Vec<usize> = Vec::new();
+
+    if rows > 1 {
+        let scale = sampling[0];
+        let scale2 = scale * scale;
+        line.resize(rows, 0.0);
+        d.resize(rows, 0.0);
+        v.resize(rows, 0);
+        z.resize(rows + 1, 0.0);
+        w.resize(rows, 0);
+
+        for_each_axis_line_start(n, rows, cols, |base| {
+            for t in 0..rows {
+                line[t] = f[base + t * cols];
+            }
+            edt_1d_squared(&line, scale, scale2, &mut d, &mut v, &mut z, Some(&mut w));
+            for t in 0..rows {
+                let flat = base + t * cols;
+                f[flat] = d[t];
+                if d[t].is_finite() {
+                    feature_row[flat] = w[t];
+                }
+            }
+        });
+    }
+
+    let mut distances = return_distances.then(|| NdArray::zeros(input.shape.clone()));
+    let mut axis_indices = (0..2)
+        .map(|_| NdArray::zeros(input.shape.clone()))
+        .collect::<Vec<_>>();
+    let (axis0, rest) = axis_indices.split_at_mut(1);
+    let rows_out = &mut axis0[0].data;
+    let cols_out = &mut rest[0].data;
+
+    if cols > 1 {
+        let scale = sampling[1];
+        let scale2 = scale * scale;
+        line.resize(cols, 0.0);
+        d.resize(cols, 0.0);
+        v.resize(cols, 0);
+        z.resize(cols + 1, 0.0);
+        w.resize(cols, 0);
+
+        for row in 0..rows {
+            let base = row * cols;
+            line[..cols].copy_from_slice(&f[base..base + cols]);
+            edt_1d_squared(&line, scale, scale2, &mut d, &mut v, &mut z, Some(&mut w));
+            for t in 0..cols {
+                let flat = base + t;
+                let is_background = input.data[flat] == 0.0;
+                if let Some(output) = distances.as_mut() {
+                    output.data[flat] = if is_background { 0.0 } else { d[t].sqrt() };
+                }
+                if is_background {
+                    rows_out[flat] = row as f64;
+                    cols_out[flat] = t as f64;
+                } else {
+                    let source_col = w[t];
+                    rows_out[flat] = feature_row[base + source_col] as f64;
+                    cols_out[flat] = source_col as f64;
+                }
+            }
+        }
+    } else {
+        for row in 0..rows {
+            let flat = row * cols;
+            let is_background = input.data[flat] == 0.0;
+            if let Some(output) = distances.as_mut() {
+                output.data[flat] = if is_background { 0.0 } else { f[flat].sqrt() };
+            }
+            rows_out[flat] = if is_background {
+                row as f64
+            } else {
+                feature_row[flat] as f64
+            };
+            cols_out[flat] = 0.0;
+        }
+    }
+
+    DistanceTransformEdtResult {
+        distances,
+        indices: Some(axis_indices),
+    }
 }
 
 /// One-dimensional squared distance transform of `f` with axis scale `scale`

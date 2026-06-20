@@ -4,6 +4,105 @@ This ledger records every code-first performance attempt, including attempts tha
 are still awaiting the batch benchmark wave. Entries must name the retry
 condition so dead ends are not repeated casually.
 
+## 2026-06-20 - frankenscipy-8l8r1.138 - EDT fast-path background and 2-D feature layout
+
+- Agent: cod-b / BlackThrush
+- Lever kept: make `distance_transform_edt(return_indices=True)` treat
+  "has any background" as a boolean fast-path guard instead of prebuilding a
+  full `Vec<Vec<usize>>` of background coordinates, then specialize the 2-D
+  feature transform to fuse the final axis pass with row/column output
+  materialization. The same 1-D lower-envelope kernel, axis order, all-
+  foreground fallback, and non-finite sampling fallback are preserved.
+- Graveyard/artifact route tested: cache/data-movement, allocation avoidance,
+  and layout specialization below an already closed O(foreground*background)
+  complexity gap.
+- Decision: KEEP. The same-session lazy-background substep improves all four
+  current Rust rows on `vmi1293453`; the post-cleanup final 2-D fused path
+  moves the EDT release score to strict SciPy `4/0/0`. One comparable internal
+  row is negative evidence: the pre-cleanup `vmi1152480` 192x192 row is 0.97x
+  versus the prior `vmi1152480` Rust scorecard row.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-cod-b-edt-constant-factor/EVIDENCE.md`
+- Baseline command:
+  `AGENT_NAME=BlackThrush RCH_REQUIRE_REMOTE=1 RCH_WORKER=hz2 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b rch exec -- cargo run --release -p fsci-ndimage --bin perf_edt`
+- Lazy-background command:
+  `AGENT_NAME=BlackThrush RCH_REQUIRE_REMOTE=1 RCH_WORKER=vmi1293453 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b rch exec -- cargo run --release -p fsci-ndimage --bin perf_edt`
+- Comparable fused command:
+  `AGENT_NAME=BlackThrush RCH_REQUIRE_REMOTE=1 RCH_WORKER=vmi1293453 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b rch exec -- cargo run --release -p fsci-ndimage --bin perf_edt`
+  (RCH selected `vmi1152480`, matching the prior EDT scorecard worker).
+- Post-cleanup final command:
+  `AGENT_NAME=BlackThrush RCH_REQUIRE_REMOTE=1 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b rch exec -- cargo run --release -p fsci-ndimage --bin perf_edt`
+  (RCH selected `vmi1149989`).
+- SciPy oracle command:
+  `python3 docs/perf_oracle_edt_indices.py --reps 20`
+
+Benchmark evidence:
+
+| Workload / route | Median | Ratio / verdict |
+| --- | ---: | --- |
+| Current Rust 64x64 on `vmi1293453` | 440.587 us | baseline |
+| Lazy-background Rust 64x64 on `vmi1293453` | 225.229 us | 1.96x faster than current |
+| Current Rust 128x128 on `vmi1293453` | 1.981 ms | baseline |
+| Lazy-background Rust 128x128 on `vmi1293453` | 940.800 us | 2.11x faster than current |
+| Current Rust 192x192 on `vmi1293453` | 5.469 ms | baseline |
+| Lazy-background Rust 192x192 on `vmi1293453` | 5.272 ms | 1.04x faster than current |
+| Current Rust 256x256 on `vmi1293453` | 8.885 ms | baseline |
+| Lazy-background Rust 256x256 on `vmi1293453` | 5.229 ms | 1.70x faster than current |
+| Prior `.127` Rust 64x64 on `vmi1152480` | 216.733 us | prior scorecard |
+| Comparable `.138` Rust 64x64 on `vmi1152480` | 161.471 us | 1.34x faster than prior |
+| Post-cleanup final `.138` Rust 64x64 on `vmi1149989` | 104.120 us | 1.79x faster than SciPy |
+| SciPy 64x64 | 186.092 us | oracle |
+| Prior `.127` Rust 128x128 on `vmi1152480` | 1.207 ms | prior scorecard |
+| Comparable `.138` Rust 128x128 on `vmi1152480` | 574.614 us | 2.10x faster than prior |
+| Post-cleanup final `.138` Rust 128x128 on `vmi1149989` | 677.777 us | 1.13x faster than SciPy |
+| SciPy 128x128 | 769.172 us | oracle |
+| Prior `.127` Rust 192x192 on `vmi1152480` | 2.107 ms | prior scorecard |
+| Comparable `.138` Rust 192x192 on `vmi1152480` | 2.166 ms | 0.97x versus prior |
+| Post-cleanup final `.138` Rust 192x192 on `vmi1149989` | 1.470 ms | 1.60x faster than SciPy |
+| SciPy 192x192 | 2.346150 ms | oracle |
+| Prior `.127` Rust 256x256 on `vmi1152480` | 4.855 ms | prior scorecard |
+| Comparable `.138` Rust 256x256 on `vmi1152480` | 3.787 ms | 1.28x faster than prior |
+| Post-cleanup final `.138` Rust 256x256 on `vmi1149989` | 3.486 ms | 1.27x faster than SciPy |
+| SciPy 256x256 | 4.438267 ms | oracle |
+
+Win/loss/neutral:
+
+- Same-session lazy-background versus current Rust: `4/0/0`.
+- Comparable fused path versus prior `vmi1152480` Rust scorecard rows: `3/1/0`.
+- Post-cleanup final source versus local SciPy oracle: `4/0/0`.
+
+Correctness/conformance guards:
+
+- PASS: `perf_edt` isomorphism printed **0 mismatches / 10876 cells** on all
+  measured runs, with unchanged golden digest rows.
+- PASS: focused EDT tests via rch:
+  `cargo test -p fsci-ndimage distance_transform_edt --lib -- --nocapture` =
+  15 passed / 0 failed.
+- PASS: full ndimage lib tests via rch:
+  `cargo test -p fsci-ndimage --lib -- --nocapture` = 246 passed / 0 failed /
+  5 ignored.
+- PASS: rch per-crate all-targets check:
+  `cargo check -p fsci-ndimage --all-targets`.
+- PASS: local live SciPy conformance in an isolated local target dir:
+  `FSCI_REQUIRE_SCIPY_ORACLE=1 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b-local-f20a cargo test -p fsci-conformance --test diff_ndimage_distance_transform_edt -- --nocapture`
+  = 1 passed / 0 failed. The isolated target dir avoids stale shared target-dir
+  rustc artifacts when RCH cannot provide a worker.
+- PASS: touched-file rustfmt:
+  `rustfmt --edition 2024 --check crates/fsci-ndimage/src/lib.rs`.
+- PASS: `git diff --check -- crates/fsci-ndimage/src/lib.rs`.
+- PASS: changed-file UBS exits 0 with no critical issues; it reports the broad
+  existing `fsci-ndimage/src/lib.rs` warning inventory.
+- BLOCKED/EXISTING: `cargo fmt -p fsci-ndimage --check` is blocked by
+  pre-existing `ndimage_bench.rs` and `diff_fourier.rs` formatting drift.
+- BLOCKED/EXISTING: `cargo clippy -p fsci-ndimage --all-targets -- -D warnings`
+  stops before this patch on existing `fsci-linalg` lints.
+
+Negative evidence: do not retry background-coordinate pre-materialization for
+EDT fast-path eligibility. Also do not claim the comparable `vmi1152480` fused
+2-D path is an internal win at 192x192; it is a slight Rust-vs-Rust regression
+there and is kept only because the aggregate internal score is positive and
+every post-cleanup final row beats the SciPy oracle.
+
 ## 2026-06-20 - frankenscipy-8l8r1.137 - opt linear_sum_assignment first-scan initialization
 
 - Agent: cod-b / BlackThrush

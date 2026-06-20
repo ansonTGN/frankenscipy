@@ -1,5 +1,57 @@
 # Performance Release-Readiness Scorecard
 
+## 2026-06-20 - fsci-ndimage EDT constant-factor gauntlet
+
+- Agent: cod-b / BlackThrush
+- Bead: `frankenscipy-8l8r1.138`
+- Decision: KEEP. EDT `return_indices=True` now avoids background-coordinate
+  pre-materialization on the exact fast path and specializes 2-D output
+  materialization into the final feature-transform pass. This closes the EDT
+  strict SciPy release gap: final score is `4/0/0`.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-cod-b-edt-constant-factor/EVIDENCE.md`
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| rch current baseline | PASS | `vmi1293453`: 440.587 us / 1.981 ms / 5.469 ms / 8.885 ms for 64/128/192/256 `return_indices` rows |
+| Lazy-background substep | PASS | `vmi1293453`: 225.229 us / 940.800 us / 5.272 ms / 5.229 ms; internal `4/0/0` |
+| Comparable fused run | PASS | `vmi1152480`: 161.471 us / 574.614 us / 2.166 ms / 3.787 ms versus `.127` `vmi1152480`: `3/1/0`; 192x192 is 0.97x versus prior Rust |
+| Post-cleanup final | PASS | `vmi1149989`: 104.120 us / 677.777 us / 1.470 ms / 3.486 ms |
+| SciPy oracle | PASS | local SciPy 1.17.1: 186.092 us / 769.172 us / 2.346150 ms / 4.438267 ms; final Rust is faster on every row |
+| Isomorphism harness | PASS | `perf_edt` printed `0 mismatches / 10876 cells` on all measured runs |
+| Focused EDT tests | PASS | rch `cargo test -p fsci-ndimage distance_transform_edt --lib -- --nocapture`: 15 passed |
+| Full ndimage lib tests | PASS | rch `cargo test -p fsci-ndimage --lib -- --nocapture`: 246 passed / 0 failed / 5 ignored |
+| Per-crate compile | PASS | rch `cargo check -p fsci-ndimage --all-targets`; unrelated warnings remained |
+| Live SciPy conformance | PASS | local isolated-target `diff_ndimage_distance_transform_edt`: 1 passed |
+| Touched-file formatting | PASS | `rustfmt --edition 2024 --check crates/fsci-ndimage/src/lib.rs` |
+| Diff hygiene | PASS | `git diff --check -- crates/fsci-ndimage/src/lib.rs` |
+| Changed-file UBS | PASS | exits 0 with no critical issues; broad existing warning inventory remains |
+| Full crate formatting | BLOCKED | pre-existing `ndimage_bench.rs` and `diff_fourier.rs` formatting drift |
+| Clippy `-D warnings` | BLOCKED | stops before this patch on existing `fsci-linalg` lints |
+
+| Workload / route | Median | Ratio | Verdict |
+| --- | ---: | ---: | --- |
+| Comparable Rust `return_indices`, 64x64 | 161.471 us | 1.34x faster than prior Rust | internal keep evidence |
+| Final Rust `return_indices`, 64x64 | 104.120 us | 1.79x faster than SciPy | keep |
+| SciPy 64x64 | 186.092 us | 1.00x oracle | reference |
+| Comparable Rust `return_indices`, 128x128 | 574.614 us | 2.10x faster than prior Rust | internal keep evidence |
+| Final Rust `return_indices`, 128x128 | 677.777 us | 1.13x faster than SciPy | keep |
+| SciPy 128x128 | 769.172 us | 1.00x oracle | reference |
+| Comparable Rust `return_indices`, 192x192 | 2.166 ms | 0.97x versus prior Rust | internal negative evidence |
+| Final Rust `return_indices`, 192x192 | 1.470 ms | 1.60x faster than SciPy | keep |
+| SciPy 192x192 | 2.346150 ms | 1.00x oracle | reference |
+| Comparable Rust `return_indices`, 256x256 | 3.787 ms | 1.28x faster than prior Rust | internal keep evidence |
+| Final Rust `return_indices`, 256x256 | 3.486 ms | 1.27x faster than SciPy | keep |
+| SciPy 256x256 | 4.438267 ms | 1.00x oracle | reference |
+
+Readiness notes:
+
+- This supersedes the `.127` EDT residual loss rows. The current release table
+  now has an EDT `return_indices` SciPy score of `4/0/0`.
+- The 192x192 internal regression is retained as negative evidence. Future EDT
+  work should not chase this by restoring background coordinate allocation; it
+  needs lower-envelope SIMD/branch work or cache-blocked line batches.
+
 ## 2026-06-20 - fsci-opt linear_sum_assignment first-scan gauntlet
 
 - Agent: cod-b / BlackThrush
