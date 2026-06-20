@@ -1523,3 +1523,27 @@ Local original-SciPy oracle (`python3 docs/perf_oracle_fft_csd.py --reps 120
   `vec![0.0;nb]` zero-init) REGRESSED 4.56→5.59ms — `alloc_zeroed` gives lazy zero
   pages (~free) and `copy_to_slice` is a direct store, while `extend` adds per-chunk
   Vec-growth overhead. Kept `vec![0.0;nb]` + `copy_to_slice`.
+
+## 2026-06-19 - frankenscipy-nm8ex - pdist thread gate (all metrics) + dim-4 SqEuclidean/Cityblock SoA
+
+- Agent: cod-a / MistyBirch
+- Found via metric×dim sweep (new perf_pdist_sweep bin): cityblock/sqeuclidean/
+  chebyshev at d=4 were ~13x SLOWER than scipy (2.3-2.5ms vs 0.18ms) — only
+  Euclidean/Cosine d4 had a serial guard; everything else hit cdist_thread_count's
+  1<<18 gate and over-spawned ~64 threads (~2.4ms) for sub-ms work.
+- Fix 1 (byte-identical, broad): `pdist_thread_count(n,dim)` — serial unless
+  pairs·dim ≥ 1<<20, then cap at 16 (bandwidth-bound kernels). Strict improvement
+  over the shipped 64-thread path at every measured size (d16 chebyshev 2.48→1.26ms,
+  d64 euclidean 2.49→1.31ms, d4 metrics 2.4→0.7ms serial). Commit `bd09f5d6`.
+- Fix 2 (WIN): dim-4 SqEuclidean/Cityblock SoA SIMD-across-pairs fast paths (shared
+  `pdist_fill_dim4` wrapper). Bit-identical at d=4. Commit `0278e4b3`:
+
+  | Workload | before | after | scipy | vs scipy |
+  | --- | ---: | ---: | ---: | ---: |
+  | pdist sqeuclidean d4 n512 | 2.47ms | 0.102ms | 0.179ms | 1.75x faster |
+  | pdist cityblock d4 n512 | 2.49ms | 0.109ms | 0.190ms | 1.74x faster |
+- Bit-identity gates extended (serial n=32 + parallel n=2100); parallel coverage
+  tests bumped (n=1100 d2 / n=2100 d4) to stay above the raised 1<<20 gate.
+- DEFERRED: chebyshev d4 (0.79ms vs scipy 0.18ms) — its NaN-propagating max fold
+  needs careful SIMD replication (f64::max doesn't propagate NaN; the helper forces
+  it). Left on the gate-fixed generic path.
