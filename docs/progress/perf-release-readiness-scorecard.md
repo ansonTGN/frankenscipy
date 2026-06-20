@@ -98,6 +98,46 @@ Readiness notes:
   LSAP row is no longer a strict SciPy loss on this gauntlet, but n=500 still
   needs lower-level dense storage/kernel work.
 
+## 2026-06-20 - fsci-cluster kmeans2 fused SIMD assignment gauntlet
+
+- Agent: cod-a / BlackThrush
+- Bead: `frankenscipy-9g6ku`
+- Decision: KEEP. The tracked fixed-iter `kmeans2(k=4, d=4, iter=50)`
+  workload now uses a guarded fused Lloyd kernel: observations are flattened
+  once, four centroid distances are computed with `std::simd`, and assignment
+  is accumulated into centroid sums in the same pass. Other shapes still use
+  the generic route, which now bypasses `vq`'s unused distance vector.
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| rch Criterion final | PASS | `vmi1227854`: final `kmeans2/k4/n2000` median 378.67 us; legacy `vq` route median 1.1880 ms |
+| SciPy oracle | PASS | local SciPy 1.17.1 `cluster.vq.kmeans2`, same deterministic data/init/iter contract: median 1624.576 us |
+| Intermediate candidate | FAIL/SUPERSEDED | pre-fused candidate median 2.2659 ms, 1.39x slower than SciPy |
+| Focused SIMD argmin test | PASS | `cargo test -p fsci-cluster nearest_centroid_k4_d4 --lib -- --nocapture` via rch |
+| Focused kmeans2 tests | PASS | `cargo test -p fsci-cluster kmeans2 --lib -- --nocapture` via rch |
+| Per-crate release build | PASS | `cargo build --release -p fsci-cluster` via rch; existing `perf_kmeans.rs` warning remained |
+| Per-crate check | PASS | `cargo check -p fsci-cluster --all-targets` via rch; same existing warning remained |
+| No-deps library clippy | PASS | `cargo clippy -p fsci-cluster --lib --no-deps -- -D warnings` via rch on final source |
+| Cluster conformance smoke | PASS | local shared-target `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a cargo test -p fsci-conformance --test e2e_cluster scenario_01_kmeans -- --nocapture`: 1 passed; corrected rch attempt lost its session handle and is not counted |
+| Diff hygiene | PASS | `git diff --check` |
+| Changed-file UBS | PASS | changed-file scan exited 0 with no critical issues; broad existing `fsci-cluster` warning inventory remains |
+| Touched-file formatting | BLOCKED/EXISTING | `rustfmt --edition 2024 --check crates/fsci-cluster/src/lib.rs crates/fsci-cluster/benches/cluster_bench.rs` reports pre-existing crate-file drift; new bench helper signature was manually wrapped |
+| All-targets clippy | BLOCKED/EXISTING | `cargo clippy -p fsci-cluster --lib --benches --no-deps -- -D warnings` reports existing test/bench-target lints after the new specialization loop lint was fixed |
+
+| Workload / route | Median | Ratio | Verdict |
+| --- | ---: | ---: | --- |
+| Legacy Rust `kmeans2_legacy_vq/k4/n2000` | 1.1880 ms | 1.37x faster than SciPy on this fresh worker/dataset | baseline route |
+| Pre-fused Rust candidate | 2.2659 ms | 1.39x slower than SciPy | reject/supersede |
+| Final fused SIMD Rust `kmeans2/k4/n2000` | 378.67 us | 3.14x faster than legacy; 4.29x faster than SciPy | keep |
+| SciPy `cluster.vq.kmeans2` | 1624.576 us | 1.00x oracle | reference |
+
+Readiness notes:
+
+- Final SciPy score is `1/0/0`; internal score versus fresh legacy Rust is
+  `1/0/0`.
+- Do not retry the standalone SIMD-nearest-centroid lever without fusion. The
+  measured paying shape is assignment-plus-accumulation in one fixed-`k` loop.
+
 ## 2026-06-20 - fsci-ndimage filter1d contiguous Reflect direct queue gauntlet
 
 - Agent: cod-b / BlackThrush

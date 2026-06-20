@@ -186,6 +186,122 @@ evidence. The remaining n=500 loss is lower-level constant factor; credible next
 work is dense matrix storage/API specialization, row indirection removal
 without copying, or a more invasive LAPJV-style kernel.
 
+## 2026-06-20 - frankenscipy-9g6ku - cluster kmeans2 fused SIMD assignment
+
+- Agent: cod-a / BlackThrush
+- Lever kept: specialize `fsci_cluster::kmeans2` for the tracked fixed-iter
+  `k=4, d=4` matrix-init workload. The fast path flattens observations once,
+  uses `std::simd` to compute four centroid squared distances per observation,
+  and fuses label assignment with centroid accumulation so the Lloyd loop no
+  longer allocates/returns unused `vq` distances or re-walks the labels.
+- Generic improvement kept: all other `kmeans2` shapes now call the existing
+  assignment helper directly instead of calling `vq` for labels plus an unused
+  Euclidean-distance vector.
+- Graveyard/artifact route tested: small-fixed-shape specialization,
+  structure-of-arrays-by-centroid lanes, branchless-ish centroid SIMD, and
+  bump-like scratch reuse inside the Lloyd loop.
+- Decision: KEEP. The final source is `3.14x` faster than the fresh legacy
+  `vq`-inside-Lloyd bench route and `4.29x` faster than local SciPy 1.17.1 on
+  the same deterministic data/init contract. A pre-fused SIMD/bypass candidate
+  was measured and superseded because it was still slower than SciPy.
+- rch final command:
+  `AGENT_NAME=BlackThrush CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo bench -p fsci-cluster --bench cluster_bench -- kmeans --noplot --sample-size 10 --warm-up-time 1 --measurement-time 2`
+- Local SciPy oracle command:
+  `AGENT_NAME=BlackThrush python3 - <<'PY' ... scipy.cluster.vq.kmeans2(data, init, iter=50, minit='matrix', missing='warn') ... PY`
+
+Benchmark evidence:
+
+| Workload / route | Median | Interval / value | Ratio / verdict |
+| --- | ---: | ---: | --- |
+| `kmeans/k4/n2000` early-stop Rust | 69.817 us | [64.984, 75.325] us on `vmi1227854` | context only; not scored against fixed-iter SciPy |
+| Legacy Rust `kmeans2_legacy_vq/k4/n2000` | 1.1880 ms | [1.1220, 1.2449] ms on `vmi1227854` | fresh current-style baseline; 1.37x faster than SciPy on this dataset |
+| Pre-fused candidate `kmeans2/k4/n2000` | 2.2659 ms | [2.1839, 2.4035] ms on `vmi1153651` | rejected/superseded: 1.39x slower than SciPy |
+| Final Rust `kmeans2/k4/n2000` | 378.67 us | [366.70, 389.93] us on `vmi1227854` | keep: 3.14x faster than legacy; 4.29x faster than SciPy |
+| SciPy 1.17.1 `cluster.vq.kmeans2` | 1624.576 us | p10 1610.360 us; p90 1678.658 us, local | oracle |
+
+Win/loss/neutral:
+
+- Same-worker final Rust versus legacy Rust: `1/0/0`.
+- Final Rust versus local SciPy oracle: `1/0/0`.
+- Pre-fused candidate versus local SciPy oracle: `0/1/0`; superseded and not
+  kept as a separate route.
+
+Correctness/conformance guards:
+
+- PASS: rch focused SIMD argmin test:
+  `cargo test -p fsci-cluster nearest_centroid_k4_d4 --lib -- --nocapture`.
+- PASS: rch focused `kmeans2` tests:
+  `cargo test -p fsci-cluster kmeans2 --lib -- --nocapture`.
+- PASS: rch per-crate release build:
+  `cargo build --release -p fsci-cluster`; the existing `perf_kmeans.rs`
+  unnecessary-parentheses warning remained.
+- PASS: rch per-crate all-targets check:
+  `cargo check -p fsci-cluster --all-targets`; the same existing
+  `perf_kmeans.rs` warning remained.
+- PASS: rch final-source no-deps library clippy:
+  `cargo clippy -p fsci-cluster --lib --no-deps -- -D warnings`.
+- PASS: local shared-target cluster conformance smoke:
+  `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a cargo test -p fsci-conformance --test e2e_cluster scenario_01_kmeans -- --nocapture`
+  = 1 passed / 0 failed. The corrected rch attempt lost its session handle
+  before a final status, so it is not counted as proof.
+- PASS: diff hygiene:
+  `git diff --check`.
+- PASS: changed-file UBS:
+  `ubs crates/fsci-cluster/src/lib.rs crates/fsci-cluster/benches/cluster_bench.rs docs/NEGATIVE_EVIDENCE.md docs/progress/perf-negative-results.md docs/progress/perf-release-readiness-scorecard.md docs/GAUNTLET_RELEASE_SCORECARD.md .beads/issues.jsonl`
+  exits 0 with no critical issues; the broad existing `fsci-cluster` warning
+  inventory remains.
+- BLOCKED/EXISTING: `rustfmt --edition 2024 --check
+  crates/fsci-cluster/src/lib.rs crates/fsci-cluster/benches/cluster_bench.rs`
+  reports broad pre-existing `fsci-cluster/src/lib.rs` formatting drift. The
+  newly added bench helper signature was manually wrapped after this check.
+- BLOCKED/EXISTING: `cargo clippy -p fsci-cluster --lib --benches --no-deps
+  -- -D warnings` reports existing test/bench-target lints after the new
+  specialization loop lint was fixed.
+
+Retry condition: do not retry "SIMD nearest centroid, but still call `vq` and
+then re-walk labels" for this bead. The profitable version is the fused
+fixed-shape Lloyd kernel. Future cluster work should broaden the specialization
+only with a fresh same-worker baseline and SciPy oracle per shape.
+
+## 2026-06-20 - spatial pdist sweep routing evidence
+
+- Agent: cod-a / BlackThrush
+- Lever tested: none shipped. This was a BOLD-VERIFY routing sweep before
+  claiming the cluster bead, using the existing `perf_pdist_sweep` harness.
+- Decision: ROUTE ONLY. The sweep confirms Euclidean dim-4 is closed on the
+  current source, while Chebyshev is the largest measured `pdist` gap.
+- rch sweep command:
+  `AGENT_NAME=BlackThrush CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo run --release -p fsci-spatial --bin perf_pdist_sweep`
+
+Benchmark evidence:
+
+| Workload | Rust | SciPy oracle | Ratio / verdict |
+| --- | ---: | ---: | --- |
+| `pdist/euclidean/n512/d4` | 0.318 ms | 0.375 ms | Rust 1.18x faster |
+| `pdist/cityblock/n512/d4` | 0.228 ms | 0.191 ms | Rust 1.19x slower |
+| `pdist/sqeuclidean/n512/d4` | 0.209 ms | 0.177 ms | Rust 1.18x slower |
+| `pdist/chebyshev/n512/d4` | 2.192 ms | 0.174 ms | Rust 12.60x slower |
+| `pdist/euclidean/n512/d16` | 12.206 ms | not scored | routing only |
+| `pdist/cityblock/n512/d16` | 8.326 ms | not scored | routing only |
+| `pdist/sqeuclidean/n512/d16` | 13.176 ms | not scored | routing only |
+| `pdist/chebyshev/n512/d16` | 12.963 ms | not scored | routing only |
+| `pdist/euclidean/n512/d64` | 12.893 ms | not scored | routing only |
+| `pdist/cityblock/n512/d64` | 28.209 ms | not scored | routing only |
+| `pdist/sqeuclidean/n512/d64` | 14.032 ms | not scored | routing only |
+| `pdist/chebyshev/n512/d64` | 28.106 ms | not scored | routing only |
+| `pdist/euclidean/n4096/d4` | 38.131 ms | 54.682 ms | Rust 1.43x faster |
+| `pdist/cosine/n4096/d4` | 62.271 ms | 54.693 ms | Rust 1.14x slower |
+| `pdist/chebyshev/n2048/d64` | 72.085 ms | 41.911 ms | Rust 1.72x slower |
+| `pdist/cityblock/n2048/d64` | 28.007 ms | 48.630 ms | Rust 1.74x faster |
+
+Win/loss/neutral:
+
+- Scored rows versus local SciPy oracle: `3/5/0`.
+
+Retry condition: do not spend the next spatial pass on dim-4 Euclidean. Target
+`pdist` Chebyshev first, especially the d=4 row where current Rust is 12.60x
+slower than SciPy.
+
 ## 2026-06-20 - frankenscipy-8l8r1.135 - ndimage filter1d contiguous Reflect direct queue
 
 - Agent: cod-b / BlackThrush

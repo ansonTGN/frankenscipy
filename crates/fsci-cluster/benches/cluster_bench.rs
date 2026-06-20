@@ -1,5 +1,5 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use fsci_cluster::{LinkageMethod, gaussian_mixture, kmeans, kmeans2, linkage};
+use fsci_cluster::{LinkageMethod, gaussian_mixture, kmeans, kmeans2, linkage, vq};
 use std::hint::black_box;
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -231,11 +231,53 @@ print(f"{elapsed:.17g} {acc:.17g}")
 }
 
 /// kmeans (Lloyd) and kmeans2 (double-buffered Lloyd loop, frankenscipy-4ylee).
+fn legacy_kmeans2_vq(
+    data: &[Vec<f64>],
+    init: &[Vec<f64>],
+    iter: usize,
+) -> (Vec<Vec<f64>>, Vec<usize>) {
+    let d = data[0].len();
+    let nc = init.len();
+    let mut code_book = init.to_vec();
+    let mut label = vec![0usize; data.len()];
+    let mut sums = vec![vec![0.0_f64; d]; nc];
+    let mut counts = vec![0usize; nc];
+    let mut next_cb = code_book.clone();
+    for _ in 0..iter {
+        label = vq(data, &code_book).expect("legacy vq kmeans2").0;
+        for row in sums.iter_mut() {
+            row.iter_mut().for_each(|x| *x = 0.0);
+        }
+        counts.iter_mut().for_each(|x| *x = 0);
+        for (i, &lab) in label.iter().enumerate() {
+            counts[lab] += 1;
+            for c in 0..d {
+                sums[lab][c] += data[i][c];
+            }
+        }
+        for j in 0..nc {
+            if counts[j] > 0 {
+                let inv = 1.0 / counts[j] as f64;
+                for c in 0..d {
+                    next_cb[j][c] = sums[j][c] * inv;
+                }
+            } else {
+                next_cb[j].clone_from(&code_book[j]);
+            }
+        }
+        std::mem::swap(&mut code_book, &mut next_cb);
+    }
+    (code_book, label)
+}
+
 fn bench_kmeans(c: &mut Criterion) {
     let data = blobs(2000, 4);
     let init: Vec<Vec<f64>> = (0..4).map(|k| vec![k as f64 * 5.0; 4]).collect();
     let mut group = c.benchmark_group("kmeans");
     group.bench_function("k4/n2000", |b| b.iter(|| kmeans(&data, 4, 50, 42)));
+    group.bench_function("kmeans2_legacy_vq/k4/n2000", |b| {
+        b.iter(|| legacy_kmeans2_vq(&data, &init, 50))
+    });
     group.bench_function("kmeans2/k4/n2000", |b| b.iter(|| kmeans2(&data, &init, 50)));
     group.finish();
 }

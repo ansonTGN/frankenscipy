@@ -75,6 +75,63 @@ remaining-template copy initialization in this SAP loop without fresh
 same-worker proof. The remaining n=500 gap needs lower-level dense storage or a
 more invasive LAPJV-style kernel, not another whole-vector reset micro-variant.
 
+## 2026-06-20 - frankenscipy-9g6ku - kmeans2 k=4/d=4 fused SIMD assignment
+
+- Agent: cod-a / BlackThrush
+- Decision: KEEP the guarded `k=4, d=4` `kmeans2` specialization and the
+  generic-loop `vq` bypass. The shipped path flattens observations once,
+  computes four centroid distances with `std::simd`, fuses assignment with
+  centroid accumulation, and keeps the prior generic route for other shapes.
+- Same-worker internal score versus the legacy `vq`-inside-Lloyd route:
+  `1/0/0`.
+- Strict final Rust versus local SciPy 1.17.1 oracle score: `1/0/0`.
+- Rejected/superseded pre-fused candidate score versus SciPy: `0/1/0`.
+
+| Workload | Route | Median | Verdict |
+| --- | --- | ---: | --- |
+| `kmeans2`, n=2000 k=4 d=4 iter=50 | legacy Rust `vq` loop | 1.1880 ms | fresh baseline; 1.37x faster than SciPy on this worker/dataset |
+| `kmeans2`, n=2000 k=4 d=4 iter=50 | pre-fused candidate | 2.2659 ms | reject/supersede: 1.39x slower than SciPy |
+| `kmeans2`, n=2000 k=4 d=4 iter=50 | final fused SIMD Rust | 378.67 us | keep: 3.14x faster than legacy; 4.29x faster than SciPy |
+| `scipy.cluster.vq.kmeans2` | local SciPy 1.17.1 | 1624.576 us | oracle |
+
+Guards: focused `nearest_centroid_k4_d4` and `kmeans2` unit tests pass via
+rch, per-crate `fsci-cluster` build/check pass via rch with only the existing
+`perf_kmeans.rs` warning, no-deps library clippy passes on final source, diff
+hygiene passes, UBS exits 0 on changed files, the local shared-target
+`e2e_cluster` `scenario_01_kmeans` conformance smoke passes, and the exact local SciPy
+oracle uses the same deterministic `blobs()`/matrix-init workload as the
+Criterion bench. Full crate rustfmt remains blocked by pre-existing
+`fsci-cluster/src/lib.rs` drift; all-targets clippy remains blocked by
+pre-existing test lints after the new specialization lint was fixed.
+
+Negative evidence: do not retry a standalone SIMD helper that still calls
+`vq` and then re-walks labels for centroid sums; the intermediate candidate
+was still slower than SciPy. The paying lever is fusing assignment and
+accumulation for the fixed small-`k` hot shape.
+
+## 2026-06-20 - spatial pdist sweep routing evidence
+
+- Agent: cod-a / BlackThrush
+- Decision: ROUTE ONLY. No spatial source changed in this commit. The fresh
+  sweep shows dim-4 Euclidean is closed, but `chebyshev` remains the largest
+  measured `pdist` loss and should get the next spatial bead.
+- Routing score versus local SciPy oracle: `3/5/0`.
+
+| Workload | Rust | SciPy oracle | Verdict |
+| --- | ---: | ---: | --- |
+| `pdist/euclidean/n512/d4` | 0.318 ms | 0.375 ms | Rust 1.18x faster |
+| `pdist/cityblock/n512/d4` | 0.228 ms | 0.191 ms | Rust 1.19x slower |
+| `pdist/sqeuclidean/n512/d4` | 0.209 ms | 0.177 ms | Rust 1.18x slower |
+| `pdist/chebyshev/n512/d4` | 2.192 ms | 0.174 ms | Rust 12.60x slower |
+| `pdist/euclidean/n4096/d4` | 38.131 ms | 54.682 ms | Rust 1.43x faster |
+| `pdist/cosine/n4096/d4` | 62.271 ms | 54.693 ms | Rust 1.14x slower |
+| `pdist/chebyshev/n2048/d64` | 72.085 ms | 41.911 ms | Rust 1.72x slower |
+| `pdist/cityblock/n2048/d64` | 28.007 ms | 48.630 ms | Rust 1.74x faster |
+
+Negative evidence: do not spend more on dim-4 Euclidean first. The biggest
+current gap is `pdist` Chebyshev, especially the d=4 row where Rust is still
+over an order of magnitude behind SciPy.
+
 ## 2026-06-20 - frankenscipy-8l8r1.135 - filter1d contiguous Reflect direct queue
 
 - Agent: cod-b / BlackThrush

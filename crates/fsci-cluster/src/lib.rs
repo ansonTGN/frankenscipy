@@ -1,3 +1,4 @@
+#![feature(portable_simd)]
 #![forbid(unsafe_code)]
 
 //! Clustering algorithms for FrankenSciPy.
@@ -3217,7 +3218,20 @@ pub fn kmeans2(
             "data dimension {d} must match centroid dimension {cd}"
         )));
     }
+    if data.iter().flatten().any(|v| !v.is_finite()) {
+        return Err(ClusterError::InvalidArgument(
+            "vq data must be finite".to_string(),
+        ));
+    }
+    if init_centroids.iter().flatten().any(|v| !v.is_finite()) {
+        return Err(ClusterError::InvalidArgument(
+            "vq centroids must be finite".to_string(),
+        ));
+    }
     let nc = init_centroids.len();
+    if nc == 4 && d == 4 {
+        return Ok(kmeans2_k4_d4(data, init_centroids, iter));
+    }
     let mut code_book = init_centroids.to_vec();
     let mut label = vec![0usize; data.len()];
     // Lloyd scratch hoisted out of the loop: sums/counts are zeroed-and-reaccumulated
@@ -3227,9 +3241,15 @@ pub fn kmeans2(
     let mut sums = vec![vec![0.0_f64; d]; nc];
     let mut counts = vec![0usize; nc];
     let mut next_cb = code_book.clone();
+    let mut centroids_flat = Vec::with_capacity(nc * d);
     for _ in 0..iter {
-        // Assign each observation to its nearest current centroid.
-        label = vq(data, &code_book)?.0;
+        // Assign each observation to its nearest current centroid. kmeans2 only
+        // needs labels, so bypass vq's Euclidean-distance sqrt/output vector.
+        flatten_centroids_into(&code_book, d, &mut centroids_flat);
+        let assignments = assign_points(data, &centroids_flat, nc, d);
+        for (dst, &(best_c, _)) in label.iter_mut().zip(assignments.iter()) {
+            *dst = best_c;
+        }
         // Recompute centroids as the mean of assigned observations.
         for row in sums.iter_mut() {
             row.iter_mut().for_each(|x| *x = 0.0);
@@ -3255,6 +3275,57 @@ pub fn kmeans2(
         std::mem::swap(&mut code_book, &mut next_cb);
     }
     Ok((code_book, label))
+}
+
+fn kmeans2_k4_d4(
+    data: &[Vec<f64>],
+    init_centroids: &[Vec<f64>],
+    iter: usize,
+) -> (Vec<Vec<f64>>, Vec<usize>) {
+    let n = data.len();
+    let mut points = Vec::with_capacity(n * 4);
+    for point in data {
+        points.extend_from_slice(&point[..4]);
+    }
+
+    let mut centroids = [0.0_f64; 16];
+    for c in 0..4 {
+        centroids[c * 4..c * 4 + 4].copy_from_slice(&init_centroids[c][..4]);
+    }
+    let mut labels = vec![0usize; n];
+    let mut sums = [0.0_f64; 16];
+    let mut counts = [0usize; 4];
+
+    for _ in 0..iter {
+        sums.fill(0.0);
+        counts.fill(0);
+        for i in 0..n {
+            let point = &points[i * 4..i * 4 + 4];
+            let (best_c, _) = nearest_centroid_k4_d4(point, &centroids);
+            labels[i] = best_c;
+            counts[best_c] += 1;
+            let dst = best_c * 4;
+            sums[dst] += point[0];
+            sums[dst + 1] += point[1];
+            sums[dst + 2] += point[2];
+            sums[dst + 3] += point[3];
+        }
+        for (c, &count) in counts.iter().enumerate() {
+            if count > 0 {
+                let inv = 1.0 / count as f64;
+                let base = c * 4;
+                centroids[base] = sums[base] * inv;
+                centroids[base + 1] = sums[base + 1] * inv;
+                centroids[base + 2] = sums[base + 2] * inv;
+                centroids[base + 3] = sums[base + 3] * inv;
+            }
+        }
+    }
+
+    let code_book = (0..4)
+        .map(|c| centroids[c * 4..c * 4 + 4].to_vec())
+        .collect();
+    (code_book, labels)
 }
 
 /// Whiten observations by dividing by per-feature standard deviation.
@@ -5198,6 +5269,9 @@ fn assign_points(
 }
 
 fn nearest_centroid(point: &[f64], centroids_flat: &[f64], k: usize, d: usize) -> (usize, f64) {
+    if k == 4 && d == 4 {
+        return nearest_centroid_k4_d4(point, centroids_flat);
+    }
     let probe = d.min(PREFILTER_DIMS);
     let mut seed = 0usize;
     let mut seed_partial = f64::INFINITY;
@@ -5220,6 +5294,57 @@ fn nearest_centroid(point: &[f64], centroids_flat: &[f64], k: usize, d: usize) -
         let row = &centroids_flat[c * d..c * d + d];
         let sd = sq_dist_within(point, row, min_sq);
         if sd < min_sq || (sd == min_sq && c < best_c) {
+            min_sq = sd;
+            best_c = c;
+        }
+    }
+    (best_c, min_sq)
+}
+
+#[inline]
+fn nearest_centroid_k4_d4(point: &[f64], centroids_flat: &[f64]) -> (usize, f64) {
+    use std::simd::Simd;
+
+    let p0 = Simd::<f64, 4>::splat(point[0]);
+    let p1 = Simd::<f64, 4>::splat(point[1]);
+    let p2 = Simd::<f64, 4>::splat(point[2]);
+    let p3 = Simd::<f64, 4>::splat(point[3]);
+    let c0 = Simd::from_array([
+        centroids_flat[0],
+        centroids_flat[4],
+        centroids_flat[8],
+        centroids_flat[12],
+    ]);
+    let c1 = Simd::from_array([
+        centroids_flat[1],
+        centroids_flat[5],
+        centroids_flat[9],
+        centroids_flat[13],
+    ]);
+    let c2 = Simd::from_array([
+        centroids_flat[2],
+        centroids_flat[6],
+        centroids_flat[10],
+        centroids_flat[14],
+    ]);
+    let c3 = Simd::from_array([
+        centroids_flat[3],
+        centroids_flat[7],
+        centroids_flat[11],
+        centroids_flat[15],
+    ]);
+
+    let d0 = p0 - c0;
+    let d1 = p1 - c1;
+    let d2 = p2 - c2;
+    let d3 = p3 - c3;
+    let dist = d0 * d0 + d1 * d1 + d2 * d2 + d3 * d3;
+    let values = dist.to_array();
+
+    let mut best_c = 0usize;
+    let mut min_sq = values[0];
+    for (c, &sd) in values.iter().enumerate().skip(1) {
+        if sd < min_sq {
             min_sq = sd;
             best_c = c;
         }
@@ -7568,6 +7693,36 @@ mod tests {
     }
 
     #[test]
+    fn nearest_centroid_k4_d4_matches_scalar_argmin() {
+        let centroids = vec![
+            vec![0.0, 0.0, 0.0, 0.0],
+            vec![2.0, -1.0, 0.5, 3.0],
+            vec![-4.0, 2.0, 1.5, -0.25],
+            vec![1.0, 1.0, 1.0, 1.0],
+        ];
+        let flat = flatten_centroids(&centroids, 4);
+        let points = [
+            vec![0.1, -0.2, 0.3, -0.4],
+            vec![1.8, -0.8, 0.7, 2.7],
+            vec![-3.5, 1.9, 1.4, -0.4],
+            vec![0.5, 0.5, 0.5, 0.5],
+        ];
+
+        for point in points {
+            let got = nearest_centroid_k4_d4(&point, &flat);
+            let mut want = (0usize, sq_dist(&point, &flat[0..4]));
+            for c in 1..4 {
+                let sd = sq_dist(&point, &flat[c * 4..c * 4 + 4]);
+                if sd < want.1 {
+                    want = (c, sd);
+                }
+            }
+            assert_eq!(got.0, want.0);
+            assert_eq!(got.1.to_bits(), want.1.to_bits());
+        }
+    }
+
+    #[test]
     fn vq_metamorphic_translation_invariance() {
         // /testing-metamorphic: translating data and centroids by the
         // same vector preserves the (labels, distances) output exactly.
@@ -9017,6 +9172,67 @@ mod tests {
             }
         }
         assert!(kmeans2(&data, &init, 0).is_err());
+    }
+
+    #[test]
+    fn kmeans2_k4_d4_fused_matches_vq_reference() {
+        fn reference(
+            data: &[Vec<f64>],
+            init: &[Vec<f64>],
+            iter: usize,
+        ) -> (Vec<Vec<f64>>, Vec<usize>) {
+            let d = data[0].len();
+            let nc = init.len();
+            let mut code_book = init.to_vec();
+            let mut label = vec![0usize; data.len()];
+            let mut sums = vec![vec![0.0_f64; d]; nc];
+            let mut counts = vec![0usize; nc];
+            let mut next_cb = code_book.clone();
+            for _ in 0..iter {
+                label = vq(data, &code_book).expect("vq reference").0;
+                for row in sums.iter_mut() {
+                    row.iter_mut().for_each(|x| *x = 0.0);
+                }
+                counts.iter_mut().for_each(|x| *x = 0);
+                for (i, &lab) in label.iter().enumerate() {
+                    counts[lab] += 1;
+                    for c in 0..d {
+                        sums[lab][c] += data[i][c];
+                    }
+                }
+                for j in 0..nc {
+                    if counts[j] > 0 {
+                        let inv = 1.0 / counts[j] as f64;
+                        for c in 0..d {
+                            next_cb[j][c] = sums[j][c] * inv;
+                        }
+                    } else {
+                        next_cb[j].clone_from(&code_book[j]);
+                    }
+                }
+                std::mem::swap(&mut code_book, &mut next_cb);
+            }
+            (code_book, label)
+        }
+
+        let data: Vec<Vec<f64>> = (0..96)
+            .map(|i| {
+                let cluster = (i % 4) as f64;
+                (0..4)
+                    .map(|j| cluster * 3.0 + ((i * 17 + j * 13) as f64 * 0.037).sin())
+                    .collect()
+            })
+            .collect();
+        let init: Vec<Vec<f64>> = (0..4).map(|k| vec![k as f64 * 3.0; 4]).collect();
+
+        let got = kmeans2(&data, &init, 9).expect("fused kmeans2");
+        let want = reference(&data, &init, 9);
+        assert_eq!(got.1, want.1);
+        for (got_row, want_row) in got.0.iter().zip(want.0.iter()) {
+            for (&g, &w) in got_row.iter().zip(want_row.iter()) {
+                assert_eq!(g.to_bits(), w.to_bits());
+            }
+        }
     }
 
     #[test]
