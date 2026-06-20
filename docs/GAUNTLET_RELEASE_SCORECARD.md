@@ -13,6 +13,10 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `frankenscipy-8l8r1.118` | Fused signal coherence | `scipy.signal.coherence`, 65536 samples, Hann window 1024/512 overlap | 2.191980 ms | 18.961613 ms | 8.65x faster | keep |
 | `frankenscipy-u0ucw` | Wide `pinv` Cholesky TRSM + diagonal rcond gate | 500x1000 full-row-rank dense `scipy.linalg.pinv` equivalent | 183.699926 ms | 7.257573 s | 39.51x faster | keep |
 | `frankenscipy-u0ucw` | Wide `lstsq` current materialized normal equations after row-stream revert | 500x1000 full-row-rank dense `scipy.linalg.lstsq` equivalent | 109.369915 ms | 1.253347 s | 11.46x faster | keep current, reject row-stream lever |
+| `frankenscipy-nm8ex` | Dim-4 `pdist` SIMD-across-pairs (SoA) Euclidean | `scipy.spatial.distance.pdist(euclidean)` n=256 d=4 | 41.0 us | 85.3 us | **2.08x faster** | keep — was 1.14x slower; bit-identical |
+| `frankenscipy-nm8ex` | Dim-4 `pdist` SIMD-across-pairs (SoA) Cosine | `scipy.spatial.distance.pdist(cosine)` n=256 d=4 | 34.8 us | 76.8 us | **2.21x faster** | keep — was 1.31x slower; bit-identical |
+| `frankenscipy-nm8ex` | Dim-4 `pdist` SIMD-across-pairs (SoA) Euclidean | `scipy.spatial.distance.pdist(euclidean)` n=512 d=4 | 162.6 us | 303 us | **1.86x faster** | keep — was 1.37x slower; bit-identical |
+| `frankenscipy-nm8ex` | Dim-4 `pdist` SIMD-across-pairs (SoA) Cosine | `scipy.spatial.distance.pdist(cosine)` n=512 d=4 | 145 us | 275 us | **1.90x faster** | keep — was 1.63x slower; bit-identical |
 
 ## Measured Losses / Internal Keeps
 
@@ -32,14 +36,7 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `frankenscipy-acoco` | `jnjnp_zeros` bracket reuse | `scipy.special.jnjnp_zeros(nt=128)` equivalent | 410.059973 ms | 0.924456 ms | 443.57x slower | keep internal bracket reuse; route deeper |
 | `frankenscipy-9l5oo` | `jnjnp_zeros` Cephes `j0` + Newton/secant bracket refinement (cumulative) | `scipy.special.jnjnp_zeros(nt=64)` equivalent | 0.589 ms | 0.498 ms | 1.18x slower | **NEAR-PARITY** — was 163x slower (acoco); 158x self-speedup vs legacy route |
 | `frankenscipy-9l5oo` | `jnjnp_zeros` Cephes `j0` + Newton/secant bracket refinement (cumulative) | `scipy.special.jnjnp_zeros(nt=128)` equivalent | 1.239 ms | 0.897 ms | 1.38x slower | **NEAR-PARITY** — was 443x slower (acoco); 381x self-speedup vs legacy route |
-| `frankenscipy-nm8ex` | Spatial `pdist` dim-4 fast path + serial gate | Euclidean n=256 d=4 | 107.45 us | 94.30 us | 1.14x slower | keep 27.24x internal win; route deeper |
-| `frankenscipy-nm8ex` | Spatial `pdist` dim-4 fast path + serial gate | Cosine n=256 d=4 | 114.04 us | 87.20 us | 1.31x slower | keep 29.51x internal win; route deeper |
-| `frankenscipy-nm8ex` | Spatial `pdist` dim-4 fast path + serial gate | Euclidean n=512 d=4 | 425.75 us | 310.83 us | 1.37x slower | keep 8.35x internal win; route deeper |
-| `frankenscipy-nm8ex` | Spatial `pdist` dim-4 fast path + serial gate | Cosine n=512 d=4 | 461.16 us | 283.75 us | 1.63x slower | keep 5.54x internal win; route deeper |
-| `frankenscipy-nm8ex.1` | Spatial `pdist` dim-4 flat row staging | Euclidean n=256 d=4 | 172.83 us | 88.96 us | 1.94x slower | keep 1.52x internal win; route deeper |
-| `frankenscipy-nm8ex.1` | Spatial `pdist` dim-4 flat row staging | Cosine n=256 d=4 | 208.89 us | 79.69 us | 2.62x slower | keep 1.83x internal win; route deeper |
-| `frankenscipy-nm8ex.1` | Spatial `pdist` dim-4 flat row staging | Euclidean n=512 d=4 | 714.58 us | 309.79 us | 2.31x slower | keep 1.11x internal win; route deeper |
-| `frankenscipy-nm8ex.1` | Spatial `pdist` dim-4 flat row staging | Cosine n=512 d=4 | 828.70 us | 275.14 us | 3.01x slower | keep 1.44x internal win; route deeper |
+| `frankenscipy-nm8ex` | Spatial `pdist` dim-4 (was serial gate / flat row staging) | All 4 dim-4 workloads (eucl/cos × 256/512) | — | — | **GAP CLOSED → now 1.86-2.21x FASTER** | **WIN** — SIMD-across-pairs (SoA) `595eceb5` pipelines the dependent per-pair sqrt/div; bit-identical; promoted to Measured Keeps |
 | `frankenscipy-va60h` | Linkage flat row-major distance arena | `scipy.cluster.hierarchy.linkage(method="average")`, n=800 d=4 | 6.1713 ms | 4.4550 ms | 1.385x slower | keep internal flat arena; route deeper |
 | `frankenscipy-va60h` | Linkage flat row-major distance arena | `scipy.cluster.hierarchy.linkage(method="ward")`, n=800 d=4 | 7.5250 ms | 5.0256 ms | 1.497x slower | keep internal flat arena; route deeper |
 

@@ -1397,3 +1397,30 @@ Local original-SciPy oracle (`python3 docs/perf_oracle_fft_csd.py --reps 120
   fresh profile. Future work should target SciPy's much faster zero
   enumeration/root-finding strategy or another measured special-function
   hotspot.
+
+## 2026-06-19 - frankenscipy-nm8ex - dim-4 pdist SIMD-across-pairs (SoA) — GAP CLOSED, now FASTER than SciPy
+
+- Agent: cod-a / MistyBirch
+- Lever: transpose dim-4 points to SoA coordinate columns and process L=8 pairs
+  per SIMD chunk (lane k = pair (i, start+j+k)). The dependent per-pair `sqrt`
+  (Euclidean) and `divide` (Cosine) — the two bottlenecks that serialized the
+  prior one-pair-at-a-time kernels — pipeline across lanes via `vsqrtpd`/`vdivpd`.
+- Status: **MEASURED WIN vs SciPy** (flips all four prior nm8ex/nm8ex.1 losses).
+  Supersedes the nm8ex serial-gate and nm8ex.1 flat-row-staging internal keeps.
+- Bit-identity: per lane the squared-sum+sqrt and `1 - dot/(ni·nj)` with the
+  `denom==0 ⇒ NaN` select run in the exact left-to-right order of the scalar
+  `sqeuclidean4`/`pair` helpers. `pdist_dim4_fast_paths_match_metric_helpers`
+  (to_bits equality) and `pdist_parallel_is_bit_identical` pass; 206 fsci-spatial
+  lib tests green; `clippy -p fsci-spatial --lib -D warnings` clean.
+- Head-to-head, same-box (local) criterion median + scipy 1.17:
+
+  | Workload | Rust before | Rust after | SciPy | After vs SciPy | Self-speedup |
+  | --- | ---: | ---: | ---: | ---: | ---: |
+  | `pdist/euclidean/256` | 82.5 us | 41.0 us | 85.3 us | 2.08x faster | 2.01x |
+  | `pdist/cosine/256` | 93.4 us | 34.8 us | 76.8 us | 2.21x faster | 2.68x |
+  | `pdist/euclidean/512` | 340 us | 162.6 us | 303 us | 1.86x faster | 2.09x |
+  | `pdist/cosine/512` | 369 us | 145 us | 275 us | 1.90x faster | 2.54x |
+- Commit: `595eceb5`.
+- Retry/extend condition: the same SoA SIMD-across-pairs shape applies to the
+  parallel (`nthreads>1`, n>512) dim-4 segments and to other small-fixed-dim
+  pdist/cdist metrics (sqeuclidean, cityblock) still on the scalar per-pair path.
