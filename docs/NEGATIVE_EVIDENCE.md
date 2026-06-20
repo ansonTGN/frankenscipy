@@ -286,3 +286,22 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
   vs SciPy's tighter in-place pass. A further flip needs pass fusion or chunked
   parallelism of the single 1-D line; the routing here is the byte-identical
   asymptotic fix and is kept regardless.
+
+## 2026-06-20 - filter1d HGW within-line parallelism - REJECT (bandwidth-bound + spawn overhead)
+
+- Agent: cc / MistyBirch
+- Decision: **REJECT AND REVERT**. Parallelize the van Herk passes WITHIN a single
+  long line (block prefix/suffix across independent blocks, then combine across
+  output chunks) to close the filter1d residual ~2.3x vs SciPy. Gated to
+  `stride==1 && mid>=16384 && lines<=2`; byte-identical to serial (proven by
+  `filter1d_hgw_parallel_byte_identical_to_serial`, all sizes/min-max/NaN).
+- Measured (same-process A/B, n=65536): size=31 **0.58x**, size=101 **0.64x** —
+  the parallel path is ~1.5 ms vs serial ~0.87-0.92 ms. SLOWER.
+- Root cause: each HGW pass touches only ~512 KB (memory-bandwidth-bound, not
+  compute-bound), and the two `thread::scope` barriers spawn ≤16 threads twice
+  (~32 spawns) whose overhead + cross-core memory traffic exceed the serial pass.
+  Parallelizing a bandwidth-bound 3-pass kernel over one 0.5 MB line does not pay.
+- Negative evidence: do NOT parallelize within a single van Herk line. The
+  filter1d residual vs SciPy (serial HGW's 4 passes + 3 buffers vs SciPy's single
+  in-place pass) needs PASS FUSION (fewer streams over the line), not threads.
+  The shipped serial routing (ce1857ab, 4-7x self-win) is kept as-is.
