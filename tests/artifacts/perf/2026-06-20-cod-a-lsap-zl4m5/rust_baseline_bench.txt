@@ -1,0 +1,13 @@
+Summary artifact for the pre-change Rust baseline.
+
+Command:
+CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo bench -p fsci-opt --bench optimize_bench -- linear_sum_assignment/dense --sample-size 10 --measurement-time 1 --warm-up-time 1
+
+Worker: vmi1152480
+
+Criterion medians:
+- linear_sum_assignment/dense/500: [41.727 ms 43.798 ms 45.836 ms]
+- linear_sum_assignment/dense/1000: [332.54 ms 349.80 ms 368.28 ms]
+
+Note: this summary replaces a zero-byte early log produced before stderr/stdout
+capture was corrected for rch output.

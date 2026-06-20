@@ -1,0 +1,8 @@
+Summary artifact for focused unit tests on the rejected flat-cost sub-variant.
+
+Command:
+CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo test -p fsci-opt linear_sum_assignment --lib -- --nocapture
+
+Result: PASS before performance rejection.
+
+Decision: source reverted because benchmark evidence regressed n=500.

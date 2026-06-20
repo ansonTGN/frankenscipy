@@ -1,0 +1,8 @@
+Summary artifact for focused unit tests on the initial SAP candidate.
+
+Command:
+CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo test -p fsci-opt linear_sum_assignment --lib -- --nocapture
+
+Result: PASS, 8 linear_sum_assignment tests passed / 0 failed.
+
+Note: final exact-source output is in focused_lsa_tests_final.txt.

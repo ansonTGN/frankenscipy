@@ -43,6 +43,41 @@ queue storage for this contiguous Reflect route. Future filter1d work should
 move to non-contiguous axes, `size > line_len`, or missing SciPy max/min
 filter1d conformance coverage.
 
+## 2026-06-20 - frankenscipy-zl4m5 - linear_sum_assignment SAP route
+
+- Agent: cod-a / BlackThrush
+- Decision: KEEP the SciPy-style modified Jonker-Volgenant shortest
+  augmenting path core with owned reusable scratch; REJECT/REVERT the row-major
+  flat-cost sub-variant.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-cod-a-lsap-zl4m5/EVIDENCE.md`
+- Same-worker internal score versus current Rust: `2/0/0`.
+- Strict median score versus local SciPy 1.17.1 oracle: `0/2/0`; the SciPy
+  gap is narrowed but not closed.
+- Rejected sub-variant score: `0/1/1`; flat-cost scratch regressed n=500 by
+  1.27x versus the first SAP candidate and did not produce a significant n=1000
+  win.
+
+| Workload | Baseline Rust | Final Rust | SciPy oracle | Verdict |
+| --- | ---: | ---: | ---: | --- |
+| `linear_sum_assignment/dense/500` | 43.798 ms | 28.681 ms | 18.578689 ms | keep: 1.53x faster than current; Rust 1.54x slower than SciPy |
+| `linear_sum_assignment/dense/1000` | 349.80 ms | 199.52 ms | 122.932709 ms | keep: 1.75x faster than current; Rust 1.62x slower than SciPy |
+
+Guards: focused `fsci-opt` assignment tests, `cargo check -p fsci-opt
+--all-targets`, no-deps clippy, release build, and local live SciPy conformance
+all passed. The rch conformance attempt failed before comparison because the
+worker Python lacked SciPy. Touched-file rustfmt and diff whitespace checks
+passed; full workspace rustfmt remains blocked by pre-existing unrelated
+formatting drift. UBS exits nonzero on the existing broad `fsci-opt/src/lib.rs`
+inventory (test-only panic callbacks and pre-existing unwrap/assert/indexing
+findings), so it is recorded as a scoped blocker rather than folded into this
+perf lever.
+
+Negative evidence: do not retry naive per-call row-major flat-cost copying
+inside this SAP route without a new way to amortize the n=500 penalty. The next
+credible strict-SciPy attack needs deeper dense-matrix layout/API work that
+removes row indirection without copying, or a lower-level specialized kernel.
+
 ## 2026-06-20 - frankenscipy-8l8r1.133 - linkage compact active frontier
 
 - Agent: cod-a / BlackThrush

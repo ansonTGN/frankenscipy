@@ -1,0 +1,13 @@
+Summary artifact for the first SciPy-style shortest augmenting path candidate.
+
+Command:
+CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo bench -p fsci-opt --bench optimize_bench -- linear_sum_assignment/dense --sample-size 10 --measurement-time 1 --warm-up-time 1
+
+Worker: vmi1152480
+
+Criterion medians:
+- linear_sum_assignment/dense/500: [27.995 ms 28.955 ms 29.948 ms]
+- linear_sum_assignment/dense/1000: [238.67 ms 265.05 ms 295.59 ms]
+
+Decision: algorithmic win versus old Rust baseline, but superseded by the
+owned-scratch final variant.

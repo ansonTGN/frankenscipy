@@ -594,13 +594,13 @@ pub fn linear_sum_assignment(
     }
 
     if cost_matrix.len() <= col_count {
-        let assignment = hungarian_rectangular(cost_matrix);
+        let assignment = shortest_augmenting_path_rectangular(cost_matrix);
         let row_ind = (0..assignment.len()).collect::<Vec<_>>();
         return Ok((row_ind, assignment));
     }
 
     let transposed = transpose_matrix(cost_matrix);
-    let assignment = hungarian_rectangular(&transposed);
+    let assignment = shortest_augmenting_path_rectangular(&transposed);
     let mut pairs = assignment
         .into_iter()
         .enumerate()
@@ -809,106 +809,198 @@ pub fn quadratic_assignment(
     })
 }
 
-// Hungarian implementation for row_count <= col_count.
-/// Minimum-cost assignment for `nr <= nc` (the caller transposes otherwise).
-/// Returns `col4row`: the column assigned to each of the `nr` rows.
-///
-/// LAPJV shortest-augmenting-path (Crouse 2016), ported faithfully from SciPy's
-/// `rectangular_lsap.cpp`: lazy dual updates, a shrinking remaining-column list,
-/// and SciPy's exact tie-break (prefer a strictly-cheaper column, else an equal-
-/// cost UNASSIGNED column) so the assignment matches `scipy.optimize.
-/// linear_sum_assignment` bit-for-bit (and is the unique optimum for distinct
-/// costs). Replaces the basic e-maxx O(n^3) Hungarian (O(n) per-step delta sweep
-/// + full column rescan + per-row allocs) that was ~5.6-7.4x slower than SciPy.
-fn hungarian_rectangular(cost_matrix: &[Vec<f64>]) -> Vec<usize> {
-    const NONE: usize = usize::MAX;
-    let nr = cost_matrix.len();
-    let nc = cost_matrix[0].len();
+// Modified Jonker-Volgenant shortest augmenting path implementation for
+// row_count <= col_count, following SciPy's rectangular_lsap core.
+fn shortest_augmenting_path_rectangular(cost_matrix: &[Vec<f64>]) -> Vec<usize> {
+    let row_count = cost_matrix.len();
+    let col_count = cost_matrix[0].len();
+    let mut u = vec![0.0; row_count];
+    let mut v = vec![0.0; col_count];
+    let mut col4row = vec![UNASSIGNED; row_count];
+    let mut row4col = vec![UNASSIGNED; col_count];
+    let mut scratch = ShortestAugmentingPathScratch::new(row_count, col_count);
 
-    let mut u = vec![0.0f64; nr];
-    let mut v = vec![0.0f64; nc];
-    let mut shortest = vec![0.0f64; nc];
-    let mut path = vec![NONE; nc];
-    let mut col4row = vec![NONE; nr];
-    let mut row4col = vec![NONE; nc];
-    let mut sr = vec![false; nr];
-    let mut sc = vec![false; nc];
-    let mut remaining = vec![0usize; nc];
+    for cur_row in 0..row_count {
+        let (sink, min_val) =
+            scratch.shortest_augmenting_path(cost_matrix, &u, &v, &row4col, cur_row);
 
-    for cur_row in 0..nr {
-        let mut min_val = 0.0f64;
-        let mut num_remaining = nc;
-        // SciPy fills `remaining` in reverse (nc-1 .. 0); the order feeds the
-        // tie-break, so keep it identical.
-        for (it, slot) in remaining.iter_mut().enumerate() {
-            *slot = nc - it - 1;
-        }
-        sr.iter_mut().for_each(|x| *x = false);
-        sc.iter_mut().for_each(|x| *x = false);
-        shortest.iter_mut().for_each(|x| *x = f64::INFINITY);
-
-        let mut sink = NONE;
-        let mut i = cur_row;
-        while sink == NONE {
-            let mut index = NONE;
-            let mut lowest = f64::INFINITY;
-            sr[i] = true;
-            let row_i = &cost_matrix[i];
-            let ui = u[i];
-            for it in 0..num_remaining {
-                let j = remaining[it];
-                let r = min_val + row_i[j] - ui - v[j];
-                if r < shortest[j] {
-                    path[j] = i;
-                    shortest[j] = r;
-                }
-                let sj = shortest[j];
-                // strictly cheaper, OR equal-cost but the column is unassigned
-                if sj < lowest || (sj == lowest && row4col[j] == NONE) {
-                    lowest = sj;
-                    index = it;
-                }
-            }
-            min_val = lowest;
-            let j = remaining[index];
-            if row4col[j] == NONE {
-                sink = j;
-            } else {
-                i = row4col[j];
-            }
-            sc[j] = true;
-            num_remaining -= 1;
-            remaining[index] = remaining[num_remaining];
-        }
-
-        // Lazy dual update over the scanned rows/columns.
         u[cur_row] += min_val;
-        for i2 in 0..nr {
-            if sr[i2] && i2 != cur_row {
-                u[i2] += min_val - shortest[col4row[i2]];
+        for row in 0..row_count {
+            if scratch.sr[row] && row != cur_row {
+                let col = col4row[row];
+                debug_assert_ne!(col, UNASSIGNED);
+                u[row] += min_val - scratch.shortest_path_costs[col];
             }
         }
-        for j in 0..nc {
-            if sc[j] {
-                v[j] -= min_val - shortest[j];
+        for (col, v_col) in v.iter_mut().enumerate() {
+            if scratch.sc[col] {
+                *v_col -= min_val - scratch.shortest_path_costs[col];
             }
         }
 
-        // Augment along the recorded shortest path back to `cur_row`.
-        let mut j = sink;
+        let mut col = sink;
         loop {
-            let i = path[j];
-            row4col[j] = i;
-            let prev = col4row[i];
-            col4row[i] = j;
-            j = prev;
-            if i == cur_row {
+            let row = scratch.path[col];
+            debug_assert_ne!(row, UNASSIGNED);
+            row4col[col] = row;
+            let previous_col = col4row[row];
+            col4row[row] = col;
+            if row == cur_row {
+                break;
+            }
+            col = previous_col;
+        }
+    }
+
+    col4row
+}
+
+const UNASSIGNED: usize = usize::MAX;
+
+struct ShortestAugmentingPathScratch {
+    path: Vec<usize>,
+    shortest_path_costs: Vec<f64>,
+    sr: Vec<bool>,
+    sc: Vec<bool>,
+    remaining: Vec<usize>,
+}
+
+impl ShortestAugmentingPathScratch {
+    fn new(row_count: usize, col_count: usize) -> Self {
+        Self {
+            path: vec![UNASSIGNED; col_count],
+            shortest_path_costs: vec![0.0; col_count],
+            sr: vec![false; row_count],
+            sc: vec![false; col_count],
+            remaining: vec![0usize; col_count],
+        }
+    }
+
+    #[inline(always)]
+    fn shortest_augmenting_path(
+        &mut self,
+        cost_matrix: &[Vec<f64>],
+        u: &[f64],
+        v: &[f64],
+        row4col: &[usize],
+        start_row: usize,
+    ) -> (usize, f64) {
+        let col_count = v.len();
+        let mut min_val = 0.0;
+        let mut row = start_row;
+        let mut remaining_count = col_count;
+
+        for (index, slot) in self.remaining.iter_mut().enumerate() {
+            *slot = col_count - index - 1;
+        }
+        self.path.fill(UNASSIGNED);
+        self.sr.fill(false);
+        self.sc.fill(false);
+        self.shortest_path_costs.fill(f64::INFINITY);
+
+        loop {
+            let mut lowest = f64::INFINITY;
+            let mut best_remaining_index = 0usize;
+            let cost_row = &cost_matrix[row];
+            let row_dual = u[row];
+            self.sr[row] = true;
+
+            for (remaining_index, &col) in self.remaining[..remaining_count].iter().enumerate() {
+                let reduced_cost = min_val + cost_row[col] - row_dual - v[col];
+                if reduced_cost < self.shortest_path_costs[col] {
+                    self.path[col] = row;
+                    self.shortest_path_costs[col] = reduced_cost;
+                }
+                if self.shortest_path_costs[col] < lowest
+                    || (self.shortest_path_costs[col] == lowest && row4col[col] == UNASSIGNED)
+                {
+                    lowest = self.shortest_path_costs[col];
+                    best_remaining_index = remaining_index;
+                }
+            }
+
+            min_val = lowest;
+            let col = self.remaining[best_remaining_index];
+            if row4col[col] == UNASSIGNED {
+                return (col, min_val);
+            }
+
+            row = row4col[col];
+            self.sc[col] = true;
+            remaining_count -= 1;
+            self.remaining[best_remaining_index] = self.remaining[remaining_count];
+        }
+    }
+}
+
+#[cfg(test)]
+fn hungarian_rectangular_reference(cost_matrix: &[Vec<f64>]) -> Vec<usize> {
+    let row_count = cost_matrix.len();
+    let col_count = cost_matrix[0].len();
+    let mut u = vec![0.0; row_count + 1];
+    let mut v = vec![0.0; col_count + 1];
+    let mut p = vec![0usize; col_count + 1];
+    let mut way = vec![0usize; col_count + 1];
+
+    for row in 1..=row_count {
+        p[0] = row;
+        let mut col0 = 0usize;
+        let mut minv = vec![f64::INFINITY; col_count + 1];
+        let mut used = vec![false; col_count + 1];
+
+        loop {
+            used[col0] = true;
+            let row0 = p[col0];
+            let mut delta = f64::INFINITY;
+            let mut col1 = 0usize;
+
+            for col in 1..=col_count {
+                if used[col] {
+                    continue;
+                }
+                let current = cost_matrix[row0 - 1][col - 1] - u[row0] - v[col];
+                if current < minv[col] {
+                    minv[col] = current;
+                    way[col] = col0;
+                }
+                if minv[col] < delta {
+                    delta = minv[col];
+                    col1 = col;
+                }
+            }
+
+            for col in 0..=col_count {
+                if used[col] {
+                    u[p[col]] += delta;
+                    v[col] -= delta;
+                } else {
+                    minv[col] -= delta;
+                }
+            }
+            col0 = col1;
+
+            if p[col0] == 0 {
+                break;
+            }
+        }
+
+        loop {
+            let col1 = way[col0];
+            p[col0] = p[col1];
+            col0 = col1;
+            if col0 == 0 {
                 break;
             }
         }
     }
 
-    col4row
+    let mut assignment = vec![0usize; row_count];
+    for col in 1..=col_count {
+        if p[col] != 0 {
+            assignment[p[col] - 1] = col - 1;
+        }
+    }
+    assignment
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -5374,6 +5466,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::hungarian_rectangular_reference;
     use fsci_runtime::RuntimeMode;
 
     use crate::{
@@ -5386,6 +5479,7 @@ mod tests {
         linprog, milp, minimize_scalar_bounded, minimize_trisection, nnls, numerical_gradient,
         numerical_hessian, numerical_jacobian, projected_gradient_descent, pso,
         quadratic_assignment, rosen, rosen_der, rosen_hess, rosen_hess_prod, shgo,
+        transpose_matrix,
     };
 
     #[test]
@@ -6017,7 +6111,15 @@ mod tests {
             let nr = cost.len();
             let nc = cost[0].len();
             let mut used = vec![false; nc];
-            fn rec(r: usize, nr: usize, nc: usize, cost: &[Vec<f64>], used: &mut [bool], acc: f64, best: &mut f64) {
+            fn rec(
+                r: usize,
+                nr: usize,
+                nc: usize,
+                cost: &[Vec<f64>],
+                used: &mut [bool],
+                acc: f64,
+                best: &mut f64,
+            ) {
                 if acc >= *best {
                     return;
                 }
@@ -6042,8 +6144,7 @@ mod tests {
         // every row to a distinct column.
         for &(nr, nc) in &[(6usize, 6usize), (5, 8), (7, 7), (4, 9)] {
             let cost: Vec<Vec<f64>> = (0..nr).map(|_| (0..nc).map(|_| next()).collect()).collect();
-            let (row_ind, col_ind) =
-                linear_sum_assignment(&cost).expect("assignment");
+            let (row_ind, col_ind) = linear_sum_assignment(&cost).expect("assignment");
             // valid: distinct cols, every row covered, count = min(nr,nc)
             assert_eq!(row_ind.len(), nr.min(nc));
             let mut seen = std::collections::HashSet::new();
@@ -6103,6 +6204,67 @@ mod tests {
         let (row_ind, col_ind) = linear_sum_assignment(&[]).expect("empty problem should succeed");
         assert!(row_ind.is_empty());
         assert!(col_ind.is_empty());
+    }
+
+    #[test]
+    fn linear_sum_assignment_matches_hungarian_reference_costs() {
+        fn deterministic_cost(rows: usize, cols: usize) -> Vec<Vec<f64>> {
+            (0..rows)
+                .map(|i| {
+                    (0..cols)
+                        .map(|j| {
+                            let mixed = (i
+                                .wrapping_mul(1_103_515_245)
+                                .wrapping_add(j.wrapping_mul(12_345))
+                                ^ (i.wrapping_mul(2_654_435_761) >> 7))
+                                as u64;
+                            let jitter = ((i * 17 + j * 31) % 997) as f64 * 1.0e-13;
+                            mixed as f64 / u64::MAX as f64 + jitter
+                        })
+                        .collect()
+                })
+                .collect()
+        }
+
+        fn assignment_cost(cost: &[Vec<f64>], rows: &[usize], cols: &[usize]) -> f64 {
+            rows.iter()
+                .zip(cols)
+                .map(|(&row, &col)| cost[row][col])
+                .sum()
+        }
+
+        fn reference_assignment(cost: &[Vec<f64>]) -> (Vec<usize>, Vec<usize>) {
+            if cost.len() <= cost[0].len() {
+                let cols = hungarian_rectangular_reference(cost);
+                let rows = (0..cols.len()).collect::<Vec<_>>();
+                return (rows, cols);
+            }
+
+            let transposed = transpose_matrix(cost);
+            let assignment = hungarian_rectangular_reference(&transposed);
+            let mut pairs = assignment
+                .into_iter()
+                .enumerate()
+                .map(|(col, row)| (row, col))
+                .collect::<Vec<_>>();
+            pairs.sort_unstable_by_key(|(row, _)| *row);
+            pairs.into_iter().unzip()
+        }
+
+        for &(rows, cols) in &[(3, 5), (8, 8), (16, 12)] {
+            let cost = deterministic_cost(rows, cols);
+            let (fast_rows, fast_cols) = linear_sum_assignment(&cost).expect("lapjv assignment");
+            let (ref_rows, ref_cols) = reference_assignment(&cost);
+            assert_eq!(fast_rows.len(), rows.min(cols));
+            assert_eq!(fast_rows.len(), fast_cols.len());
+            assert_eq!(ref_rows.len(), fast_rows.len());
+            let fast_cost = assignment_cost(&cost, &fast_rows, &fast_cols);
+            let ref_cost = assignment_cost(&cost, &ref_rows, &ref_cols);
+            assert!(
+                (fast_cost - ref_cost).abs() <= 1.0e-10,
+                "shape {rows}x{cols}: fast cost {fast_cost}, reference cost {ref_cost}"
+            );
+        }
     }
 
     #[test]

@@ -1,0 +1,13 @@
+Summary artifact for the rejected row-major flat-cost sub-variant.
+
+Command:
+CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo bench -p fsci-opt --bench optimize_bench -- linear_sum_assignment/dense --sample-size 10 --measurement-time 1 --warm-up-time 1
+
+Worker: vmi1152480
+
+Criterion medians:
+- linear_sum_assignment/dense/500: [34.147 ms 36.674 ms 40.527 ms]
+- linear_sum_assignment/dense/1000: [230.96 ms 243.46 ms 253.85 ms]
+
+Decision: REJECT/REVERT. It regressed n=500 by 1.27x versus the first SAP
+candidate and did not produce a significant n=1000 win.

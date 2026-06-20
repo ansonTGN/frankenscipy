@@ -51,6 +51,51 @@ Readiness notes:
   non-contiguous axes, `size > line_len`, or missing max/min filter1d SciPy
   conformance coverage.
 
+## 2026-06-20 - fsci-opt linear_sum_assignment SAP gauntlet
+
+- Agent: cod-a / BlackThrush
+- Bead: `frankenscipy-zl4m5`
+- Decision: KEEP. The public assignment solver now uses a SciPy
+  `rectangular_lsap` style shortest augmenting path core with owned reusable
+  scratch. It materially improves both tracked dense rows versus current Rust,
+  but release-readiness remains partial because SciPy still wins both medians.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-cod-a-lsap-zl4m5/EVIDENCE.md`
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| rch same-worker baseline | PASS | `vmi1152480`: n=500 43.798 ms; n=1000 349.80 ms |
+| rch same-worker final | PASS | `vmi1152480`: n=500 28.681 ms; n=1000 199.52 ms |
+| SciPy oracle | LOSS | local SciPy 1.17.1 p50: n=500 18.578689 ms; n=1000 122.932709 ms |
+| Rejected flat-cost variant | FAIL | n=500 regressed 1.27x versus first SAP candidate; source reverted |
+| Focused assignment tests | PASS | `cargo test -p fsci-opt linear_sum_assignment --lib -- --nocapture` via rch: 8 passed |
+| Per-crate check | PASS | `cargo check -p fsci-opt --all-targets` via rch |
+| No-deps clippy | PASS | `cargo clippy -p fsci-opt --all-targets --no-deps -- -D warnings` via rch |
+| Per-crate release build | PASS | `cargo build --release -p fsci-opt` via rch |
+| Live SciPy conformance | PASS | local `cargo test -p fsci-conformance --test diff_opt_linear_sum_assignment -- --nocapture`: 1 passed |
+| rch live SciPy conformance | BLOCKED | worker `hz2` had no SciPy module installed |
+| Touched-file rustfmt | PASS | `rustfmt --edition 2024 --check crates/fsci-opt/src/lib.rs` |
+| Diff hygiene | PASS | `git diff --check` on touched source/docs/artifact files |
+| Changed-file UBS | BLOCKED | exits nonzero on existing broad `fsci-opt/src/lib.rs` test panic/unwrap/assert/indexing inventory outside this lever |
+| Full workspace formatting | BLOCKED | pre-existing unrelated rustfmt drift; captured in `cargo_fmt_check.txt` |
+
+| Workload / route | Median | Ratio | Verdict |
+| --- | ---: | ---: | --- |
+| Current Rust `linear_sum_assignment/dense/500` | 43.798 ms | 2.36x slower than SciPy | prior current |
+| Final Rust SAP n=500 | 28.681 ms | 1.53x faster than current; 1.54x slower than SciPy | keep/partial |
+| SciPy n=500 | 18.578689 ms | 1.00x oracle | reference |
+| Current Rust `linear_sum_assignment/dense/1000` | 349.80 ms | 2.85x slower than SciPy | prior current |
+| Final Rust SAP n=1000 | 199.52 ms | 1.75x faster than current; 1.62x slower than SciPy | keep/partial |
+| SciPy n=1000 | 122.932709 ms | 1.00x oracle | reference |
+
+Readiness notes:
+
+- This closes the old algorithmic loss from the Hungarian-style rectangular
+  implementation but does not yet dominate SciPy. The remaining credible work
+  is lower-level dense storage/kernel specialization, not another naive
+  row-major copy.
+- Same-worker internal score is `2/0/0`; strict SciPy score is `0/2/0`.
+
 ## 2026-06-20 - fsci-cluster linkage compact active frontier gauntlet
 
 - Agent: cod-a / BlackThrush

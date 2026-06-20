@@ -96,6 +96,81 @@ these four rows. The tracked residual is closed; future filter1d work should
 target non-contiguous axes, `size > line_len`, or the still-open max/min
 filter1d SciPy conformance coverage.
 
+## 2026-06-20 - frankenscipy-zl4m5 - optimize linear_sum_assignment SAP route
+
+- Agent: cod-a / BlackThrush
+- Lever kept: replace the e-maxx-style rectangular Hungarian implementation
+  used by `fsci_opt::linear_sum_assignment` with a SciPy `rectangular_lsap`
+  style modified Jonker-Volgenant shortest augmenting path core.
+- Graveyard/artifact route tested: algorithmic complexity-class swap plus
+  owned bump-like reusable scratch workspace. A row-major flat-cost scratch
+  copy was also tested and reverted.
+- Decision: KEEP the SAP owned-scratch route. It cuts the tracked dense rows by
+  1.53x and 1.75x versus the old Rust baseline on the same rch worker, but it
+  remains a strict `0/2/0` SciPy loss.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-cod-a-lsap-zl4m5/EVIDENCE.md`
+- Baseline command:
+  `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo bench -p fsci-opt --bench optimize_bench -- linear_sum_assignment/dense --sample-size 10 --measurement-time 1 --warm-up-time 1`
+- Final same-worker command:
+  `RCH_WORKER=vmi1152480 CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a rch exec -- cargo bench -p fsci-opt --bench optimize_bench -- linear_sum_assignment/dense --sample-size 10 --measurement-time 1 --warm-up-time 1`
+
+Benchmark evidence:
+
+| Workload / route | Median | Interval / value | Ratio / verdict |
+| --- | ---: | ---: | --- |
+| Current Rust `linear_sum_assignment/dense/500` | 43.798 ms | [41.727, 45.836] ms on `vmi1152480` | baseline |
+| Final Rust SAP `linear_sum_assignment/dense/500` | 28.681 ms | [26.828, 30.162] ms on `vmi1152480` | 1.53x faster than current; 1.54x slower than SciPy |
+| SciPy 1.17.1 `linear_sum_assignment` n=500 | 18.578689 ms | local p50 | oracle |
+| Current Rust `linear_sum_assignment/dense/1000` | 349.80 ms | [332.54, 368.28] ms on `vmi1152480` | baseline |
+| Final Rust SAP `linear_sum_assignment/dense/1000` | 199.52 ms | [182.05, 217.44] ms on `vmi1152480` | 1.75x faster than current; 1.62x slower than SciPy |
+| SciPy 1.17.1 `linear_sum_assignment` n=1000 | 122.932709 ms | local p50 | oracle |
+
+Win/loss/neutral:
+
+- Same-worker final candidate versus current Rust: `2/0/0`.
+- Strict final candidate versus SciPy oracle: `0/2/0`.
+- Rejected flat-cost sub-variant versus first SAP candidate: `0/1/1`.
+
+Sub-attempt evidence:
+
+| Route | n=500 median | n=1000 median | Verdict |
+| --- | ---: | ---: | --- |
+| First SAP candidate | 28.955 ms | 265.05 ms | algorithmic win, superseded |
+| Flat-cost scratch copy | 36.674 ms | 243.46 ms | rejected: n=500 regressed 1.27x and n=1000 was not significant |
+| Final owned-scratch SAP | 28.681 ms | 199.52 ms | kept |
+
+Correctness/conformance guards:
+
+- PASS: rch focused assignment unit tests:
+  `cargo test -p fsci-opt linear_sum_assignment --lib -- --nocapture` =
+  8 passed / 0 failed.
+- PASS: rch per-crate all-targets check:
+  `cargo check -p fsci-opt --all-targets`.
+- PASS: rch no-deps clippy:
+  `cargo clippy -p fsci-opt --all-targets --no-deps -- -D warnings`.
+- PASS: rch per-crate release build:
+  `cargo build --release -p fsci-opt`.
+- PASS: local live SciPy conformance:
+  `cargo test -p fsci-conformance --test diff_opt_linear_sum_assignment -- --nocapture`
+  = 1 passed / 0 failed.
+- BLOCKED/ENV: the rch live SciPy conformance attempt failed before comparison
+  because worker `hz2` had no SciPy module installed.
+- PASS: `rustfmt --edition 2024 --check crates/fsci-opt/src/lib.rs`.
+- PASS: `git diff --check` on touched source/docs/artifact files.
+- BLOCKED/EXISTING: changed-file UBS exits nonzero on the existing broad
+  `crates/fsci-opt/src/lib.rs` inventory (test-only panic callbacks and
+  pre-existing unwrap/assert/indexing findings), not on a new unsafe/clippy
+  failure from this patch.
+- BLOCKED: full workspace formatting remains blocked by pre-existing unrelated
+  rustfmt drift outside this patch.
+
+Retry condition: do not retry naive row-major flat-cost copying inside the SAP
+path unless the copy is removed, amortized across calls, or replaced by a real
+dense matrix storage API. The remaining strict SciPy gap is likely row
+indirection and Rust scalar-loop constant factor, not the old Hungarian
+complexity route.
+
 ## 2026-06-20 - frankenscipy-8l8r1.133 - cluster linkage compact active frontier
 
 - Agent: cod-a / BlackThrush
