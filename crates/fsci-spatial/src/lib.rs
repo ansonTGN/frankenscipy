@@ -527,7 +527,7 @@ pub fn pdist(x: &[Vec<f64>], metric: DistanceMetric) -> Result<Vec<f64>, Spatial
     {
         1
     } else {
-        cdist_thread_count(n, n, dim)
+        pdist_thread_count(n, dim)
     };
 
     // Cosine and Correlation recompute each vector's norm/mean+centered-norm — quantities
@@ -1285,6 +1285,30 @@ fn cdist_row_cosine4(
         j += 1;
     }
     row
+}
+
+/// Worker count for a parallel `pdist`. The n·(n-1)/2 condensed pairs carry `pairs·dim`
+/// element-ops. Stay serial unless that clearly exceeds the thread-spawn cost: spawning ~64
+/// threads costs ~2.4ms on this contended 64-core box, so small pdists were up to 13x slower
+/// than SciPy purely from over-spawn (only the Euclidean/Cosine dim-4 path had a serial
+/// guard; cityblock/sqeuclidean/chebyshev fell straight to `cdist_thread_count`'s 1<<18 gate
+/// and parallelized trivially-small work). Cap workers at 16 — the per-pair kernels are
+/// low-arithmetic-intensity / memory-bandwidth-bound, so ~16 saturate bandwidth and more only
+/// contend (same finding as the cdist dim-4 cap, nm8ex). Byte-identical: thread count never
+/// changes values (`pdist_fill` fills disjoint contiguous pair ranges in i<j order).
+fn pdist_thread_count(n: usize, dim: usize) -> usize {
+    if n < 8 {
+        return 1;
+    }
+    let pairs = (n as u64) * (n as u64 - 1) / 2;
+    let work = pairs.saturating_mul(dim.max(1) as u64);
+    if work < (1 << 20) {
+        return 1;
+    }
+    let cores = std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(1);
+    cores.min(16).min(n / 4).max(1)
 }
 
 /// Compute the full Euclidean distance matrix between two point sets.
@@ -6348,8 +6372,8 @@ mod tests {
             DistanceMetric::Cityblock,
             DistanceMetric::Chebyshev,
         ] {
-            // n=900 (dim 2) => ~405k pairs * 2 >= the 2^18 gate -> parallel path.
-            let x = grid(900, 2, 0.5);
+            // n=1100 (dim 2) => ~604k pairs * 2 = 1.21M >= the 2^20 pdist gate -> parallel.
+            let x = grid(1100, 2, 0.5);
             let n = x.len();
             let got = pdist(&x, metric).expect("parallel pdist");
             let mut want = Vec::with_capacity(n * (n - 1) / 2);
@@ -6366,12 +6390,12 @@ mod tests {
     }
 
     /// The vectorized dim-4 Euclidean/Cosine fast paths must stay BIT-identical to the
-    /// scalar metric helper at a size above the serial gate (n>512), where rows are split
-    /// across worker threads — exercising the `r0>0` mid-triangle offset of the SIMD
-    /// row-filler that the n=32 serial gate does not reach.
+    /// scalar metric helper above the serial gate (n>2048), where rows are split across
+    /// worker threads — exercising the `r0>0` mid-triangle offset of the SIMD row-filler
+    /// that the serial path does not reach.
     #[test]
     fn pdist_dim4_parallel_matches_metric_helpers() {
-        let n = 600;
+        let n = 2100;
         let x: Vec<Vec<f64>> = (0..n)
             .map(|i| {
                 let t = i as f64;
