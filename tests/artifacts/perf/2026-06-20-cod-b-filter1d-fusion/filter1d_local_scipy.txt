@@ -1,0 +1,7 @@
+scipy_version=1.17.1
+numpy_version=2.4.3
+n=65536 dtype=float64 mode=reflect rounds=80 inner=3
+scipy_maximum_65536/31: median=518.03us p95=580.22us first=18.963414262 last=103.182753097
+scipy_minimum_65536/31: median=540.51us p95=574.32us first=0 last=94.9883996993
+scipy_maximum_65536/101: median=514.82us p95=543.06us first=52.1779175541 last=105.960993469
+scipy_minimum_65536/101: median=543.55us p95=590.77us first=0 last=94.9883996993

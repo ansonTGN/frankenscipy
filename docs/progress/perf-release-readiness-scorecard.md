@@ -46,6 +46,54 @@ Readiness notes:
   linkage attack should be a true method-specific NN-chain or smaller frontier
   primitive.
 
+## 2026-06-20 - fsci-ndimage filter1d fused monotonic-queue gauntlet
+
+- Agent: cod-b / BlackThrush
+- Bead: `frankenscipy-8l8r1.134`
+- Decision: KEEP. The public `maximum_filter1d` / `minimum_filter1d` path now
+  uses a single-pass monotonic index queue over the boundary-resolved line,
+  replacing the HGW prefix/suffix/combine route. This is an internal keep that
+  narrows, but does not close, the SciPy residual.
+- Artifact:
+  `tests/artifacts/perf/2026-06-20-cod-b-filter1d-fusion/EVIDENCE.md`
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| Focused fold oracle | PASS | `cargo test -p fsci-ndimage filter1d_hgw_byte_identical_to_fold -- --nocapture` via rch `vmi1149989`: 1 passed / 0 failed |
+| Same-process queue/HGW A/B | PASS | rch `hz2`: queue is 1.15x / 1.17x / 1.21x / 1.21x faster for max31/min31/max101/min101, with bit-identical output checked before timing |
+| rch Criterion final | PASS | `cargo bench -p fsci-ndimage --bench ndimage_bench -- minmax_filter1d --noplot` via `hz2`: final means 560.72 us / 769.56 us / 824.22 us / 777.60 us |
+| SciPy oracle | PASS | local SciPy 1.17.1 / NumPy 2.4.3: medians 518.03 us / 540.51 us / 514.82 us / 543.55 us |
+| Local live SciPy conformance | PASS | `FSCI_REQUIRE_SCIPY_ORACLE=1 cargo test -p fsci-conformance --test diff_ndimage_filter_1d -- --nocapture`: 1 passed / 0 failed; max/min filter1d remain outside that target by existing boundary-parity note |
+| Per-crate compile | PASS | `cargo check -p fsci-ndimage --all-targets` via rch `hz2`; unrelated existing warnings remain in `fsci-interpolate` and `diff_geom` |
+| Touched-file formatting | PASS | `rustfmt --edition 2024 --check crates/fsci-ndimage/src/lib.rs` |
+| Diff hygiene | PASS | `git diff --check` |
+| Changed-file UBS | PASS | `ubs crates/fsci-ndimage/src/lib.rs` exit 0; 0 critical issues; broad existing warning inventory remains |
+| Clippy `-D warnings` | BLOCKED | `cargo clippy -p fsci-ndimage --all-targets -- -D warnings` stops before this patch on existing `fsci-linalg` lints (`needless_range_loop`, `needless_borrow`) |
+
+| Workload / route | Mean | Ratio | Verdict |
+| --- | ---: | ---: | --- |
+| Prior HGW `maximum_filter1d`, n=65536 size=31 | 1.2413 ms | 2.40x slower than SciPy | prior current |
+| Final queue `maximum_filter1d`, n=65536 size=31 | 0.56072 ms | 2.21x faster than HGW; 1.08x slower than SciPy | keep, residual loss |
+| SciPy `maximum_filter1d`, n=65536 size=31 | 0.51803 ms | 1.00x oracle | reference |
+| Prior HGW `minimum_filter1d`, n=65536 size=31 | 1.0365 ms | 1.92x slower than SciPy | prior current |
+| Final queue `minimum_filter1d`, n=65536 size=31 | 0.76956 ms | 1.35x faster than HGW; 1.42x slower than SciPy | keep, residual loss |
+| SciPy `minimum_filter1d`, n=65536 size=31 | 0.54051 ms | 1.00x oracle | reference |
+| Prior HGW `maximum_filter1d`, n=65536 size=101 | 1.0385 ms | 2.02x slower than SciPy | prior current |
+| Final queue `maximum_filter1d`, n=65536 size=101 | 0.82422 ms | 1.26x faster than HGW; 1.60x slower than SciPy | keep, residual loss |
+| SciPy `maximum_filter1d`, n=65536 size=101 | 0.51482 ms | 1.00x oracle | reference |
+| Prior HGW `minimum_filter1d`, n=65536 size=101 | 1.0234 ms | 1.88x slower than SciPy | prior current |
+| Final queue `minimum_filter1d`, n=65536 size=101 | 0.77760 ms | 1.32x faster than HGW; 1.43x slower than SciPy | keep, residual loss |
+| SciPy `minimum_filter1d`, n=65536 size=101 | 0.54355 ms | 1.00x oracle | reference |
+
+Readiness notes:
+
+- This run acts on the prior filter1d negative evidence: pass fusion pays,
+  within-line threading does not. The remaining gap is constant-factor queue and
+  boundary/NaN handling overhead, not complexity.
+- Next attempts need a fresh child bead and should target a guarded contiguous
+  `Reflect`/NaN-free specialization or a SIMD/block-merge design with explicit
+  signed-zero tie tests.
+
 ## 2026-06-20 - fsci-ndimage gaussian_filter tile-local scratch gauntlet
 
 - Agent: cod-a / BlackThrush

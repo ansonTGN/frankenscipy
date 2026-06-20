@@ -364,6 +364,42 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
   in-place pass) needs PASS FUSION (fewer streams over the line), not threads.
   The shipped serial routing (ce1857ab, 4-7x self-win) is kept as-is.
 
+## 2026-06-20 - frankenscipy-8l8r1.134 - filter1d fused monotonic queue - KEEP (internal win, residual SciPy loss)
+
+- Agent: cod-b / BlackThrush
+- Decision: **KEEP**. Replace the public `maximum_filter1d` /
+  `minimum_filter1d` HGW prefix-suffix route with a single-pass monotonic index
+  queue over the same boundary-resolved line. This is the pass-fusion direction
+  requested by the prior negative evidence, not another within-line threading
+  attempt.
+- Correctness: **byte-for-bit identical** to the fold/HGW route. The focused
+  `filter1d_hgw_byte_identical_to_fold` test passed via rch `vmi1149989`, and
+  the same-process `filter1d_queue_vs_hgw_ab_timing` test compares HGW and queue
+  outputs bit-for-bit before timing. Local live SciPy conformance
+  `diff_ndimage_filter_1d` also passed 1/0; that target currently exercises
+  `uniform_filter1d` only because max/min filter1d SciPy boundary parity is
+  already documented as out of scope there.
+
+| Workload (n=65536, Reflect) | HGW baseline (`hz2`) | queue final (`hz2`) | internal ratio | SciPy 1.17.1 median | final vs SciPy |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `maximum_filter1d` size=31 | 1.2413 ms | 0.56072 ms | **2.21x faster** | 0.51803 ms | 1.08x slower |
+| `minimum_filter1d` size=31 | 1.0365 ms | 0.76956 ms | **1.35x faster** | 0.54051 ms | 1.42x slower |
+| `maximum_filter1d` size=101 | 1.0385 ms | 0.82422 ms | **1.26x faster** | 0.51482 ms | 1.60x slower |
+| `minimum_filter1d` size=101 | 1.0234 ms | 0.77760 ms | **1.32x faster** | 0.54355 ms | 1.43x slower |
+
+- Same-process release A/B on rch `hz2`: queue/HGW was 1.15x / 1.17x / 1.21x /
+  1.21x faster for max31/min31/max101/min101, all bit-identical.
+- Gates: rch `cargo check -p fsci-ndimage --all-targets` passed; touched-file
+  rustfmt, `git diff --check`, UBS, local live SciPy conformance, and focused
+  correctness tests passed. Strict dependency-inclusive clippy remains blocked
+  before this patch on existing `fsci-linalg` lints (`needless_range_loop`,
+  `needless_borrow`).
+- Negative evidence / next: this narrows the residual from the HGW flat ~2.0x
+  loss to 1.08-1.60x slower, but does not yet dominate SciPy. Do not call this
+  closed. Next routes should target branch-reduced NaN-free contiguous-line
+  specialization, boundary-free interior fast paths, or SIMD/block-merge designs
+  that preserve NaN propagation and signed-zero newest-tie semantics.
+
 ## 2026-06-20 - rfft measured head-to-head vs numpy - MIXED (stale "loss" corrected; mid-size kernel wall)
 
 - Agent: cc / MistyBirch

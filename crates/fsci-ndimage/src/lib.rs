@@ -2645,6 +2645,7 @@ fn tc_min(a: f64, b: f64) -> f64 {
 /// (the extremum is one of the inputs — no rounding — and NaN propagates
 /// regardless of association). Lets the 1-D filters use the O(n) HGW kernel
 /// instead of the O(n·size) per-window scan with its per-pixel allocation.
+#[cfg(test)]
 #[inline(always)]
 fn nanprop_max(a: f64, b: f64) -> f64 {
     if a.is_nan() || b.is_nan() {
@@ -2654,6 +2655,7 @@ fn nanprop_max(a: f64, b: f64) -> f64 {
     }
 }
 
+#[cfg(test)]
 #[inline(always)]
 fn nanprop_min(a: f64, b: f64) -> f64 {
     if a.is_nan() || b.is_nan() {
@@ -2748,6 +2750,106 @@ fn minmax_along_axis_hgw<F: Fn(f64, f64) -> f64 + Copy>(
             // start) covers it exactly. Idempotent op handles the single-block case.
             for i in 0..mid {
                 out.data[base + i * stride] = op(h[i], g[i + size - 1]);
+            }
+        }
+    }
+    out
+}
+
+#[inline(always)]
+fn filter1d_queue_evicts(back: f64, val: f64, is_max: bool) -> bool {
+    if is_max { back <= val } else { back >= val }
+}
+
+/// Single-pass monotonic index queue for the public NaN-propagating 1-D min/max
+/// filters. It keeps the HGW boundary-resolved line materialization but fuses the
+/// prefix/suffix/combine passes into one scan. NaNs are counted out-of-band so the
+/// output remains the canonical NaN whenever any window element is NaN; equal
+/// non-NaN extrema evict older entries to match the left-to-right `f64::max/min`
+/// fold for signed zeros.
+fn minmax_filter1d_nanprop_queue(
+    arr: &NdArray,
+    axis: usize,
+    size: usize,
+    origin: i64,
+    mode: BoundaryMode,
+    cval: f64,
+    is_max: bool,
+) -> NdArray {
+    let mid = arr.shape[axis];
+    let inner: usize = arr.shape[axis + 1..].iter().product();
+    let outer: usize = arr.shape[..axis].iter().product();
+    let n = mid as i64;
+    let size_i = size as i64;
+    let lo = size_i / 2 + origin;
+    let ext_len = mid + size - 1;
+    let stride = inner;
+    let slab = mid * inner;
+
+    let mut out = NdArray::zeros(arr.shape.clone());
+    let mut ext = vec![0.0f64; ext_len];
+    let mut queue = vec![0usize; ext_len];
+
+    for o in 0..outer {
+        let outer_base = o * slab;
+        for j in 0..inner {
+            let base = outer_base + j;
+            let interior_start = lo as usize;
+            let interior_end = interior_start + mid;
+            for t in 0..interior_start {
+                let coord = t as i64 - lo;
+                ext[t] = match boundary_index_1d(coord, n, mode) {
+                    Some(m) => arr.data[base + (m as usize) * stride],
+                    None => cval,
+                };
+            }
+            if stride == 1 {
+                ext[interior_start..interior_end].copy_from_slice(&arr.data[base..base + mid]);
+            } else {
+                for t in interior_start..interior_end {
+                    ext[t] = arr.data[base + (t - interior_start) * stride];
+                }
+            }
+            for t in interior_end..ext_len {
+                let coord = t as i64 - lo;
+                ext[t] = match boundary_index_1d(coord, n, mode) {
+                    Some(m) => arr.data[base + (m as usize) * stride],
+                    None => cval,
+                };
+            }
+
+            let mut head = 0usize;
+            let mut tail = 0usize;
+            let mut next = 0usize;
+            let mut nan_count = 0usize;
+            for i in 0..mid {
+                let right = i + size - 1;
+                while next <= right {
+                    let val = ext[next];
+                    if val.is_nan() {
+                        nan_count += 1;
+                    } else {
+                        while tail > head
+                            && filter1d_queue_evicts(ext[queue[tail - 1]], val, is_max)
+                        {
+                            tail -= 1;
+                        }
+                        queue[tail] = next;
+                        tail += 1;
+                    }
+                    next += 1;
+                }
+                while head < tail && queue[head] < i {
+                    head += 1;
+                }
+                out.data[base + i * stride] = if nan_count == 0 {
+                    ext[queue[head]]
+                } else {
+                    f64::NAN
+                };
+                if ext[i].is_nan() {
+                    nan_count -= 1;
+                }
             }
         }
     }
@@ -7757,17 +7859,10 @@ pub fn maximum_filter1d_with_origin(
         return Err(NdimageError::EmptyInput);
     }
     validate_filter_origin(size, origin)?;
-    // O(n) van Herk block prefix/suffix with the NaN-propagating max — byte-identical
-    // to the per-window fold but linear in the axis length, not O(n·size), and with no
-    // per-pixel allocation. frankenscipy filter1d van-Herk routing.
-    Ok(minmax_along_axis_hgw(
-        input,
-        axis,
-        size,
-        origin,
-        mode,
-        cval,
-        nanprop_max,
+    // O(n) monotonic index queue over a boundary-resolved line. It preserves the
+    // NaN-propagating fold contract while reducing the HGW path's extra full-line scans.
+    Ok(minmax_filter1d_nanprop_queue(
+        input, axis, size, origin, mode, cval, true,
     ))
 }
 
@@ -7830,14 +7925,8 @@ pub fn minimum_filter1d_with_origin(
         return Err(NdimageError::EmptyInput);
     }
     validate_filter_origin(size, origin)?;
-    Ok(minmax_along_axis_hgw(
-        input,
-        axis,
-        size,
-        origin,
-        mode,
-        cval,
-        nanprop_min,
+    Ok(minmax_filter1d_nanprop_queue(
+        input, axis, size, origin, mode, cval, false,
     ))
 }
 
@@ -9440,9 +9529,7 @@ mod tests {
             ),
             (
                 {
-                    let mut v: Vec<f64> = (0..40)
-                        .map(|i| ((i * 13) % 11) as f64 - 5.0)
-                        .collect();
+                    let mut v: Vec<f64> = (0..40).map(|i| ((i * 13) % 11) as f64 - 5.0).collect();
                     v[3] = f64::NAN;
                     v[7] = -0.0;
                     v[8] = 0.0;
@@ -9453,9 +9540,7 @@ mod tests {
                 vec![40],
             ),
             (
-                (0..5 * 6 * 4)
-                    .map(|i| (i % 9) as f64 - 4.0)
-                    .collect(),
+                (0..5 * 6 * 4).map(|i| (i % 9) as f64 - 4.0).collect(),
                 vec![5, 6, 4],
             ),
         ];
@@ -9477,19 +9562,15 @@ mod tests {
                     for &mode in &modes {
                         for is_max in [false, true] {
                             MINMAX_FILTER_HGW.store(false, AtomOrd::Relaxed);
-                            let deque = separable_minmax_filter(
-                                &arr, size, &origins, mode, 0.0, is_max,
-                            )
-                            .unwrap();
+                            let deque =
+                                separable_minmax_filter(&arr, size, &origins, mode, 0.0, is_max)
+                                    .unwrap();
                             MINMAX_FILTER_HGW.store(true, AtomOrd::Relaxed);
-                            let hgw = separable_minmax_filter(
-                                &arr, size, &origins, mode, 0.0, is_max,
-                            )
-                            .unwrap();
+                            let hgw =
+                                separable_minmax_filter(&arr, size, &origins, mode, 0.0, is_max)
+                                    .unwrap();
                             assert_eq!(deque.shape, hgw.shape);
-                            for (k, (a, b)) in
-                                deque.data.iter().zip(hgw.data.iter()).enumerate()
-                            {
+                            for (k, (a, b)) in deque.data.iter().zip(hgw.data.iter()).enumerate() {
                                 assert_eq!(
                                     a.to_bits(),
                                     b.to_bits(),
@@ -9528,7 +9609,11 @@ mod tests {
             let inner = 10;
             for r in 0..rounds {
                 // alternate which arm runs first each round to cancel drift
-                let order = if r % 2 == 0 { [false, true] } else { [true, false] };
+                let order = if r % 2 == 0 {
+                    [false, true]
+                } else {
+                    [true, false]
+                };
                 for &use_hgw in &order {
                     MINMAX_FILTER_HGW.store(use_hgw, AtomOrd::Relaxed);
                     let t = Instant::now();
@@ -9634,34 +9719,63 @@ mod tests {
         );
     }
 
-    /// The HGW-routed `maximum/minimum_filter1d` must be bit-for-bit identical to
+    /// The fast `maximum/minimum_filter1d` path must be bit-for-bit identical to
     /// the legacy O(n·size) per-window fold (`filter1d_axis_with_origin`) across
     /// dims, axes, window sizes (incl. size > axis length), origins, boundary
     /// modes, and NaN/±0/±inf data.
     #[test]
     fn filter1d_hgw_byte_identical_to_fold() {
         let max_fold = |window: &[f64]| {
-            window.iter().copied().fold(f64::NEG_INFINITY, |a: f64, b: f64| {
-                if a.is_nan() || b.is_nan() { f64::NAN } else { a.max(b) }
-            })
+            window
+                .iter()
+                .copied()
+                .fold(f64::NEG_INFINITY, |a: f64, b: f64| {
+                    if a.is_nan() || b.is_nan() {
+                        f64::NAN
+                    } else {
+                        a.max(b)
+                    }
+                })
         };
         let min_fold = |window: &[f64]| {
-            window.iter().copied().fold(f64::INFINITY, |a: f64, b: f64| {
-                if a.is_nan() || b.is_nan() { f64::NAN } else { a.min(b) }
-            })
+            window
+                .iter()
+                .copied()
+                .fold(f64::INFINITY, |a: f64, b: f64| {
+                    if a.is_nan() || b.is_nan() {
+                        f64::NAN
+                    } else {
+                        a.min(b)
+                    }
+                })
         };
         let cases: Vec<(Vec<f64>, Vec<usize>)> = vec![
-            ({
-                let mut v: Vec<f64> = (0..40).map(|i| ((i * 7) % 13) as f64 - 6.0).collect();
-                v[5] = f64::NAN; v[6] = -0.0; v[7] = 0.0; v[30] = f64::INFINITY;
-                v
-            }, vec![40]),
-            ((0..6 * 9).map(|i| (i as f64 * 0.3).sin() * 4.0).collect(), vec![6, 9]),
-            ((0..4 * 5 * 7).map(|i| (i % 11) as f64 - 5.0).collect(), vec![4, 5, 7]),
+            (
+                {
+                    let mut v: Vec<f64> = (0..40).map(|i| ((i * 7) % 13) as f64 - 6.0).collect();
+                    v[5] = f64::NAN;
+                    v[6] = -0.0;
+                    v[7] = 0.0;
+                    v[30] = f64::INFINITY;
+                    v
+                },
+                vec![40],
+            ),
+            (
+                (0..6 * 9).map(|i| (i as f64 * 0.3).sin() * 4.0).collect(),
+                vec![6, 9],
+            ),
+            (
+                (0..4 * 5 * 7).map(|i| (i % 11) as f64 - 5.0).collect(),
+                vec![4, 5, 7],
+            ),
         ];
         let modes = [
-            BoundaryMode::Reflect, BoundaryMode::Constant, BoundaryMode::Nearest,
-            BoundaryMode::Wrap, BoundaryMode::Mirror,
+            BoundaryMode::Reflect,
+            BoundaryMode::Constant,
+            BoundaryMode::Nearest,
+            BoundaryMode::Wrap,
+            BoundaryMode::Mirror,
         ];
         for (data, shape) in &cases {
             let arr = NdArray::new(data.clone(), shape.clone()).unwrap();
@@ -9672,20 +9786,31 @@ mod tests {
                         for &mode in &modes {
                             for is_max in [true, false] {
                                 let reference = if is_max {
-                                    filter1d_axis_with_origin(&arr, size, axis, mode, 0.0, origin, max_fold)
+                                    filter1d_axis_with_origin(
+                                        &arr, size, axis, mode, 0.0, origin, max_fold,
+                                    )
                                 } else {
-                                    filter1d_axis_with_origin(&arr, size, axis, mode, 0.0, origin, min_fold)
-                                }.unwrap();
+                                    filter1d_axis_with_origin(
+                                        &arr, size, axis, mode, 0.0, origin, min_fold,
+                                    )
+                                }
+                                .unwrap();
                                 let got = if is_max {
-                                    maximum_filter1d_with_origin(&arr, size, axis, mode, 0.0, origin)
+                                    maximum_filter1d_with_origin(
+                                        &arr, size, axis, mode, 0.0, origin,
+                                    )
                                 } else {
-                                    minimum_filter1d_with_origin(&arr, size, axis, mode, 0.0, origin)
-                                }.unwrap();
+                                    minimum_filter1d_with_origin(
+                                        &arr, size, axis, mode, 0.0, origin,
+                                    )
+                                }
+                                .unwrap();
                                 for (k, (a, b)) in
                                     reference.data.iter().zip(got.data.iter()).enumerate()
                                 {
                                     assert_eq!(
-                                        a.to_bits(), b.to_bits(),
+                                        a.to_bits(),
+                                        b.to_bits(),
                                         "shape={shape:?} axis={axis} size={size} origin={origin} mode={mode:?} is_max={is_max} idx={k}: ref={a} got={b}"
                                     );
                                 }
@@ -9709,31 +9834,170 @@ mod tests {
     fn filter1d_hgw_ab_timing() {
         use std::time::Instant;
         let n = 65536usize;
-        let data: Vec<f64> = (0..n).map(|i| (i as f64 * 0.01).sin() * 100.0 + (i % 7) as f64).collect();
+        let data: Vec<f64> = (0..n)
+            .map(|i| (i as f64 * 0.01).sin() * 100.0 + (i % 7) as f64)
+            .collect();
         let line = NdArray::new(data, vec![n]).unwrap();
         let max_fold = |w: &[f64]| {
             w.iter().copied().fold(f64::NEG_INFINITY, |a: f64, b: f64| {
-                if a.is_nan() || b.is_nan() { f64::NAN } else { a.max(b) }
+                if a.is_nan() || b.is_nan() {
+                    f64::NAN
+                } else {
+                    a.max(b)
+                }
             })
         };
         for &size in &[31usize, 101] {
             let (mut t_old, mut t_new) = (0.0f64, 0.0f64);
             let rounds = 30;
             for r in 0..rounds {
-                let order = if r % 2 == 0 { [false, true] } else { [true, false] };
+                let order = if r % 2 == 0 {
+                    [false, true]
+                } else {
+                    [true, false]
+                };
                 for &new_path in &order {
                     let t = Instant::now();
                     let _ = if new_path {
                         maximum_filter1d(&line, size, 0, BoundaryMode::Reflect, 0.0).unwrap()
                     } else {
-                        filter1d_axis_with_origin(&line, size, 0, BoundaryMode::Reflect, 0.0, 0, max_fold).unwrap()
+                        filter1d_axis_with_origin(
+                            &line,
+                            size,
+                            0,
+                            BoundaryMode::Reflect,
+                            0.0,
+                            0,
+                            max_fold,
+                        )
+                        .unwrap()
                     };
                     let el = t.elapsed().as_secs_f64();
                     if new_path { t_new += el } else { t_old += el }
                 }
             }
             let (o, ne) = (t_old / rounds as f64 * 1e6, t_new / rounds as f64 * 1e6);
-            println!("filter1d A/B max n={n} size={size}: old_fold={o:.1}us new_hgw={ne:.1}us  speedup={:.2}x", o / ne);
+            println!(
+                "filter1d A/B max n={n} size={size}: old_fold={o:.1}us new_hgw={ne:.1}us  speedup={:.2}x",
+                o / ne
+            );
+        }
+    }
+
+    /// Same-process A/B: existing HGW prefix/suffix route vs the fused monotonic
+    /// index-queue route used by public filter1d min/max.
+    #[test]
+    #[ignore]
+    fn filter1d_queue_vs_hgw_ab_timing() {
+        use std::hint::black_box;
+        use std::time::Instant;
+
+        let n = 65536usize;
+        let data: Vec<f64> = (0..n)
+            .map(|i| (i as f64 * 0.01).sin() * 100.0 + (i % 7) as f64)
+            .collect();
+        let line = NdArray::new(data, vec![n]).unwrap();
+        for &size in &[31usize, 101] {
+            for is_max in [true, false] {
+                let hgw = if is_max {
+                    minmax_along_axis_hgw(
+                        &line,
+                        0,
+                        size,
+                        0,
+                        BoundaryMode::Reflect,
+                        0.0,
+                        nanprop_max,
+                    )
+                } else {
+                    minmax_along_axis_hgw(
+                        &line,
+                        0,
+                        size,
+                        0,
+                        BoundaryMode::Reflect,
+                        0.0,
+                        nanprop_min,
+                    )
+                };
+                let queue = minmax_filter1d_nanprop_queue(
+                    &line,
+                    0,
+                    size,
+                    0,
+                    BoundaryMode::Reflect,
+                    0.0,
+                    is_max,
+                );
+                for (k, (a, b)) in hgw.data.iter().zip(queue.data.iter()).enumerate() {
+                    assert_eq!(
+                        a.to_bits(),
+                        b.to_bits(),
+                        "size={size} is_max={is_max} idx={k}: hgw={a} queue={b}"
+                    );
+                }
+
+                let (mut t_hgw, mut t_queue) = (0.0f64, 0.0f64);
+                let rounds = 40;
+                let inner = 2;
+                for r in 0..rounds {
+                    let order = if r % 2 == 0 {
+                        [false, true]
+                    } else {
+                        [true, false]
+                    };
+                    for &use_queue in &order {
+                        let t = Instant::now();
+                        for _ in 0..inner {
+                            let result = if use_queue {
+                                minmax_filter1d_nanprop_queue(
+                                    &line,
+                                    0,
+                                    size,
+                                    0,
+                                    BoundaryMode::Reflect,
+                                    0.0,
+                                    is_max,
+                                )
+                            } else if is_max {
+                                minmax_along_axis_hgw(
+                                    &line,
+                                    0,
+                                    size,
+                                    0,
+                                    BoundaryMode::Reflect,
+                                    0.0,
+                                    nanprop_max,
+                                )
+                            } else {
+                                minmax_along_axis_hgw(
+                                    &line,
+                                    0,
+                                    size,
+                                    0,
+                                    BoundaryMode::Reflect,
+                                    0.0,
+                                    nanprop_min,
+                                )
+                            };
+                            black_box(result);
+                        }
+                        let elapsed = t.elapsed().as_secs_f64() / inner as f64;
+                        if use_queue {
+                            t_queue += elapsed;
+                        } else {
+                            t_hgw += elapsed;
+                        }
+                    }
+                }
+                let label = if is_max { "max" } else { "min" };
+                let hgw_us = t_hgw / rounds as f64 * 1e6;
+                let queue_us = t_queue / rounds as f64 * 1e6;
+                println!(
+                    "filter1d queue/HGW {label} n={n} size={size}: hgw={hgw_us:.1}us queue={queue_us:.1}us  speedup_vs_hgw={:.2}x",
+                    hgw_us / queue_us
+                );
+            }
         }
     }
 
