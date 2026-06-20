@@ -1424,3 +1424,29 @@ Local original-SciPy oracle (`python3 docs/perf_oracle_fft_csd.py --reps 120
 - Retry/extend condition: the same SoA SIMD-across-pairs shape applies to the
   parallel (`nthreads>1`, n>512) dim-4 segments and to other small-fixed-dim
   pdist/cdist metrics (sqeuclidean, cityblock) still on the scalar per-pair path.
+
+## 2026-06-19 - frankenscipy-nm8ex - dim-4 pdist parallel vectorization + serial gate raised to n<=2048
+
+- Agent: cod-a / MistyBirch
+- Follow-up to `595eceb5`. (1) Extended the SoA SIMD-across-pairs kernel to the
+  parallel (n>2048) workers via shared `fill_euclidean4_rows`/`fill_cosine4_rows`;
+  new `pdist_dim4_parallel_matches_metric_helpers` gate (n=600, to_bits) covers
+  the `r0>0` mid-triangle offset. (2) Raised the dim-4 Euclidean/Cosine serial
+  guard 512→2048: the vectorized serial kernel is compute-bound and beats SciPy
+  ~1.5-2.2x to n≈2048, below which the parallel path lost to its own ~64-thread
+  spawn cost (n=1024: serial 0.67ms vs parallel **2.83ms** — was 2.4x SLOWER than
+  SciPy). Above 2048 the memory-bound O(n²) work amortizes the spawn (n=4096:
+  parallel 13ms vs serial 43ms vs SciPy 51ms).
+- Status: **MEASURED WIN at every size** (same-box criterion median vs scipy 1.17):
+
+  | n | Rust eucl | SciPy eucl | eucl ratio | Rust cos | SciPy cos | cos ratio |
+  | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+  | 256 | 48.5 us | 85.3 us | 1.76x | 40.7 us | 76.8 us | 1.89x |
+  | 512 | 167 us | 303 us | 1.82x | 148 us | 275 us | 1.86x |
+  | 1024 | 666 us | 1.20 ms | 1.80x | 549 us | 1.08 ms | 1.97x |
+  | 2048 | 2.86 ms | 4.65 ms | 1.63x | 2.53 ms | 4.23 ms | 1.67x |
+  | 4096 | 13.2 ms | 51.1 ms | **3.87x** | 13.1 ms | 48.3 ms | **3.69x** |
+- Commits: `595eceb5` (serial kernel), `aeb5e0c8` (parallel + gate).
+- Note: the residual `cdist_thread_count` over-spawn (CrimsonForge's finding,
+  `work < 1<<18` spawns ~64 threads) still affects the generic cdist path (no
+  bench); coordinate before retuning that shared gate.

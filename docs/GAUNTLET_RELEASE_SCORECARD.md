@@ -13,10 +13,8 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `frankenscipy-8l8r1.118` | Fused signal coherence | `scipy.signal.coherence`, 65536 samples, Hann window 1024/512 overlap | 2.191980 ms | 18.961613 ms | 8.65x faster | keep |
 | `frankenscipy-u0ucw` | Wide `pinv` Cholesky TRSM + diagonal rcond gate | 500x1000 full-row-rank dense `scipy.linalg.pinv` equivalent | 183.699926 ms | 7.257573 s | 39.51x faster | keep |
 | `frankenscipy-u0ucw` | Wide `lstsq` current materialized normal equations after row-stream revert | 500x1000 full-row-rank dense `scipy.linalg.lstsq` equivalent | 109.369915 ms | 1.253347 s | 11.46x faster | keep current, reject row-stream lever |
-| `frankenscipy-nm8ex` | Dim-4 `pdist` SIMD-across-pairs (SoA) Euclidean | `scipy.spatial.distance.pdist(euclidean)` n=256 d=4 | 41.0 us | 85.3 us | **2.08x faster** | keep — was 1.14x slower; bit-identical |
-| `frankenscipy-nm8ex` | Dim-4 `pdist` SIMD-across-pairs (SoA) Cosine | `scipy.spatial.distance.pdist(cosine)` n=256 d=4 | 34.8 us | 76.8 us | **2.21x faster** | keep — was 1.31x slower; bit-identical |
-| `frankenscipy-nm8ex` | Dim-4 `pdist` SIMD-across-pairs (SoA) Euclidean | `scipy.spatial.distance.pdist(euclidean)` n=512 d=4 | 162.6 us | 303 us | **1.86x faster** | keep — was 1.37x slower; bit-identical |
-| `frankenscipy-nm8ex` | Dim-4 `pdist` SIMD-across-pairs (SoA) Cosine | `scipy.spatial.distance.pdist(cosine)` n=512 d=4 | 145 us | 275 us | **1.90x faster** | keep — was 1.63x slower; bit-identical |
+| `frankenscipy-nm8ex` | Dim-4 `pdist` SIMD-across-pairs (SoA), serial n≤2048 / parallel above | `scipy.spatial.distance.pdist` euclidean d=4, n=256→4096 | 48.5us / 167us / 666us / 2.86ms / 13.2ms | 85.3us / 303us / 1.20ms / 4.65ms / 51.1ms | **1.76 / 1.82 / 1.80 / 1.63 / 3.87x faster** | keep — was 1.14-1.37x slower (and 2.4x slower at n=1024 via over-spawn); bit-identical |
+| `frankenscipy-nm8ex` | Dim-4 `pdist` SIMD-across-pairs (SoA), serial n≤2048 / parallel above | `scipy.spatial.distance.pdist` cosine d=4, n=256→4096 | 40.7us / 148us / 549us / 2.53ms / 13.1ms | 76.8us / 275us / 1.08ms / 4.23ms / 48.3ms | **1.89 / 1.86 / 1.97 / 1.67 / 3.69x faster** | keep — was 1.31-1.63x slower; bit-identical |
 
 ## Measured Losses / Internal Keeps
 
