@@ -130,3 +130,45 @@ Negative evidence: do not retry dense-table, `fract()`, `is_finite()`, HashMap,
 or `Vec<Vec<f64>>` grouping variants for this workload without a fresh profile.
 Next attempts should target deeper reduction primitives such as
 parallel/cache-tiled sum/count accumulation or sorted/run-grouped label spans.
+
+## 2026-06-20 - frankenscipy-5smr3 - ndimage min/max filter van Herk/Gil-Werman (WIN, byte-identical)
+
+- Agent: cc / MistyBirch
+- Decision: **KEEP**. Replace the per-line monotonic-deque sliding min/max
+  (`VecDeque` alloc + pointer-chase + variable `total_cmp` evictions, scanning
+  every flat index to find line heads) with van Herk / Gil-Werman block
+  prefix/suffix scans over a materialized, boundary-resolved line, plus an
+  in-bounds interior fast path (contiguous `copy_from_slice` when stride==1,
+  strided direct read otherwise) that skips the per-element `boundary_index_1d`
+  match for the `mid`-cell interior. Lines addressed directly (outer × inner).
+- Correctness: **byte-for-bit identical** to the deque path — same `total_cmp`
+  total order (min/max element bits are uniquely determined, incl. NaN / ±0.0 /
+  ±inf), same neighbourhood mapping. Proven by `minmax_hgw_byte_identical_to_deque`
+  (lib unit test, 1 passed) across ndim ∈ {1,2,3}, size ∈ {1,2,3,5,8}, all valid
+  origins, all 5 boundary modes, min & max, with adversarial NaN/±0/±inf data.
+- A/B: in-process atomic toggle (`MINMAX_FILTER_HGW`) interleaved OFF/ON so fleet
+  load cancels (the only reliable method under multi-agent contention).
+- Conformance: zero new failures. The `diff_ndimage_morph_filters`,
+  `diff_ndimage_filters_edges`, `diff_ndimage_grey_morphology`,
+  `diff_ndimage_filter_1d`, and `diff_ndimage` live_scipy tests fail identically
+  on clean `origin/main` (no scipy on the rch workers under
+  `FSCI_REQUIRE_SCIPY_ORACLE=1`) — verified by stash-and-rerun. `maximum_filter1d`
+  uses a separate (`filter1d_axis_with_origin`) path that this change does not touch.
+
+| Workload (256×256, Reflect) | deque (same-proc A/B) | HGW (same-proc A/B) | self-speedup |
+| --- | ---: | ---: | ---: |
+| `maximum_filter` size=7  | 1484.7 us | 630.2 us | **2.36x faster** |
+| `maximum_filter` size=15 | 1520.9 us | 659.4 us | **2.31x faster** |
+| `maximum_filter` size=31 | 1608.5 us | 692.9 us | **2.32x faster** |
+
+| Workload (standalone criterion, rch worker) | deque baseline | HGW | self | scipy (local, diff CPU) |
+| --- | ---: | ---: | ---: | ---: |
+| `maximum_256x256/31` | 1.567 ms | 0.946 ms | 1.66x | 0.820 ms |
+| `minimum_256x256/31` | ~1.5 ms | 0.904 ms | — | ~0.82 ms |
+| `maximum_256x256/7`  | ~1.48 ms | 0.873 ms | — | 0.784 ms |
+
+Score: self-speedup `3/0/0` (load-canceling A/B, byte-identical). vs SciPy: the
+documented `minimum/maximum_filter` 1.8-1.9x loss closes to near-parity (cross-box
+standalone ~1.1x; load-canceling A/B absolutes beat scipy). Reusable lever:
+**any monotonic-deque sliding-window extremum → van Herk block prefix/suffix +
+interior-direct (boundary-map only the ~window-1 edge cells).**

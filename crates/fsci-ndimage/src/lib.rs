@@ -2574,6 +2574,123 @@ fn uniform_filter_along_axis(
     out
 }
 
+/// Runtime A/B toggle: the van Herk / Gil-Werman block prefix-suffix min/max path
+/// (default, production) vs the legacy monotonic-deque path. The deque path is kept
+/// as a reference oracle and for same-process interleaved A/B benchmarking under
+/// fleet contention (separate-run benches drift ~2×; only an in-process toggle is
+/// reliable). frankenscipy van-Herk lever.
+pub static MINMAX_FILTER_HGW: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(true);
+
+#[inline(always)]
+fn tc_max(a: f64, b: f64) -> f64 {
+    if a.total_cmp(&b) == std::cmp::Ordering::Less {
+        b
+    } else {
+        a
+    }
+}
+
+#[inline(always)]
+fn tc_min(a: f64, b: f64) -> f64 {
+    if a.total_cmp(&b) == std::cmp::Ordering::Greater {
+        b
+    } else {
+        a
+    }
+}
+
+/// van Herk / Gil-Werman sliding-window min/max along `axis`. Byte-identical to the
+/// monotonic-deque path — same `total_cmp` total order (so the min/max element's bits
+/// are uniquely determined, including NaN and signed-zero), same `boundary_index_1d`
+/// neighbourhood mapping — but replaces the per-element deque (alloc + pointer-chase +
+/// variable evictions) with three branch-light linear scans over a materialized,
+/// boundary-resolved line: a block prefix `g`, a block suffix `h`, and the combine
+/// `out[i] = op(h[i], g[i+size-1])`. Lines are addressed directly (outer × inner)
+/// rather than scanning every flat index to find the line heads.
+fn minmax_along_axis_hgw<F: Fn(f64, f64) -> f64 + Copy>(
+    arr: &NdArray,
+    axis: usize,
+    size: usize,
+    origin: i64,
+    mode: BoundaryMode,
+    cval: f64,
+    op: F,
+) -> NdArray {
+    let mid = arr.shape[axis];
+    let inner: usize = arr.shape[axis + 1..].iter().product();
+    let outer: usize = arr.shape[..axis].iter().product();
+    let n = mid as i64;
+    let size_i = size as i64;
+    let lo = size_i / 2 + origin; // window left extent relative to the output
+    let ext_len = mid + size - 1; // boundary-resolved line covers coords [-lo, mid-1-lo+size-1]
+    let stride = inner;
+    let slab = mid * inner;
+
+    let mut out = NdArray::zeros(arr.shape.clone());
+    let mut ext = vec![0.0f64; ext_len];
+    let mut g = vec![0.0f64; ext_len];
+    let mut h = vec![0.0f64; ext_len];
+
+    for o in 0..outer {
+        let outer_base = o * slab;
+        for j in 0..inner {
+            let base = outer_base + j;
+            // Materialize the boundary-resolved line: ext[t] is the input value at
+            // axis-coord (t - lo), so the window for output i is ext[i..i+size]. Only
+            // the ~size-1 edge cells touch the boundary; the `mid`-cell interior is
+            // in-bounds (coord in [0, mid)), where `boundary_index_1d` is the identity
+            // for every mode — read it directly (contiguous memcpy when stride==1),
+            // skipping the per-element boundary match. Byte-identical.
+            let interior_start = lo as usize; // t where coord == 0 (lo >= 0 always)
+            let interior_end = interior_start + mid; // t where coord == mid (exclusive)
+            for t in 0..interior_start {
+                let coord = t as i64 - lo;
+                ext[t] = match boundary_index_1d(coord, n, mode) {
+                    Some(m) => arr.data[base + (m as usize) * stride],
+                    None => cval,
+                };
+            }
+            if stride == 1 {
+                ext[interior_start..interior_end].copy_from_slice(&arr.data[base..base + mid]);
+            } else {
+                for t in interior_start..interior_end {
+                    ext[t] = arr.data[base + (t - interior_start) * stride];
+                }
+            }
+            for t in interior_end..ext_len {
+                let coord = t as i64 - lo;
+                ext[t] = match boundary_index_1d(coord, n, mode) {
+                    Some(m) => arr.data[base + (m as usize) * stride],
+                    None => cval,
+                };
+            }
+            // Block prefix g and block suffix h, blocks of length `size` aligned to 0.
+            // The final block may be short; h resets at its true end (ext_len-1).
+            let mut bstart = 0usize;
+            while bstart < ext_len {
+                let bend = (bstart + size).min(ext_len);
+                g[bstart] = ext[bstart];
+                for t in bstart + 1..bend {
+                    g[t] = op(g[t - 1], ext[t]);
+                }
+                h[bend - 1] = ext[bend - 1];
+                for t in (bstart..bend - 1).rev() {
+                    h[t] = op(h[t + 1], ext[t]);
+                }
+                bstart = bend;
+            }
+            // Combine: window [i, i+size-1] splits across at most two blocks, and
+            // h[i] (suffix to its block end) ∪ g[i+size-1] (prefix from its block
+            // start) covers it exactly. Idempotent op handles the single-block case.
+            for i in 0..mid {
+                out.data[base + i * stride] = op(h[i], g[i + size - 1]);
+            }
+        }
+    }
+    out
+}
+
 fn minmax_filter_along_axis(
     arr: &NdArray,
     axis: usize,
@@ -2585,6 +2702,14 @@ fn minmax_filter_along_axis(
 ) -> NdArray {
     use std::cmp::Ordering;
     use std::collections::VecDeque;
+
+    if MINMAX_FILTER_HGW.load(std::sync::atomic::Ordering::Relaxed) {
+        return if is_max {
+            minmax_along_axis_hgw(arr, axis, size, origin, mode, cval, tc_max)
+        } else {
+            minmax_along_axis_hgw(arr, axis, size, origin, mode, cval, tc_min)
+        };
+    }
 
     let n = arr.shape[axis] as i64;
     let stride = arr.strides[axis];
@@ -9204,6 +9329,139 @@ fn compute_structure_offsets(struct_shape: &[usize], struct_data: &[f64]) -> Vec
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::Ordering as AtomOrd;
+
+    /// HGW must be bit-for-bit identical to the legacy monotonic-deque path across
+    /// dimensions, window sizes, origins, boundary modes, and adversarial data
+    /// (NaN, ±0.0, duplicates). Serialized via a mutex because both paths share the
+    /// global `MINMAX_FILTER_HGW` toggle.
+    #[test]
+    fn minmax_hgw_byte_identical_to_deque() {
+        use std::sync::Mutex;
+        static LOCK: Mutex<()> = Mutex::new(());
+        let _guard = LOCK.lock().unwrap();
+
+        let cases: Vec<(Vec<f64>, Vec<usize>)> = vec![
+            (
+                (0..17 * 23)
+                    .map(|i| (i as f64 * 0.37).sin() * 5.0 + (i % 7) as f64)
+                    .collect(),
+                vec![17, 23],
+            ),
+            (
+                {
+                    let mut v: Vec<f64> = (0..40)
+                        .map(|i| ((i * 13) % 11) as f64 - 5.0)
+                        .collect();
+                    v[3] = f64::NAN;
+                    v[7] = -0.0;
+                    v[8] = 0.0;
+                    v[20] = f64::NEG_INFINITY;
+                    v[21] = f64::INFINITY;
+                    v
+                },
+                vec![40],
+            ),
+            (
+                (0..5 * 6 * 4)
+                    .map(|i| (i % 9) as f64 - 4.0)
+                    .collect(),
+                vec![5, 6, 4],
+            ),
+        ];
+        let modes = [
+            BoundaryMode::Reflect,
+            BoundaryMode::Constant,
+            BoundaryMode::Nearest,
+            BoundaryMode::Wrap,
+            BoundaryMode::Mirror,
+        ];
+        for (data, shape) in &cases {
+            let arr = NdArray::new(data.clone(), shape.clone()).unwrap();
+            let ndim = shape.len();
+            for &size in &[1usize, 2, 3, 5, 8] {
+                // valid origins: |origin| <= (size-1)/2 ... SciPy allows lo=(size-1)//2 range
+                let omax = ((size - 1) / 2) as i64;
+                for origin in -omax..=omax {
+                    let origins = vec![origin; ndim];
+                    for &mode in &modes {
+                        for is_max in [false, true] {
+                            MINMAX_FILTER_HGW.store(false, AtomOrd::Relaxed);
+                            let deque = separable_minmax_filter(
+                                &arr, size, &origins, mode, 0.0, is_max,
+                            )
+                            .unwrap();
+                            MINMAX_FILTER_HGW.store(true, AtomOrd::Relaxed);
+                            let hgw = separable_minmax_filter(
+                                &arr, size, &origins, mode, 0.0, is_max,
+                            )
+                            .unwrap();
+                            assert_eq!(deque.shape, hgw.shape);
+                            for (k, (a, b)) in
+                                deque.data.iter().zip(hgw.data.iter()).enumerate()
+                            {
+                                assert_eq!(
+                                    a.to_bits(),
+                                    b.to_bits(),
+                                    "mismatch shape={:?} size={size} origin={origin} \
+                                     mode={mode:?} is_max={is_max} idx={k}: deque={a} hgw={b}",
+                                    shape
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        MINMAX_FILTER_HGW.store(true, AtomOrd::Relaxed);
+    }
+
+    /// Same-process interleaved A/B: deque vs HGW timed in one binary so fleet load
+    /// cancels. Ignored by default; run with
+    /// `cargo test -p fsci-ndimage --release minmax_hgw_ab -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn minmax_hgw_ab_timing() {
+        use std::time::Instant;
+        let side = 256;
+        let data: Vec<f64> = (0..side * side)
+            .map(|i| {
+                let x = i as f64;
+                (x * 0.017).sin() * 100.0 + (x * 0.0031).cos() * 37.0 + (i % 53) as f64
+            })
+            .collect();
+        let img = NdArray::new(data, vec![side, side]).unwrap();
+        for &size in &[7usize, 15, 31] {
+            let mut t_deque = 0.0f64;
+            let mut t_hgw = 0.0f64;
+            let rounds = 40;
+            let inner = 10;
+            for r in 0..rounds {
+                // alternate which arm runs first each round to cancel drift
+                let order = if r % 2 == 0 { [false, true] } else { [true, false] };
+                for &use_hgw in &order {
+                    MINMAX_FILTER_HGW.store(use_hgw, AtomOrd::Relaxed);
+                    let t = Instant::now();
+                    for _ in 0..inner {
+                        let _ = maximum_filter(&img, size, BoundaryMode::Reflect, 0.0).unwrap();
+                    }
+                    let el = t.elapsed().as_secs_f64() / inner as f64;
+                    if use_hgw {
+                        t_hgw += el;
+                    } else {
+                        t_deque += el;
+                    }
+                }
+            }
+            MINMAX_FILTER_HGW.store(true, AtomOrd::Relaxed);
+            let dq = t_deque / rounds as f64 * 1e6;
+            let hg = t_hgw / rounds as f64 * 1e6;
+            println!(
+                "minmax A/B size={size}: deque={dq:.1}us hgw={hg:.1}us  speedup={:.2}x",
+                dq / hg
+            );
+        }
+    }
 
     #[test]
     fn ndarray_new_rejects_overflowing_shape_product() {

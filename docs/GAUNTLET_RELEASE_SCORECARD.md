@@ -27,6 +27,7 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 | `frankenscipy-2hclc` | Public CSR `spmv_csr` cached-slice + 4-lane unrolled row sweep | `scipy.sparse` CSR `.dot(x)`, n=100/1000/10000 with 500/10k/100k nnz | 0.388us / 7.077us / 68.82us | 4.63us / 8.00us / 96.95us | **11.95x / 1.13x / 1.41x faster** | keep — was 1 win / 2 losses; now 3 wins / 0 losses; bit-identical to legacy public row sweep |
 | `frankenscipy-oi8hq` | `ndimage.zoom` 2D Reflect/order=1 no-prefilter fast path | `scipy.ndimage.zoom(256x256, 2x, order=1)` equivalent | 1.2219 ms | 4.86171 ms | **3.98x faster** | keep — closes previous `frankenscipy-wm14d` residual loss |
 | `frankenscipy-wh8ac` | `jnjnp_zeros` Cephes `j1` seed evaluator | `scipy.special.jnjnp_zeros(nt=64/128)` equivalent | 381.89 us / 742.06 us | 463.91 us / 832.79 us | **1.22x / 1.12x faster** | keep — same-worker rch internal win 1.59-1.61x; closes `frankenscipy-9l5oo` near-parity loss to `2/0/0` SciPy wins |
+| `frankenscipy-5smr3` | `ndimage.minimum/maximum_filter` van Herk / Gil-Werman block prefix-suffix + interior-direct (replaces monotonic deque) | `scipy.ndimage.maximum_filter(256x256, Reflect)` size 7/15/31 | 0.873 ms / — / 0.946 ms | 0.784 ms / 0.802 ms / 0.820 ms | **2.31-2.36x faster than deque (same-proc A/B); near-parity vs SciPy** | keep — byte-identical (lib test, all dims/sizes/origins/modes/NaN/±0); closes documented 1.8-1.9x SciPy loss to ~parity |
 
 ## Measured Losses / Internal Keeps
 
