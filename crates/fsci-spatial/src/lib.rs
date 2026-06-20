@@ -2906,6 +2906,80 @@ impl Delaunay {
         }
         None
     }
+
+    /// Locate the containing simplex for a BATCH of query points — matches
+    /// `scipy.spatial.Delaunay.find_simplex(X)` (with fsci's barycentric return).
+    /// Bit-for-bit identical to calling [`Delaunay::find_simplex`] per point: it
+    /// returns the same lowest-index containing simplex and identical barycentric
+    /// coordinates. Two amortized accelerations over the per-point linear scan:
+    /// (1) each triangle's padded axis-aligned bbox is precomputed ONCE for the
+    /// whole batch and used as a cheap reject before the barycentric test — the
+    /// pad (`1e-8·extent`) safely dominates the `1e-10` barycentric tolerance, so
+    /// a triangle is skipped only when it cannot contain the point; (2) the
+    /// independent per-point scans are parallelized across the batch.
+    pub fn find_simplex_many(
+        &self,
+        queries: &[(f64, f64)],
+    ) -> Vec<Option<(usize, f64, f64, f64)>> {
+        let ns = self.simplices.len();
+        let bboxes: Vec<(f64, f64, f64, f64)> = self
+            .simplices
+            .iter()
+            .map(|&(a, b, c)| {
+                let (pa, pb, pc) = (self.points[a], self.points[b], self.points[c]);
+                let minx = pa.0.min(pb.0).min(pc.0);
+                let maxx = pa.0.max(pb.0).max(pc.0);
+                let miny = pa.1.min(pb.1).min(pc.1);
+                let maxy = pa.1.max(pb.1).max(pc.1);
+                let pad = (maxx - minx).max(maxy - miny) * 1e-8 + 1e-12;
+                (minx - pad, maxx + pad, miny - pad, maxy + pad)
+            })
+            .collect();
+        let nq = queries.len();
+        let mut out: Vec<Option<(usize, f64, f64, f64)>> = vec![None; nq];
+        let points = &self.points;
+        let simplices = &self.simplices;
+        let bb = &bboxes;
+        let eval = move |q: (f64, f64)| -> Option<(usize, f64, f64, f64)> {
+            for idx in 0..ns {
+                let (lx, hx, ly, hy) = bb[idx];
+                if q.0 < lx || q.0 > hx || q.1 < ly || q.1 > hy {
+                    continue;
+                }
+                let (a, b, c) = simplices[idx];
+                let (l1, l2, l3) = barycentric_2d(points[a], points[b], points[c], q);
+                if l1 >= -1e-10 && l2 >= -1e-10 && l3 >= -1e-10 {
+                    return Some((idx, l1, l2, l3));
+                }
+            }
+            None
+        };
+        let cores = std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(1);
+        let nthreads = if nq >= 64 {
+            cores.min(16).min(nq / 16).max(1)
+        } else {
+            1
+        };
+        if nthreads <= 1 {
+            for (slot, &q) in out.iter_mut().zip(queries) {
+                *slot = eval(q);
+            }
+            return out;
+        }
+        let chunk = nq.div_ceil(nthreads);
+        std::thread::scope(|s| {
+            for (qchunk, ochunk) in queries.chunks(chunk).zip(out.chunks_mut(chunk)) {
+                s.spawn(move || {
+                    for (slot, &q) in ochunk.iter_mut().zip(qchunk) {
+                        *slot = eval(q);
+                    }
+                });
+            }
+        });
+        out
+    }
 }
 
 const DELAUNAY_CIRCLE_GRID_THRESHOLD: usize = 4096;
@@ -6509,6 +6583,46 @@ mod tests {
     /// `query_ball_point_many` must be bit-for-bit identical to calling
     /// `query_ball_point` per point (same sorted index lists), across dims,
     /// radii, and batch sizes spanning the gate, plus error/empty handling.
+    /// `find_simplex_many` must be bit-for-bit identical to calling
+    /// `find_simplex` per point (same simplex index, same barycentric bits),
+    /// across interior / exterior / on-vertex queries and a batch that crosses
+    /// the serial/parallel gate.
+    #[test]
+    fn delaunay_find_simplex_many_matches_per_point() {
+        // Deterministic scattered points (mirror the perf bench distribution).
+        let n = 400usize;
+        let pts: Vec<(f64, f64)> = (0..n)
+            .map(|i| {
+                let t = i as f64;
+                ((t * 0.137).sin() * 0.5 + 0.5, (t * 0.071).cos() * 0.5 + 0.5)
+            })
+            .collect();
+        let tri = Delaunay::new(&pts).expect("delaunay");
+        let mut queries: Vec<(f64, f64)> = (0..2000)
+            .map(|i| {
+                let t = i as f64;
+                ((t * 0.0191).fract(), (t * 0.0233).fract())
+            })
+            .collect();
+        // include some exact input points (on-vertex / shared-edge stress)
+        queries.extend(pts.iter().copied().take(50));
+        let batch = tri.find_simplex_many(&queries);
+        assert_eq!(batch.len(), queries.len());
+        for (q, got) in queries.iter().zip(&batch) {
+            let expect = tri.find_simplex(*q);
+            match (got, expect) {
+                (Some((gi, g1, g2, g3)), Some((ei, e1, e2, e3))) => {
+                    assert_eq!(gi, &ei, "simplex idx q={q:?}");
+                    assert_eq!(g1.to_bits(), e1.to_bits(), "l1 q={q:?}");
+                    assert_eq!(g2.to_bits(), e2.to_bits(), "l2 q={q:?}");
+                    assert_eq!(g3.to_bits(), e3.to_bits(), "l3 q={q:?}");
+                }
+                (None, None) => {}
+                _ => panic!("mismatch presence q={q:?}: {got:?} vs {expect:?}"),
+            }
+        }
+    }
+
     #[test]
     fn kdtree_query_ball_point_many_matches_per_query() {
         for &d in &[2usize, 3] {

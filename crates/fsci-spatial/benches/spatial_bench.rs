@@ -118,6 +118,27 @@ fn bench_kdtree(c: &mut Criterion) {
 /// Delaunay triangulation (Bowyer-Watson, frankenscipy-8d2z2 buffer hoist) vs scipy's
 /// Qhull (docs/perf_oracle_delaunay.py). Tests fsci's most complex spatial algorithm
 /// against scipy's elite geometric C.
+fn bench_find_simplex(c: &mut Criterion) {
+    use fsci_spatial::Delaunay;
+    let mut group = c.benchmark_group("find_simplex");
+    for &npts in &[2000usize, 5000] {
+        let pts: Vec<(f64, f64)> = (0..npts)
+            .map(|i| { let t = i as f64; ((t * 0.137).sin() * 0.5 + 0.5, (t * 0.071).cos() * 0.5 + 0.5) })
+            .collect();
+        let tri = Delaunay::new(&pts).expect("delaunay");
+        let q: Vec<(f64, f64)> = (0..50000)
+            .map(|i| { let t = i as f64; ((t * 0.0191).fract(), (t * 0.0233).fract()) })
+            .collect();
+        group.bench_function(BenchmarkId::new("seq", npts), |b| {
+            b.iter(|| q.iter().map(|&p| tri.find_simplex(p)).collect::<Vec<_>>())
+        });
+        group.bench_function(BenchmarkId::new("many", npts), |b| {
+            b.iter(|| tri.find_simplex_many(&q))
+        });
+    }
+    group.finish();
+}
+
 fn bench_delaunay(c: &mut Criterion) {
     use fsci_spatial::Delaunay;
     let mut group = c.benchmark_group("delaunay");
@@ -165,6 +186,7 @@ criterion_group!(
     bench_pdist,
     bench_pdist_highdim,
     bench_kdtree,
-    bench_delaunay
+    bench_delaunay,
+    bench_find_simplex
 );
 criterion_main!(benches);

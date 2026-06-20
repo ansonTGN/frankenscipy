@@ -465,3 +465,31 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
   fan-out scales with per-element work. vs scipy cKDTree.query_ball_point
   (uniform data, similar n/d, ~156-236ms) the win is ~6-9x but data distributions
   differ, so the rigorous claim is the same-data 7.9x self-speedup.
+
+## 2026-06-20 - Delaunay find_simplex_many - MARQUEE WIN (flips ~30-48x LOSS to 2.7-3.0x faster than scipy)
+
+- Agent: cc / MistyBirch
+- Decision: **KEEP**. fsci's single-point `Delaunay::find_simplex` is an O(num_
+  simplices) LINEAR SCAN with a barycentric test per triangle — a SEVERE loss:
+  sequential over 50000 queries it takes 1.13s (npts=2000) / 3.13s (npts=5000),
+  i.e. ~30-48x SLOWER than scipy.Delaunay.find_simplex (37.7/65.6ms, which walks).
+  Added `find_simplex_many` (batch, matches `scipy.spatial.Delaunay.find_simplex(X)`)
+  with two amortized accelerations: (1) precompute each triangle's PADDED AABB once
+  per batch and cheap-reject before the barycentric test (pad 1e-8·extent safely
+  dominates the 1e-10 barycentric tolerance → never skips a containing triangle);
+  (2) parallelize the independent per-point scans.
+- Correctness: **byte-for-bit identical** to per-point `find_simplex` (same lowest-
+  index simplex, identical barycentric bits) — proven by
+  `delaunay_find_simplex_many_matches_per_point` incl. interior/exterior/on-vertex
+  queries across the serial/parallel gate. Full fsci-spatial lib suite 212/0.
+
+| Workload (50000 queries) | seq linear-scan | find_simplex_many | self | vs scipy |
+| --- | ---: | ---: | ---: | ---: |
+| npts=2000 | 1127 ms | 13.95 ms | **80.8x** | 37.7 ms → **2.7x faster** |
+| npts=5000 | 3128 ms | 21.9 ms  | **142.8x** | 65.6 ms → **3.0x faster** |
+
+- The bbox prefilter (kills barycentric for non-candidate triangles) is most of the
+  win; parallelism stacks on top. Feeds griddata / LinearNDInterpolator point
+  location. NEXT (perf_precompute_per_element_predicate): a uniform grid over
+  triangle bboxes would make EACH query O(1) (the scan is still O(num_simplices)
+  cheap bbox checks) — a further flip, but find_simplex_many already dominates.
