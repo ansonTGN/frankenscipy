@@ -1918,6 +1918,77 @@ impl KDTree {
         Ok(results)
     }
 
+    /// k-nearest-neighbour query for a batch of points — matches
+    /// `scipy.spatial.cKDTree.query(X, k)`. Each query runs the same independent,
+    /// read-only `knn_search` + total_cmp sort + sqrt as [`KDTree::query_k`], so
+    /// the batch is parallelized across query points and the per-query result is
+    /// bit-for-bit identical (same neighbours, same order, same distance bits).
+    /// Results are returned in input order; all queries are validated up front.
+    pub fn query_k_many(
+        &self,
+        queries: &[Vec<f64>],
+        k: usize,
+    ) -> Result<Vec<Vec<(usize, f64)>>, SpatialError> {
+        for q in queries {
+            if q.len() != self.dim {
+                return Err(SpatialError::DimensionMismatch {
+                    expected: self.dim,
+                    actual: q.len(),
+                });
+            }
+            if q.iter().any(|value| !value.is_finite()) {
+                return Err(SpatialError::InvalidArgument(
+                    "query must be finite".to_string(),
+                ));
+            }
+        }
+        let nq = queries.len();
+        let mut out: Vec<Vec<(usize, f64)>> = vec![Vec::new(); nq];
+        if k == 0 {
+            return Ok(out);
+        }
+        let kk = k.min(self.nodes.len());
+        let nodes = &self.nodes;
+        let cores = std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(1);
+        // k-NN is heavier per query than k=1 (bounded heap + sort), so a lower gate.
+        let nthreads = if nq >= 128 {
+            cores.min(16).min(nq / 32).max(1)
+        } else {
+            1
+        };
+        if nthreads <= 1 {
+            for (slot, q) in out.iter_mut().zip(queries) {
+                let mut results: Vec<(usize, f64)> = Vec::with_capacity(kk);
+                knn_search(nodes, 0, q, kk, &mut results);
+                results.sort_by(|a, b| a.1.total_cmp(&b.1));
+                for r in &mut results {
+                    r.1 = r.1.sqrt();
+                }
+                *slot = results;
+            }
+            return Ok(out);
+        }
+        let chunk = nq.div_ceil(nthreads);
+        std::thread::scope(|s| {
+            for (qchunk, ochunk) in queries.chunks(chunk).zip(out.chunks_mut(chunk)) {
+                s.spawn(move || {
+                    for (slot, q) in ochunk.iter_mut().zip(qchunk) {
+                        let mut results: Vec<(usize, f64)> = Vec::with_capacity(kk);
+                        knn_search(nodes, 0, q, kk, &mut results);
+                        results.sort_by(|a, b| a.1.total_cmp(&b.1));
+                        for r in &mut results {
+                            r.1 = r.1.sqrt();
+                        }
+                        *slot = results;
+                    }
+                });
+            }
+        });
+        Ok(out)
+    }
+
     /// Number of points in the tree.
     pub fn size(&self) -> usize {
         self.nodes.len()
@@ -6364,6 +6435,41 @@ mod tests {
     /// `query_many` must be bit-for-bit identical to calling `query` per point
     /// (same traversal + sqrt), across dims and batch sizes that span the
     /// serial/parallel gate, including non-finite/wrong-dim error propagation.
+    /// `query_k_many` must be bit-for-bit identical to calling `query_k` per
+    /// point (same neighbours/order/distance bits), across dims, k, and batch
+    /// sizes spanning the serial/parallel gate, plus error propagation.
+    #[test]
+    fn kdtree_query_k_many_matches_per_query() {
+        for &d in &[2usize, 3, 8] {
+            for &n in &[60usize, 1200] {
+                let data: Vec<Vec<f64>> = (0..n)
+                    .map(|i| (0..d).map(|c| ((i * 29 + c * 11) as f64 * 0.021).sin()).collect())
+                    .collect();
+                let tree = KDTree::new(&data).expect("build");
+                let queries: Vec<Vec<f64>> = (0..n)
+                    .map(|i| (0..d).map(|c| ((i * 23 + c * 5) as f64 * 0.017 + 0.3).cos()).collect())
+                    .collect();
+                for &k in &[1usize, 5, 12] {
+                    let batch = tree.query_k_many(&queries, k).expect("query_k_many");
+                    assert_eq!(batch.len(), queries.len());
+                    for (q, brow) in queries.iter().zip(&batch) {
+                        let erow = tree.query_k(q, k).expect("query_k");
+                        assert_eq!(brow.len(), erow.len(), "len d={d} n={n} k={k}");
+                        for (&(bi, bd), &(ei, ed)) in brow.iter().zip(&erow) {
+                            assert_eq!(bi, ei, "idx d={d} n={n} k={k}");
+                            assert_eq!(bd.to_bits(), ed.to_bits(), "dist bits d={d} n={n} k={k}");
+                        }
+                    }
+                }
+            }
+        }
+        let data: Vec<Vec<f64>> = (0..10).map(|i| vec![i as f64, (i * 2) as f64]).collect();
+        let tree = KDTree::new(&data).expect("build");
+        assert!(tree.query_k_many(&[vec![1.0, 2.0, 3.0]], 3).is_err());
+        assert!(tree.query_k_many(&[vec![f64::NAN, 0.0]], 3).is_err());
+        assert_eq!(tree.query_k_many(&[vec![1.0, 2.0]], 0).unwrap(), vec![Vec::new()]);
+    }
+
     #[test]
     fn kdtree_query_many_matches_per_query() {
         for &d in &[2usize, 3, 8] {

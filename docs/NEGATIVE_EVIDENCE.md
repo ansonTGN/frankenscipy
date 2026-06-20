@@ -421,3 +421,24 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
   shared-tree traversal is memory-latency-bound; still strictly positive and
   byte-identical. LEVER: parallelize independent COMPUTE/LATENCY-bound batches
   (tree queries, root-finds) — distinct from bandwidth-bound 1-D scans which wall.
+
+## 2026-06-20 - KDTree query_k_many parallel batch k-NN - WIN (4.8-5.1x self, 8.9x vs scipy, byte-identical)
+
+- Agent: cc / MistyBirch
+- Decision: **KEEP**. Added `KDTree::query_k_many` — parallel batch k-NN matching
+  `scipy.spatial.cKDTree.query(X, k)`. Generalizes the `query_many` lever to k>1:
+  each query runs the same independent read-only `knn_search` + total_cmp sort +
+  sqrt as `query_k`, parallelized across the query batch.
+- Correctness: **byte-for-bit identical** to per-point `query_k` (same neighbours,
+  order, distance bits) — proven by `kdtree_query_k_many_matches_per_query` across
+  d∈{2,3,8}, k∈{1,5,12}, batch sizes across the gate, k=0 and error propagation.
+  Full fsci-spatial lib suite 210/0.
+
+| Workload (n=10000, k=10) | seq (per-query) | query_k_many | self | vs scipy cKDTree |
+| --- | ---: | ---: | ---: | ---: |
+| query k=10, d=3 | 10.1 ms | 2.09 ms | **4.8x** | 18.6 ms → **8.9x faster** |
+| query k=10, d=8 | 11.9 ms | 2.35 ms | **5.1x** | (scipy randn 263ms; seq alone 22x) |
+
+- k-NN's heavier per-query work (bounded heap + sort over k) amortizes spawn far
+  better than k=1 (query_many got 2.2x) → 4.8-5.1x. Confirms the lever: the
+  heavier the independent per-element compute, the better the batch fan-out scales.

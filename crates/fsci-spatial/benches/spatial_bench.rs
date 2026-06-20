@@ -97,6 +97,12 @@ fn bench_kdtree(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("query_many", format!("n{nn}_d{d}")), |b| {
             b.iter(|| t2.query_many(&qdata).expect("query_many"))
         });
+        group.bench_function(BenchmarkId::new("query_k_seq", format!("n{nn}_d{d}_k10")), |b| {
+            b.iter(|| qdata.iter().map(|q| t2.query_k(q, 10)).collect::<Vec<_>>())
+        });
+        group.bench_function(BenchmarkId::new("query_k_many", format!("n{nn}_d{d}_k10")), |b| {
+            b.iter(|| t2.query_k_many(&qdata, 10).expect("query_k_many"))
+        });
     }
     group.finish();
 }
