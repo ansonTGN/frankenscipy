@@ -2061,3 +2061,14 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   size only changes FFT rounding). Residual 2.4x = the FFT wall (fsci_fft complex-vs-rfft 2x +
   pocketfft SIMD; native rfft is the open FFT lever). firls T+H O(n²) solver left (fsci already
   wins firls, not worth the hard Toeplitz+Hankel solver).
+
+## 2026-06-21 - SHIPPED: oaconvolve real-FFT routing (rfft/irfft) — 4.1x→1.5x loss (near-parity)
+- Agent: cc / MistyBirch. oaconvolve transformed REAL blocks with the COMPLEX fft on (v,0.0)
+  (full-size complex FFT). Routed through fsci_fft::rfft/irfft (pack N reals into N/2 complex
+  — ~2x less work; irfft returns real directly). Combined with last cycle's cost-optimal block:
+  200k*512: 8.18ms (orig) → 4.80ms (block) → 3.03ms (rfft). vs scipy 2.0ms: 4.1x → 2.4x → 1.5x
+  LOSS (near-parity). Tolerance-parity (rfft/irfft == fft/ifft to rounding; oaconvolve test +
+  full signal suite green). Residual 1.5x = pocketfft C-SIMD wall (fsci_fft is competitive:
+  rfft WINS scipy 1.23x at n=262144, loses 2.5x at n=8192).
+- NEXT (same lever): fftconvolve + hilbert also use the complex fft on real data → route
+  through rfft/irfft for ~2x (would close their FFT-wall losses toward parity).

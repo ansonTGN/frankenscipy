@@ -1094,31 +1094,34 @@ pub fn oaconvolve(a: &[f64], b: &[f64], mode: ConvolveMode) -> Result<Vec<f64>, 
     }
     let block = fft_len - nh + 1;
 
-    // Pre-transform the zero-padded kernel once.
-    let mut h_pad: Vec<fsci_fft::Complex64> = h.iter().map(|&v| (v, 0.0)).collect();
-    h_pad.resize(fft_len, (0.0, 0.0));
-    let fh =
-        fsci_fft::fft(&h_pad, &opts).map_err(|e| SignalError::InvalidArgument(format!("{e}")))?;
+    // Inputs are REAL, so use the real FFT (rfft packs N reals into an N/2 complex transform
+    // — ~2x less work than a full complex FFT, and irfft returns real directly). Pre-transform
+    // the zero-padded kernel once into its fft_len/2+1 nonredundant bins.
+    let mut h_pad: Vec<f64> = h.to_vec();
+    h_pad.resize(fft_len, 0.0);
+    let fh = fsci_fft::rfft(&h_pad, &opts).map_err(|e| SignalError::InvalidArgument(format!("{e}")))?;
 
     let mut full = vec![0.0_f64; full_len];
+    let mut seg = vec![0.0_f64; fft_len];
     let mut start = 0;
     while start < nx {
         let len = block.min(nx - start);
-        let mut seg: Vec<fsci_fft::Complex64> =
-            x[start..start + len].iter().map(|&v| (v, 0.0)).collect();
-        seg.resize(fft_len, (0.0, 0.0));
-        let fs = fsci_fft::fft(&seg, &opts)
+        seg[..len].copy_from_slice(&x[start..start + len]);
+        for s in seg[len..].iter_mut() {
+            *s = 0.0;
+        }
+        let fs = fsci_fft::rfft(&seg, &opts)
             .map_err(|e| SignalError::InvalidArgument(format!("{e}")))?;
         let prod: Vec<fsci_fft::Complex64> = fs
             .iter()
             .zip(fh.iter())
             .map(|(&(sr, si), &(hr, hi))| (sr * hr - si * hi, sr * hi + si * hr))
             .collect();
-        let conv = fsci_fft::ifft(&prod, &opts)
+        let conv = fsci_fft::irfft(&prod, Some(fft_len), &opts)
             .map_err(|e| SignalError::InvalidArgument(format!("{e}")))?;
         // This block contributes len+nh-1 samples starting at `start`.
         let contrib = len + nh - 1;
-        for (k, &(re, _)) in conv.iter().take(contrib).enumerate() {
+        for (k, &re) in conv.iter().take(contrib).enumerate() {
             full[start + k] += re;
         }
         start += block;
@@ -29236,6 +29239,7 @@ mod tests {
         }
     }
 }
+
 
 
 
