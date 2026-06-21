@@ -1360,3 +1360,15 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
   compact basis eval returning the k+1 de-Boor values + offset (no length-n alloc), and
   COMPACT banded storage + solver (no n×n alloc). Shipped the byte-identical solve_banded
   step now; the build rewrite is the larger remaining piece.
+
+## 2026-06-20 - make_interp_spline compact-band: DESIGN committed (disk-low, no-build window)
+
+- Agent: cc / MistyBirch. Disk-low (48G) paused new rch builds/benches, so rather than
+  push an UNVERIFIED conformance-critical band-LU rewrite (risk: break the crate build
+  for the swarm), committed a complete implementation spec:
+  docs/perf/make_interp_spline_banded_plan.md (binary-search interval finder + compact
+  k+1 de-Boor eval + compact banded LU storage/solver → O(n·k) to match scipy; verify
+  vs the byte-identical solve_banded reference + bench expectation n=3000 58ms→~1-2ms).
+- The partial byte-identical solve_banded step is already shipped (318898bb, 1.45x).
+  The compact-band build rewrite is the remaining piece; implement + verify when disk
+  recovers.
