@@ -5983,6 +5983,12 @@ pub fn exp2(x: f64) -> f64 {
 /// Matches `scipy.special.exp10(x)`.
 #[must_use]
 pub fn exp10(x: f64) -> f64 {
+    // Non-negative integer powers up to 10^15 are exactly representable in f64 (< 2^53), and
+    // scipy.special.exp10 returns them exactly (e.g. exp10(2.0) == 100.0). The generic
+    // exp(x·ln10) form is 1 ULP off for these, so compute them directly.
+    if x >= 0.0 && x <= 15.0 && x == x.trunc() {
+        return 10.0_f64.powi(x as i32);
+    }
     (x * std::f64::consts::LN_10).exp()
 }
 
