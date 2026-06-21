@@ -10433,11 +10433,10 @@ impl DiscreteDistribution for Hypergeometric {
         if k >= k_max {
             return 0.0;
         }
-        let mut sum = 0.0;
-        for j in (k + 1)..=k_max {
-            sum += self.pmf(j);
-        }
-        sum.clamp(0.0, 1.0)
+        // Sum pmf over the upper tail via the recurrence sweep (pmf_many), O(N + k_max) instead of
+        // O((k_max-k)·N) from per-j self.pmf (each rebuilds pmf0). Byte-identical (pmf_many==map pmf).
+        let ks: Vec<u64> = ((k + 1)..=k_max).collect();
+        self.pmf_many(&ks).iter().sum::<f64>().clamp(0.0, 1.0)
     }
 
     fn skewness(&self) -> f64 {
@@ -10495,14 +10494,13 @@ impl DiscreteDistribution for Hypergeometric {
             0
         };
         let k_hi = self.n.min(self.big_n);
-        let mut h = 0.0_f64;
-        for k in k_lo..=k_hi {
-            let p = self.pmf(k);
-            if p > 0.0 {
-                h -= p * p.ln();
-            }
-        }
-        h
+        // Direct entropy sum via the recurrence sweep (pmf_many), O(N + k_hi) instead of O(K·N) from
+        // per-k self.pmf. Byte-identical: same pmf values, and h - x == h + (-x) in IEEE.
+        let ks: Vec<u64> = (k_lo..=k_hi).collect();
+        self.pmf_many(&ks)
+            .iter()
+            .map(|&p| if p > 0.0 { -p * p.ln() } else { 0.0 })
+            .sum()
     }
 }
 
@@ -78371,6 +78369,9 @@ mod tests {
         assert!(dist.cdf(5.0) > 0.99, "hypsecant CDF should be near 1 at 5");
     }
 }
+
+
+
 
 
 
