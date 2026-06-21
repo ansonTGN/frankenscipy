@@ -2494,3 +2494,14 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   contiguous ndarray + a redundant finiteness pass. Fusing the read passes is ~0.4ms (churn,
   byte-risky if via sumsq); the alloc is an API wall (return type is Vec<Vec>). Not chased.
 - No clean loss in cluster/integrate. Confirms dominance; these surfaces are DONE.
+
+## 2026-06-21 - fft DCT/DST gauntlet: dct 5.7x loss is rfft-bound (native-real-FFT wall); twiddle cache shipped
+- Agent: cc / MistyBirch. MEASURED dct type2 65536: 2.33ms vs scipy 0.371 (LOSE 6.3x); type3 5.4x;
+  5-smooth 60000 7.6x. Isolated: fsci rfft(65536) alone = 0.868ms > scipy's ENTIRE DCT (0.371) →
+  the loss is fundamentally the rfft (fsci does N/2 complex FFT + Hermitian unpack, no native
+  real-FFT — the documented rfft ~1.73x wall) + a cos/sin extract (~1.25ms, compute-bound).
+- SHIPPED: DCT-II extract twiddle cache (was recomputing cos/sin per coefficient every call) —
+  byte-identical, strictly positive (9% pow2 / 33% non-pow2, never regresses), mirrors the FFT
+  twiddle cache. Doesn't close the wall. scipy's pocketfft fuses+SIMDs FFT+extract.
+- WALL: DCT/DST parity needs a native real-FFT (big port) + fused SIMD extract. dct_iii/iv/dst
+  share the per-k cos/sin pattern (same cache applicable as follow-up).
