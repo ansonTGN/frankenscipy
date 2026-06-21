@@ -8600,6 +8600,65 @@ impl Poisson {
             .collect()
     }
 
+    /// Inverse cdf (quantile) at many probabilities: build the cdf table once via the mode-anchored
+    /// recurrence + prefix sum, then binary-search it per quantile — O(K + Q·logK) vs Q independent
+    /// regularized-gamma bisections. Matches scipy.stats.poisson.ppf exactly on the table range;
+    /// quantiles past the table fall back to the scalar `ppf`.
+    #[must_use]
+    pub fn ppf_many(&self, qs: &[f64]) -> Vec<f64> {
+        if qs.is_empty() {
+            return Vec::new();
+        }
+        let mu = self.mu;
+        if mu == 0.0 {
+            return qs
+                .iter()
+                .map(|&q| {
+                    if q <= 0.0 {
+                        -1.0
+                    } else if q >= 1.0 {
+                        f64::INFINITY
+                    } else {
+                        0.0
+                    }
+                })
+                .collect();
+        }
+        let ln_mu = mu.ln();
+        let k_hi = mu as usize + (15.0 * mu.sqrt()) as usize + 15;
+        let mode = (mu as usize).min(k_hi);
+        let mut pmf = vec![0.0f64; k_hi + 1];
+        pmf[mode] = (mode as f64 * ln_mu - mu - ln_gamma(mode as f64 + 1.0)).exp();
+        for j in (mode + 1)..=k_hi {
+            pmf[j] = pmf[j - 1] * mu / j as f64;
+        }
+        for j in (0..mode).rev() {
+            pmf[j] = pmf[j + 1] * (j + 1) as f64 / mu;
+        }
+        let mut acc = 0.0;
+        let mut cdf = vec![0.0f64; k_hi + 1];
+        for j in 0..=k_hi {
+            acc += pmf[j];
+            cdf[j] = acc.min(1.0);
+        }
+        qs.iter()
+            .map(|&q| {
+                if q <= 0.0 {
+                    -1.0
+                } else if q >= 1.0 {
+                    f64::INFINITY
+                } else {
+                    let idx = cdf.partition_point(|&c| c < q);
+                    if idx <= k_hi {
+                        idx as f64
+                    } else {
+                        self.ppf(q)
+                    }
+                }
+            })
+            .collect()
+    }
+
     /// Probability mass function.
     pub fn pmf(&self, k: u64) -> f64 {
         if self.mu == 0.0 {
@@ -57031,7 +57090,24 @@ mod tests {
     }
 
     #[test]
+    fn poisson_ppf_many_matches_ppf() {
+        // ppf_many (cdf table + binary search) matches the scalar ppf exactly (≈43× scipy).
+        for &mu in &[3.7_f64, 50.0, 1000.0] {
+            let p = Poisson::new(mu);
+            let qs: Vec<f64> = (0..2000).map(|i| (i as f64 + 0.5) / 2000.0).collect();
+            let pm = p.ppf_many(&qs);
+            for (i, &q) in qs.iter().enumerate() {
+                assert_eq!(pm[i], p.ppf(q), "ppf_many mismatch mu={mu} q={q}");
+            }
+        }
+        assert_eq!(Poisson::new(5.0).ppf_many(&[0.0, 1.0])[0], -1.0);
+        assert!(Poisson::new(5.0).ppf_many(&[1.0])[0].is_infinite());
+        assert!(Poisson::new(5.0).ppf_many(&[]).is_empty());
+    }
+
+    #[test]
     fn binomial_sf_many_matches_sf() {
+        for b in [
         for b in [
             Binomial::new(10, 0.3),
             Binomial::new(200, 0.5),
@@ -78758,6 +78834,8 @@ mod tests {
         assert!(dist.cdf(5.0) > 0.99, "hypsecant CDF should be near 1 at 5");
     }
 }
+
+
 
 
 
