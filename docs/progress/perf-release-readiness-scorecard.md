@@ -1698,6 +1698,59 @@ Readiness notes:
 - Future retries need a fresh allocation/cache profile and a same-worker >10%
   win over the materialized route before this formulation should be reconsidered.
 
+## 2026-06-21 - fsci-fft 5-smooth mixed-radix gauntlet
+
+- Agent: cod-b / BlackThrush
+- Bead: `frankenscipy-mzauo`
+- Decision: KEEP the odd-factor-first split / radix-2^2 power-tail route, but
+  leave the SciPy gap open. Score for this sub-cluster: 4/5.
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| Rust per-crate compile | PASS | `cargo check -p fsci-fft --all-targets` via rch with `CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b` |
+| Strict clippy | PASS | `cargo clippy -p fsci-fft --all-targets -- -D warnings` via rch |
+| Same-worker benchmark | PASS | `cargo run --release -p fsci-fft --bin perf_mixed_radix` via rch `hz2`; in-binary legacy split A/B |
+| SciPy oracle | PASS with caveat | Local SciPy 1.17.1 / NumPy 2.4.3; `rch exec` refuses non-compilation Python in proof mode |
+| FFT correctness | PASS | golden payload worst error `4.278e-14` vs naive DFT; focused unit test passed |
+| FFT conformance | PASS | `diff_fft` 34/0 and `e2e_fft` 12/0 via rch in the shared tree |
+| Formatting | PASS | touched `fsci-fft` files pass `rustfmt --edition 2024 --check` |
+
+Same-worker internal A/B:
+
+| n | Current | Legacy split | Ratio |
+| ---: | ---: | ---: | ---: |
+| 720 | 8.764 us | 13.496 us | 1.54x faster |
+| 1000 | 13.391 us | 18.103 us | 1.35x faster |
+| 1080 | 15.537 us | 21.618 us | 1.39x faster |
+| 1500 | 27.704 us | 29.224 us | 1.05x faster |
+| 1920 | 18.848 us | 37.399 us | 1.98x faster |
+| 3000 | 43.534 us | 57.882 us | 1.33x faster |
+| 5000 | 73.976 us | 98.582 us | 1.33x faster |
+| 10000 | 140.661 us | 207.450 us | 1.47x faster |
+
+Head-to-head vs SciPy:
+
+| n | Rust current | SciPy p50 | Verdict |
+| ---: | ---: | ---: | --- |
+| 720 | 8.764 us | 10.907 us | Rust 1.24x faster |
+| 1000 | 13.391 us | 8.178 us | Rust 1.64x slower |
+| 1080 | 15.537 us | 8.563 us | Rust 1.81x slower |
+| 1500 | 27.704 us | 12.012 us | Rust 2.31x slower |
+| 1920 | 18.848 us | 13.132 us | Rust 1.43x slower |
+| 3000 | 43.534 us | 21.822 us | Rust 1.99x slower |
+| 5000 | 73.976 us | 36.728 us | Rust 2.01x slower |
+| 10000 | 140.661 us | 74.572 us | Rust 1.89x slower |
+
+Readiness notes:
+
+- This is a release-worthy internal speedup because it is same-worker, same-binary,
+  and correctness-clean.
+- It is not release evidence that FrankenSciPy dominates SciPy on smooth FFTs.
+  The remaining gap is pocketfft's iterative SIMD/cache-blocked mixed-radix C
+  kernel versus FrankenSciPy's recursive scalar AoS schedule.
+- Future FFT attempts should start with an iterative/SoA butterfly plan or a
+  direct pocketfft-style schedule, not another split-order-only tweak.
+
 ## 2026-06-19 - fsci-opt least_squares scratch cluster
 
 - Agent: cod-b / MistyBirch

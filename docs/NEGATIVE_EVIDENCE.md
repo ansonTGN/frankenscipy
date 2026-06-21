@@ -2513,3 +2513,51 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   near-parity; cos/sin was a bigger fraction here than dct-II so the win is larger). Speeds dct_iii
   too. fft suite 176/0. Completes the cosine-family twiddle-cache (dct-II + idct/dct_iii); dct_iv/
   dst remain (separate twiddles, less common, lower value).
+
+## 2026-06-21 - KEEP WITH RESIDUAL LOSS: FFT 5-smooth mixed-radix odd-factor peel
+- Agent: cod-b / BlackThrush. Bead `frankenscipy-mzauo`.
+- Lever from the remaining FFT wall: for composite non-power-of-two lengths, peel odd factors
+  before the power-of-two tail and terminate recursive power tails in the optimized radix-2^2
+  kernel. This avoids many tiny strided radix-3/5 direct leaves. Also moved the generic `tmp`
+  allocation out of the specialized radix-2/3/4/5 combine arms.
+- Same-binary A/B proof on rch `hz2`, warm target dir
+  `/data/projects/.rch-targets/frankenscipy-cod-b`, command:
+  `cargo run --release -p fsci-fft --bin perf_mixed_radix`.
+
+| n | current | legacy split | Internal ratio |
+| ---: | ---: | ---: | ---: |
+| 720 | 8.764 us | 13.496 us | 1.54x faster |
+| 1000 | 13.391 us | 18.103 us | 1.35x faster |
+| 1080 | 15.537 us | 21.618 us | 1.39x faster |
+| 1500 | 27.704 us | 29.224 us | 1.05x faster |
+| 1920 | 18.848 us | 37.399 us | 1.98x faster |
+| 3000 | 43.534 us | 57.882 us | 1.33x faster |
+| 5000 | 73.976 us | 98.582 us | 1.33x faster |
+| 10000 | 140.661 us | 207.450 us | 1.47x faster |
+
+- Fresh SciPy oracle was local Python because `rch exec` refuses non-compilation `python3`
+  commands in proof mode. SciPy 1.17.1 / NumPy 2.4.3 p50:
+
+| n | Rust current | SciPy p50 | Ratio vs SciPy | Verdict |
+| ---: | ---: | ---: | ---: | --- |
+| 720 | 8.764 us | 10.907 us | 1.24x faster | win |
+| 1000 | 13.391 us | 8.178 us | 1.64x slower | loss |
+| 1080 | 15.537 us | 8.563 us | 1.81x slower | loss |
+| 1500 | 27.704 us | 12.012 us | 2.31x slower | loss |
+| 1920 | 18.848 us | 13.132 us | 1.43x slower | loss |
+| 3000 | 43.534 us | 21.822 us | 1.99x slower | loss |
+| 5000 | 73.976 us | 36.728 us | 2.01x slower | loss |
+| 10000 | 140.661 us | 74.572 us | 1.89x slower | loss |
+
+- Score vs legacy split: 7 wins / 0 losses / 1 neutral. Score vs SciPy: 1 win / 7 losses /
+  0 neutral. KEEP because this is a real same-worker 1.33-1.98x internal improvement on most
+  target rows and it narrows the known FFT wall; DO NOT claim SciPy dominance for 5-smooth FFT.
+- Gates: correctness payload worst error `4.278e-14` vs naive DFT (tol 1e-9); rch
+  `cargo test -p fsci-fft mixed_radix_smooth_power_tail_matches_naive_dft -- --nocapture`
+  passed; rch `cargo check -p fsci-fft --all-targets` passed; rch
+  `cargo clippy -p fsci-fft --all-targets -- -D warnings` passed; rch
+  `cargo test -p fsci-conformance --test diff_fft --test e2e_fft -- --nocapture`
+  passed 34/0 and 12/0 in the shared tree.
+- Remaining route: SciPy's pocketfft is still an iterative SIMD/cache-blocked C kernel. Closing
+  the 1.4-2.3x smooth-size residual likely needs a native iterative mixed-radix schedule with
+  SoA or explicitly vectorizable butterflies, not another recursive split-order tweak.

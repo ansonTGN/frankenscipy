@@ -439,6 +439,21 @@ fn smallest_prime_factor(n: usize) -> usize {
     n
 }
 
+fn smallest_odd_prime_factor(n: usize) -> Option<usize> {
+    let odd_part = n >> n.trailing_zeros();
+    (odd_part > 1).then(|| smallest_prime_factor(odd_part))
+}
+
+fn mixed_radix_split_factor(n: usize) -> usize {
+    if let Some(p) = smallest_odd_prime_factor(n) {
+        p
+    } else if n.is_multiple_of(4) {
+        4
+    } else {
+        2
+    }
+}
+
 /// Recursive mixed-radix Cooley-Tukey (decimation-in-time).
 ///
 /// Reads the length-`n` input as `x[t] = src[base + t·stride]` and writes the
@@ -458,13 +473,18 @@ fn mixed_radix_fft(
     n: usize,
     inverse: bool,
 ) {
-    // Prefer a radix-4 split for the power-of-2 part (fewer, cheaper passes),
-    // otherwise peel the smallest prime factor.
-    let p = if n.is_multiple_of(4) {
-        4
-    } else {
-        smallest_prime_factor(n)
-    };
+    if n.is_power_of_two() {
+        for (t, slot) in out.iter_mut().enumerate().take(n) {
+            *slot = src[base + t * stride];
+        }
+        let twiddles = get_or_compute_twiddles(n, inverse);
+        cooley_tukey_radix4_inplace_with_twiddles(&mut out[..n], &twiddles);
+        return;
+    }
+
+    // Peel odd factors first so smooth lengths bottom out in the optimized
+    // radix-2² power tail instead of thousands of tiny strided odd-prime DFTs.
+    let p = mixed_radix_split_factor(n);
     if p == n {
         if n > MIXED_RADIX_DIRECT_MAX_PRIME {
             // Large prime: gather the strided samples and let Bluestein carry it.
@@ -493,7 +513,6 @@ fn mixed_radix_fft(
 
     // Combine: twiddle each block then apply the length-p DFT across blocks.
     let twn = get_or_compute_twiddles(n, inverse);
-    let mut tmp = vec![(0.0, 0.0); p];
     if p == 4 {
         // Radix-4 butterfly: halves the passes over the power-of-2 part versus
         // two radix-2 stages. z = DFT_4 of the twiddled blocks (W_4 = ∓i).
@@ -574,6 +593,7 @@ fn mixed_radix_fft(
         }
     } else {
         let twp = get_or_compute_twiddles(p, inverse);
+        let mut tmp = vec![(0.0, 0.0); p];
         for r in 0..m {
             for (j, slot) in tmp.iter_mut().enumerate() {
                 *slot = complex_mul(out[j * m + r], twn[(j * r) % n]);
@@ -1369,13 +1389,11 @@ pub fn idct(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError> {
         let m = n / 2;
         let mut half = Vec::with_capacity(m + 1);
         half.push((0.5 * scaled_input[0], 0.0));
-        // e^{+iπk/2N} is the conjugate of the cached DCT-II twiddle e^{-iπk/2N} (bit-identical),
-        // so reuse that cache instead of recomputing cos/sin per coefficient on every idct call.
-        let idct_tw = get_or_compute_dct2_twiddles(n);
         for k in 1..=m {
             let xk = scaled_input[k];
             let xnk = scaled_input[n - k];
-            let twiddle = complex_conj(idct_tw[k]);
+            let angle = PI * k as f64 / (2.0 * nf);
+            let twiddle = (angle.cos(), angle.sin());
             half.push(complex_mul((0.5 * xk, -0.5 * xnk), twiddle));
         }
         // v = N·v_true (unscaled real inverse FFT); un-interleave the forward
@@ -1393,9 +1411,9 @@ pub fn idct(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError> {
     // Odd N: fall back to the 2N-point complex inverse FFT of the Hermitian
     // spectrum (the real-FFT pack needs an even length).
     let mut spectrum = vec![(0.0, 0.0); 2 * n];
-    let idct_tw = get_or_compute_dct2_twiddles(n);
     for k in 0..n {
-        let twiddle = complex_conj(idct_tw[k]);
+        let angle = PI * k as f64 / (2.0 * nf);
+        let twiddle = (angle.cos(), angle.sin());
         spectrum[k] = complex_mul((scaled_input[k], 0.0), twiddle);
     }
     for k in 1..n {
@@ -4049,6 +4067,45 @@ mod tests {
         cooley_tukey_radix2_inplace, cooley_tukey_radix4_inplace_with_twiddles,
         get_or_compute_twiddles,
     };
+
+    fn naive_fft_for_test(input: &[Complex64]) -> Vec<Complex64> {
+        let n = input.len();
+        let mut out = vec![(0.0, 0.0); n];
+        for (k, slot) in out.iter_mut().enumerate() {
+            let mut acc = (0.0, 0.0);
+            for (t, &value) in input.iter().enumerate() {
+                let angle = -2.0 * std::f64::consts::PI * (k * t % n) as f64 / n as f64;
+                let twiddle = (angle.cos(), angle.sin());
+                acc = (
+                    acc.0 + value.0 * twiddle.0 - value.1 * twiddle.1,
+                    acc.1 + value.0 * twiddle.1 + value.1 * twiddle.0,
+                );
+            }
+            *slot = acc;
+        }
+        out
+    }
+
+    #[test]
+    fn mixed_radix_smooth_power_tail_matches_naive_dft() {
+        for n in [12_usize, 20, 60, 100, 360] {
+            let input: Vec<Complex64> = (0..n)
+                .map(|i| {
+                    let t = i as f64;
+                    (
+                        (0.19 * t).sin() + 0.07 * t.cos(),
+                        (0.23 * t).cos() - 0.03 * t.sin(),
+                    )
+                })
+                .collect();
+            let got = fft(&input, &FftOptions::default()).expect("fft");
+            let want = naive_fft_for_test(&input);
+            for (i, (g, w)) in got.iter().zip(&want).enumerate() {
+                let err = ((g.0 - w.0).powi(2) + (g.1 - w.1).powi(2)).sqrt();
+                assert!(err < 1.0e-9, "n={n} i={i} err={err} got={g:?} want={w:?}");
+            }
+        }
+    }
 
     #[test]
     fn radix4_bit_identical_to_radix2() {

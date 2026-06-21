@@ -3660,3 +3660,51 @@ Local original-SciPy oracle (`python3 docs/perf_oracle_fft_csd.py --reps 120
   profiles still show public SpMV as a top gap. Do not retry the rejected
   `frankenscipy-fo9cj` row-major Arnoldi arena/scratch family without new
   allocation-profile proof.
+
+## 2026-06-21 - frankenscipy-mzauo - FFT 5-smooth odd-factor peel narrows but does not close SciPy loss
+
+- Agent: cod-b / BlackThrush
+- Starting point: the remaining FFT wall was non-power-of-two 5-smooth sizes,
+  where the recursive mixed-radix path still lost badly to SciPy pocketfft.
+- Lever: in `mixed_radix_fft`, peel odd factors before the power-of-two tail and
+  hand pure power tails to the optimized radix-2^2 kernel. This turns sizes like
+  10000 into `5*5*5*5*16` with a fast terminal power tail instead of repeated
+  scalar strided odd-prime leaves.
+- Same-binary A/B on rch `hz2` (`cargo run --release -p fsci-fft --bin
+  perf_mixed_radix`, warm target dir `/data/projects/.rch-targets/frankenscipy-cod-b`):
+
+  | n | current | legacy split | Internal ratio |
+  | ---: | ---: | ---: | ---: |
+  | 720 | 8.764 us | 13.496 us | 1.54x faster |
+  | 1000 | 13.391 us | 18.103 us | 1.35x faster |
+  | 1080 | 15.537 us | 21.618 us | 1.39x faster |
+  | 1500 | 27.704 us | 29.224 us | 1.05x faster |
+  | 1920 | 18.848 us | 37.399 us | 1.98x faster |
+  | 3000 | 43.534 us | 57.882 us | 1.33x faster |
+  | 5000 | 73.976 us | 98.582 us | 1.33x faster |
+  | 10000 | 140.661 us | 207.450 us | 1.47x faster |
+
+- Fresh SciPy 1.17.1 / NumPy 2.4.3 local oracle still wins 7/8 rows:
+
+  | n | Rust current | SciPy p50 | Verdict |
+  | ---: | ---: | ---: | --- |
+  | 720 | 8.764 us | 10.907 us | Rust 1.24x faster |
+  | 1000 | 13.391 us | 8.178 us | Rust 1.64x slower |
+  | 1080 | 15.537 us | 8.563 us | Rust 1.81x slower |
+  | 1500 | 27.704 us | 12.012 us | Rust 2.31x slower |
+  | 1920 | 18.848 us | 13.132 us | Rust 1.43x slower |
+  | 3000 | 43.534 us | 21.822 us | Rust 1.99x slower |
+  | 5000 | 73.976 us | 36.728 us | Rust 2.01x slower |
+  | 10000 | 140.661 us | 74.572 us | Rust 1.89x slower |
+
+- Decision: KEEP the internal win because it is same-worker, same-binary, and
+  correctness-clean; keep the SciPy gap open. Score vs legacy: 7/0/1. Score vs
+  SciPy: 1/7/0.
+- Gates: `cargo check -p fsci-fft --all-targets`, `cargo clippy -p fsci-fft
+  --all-targets -- -D warnings`, `cargo test -p fsci-fft
+  mixed_radix_smooth_power_tail_matches_naive_dft -- --nocapture`, and
+  `cargo test -p fsci-conformance --test diff_fft --test e2e_fft -- --nocapture`
+  all passed via rch in the shared tree.
+- Remaining route: iterative/cache-blocked mixed-radix with vectorizable SoA
+  butterflies. Do not claim this lane closed until fresh head-to-head rows beat
+  SciPy on the 1000-10000 5-smooth sweep.
