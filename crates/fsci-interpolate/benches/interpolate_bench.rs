@@ -2,7 +2,7 @@ use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use fsci_interpolate::{
     BarycentricInterpolator, CloughTocher2DInterpolator, CubicSplineStandalone, GriddataMethod,
     Interp1d, Interp1dOptions, InterpKind, LinearNDInterpolator, PchipInterpolator,
-    RectBivariateSpline, RegularGridInterpolator, RegularGridMethod, SplineBc, griddata,
+    RbfInterpolator, RbfKernel, RectBivariateSpline, RegularGridInterpolator, RegularGridMethod, SplineBc, griddata,
     interp1d_linear, lagrange, polymul, polyroots,
 };
 use fsci_runtime::RuntimeMode;
@@ -209,6 +209,29 @@ fn bench_scattered(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_rbf_scattered(c: &mut Criterion) {
+    // Scattered RBF (thin-plate-spline) build (O(N^3) dense solve) + eval, matching
+    // scipy.interpolate.RBFInterpolator (default kernel) at n=2000 -> 20000 queries
+    // (scipy ~1205 ms).
+    let n = 2000usize;
+    let pts: Vec<Vec<f64>> = (0..n)
+        .map(|i| vec![((i * 2654435761usize) % 10007) as f64 / 10007.0, ((i * 40503usize + 7) % 10007) as f64 / 10007.0])
+        .collect();
+    let vals: Vec<f64> = (0..n).map(|i| (i as f64 * 0.01).sin()).collect();
+    let q: Vec<Vec<f64>> = (0..20000)
+        .map(|i| vec![((i * 92821usize) % 9973) as f64 / 9973.0, ((i * 13usize + 3) % 9973) as f64 / 9973.0])
+        .collect();
+    let mut group = c.benchmark_group("rbf_scattered");
+    group.sample_size(10);
+    group.bench_function("tps_build_eval_2k_to_20k", |b| {
+        b.iter(|| {
+            let rbf = RbfInterpolator::new(&pts, &vals, RbfKernel::ThinPlateSpline, 1.0).expect("rbf");
+            rbf.eval_many(&q)
+        })
+    });
+    group.finish();
+}
+
 fn bench_rbf_and_rect(c: &mut Criterion) {
     let (x, y, z) = rect_grid(32);
     let rect = RectBivariateSpline::new(&x, &y, &z, 3, 3).expect("rect bivariate");
@@ -305,6 +328,7 @@ criterion_group!(
     bench_regular_grid,
     bench_scattered,
     bench_rbf_and_rect,
+    bench_rbf_scattered,
     bench_batch_eval,
     bench_batch_eval_large
 );

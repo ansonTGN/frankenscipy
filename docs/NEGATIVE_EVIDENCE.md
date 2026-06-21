@@ -1266,3 +1266,27 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
 - ks_2samp (12x) sorts the two samples directly (no rankdata); already optimal. The
   mwu/kruskal residual is the O(n log n) sort + tie pass (sort-bound; no safe parallel
   sort lever). Coverage protects all three.
+
+## 2026-06-20 - RbfInterpolator (scattered RBF) - MEASURED LOSS 2.9x (naive dense solve) - RESUME inline
+
+- Agent: cc / MistyBirch. Added a `rbf_scattered` bench (was uncovered).
+- MEASURED (thin-plate-spline, n=2000 build + 20000 eval):
+
+| | fsci | scipy | result |
+| --- | ---: | ---: | --- |
+| RBFInterpolator build+eval | 3.47 s | 1.205 s | **2.9x SLOWER (loss)** |
+
+- Root cause: `solve_dense_system` (the O(N³) coefficient solve in `RbfInterpolator::
+  new`) is a naive SCALAR Gaussian-elimination-with-partial-pivoting over a
+  `Vec<Vec<f64>>` (non-contiguous rows). scipy solves Φw=v with LAPACK's BLOCKED +
+  MULTITHREADED LU. eval_many is already parallel and the Φ build is O(N²); the
+  serial scalar dense solve is the whole gap.
+- FIX LEVERS (not done — substantial + conformance-critical, the spline A^T A fitter
+  shares solve_dense_system): (a) BYTE-IDENTICAL: flatten Φ to one contiguous
+  `Vec<f64>` row-major and run the SAME elimination order on it (cache + LLVM
+  auto-vectorization of the inner row update; row swaps become O(n) element swaps,
+  still O(n²) ≪ O(n³)) — est ~1.5-2x, same FP result; (b) BIGGER, tolerance-parity:
+  single-spawn blocked LU with a parallel trailing update (the code's own TODO),
+  exploit Φ symmetry (LDLᵀ ~2x fewer ops). The per-column thread::scope was already
+  tried and REJECTED (130x+ regression — spawn per column). Documented; bench tracks
+  the loss.
