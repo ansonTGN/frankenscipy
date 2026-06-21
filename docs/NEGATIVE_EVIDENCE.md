@@ -1337,3 +1337,26 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
   solver — O(n·k) to match scipy. The flat-dense lever does NOT apply here (it drops
   the zero-skip → O(n³) on a banded matrix). The eval_basis_all memory note already
   flagged "banded solve" as the next step. Bench tracks the loss.
+
+## 2026-06-20 - make_interp_spline solve_banded (partial fix of the 175x loss) - byte-identical 1.45x
+
+- Agent: cc / MistyBirch. Partial fix of the make_interp_spline loss filed above.
+- Switched the collocation solve from `solve_dense_system` to `solve_banded(_, _, k)`:
+  the B-spline collocation A[i][j]=B_j(x_i) is banded (|i-j| ≤ k), and solve_banded is
+  documented BYTE-IDENTICAL to the dense solve for bandwidth ≤ k. Aligns make_interp_spline
+  with its sibling fits (make_lsq_spline/make_smoothing_spline already use solve_banded).
+- Correctness: full fsci-interpolate suite 172/0 (incl. make_interp_spline scipy-parity);
+  byte-identical (solve_banded == solve_dense_system on banded input).
+
+| n (k=3) | dense solve | solve_banded | self | scipy | vs scipy |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 1000 | 6.81 ms | 5.57 ms | 1.22x | 0.23 ms | 24x slower (was 30x) |
+| 3000 | 84.26 ms | 58.19 ms | **1.45x** | 0.48 ms | 121x slower (was 175x) |
+
+- The solve is now O(n·k²); the remaining O(n²) is the BUILD: `vec![vec![0.0;n];n]`
+  dense alloc + `eval_basis_all` (a per-row O(n) degree-0 interval LINEAR SCAN + a
+  length-n Vec alloc + full copy). FULL FIX (next cycle, the real O(n·k) match to
+  scipy): binary-search interval finder (replaces the O(n) degree-0 scan, byte-exact),
+  compact basis eval returning the k+1 de-Boor values + offset (no length-n alloc), and
+  COMPACT banded storage + solver (no n×n alloc). Shipped the byte-identical solve_banded
+  step now; the build rewrite is the larger remaining piece.

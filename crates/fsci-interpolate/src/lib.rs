@@ -1787,7 +1787,11 @@ pub fn make_interp_spline(x: &[f64], y: &[f64], k: usize) -> Result<BSpline, Int
         a_mat[i][..n].copy_from_slice(&basis[..n]);
     }
     let mut rhs = y.to_vec();
-    let c = solve_dense_system(&mut a_mat, &mut rhs)?;
+    // The collocation A[i][j]=B_j(x_i) is banded (each B_j has support over k+1
+    // knots → |i-j| ≤ k), so the banded solver is bit-identical to the dense one
+    // (solve_banded is documented identical for bandwidth ≤ bw) at O(n·k²) instead
+    // of the O(n²) dense scan.
+    let c = solve_banded(&mut a_mat, &mut rhs, k)?;
     BSpline::new(t, c, k)
 }
 
