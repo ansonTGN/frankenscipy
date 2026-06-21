@@ -502,36 +502,12 @@ pub fn erfinv_scalar(y: f64, mode: RuntimeMode) -> Result<f64, SpecialError> {
         return Ok(y);
     }
 
-    let mut x = inv_norm_cdf_scalar(0.5 * (y + 1.0)) / 2.0_f64.sqrt();
-
-    // Newton-Raphson refinement for double precision accuracy.
-    if y.abs() < 0.7 {
-        // Use erf for central values
-        for _ in 0..2 {
-            let fx = erf_scalar(x) - y;
-            let dfx = TWO_INV_SQRT_PI * (-x * x).exp();
-            if dfx.abs() < 1e-300 {
-                break;
-            }
-            x -= fx / dfx;
-        }
-    } else {
-        // Use erfc for tail values to avoid 1 - small precision loss
-        let yc = if y > 0.0 { 1.0 - y } else { 1.0 + y };
-        let sign = y.signum();
-        x = x.abs();
-        for _ in 0..2 {
-            let fx = erfc_scalar(x) - yc;
-            let dfx = -TWO_INV_SQRT_PI * (-x * x).exp();
-            if dfx.abs() < 1e-300 {
-                break;
-            }
-            x -= fx / dfx;
-        }
-        x *= sign;
+    let p = 0.5 * (y + 1.0);
+    if p == 0.0 || p == 1.0 {
+        return Ok(y.signum() * crate::convenience::erfcinv_conv(1.0 - y.abs()));
     }
 
-    Ok(x)
+    Ok(crate::convenience::ndtri_scalar(p) * std::f64::consts::FRAC_1_SQRT_2)
 }
 
 fn erfinv_complex_scalar(y: Complex64, mode: RuntimeMode) -> Result<Complex64, SpecialError> {
@@ -978,6 +954,19 @@ mod tests {
             assert!(
                 (result - expected).abs() < 1e-9,
                 "erfinv({y}) = {result}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn erfinv_next_to_endpoint_stays_finite() {
+        let y = f64::from_bits(1.0_f64.to_bits() - 1);
+        let expected = 5.863_584_748_755_168;
+        for (input, want) in [(y, expected), (-y, -expected)] {
+            let result = super::erfinv_scalar(input, RuntimeMode::Strict).unwrap();
+            assert!(
+                (result - want).abs() < 5e-14,
+                "erfinv({input}) = {result}, expected {want}"
             );
         }
     }

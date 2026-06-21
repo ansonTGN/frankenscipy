@@ -1,5 +1,40 @@
 # Performance Release-Readiness Scorecard
 
+## 2026-06-21 - fsci-special erfinv direct ndtri route
+
+- Agent: cod-a / BlackThrush
+- Bead: `frankenscipy-8l8r1.146`
+- Decision: KEEP / PRIOR LOSS CLOSED. Real `erfinv_scalar` now routes through
+  the existing Cephes `ndtri_scalar` rational via
+  `erfinv(y)=ndtri((1+y)/2)/sqrt(2)`, with an endpoint-neighbor fallback to keep
+  the last finite values below +/-1 from rounding to infinities.
+- Final scores: same-worker scalar A/B `4/1/0`; vector Rust vs live SciPy
+  `1/0/0`.
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| Triage/claim | PASS | `bv --robot-triage` selected the no-gaps umbrella; created and claimed `frankenscipy-8l8r1.146` with assignee `cod-a` |
+| Radical lever | PASS | Reuse direct Cephes inverse-normal rational instead of per-call Newton refinement |
+| Same-worker Criterion | PASS | rch `vmi1152480`: `special_erfinv` scalar rows improved 1.38x / 1.86x / 2.86x / 1.88x at +/-0.9 and +/-0.5; zero row moved 9.65 ns -> 14.65 ns on unchanged fast path |
+| Vector Criterion | PASS | rch `ovh-a`: `special_erfinv_array/rust_current_n100000` median 792.16 us |
+| Live SciPy oracle | PASS | local SciPy 1.17.1 same-vector median 1.090846 ms; Rust is 1.38x faster |
+| Focused correctness | PASS | rch `cargo test -p fsci-special erfinv --lib -- --nocapture`: 5 passed |
+| Live conformance | PASS | local `cargo test -p fsci-conformance diff_special_error --test diff_special_error -- --nocapture`: 1 passed |
+| Per-crate release build | PASS/WARN | rch `cargo build --release -p fsci-special` passed on `hz1`; warnings are existing `fsci-special` warnings |
+| Formatting | BLOCKED/EXISTING | `cargo fmt --check -p fsci-special` reports pre-existing drift across unrelated `fsci-special` files; not auto-formatted to avoid broad rewrites |
+| Negative ledger | PASS | `docs/NEGATIVE_EVIDENCE.md` records scalar win/loss/neutral and vector ratio-vs-SciPy |
+
+| Workload | Current Rust | Live SciPy | Ratio | Verdict |
+| --- | ---: | ---: | ---: | --- |
+| `special_erfinv_array/n100000` | 792.16 us | 1.090846 ms | 1.38x faster | keep |
+
+Readiness notes:
+
+- The direct `ndtri` path removes the central/tail Newton iteration floor for
+  real `erfinv`. The endpoint fallback is intentionally retained because
+  `(1+y)/2` can round to exactly 0 or 1 for the last finite values next to the
+  domain boundary.
+
 ## 2026-06-21 - fsci-special ndtri Cephes closeout
 
 - Agent: cod-b / BlackThrush

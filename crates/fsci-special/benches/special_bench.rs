@@ -188,6 +188,92 @@ fn bench_erfinv(c: &mut Criterion) {
     group.finish();
 }
 
+fn scipy_erfinv_duration(n: usize, iters: u64) -> Option<Duration> {
+    let script = r#"
+import sys
+import time
+import numpy as np
+import scipy.special as sc
+
+n = int(sys.argv[1])
+iters = int(sys.argv[2])
+y = np.linspace(-0.95, 0.95, n, dtype=np.float64)
+sc.erfinv(y)
+start = time.perf_counter()
+checksum = 0.0
+for _ in range(iters):
+    out = sc.erfinv(y)
+    checksum += float(out[0] + out[n // 2] + out[-1])
+elapsed = time.perf_counter() - start
+if not np.isfinite(checksum):
+    raise SystemExit("non-finite checksum")
+print(f"{elapsed:.17f}")
+"#;
+    let mut child = Command::new("python3")
+        .args(["-", &n.to_string(), &iters.to_string()])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn scipy erfinv oracle");
+    child
+        .stdin
+        .as_mut()
+        .expect("open scipy erfinv oracle stdin")
+        .write_all(script.as_bytes())
+        .expect("write scipy erfinv oracle script");
+    let output = child
+        .wait_with_output()
+        .expect("wait for scipy erfinv oracle");
+    if !output.status.success() {
+        eprintln!(
+            "scipy erfinv oracle failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return None;
+    }
+    let stdout = String::from_utf8(output.stdout).expect("utf8 scipy erfinv timing");
+    let seconds: f64 = stdout
+        .trim()
+        .parse()
+        .expect("parse scipy erfinv timing seconds");
+    Some(Duration::from_secs_f64(seconds))
+}
+
+fn bench_special_erfinv_array(c: &mut Criterion) {
+    let mut group = c.benchmark_group("special_erfinv_array");
+    group.sample_size(10);
+    group.warm_up_time(Duration::from_secs(1));
+    group.measurement_time(Duration::from_secs(3));
+
+    let n = 100_000usize;
+    let denom = (n - 1) as f64;
+    let y: Vec<f64> = (0..n)
+        .map(|i| -0.95 + 1.9 * (i as f64) / denom)
+        .collect();
+    let input = real_vec(&y);
+
+    group.bench_function("rust_current_n100000", |b| {
+        b.iter(|| {
+            let out = erfinv(black_box(&input), RuntimeMode::Strict).expect("erfinv");
+            black_box(out);
+        });
+    });
+
+    if scipy_special_available() {
+        group.bench_function("scipy_n100000", |b| {
+            b.iter_custom(|iters| {
+                scipy_erfinv_duration(n, iters)
+                    .expect("scipy erfinv oracle should run after availability check")
+            });
+        });
+    } else {
+        eprintln!("skipping scipy_erfinv_n100000: python3 cannot import scipy.special");
+    }
+
+    group.finish();
+}
+
 fn bench_beta(c: &mut Criterion) {
     let mut group = c.benchmark_group("special_beta");
 
@@ -644,6 +730,7 @@ criterion_group!(
     bench_erf,
     bench_erfc,
     bench_erfinv,
+    bench_special_erfinv_array,
     bench_special_ndtri_array,
     bench_beta,
     bench_bessel_jv_array,

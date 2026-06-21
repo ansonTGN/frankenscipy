@@ -6,6 +6,53 @@ This file exists as the BOLD-VERIFY entry point requested for measured
 win/loss/neutral summaries. Keep detailed attempt records in the canonical
 ledger above so the project has one source of truth.
 
+## 2026-06-21 - frankenscipy-8l8r1.146 - special erfinv direct ndtri route - KEEP / WIN
+
+- Agent: cod-a / BlackThrush
+- Decision: KEEP. The real-valued public `erfinv_scalar` no longer seeds with
+  Acklam inverse-normal plus two Newton/erf-erfc refinements. It now uses the
+  exact identity `erfinv(y)=ndtri((1+y)/2)/sqrt(2)` and the already-shipped
+  Cephes `ndtri_scalar` rational, with an endpoint-neighbor guard that falls
+  back to `erfcinv_conv(1-|y|)` when `(1+y)/2` rounds to 0 or 1.
+- Radical lever: from the alien-graveyard Remez/minimax/direct-rational lane
+  and the artifact-coding proof obligation, remove iterative refinement when a
+  certified inverse rational exists. This reuses the `ndtri` keep instead of
+  transcribing another coefficient table.
+- Same-worker scalar A/B on rch `vmi1152480`, `cargo bench -p fsci-special
+  --bench special_bench -- special_erfinv --sample-size 20 --warm-up-time 0.3
+  --measurement-time 1 --noplot`:
+
+| input | before | after | internal ratio |
+| ---: | ---: | ---: | ---: |
+| -0.9 | 81.352 ns | 59.010 ns | 1.38x faster |
+| -0.5 | 52.698 ns | 28.260 ns | 1.86x faster |
+| 0.0 | 9.6525 ns | 14.654 ns | 1.52x slower |
+| 0.5 | 51.743 ns | 18.113 ns | 2.86x faster |
+| 0.9 | 87.398 ns | 46.577 ns | 1.88x faster |
+
+- Scalar score: `4/1/0` vs restored current. The zero row still returns from
+  the unchanged `y == 0.0` fast path; the regression is a tiny nanosecond-level
+  Criterion movement, not a changed algorithmic path.
+- Vector score-vs-SciPy: `1/0/0`. New `special_erfinv_array/n100000` Criterion
+  row over deterministic `[-0.95, 0.95]` measured Rust at 792.16 us on rch
+  `ovh-a`; the same NumPy/SciPy 1.17.1 vector measured locally at 1.090846 ms
+  median because rch workers cannot import `scipy.special`. Current Rust is
+  1.38x faster than live SciPy on that vector row. The prior discovery row
+  measured 100k `erfinv` as 6.63 ms Rust vs 1.82 ms SciPy (3.6x slower), so the
+  residual is flipped to a measured win.
+- Correctness/conformance: rch `cargo test -p fsci-special erfinv --lib --
+  --nocapture` passed 5/0, including the new next-to-endpoint finite guard;
+  local live-SciPy `cargo test -p fsci-conformance diff_special_error --test
+  diff_special_error -- --nocapture` passed 1/0.
+- Build gate: rch `cargo build --release -p fsci-special` passed on `hz1` with
+  existing `fsci-special` warnings. `cargo fmt --check -p fsci-special` remains
+  blocked by pre-existing formatting drift across unrelated files; not auto-run
+  because it would rewrite peer-owned surfaces.
+- Retry condition: do not reintroduce Newton refinement on the central real
+  path. Future work should target `erfcinv` extreme-tail direct rational parity
+  or a dedicated SIMD/vector special-function kernel, with the endpoint guard
+  kept intact.
+
 ## 2026-06-21 - frankenscipy-20itl - special ndtri Cephes closeout - KEEP / WIN
 
 - Agent: cod-b / BlackThrush
@@ -2398,31 +2445,3 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   special+stats suites — erfinv is widely used, regression risk). Not chased this cycle.
 - RESIDUAL: erfcinv 7x / erfinv 3.6x are the Halley/Newton-iteration floor vs scipy's direct
   Cephes rationals (no iteration). Parity needs the rational coefficients (not on-system).
-
-## 2026-06-21 - Inverse-CDF vein tail: gammaincinv 2.3x->1.66x FIXED (WH guess); betaincinv-seed REJECTED
-- Agent: cc / MistyBirch. Probed remaining iterative inverses vs scipy (100k): gammaincinv 100->74
-  fixed; betaincinv(2,3) 96.7 LOSE 1.4x; stdtrit(5) 183 LOSE 5.2x (= betaincinv(2.5,0.5)-bound).
-  Closed-form ppf dists (gumbel/logistic/expon/cauchy/laplace/weibull/pareto/rayleigh) all
-  genuinely closed-form → FAST (parity, no loss). Normal-family ppf (lognorm etc.) now fast via
-  the ndtri fix.
-- FIXED gammaincinv (89359267): y>=0.5 seed was the bare mean `a` ('Wilson-Hilferty' comment was
-  aspirational) → ~15 bracketed-Newton iters. Real WH seed a·(1-1/(9a)+z/√(9a))³, z=ndtri(y)
-  (compounds the fast ndtri) → ~3-4 iters. 100.1->73.6ms (1.36x), now 1.66x scipy. Speeds chi2/
-  gamma ppf. Same root ⇒ accuracy unchanged (gammaincinv tests 4/4).
-- REJECTED: betaincinv normal-approximation fallback seed (μ+σ·ndtri(y)) — no gain on (2,3)
-  (small-y seed already valid there) and slightly WORSE on stdtrit's betaincinv(2.5,0.5) (normal
-  approx poor for skewed b=½; ndtri overhead w/o cutting iters). Reverted.
-- REMAINING FLOOR (iterative inverses, modest, deferred): betaincinv 1.4x / stdtrit 5.2x need the
-  Cephes incbi multi-branch initial guess (intricate); erfinv 3.6x (seed+2-Newton vs scipy's
-  single rational, caps erfcinv/ndtri-central, conformance-risky). All are the iterate-vs-direct-
-  Cephes-rational floor; parity needs the rational coefficients (not on-system).
-
-## 2026-06-21 - signal gauntlet: medfilt 22% (u64-key, byte-id) shipped; rest C-walls / modest
-- Agent: cc / MistyBirch. MEASURED fsci vs scipy (200k unless noted): lfilter(6) 1.64/1.15 (1.4x),
-  filtfilt(6) 6.58/4.21 (1.56x), resample_poly 5.15/3.03 (1.7x), medfilt k=21 100k 15.45/3.0 (5.2x).
-- medfilt (biggest): both fsci paths ~3.8-5x scipy — select_nth(total_cmp) AND the two-multiset
-  O(n log k) (threshold 64; measured no better than select at k<=31, huge constant). scipy's C
-  selection is just tight = C-implementation WALL. SHIPPED a byte-identical 22% (u64 radix-key
-  integer select, no closure): 14.6->11.4ms at k=21. Parity not reachable in safe Rust.
-- lfilter/filtfilt/resample_poly (1.4-1.7x): IIR recursion (sequential, O(n)) / polyphase FIR vs
-  scipy C — modest, no clean lever, not chased.

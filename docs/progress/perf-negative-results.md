@@ -4,6 +4,59 @@ This ledger records every code-first performance attempt, including attempts tha
 are still awaiting the batch benchmark wave. Entries must name the retry
 condition so dead ends are not repeated casually.
 
+## 2026-06-21 - frankenscipy-8l8r1.146 - special erfinv direct ndtri route
+
+- Agent: cod-a / BlackThrush
+- Status: measured keep / prior 3.6x `erfinv` loss closed.
+- Lever: replace the real `erfinv_scalar` Acklam inverse-normal seed plus two
+  Newton refinements with the exact identity
+  `erfinv(y)=ndtri((1+y)/2)/sqrt(2)`, using the already-landed Cephes
+  `ndtri_scalar` rational. Preserve the endpoint-neighbor guard by falling back
+  to `erfcinv_conv(1-|y|)` if `(1+y)/2` rounds to exactly 0 or 1.
+- Alien/artifact route: Remez/minimax/direct-rational kernel beats iterative
+  correction when the inverse primitive already has a verified rational
+  approximation; artifact proof is the analytic identity plus endpoint-rounding
+  guard.
+
+| Workload | Prior Rust loss baseline | Current Rust | Live SciPy oracle | Current vs SciPy |
+| --- | ---: | ---: | ---: | ---: |
+| `special_erfinv_array/n100000` | 6.63 ms recorded 100k probe | 792.16 us | 1.090846 ms | 1.38x faster |
+
+Same-worker scalar A/B on rch `vmi1152480`:
+
+| input | before | after | internal ratio |
+| ---: | ---: | ---: | ---: |
+| -0.9 | 81.352 ns | 59.010 ns | 1.38x faster |
+| -0.5 | 52.698 ns | 28.260 ns | 1.86x faster |
+| 0.0 | 9.6525 ns | 14.654 ns | 1.52x slower |
+| 0.5 | 51.743 ns | 18.113 ns | 2.86x faster |
+| 0.9 | 87.398 ns | 46.577 ns | 1.88x faster |
+
+- Benchmark evidence:
+  `AGENT_NAME=BlackThrush CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a
+  rch exec -- cargo bench -p fsci-special --bench special_bench --
+  special_erfinv --sample-size 20 --warm-up-time 0.3 --measurement-time 1
+  --noplot` before/after on rch `vmi1152480`; and
+  `cargo bench -p fsci-special --bench special_bench -- special_erfinv_array
+  --sample-size 10 --warm-up-time 0.5 --measurement-time 2 --noplot` on rch
+  `ovh-a` for the vector row. The workers could not import `scipy.special`, so
+  the identical 100k vector was timed locally with SciPy 1.17.1 at 1.090846 ms
+  median.
+- Score: scalar same-worker current-vs-parent `4/1/0`; vector current-vs-SciPy
+  `1/0/0`. The one scalar loss is the unchanged `y == 0.0` fast path moving by
+  nanoseconds under Criterion, not a changed algorithmic path.
+- Correctness/conformance: rch `cargo test -p fsci-special erfinv --lib --
+  --nocapture` passed 5/0; local live SciPy `cargo test -p fsci-conformance
+  diff_special_error --test diff_special_error -- --nocapture` passed 1/0.
+- Build gate: rch `cargo build --release -p fsci-special` passed on `hz1` with
+  existing `fsci-special` warnings. `cargo fmt --check -p fsci-special` remains
+  blocked by pre-existing formatting drift across unrelated files; not
+  auto-formatted to avoid rewriting peer surfaces.
+- Retry condition: do not put the real central `erfinv` route back through
+  Newton refinement. Future attempts should target direct-rational `erfcinv`
+  extreme-tail parity or vectorized special-function dispatch while preserving
+  the endpoint guard.
+
 ## 2026-06-21 - frankenscipy-20itl - special ndtri Cephes rational closeout
 
 - Agent: cod-b / BlackThrush

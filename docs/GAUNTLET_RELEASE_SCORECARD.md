@@ -1,6 +1,6 @@
 # Gauntlet Release Scorecard
 
-Last updated: 2026-06-21 by cod-b / BlackThrush.
+Last updated: 2026-06-21 by cod-a / BlackThrush.
 
 This scorecard tracks code-first performance work that has been converted into
 measured head-to-head evidence against the SciPy original. The detailed
@@ -10,6 +10,7 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 
 | Bead | Cluster | Realistic workload | Rust result | SciPy result | Ratio | Decision |
 | --- | --- | --- | ---: | ---: | ---: | --- |
+| `frankenscipy-8l8r1.146` | `special.erfinv` direct `ndtri` rational route | `scipy.special.erfinv`, 100k deterministic values over `[-0.95,0.95]` | 792.16 us | 1.090846 ms | **1.38x faster** | keep - prior 3.6x loss closed by reusing Cephes `ndtri_scalar`; scalar same-worker A/B score `4/1/0` with only unchanged zero fast-path nanosecond noise |
 | `frankenscipy-20itl` | `special.ndtri` Cephes rational closeout | `scipy.special.ndtri` equivalent, 500k deterministic probabilities | 1.8652 ms | 8.899997 ms | **4.77x faster** | keep - current route uses direct Cephes rational instead of old `erfcinv` Newton tail; prior 25.5x `norm.ppf` loss is closed |
 | `frankenscipy-8l8r1.144` | `make_smoothing_spline` GCV selected-inverse + compact/reused scratch + banded X/E input | `scipy.interpolate.make_smoothing_spline(lam=None)` equivalent, n=200/500/1000/2000/5000 | 1.65 / 7.2 / 10.2 / 33.2 / ~184 ms | 36 / 121 / 284 / 550 / 1531 ms | **21.8 / 16.8 / 27.8 / 16.6 / 8.3x faster** | keep - selected inverse closes n trace solves; local dense-input candidate reverted because landed banded-input code is stronger |
 | `frankenscipy-8l8r1.118` | Fused signal coherence | `scipy.signal.coherence`, 65536 samples, Hann window 1024/512 overlap | 2.191980 ms | 18.961613 ms | 8.65x faster | keep |
