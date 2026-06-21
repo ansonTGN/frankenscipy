@@ -540,6 +540,50 @@ pub fn metric_distance(a: &[f64], b: &[f64], metric: DistanceMetric) -> f64 {
 ///
 /// Returns a condensed distance vector of length n*(n-1)/2, containing
 /// the upper-triangular entries in row order.
+/// Condensed pairwise Minkowski (L^p) distances within `x`, matching
+/// `scipy.spatial.distance.pdist(X, 'minkowski', p=p)`. Parallel via `pdist_fill` + tested scalar
+/// [`minkowski`]. (Not in `DistanceMetric` — that enum derives `Eq` and p is f64.)
+pub fn pdist_minkowski(x: &[Vec<f64>], p: f64) -> Result<Vec<f64>, SpatialError> {
+    let n = x.len();
+    if n == 0 {
+        return Err(SpatialError::EmptyData);
+    }
+    if !(p > 0.0) {
+        return Err(SpatialError::InvalidArgument("minkowski p must be > 0".to_string()));
+    }
+    let dim = x[0].len();
+    for row in x.iter() {
+        if row.len() != dim {
+            return Err(SpatialError::DimensionMismatch { expected: dim, actual: row.len() });
+        }
+    }
+    let total = n * (n - 1) / 2;
+    let nthreads = pdist_thread_count(n, dim);
+    Ok(pdist_fill(n, total, nthreads, |i, j| minkowski(&x[i], &x[j], p)))
+}
+
+/// Condensed pairwise standardized-Euclidean distances within `x`, matching
+/// `scipy.spatial.distance.pdist(X, 'seuclidean', V=v)`. Parallel via `pdist_fill` + tested scalar
+/// [`seuclidean`].
+pub fn pdist_seuclidean(x: &[Vec<f64>], v: &[f64]) -> Result<Vec<f64>, SpatialError> {
+    let n = x.len();
+    if n == 0 {
+        return Err(SpatialError::EmptyData);
+    }
+    let dim = x[0].len();
+    if v.len() != dim {
+        return Err(SpatialError::DimensionMismatch { expected: dim, actual: v.len() });
+    }
+    for row in x.iter() {
+        if row.len() != dim {
+            return Err(SpatialError::DimensionMismatch { expected: dim, actual: row.len() });
+        }
+    }
+    let total = n * (n - 1) / 2;
+    let nthreads = pdist_thread_count(n, dim);
+    Ok(pdist_fill(n, total, nthreads, |i, j| seuclidean(&x[i], &x[j], v)))
+}
+
 pub fn pdist(x: &[Vec<f64>], metric: DistanceMetric) -> Result<Vec<f64>, SpatialError> {
     let n = x.len();
     if n < 2 {
@@ -10588,3 +10632,22 @@ mod cdist_seuclidean_tests {
         for i in 0..xa.len(){for j in 0..xb.len(){assert!((m[i][j]-seuclidean(&xa[i],&xb[j],&v)).abs()<1e-12);}}
     }
 }
+
+#[cfg(test)]
+mod pdist_metric_gap_tests {
+    use super::*;
+    #[test]
+    fn pdist_minkowski_seuclidean_match_scalar() {
+        let x=vec![vec![0.0,1.0,2.0],vec![3.0,-1.0,0.5],vec![-2.0,2.0,1.0],vec![1.0,0.0,-1.0]];
+        let v=vec![0.5,2.0,1.5];
+        let m=pdist_minkowski(&x,3.0).unwrap();
+        let se=pdist_seuclidean(&x,&v).unwrap();
+        let mut idx=0;
+        for i in 0..x.len(){for j in (i+1)..x.len(){
+            assert!((m[idx]-minkowski(&x[i],&x[j],3.0)).abs()<1e-12);
+            assert!((se[idx]-seuclidean(&x[i],&x[j],&v)).abs()<1e-12);
+            idx+=1;
+        }}
+    }
+}
+
