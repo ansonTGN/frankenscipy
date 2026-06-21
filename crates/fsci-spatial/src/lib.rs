@@ -1231,6 +1231,39 @@ pub fn cdist(xa: &[Vec<f64>], xb: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, SpatialE
 /// Compute pairwise distance matrix with a specified metric.
 ///
 /// Matches `scipy.spatial.distance.cdist(XA, XB, metric)`.
+/// Cross-distance matrix under the Minkowski (L^p) metric, matching
+/// `scipy.spatial.distance.cdist(XA, XB, 'minkowski', p=p)` — the full na×nb matrix (distinct
+/// from row-wise [`minkowski_distance`]). Parallel over rows via `cdist_fill`; each pair uses the
+/// tested scalar [`minkowski`]. SciPy's per-element pow makes its cdist-minkowski slow; fsci
+/// parallelizes it. Not in `DistanceMetric` because that enum derives `Eq` (p is f64).
+pub fn cdist_minkowski(
+    xa: &[Vec<f64>],
+    xb: &[Vec<f64>],
+    p: f64,
+) -> Result<Vec<Vec<f64>>, SpatialError> {
+    if xa.is_empty() || xb.is_empty() {
+        return Err(SpatialError::EmptyData);
+    }
+    if !(p > 0.0) {
+        return Err(SpatialError::InvalidArgument(
+            "minkowski p must be > 0".to_string(),
+        ));
+    }
+    let dim = xa[0].len();
+    for row in xa.iter().chain(xb.iter()) {
+        if row.len() != dim {
+            return Err(SpatialError::DimensionMismatch {
+                expected: dim,
+                actual: row.len(),
+            });
+        }
+    }
+    let na = xa.len();
+    let nb = xb.len();
+    let nthreads = cdist_thread_count(na, nb, dim);
+    Ok(cdist_fill(na, nb, nthreads, |i, j| minkowski(&xa[i], &xb[j], p)))
+}
+
 pub fn cdist_metric(
     xa: &[Vec<f64>],
     xb: &[Vec<f64>],
@@ -10496,5 +10529,23 @@ mod tests {
         ];
         let n = num_obs_dm(&matrix);
         assert_eq!(n, 3, "num_obs_dm should return 3");
+    }
+}
+
+#[cfg(test)]
+mod cdist_minkowski_tests {
+    use super::*;
+    #[test]
+    fn cdist_minkowski_matches_scalar_minkowski() {
+        let xa = vec![vec![0.0,1.0,2.0], vec![3.0,-1.0,0.5], vec![-2.0,2.0,1.0]];
+        let xb = vec![vec![1.0,1.0,1.0], vec![0.0,0.0,0.0]];
+        for &p in &[1.0_f64, 1.5, 2.0, 3.0] {
+            let m = cdist_minkowski(&xa,&xb,p).unwrap();
+            assert_eq!(m.len(), xa.len());
+            for i in 0..xa.len() { for j in 0..xb.len() {
+                let expect = minkowski(&xa[i], &xb[j], p);
+                assert!((m[i][j]-expect).abs() <= 1e-12*expect.abs().max(1e-12), "p={p} i={i} j={j}");
+            }}
+        }
     }
 }
