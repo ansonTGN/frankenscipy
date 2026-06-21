@@ -6,6 +6,38 @@ This file exists as the BOLD-VERIFY entry point requested for measured
 win/loss/neutral summaries. Keep detailed attempt records in the canonical
 ledger above so the project has one source of truth.
 
+## 2026-06-21 - frankenscipy-8l8r1/cod-a-zeta-b10-20260621 - special zeta N=10/B10 tail - KEEP / RESIDUAL LOSS
+
+- Agent: cod-a / BlackThrush.
+- Decision: KEEP. The Riemann `s > 1` fast path now uses an N=10
+  Euler-Maclaurin tail plus a B10 correction instead of the previous N=13/B8
+  tail. This removes three direct `exp(-s ln n)` terms per positive zeta
+  evaluation without weakening the focused zeta tolerance surface.
+- Radical route: alien-graveyard Euler-Maclaurin coefficient compression plus
+  alien-artifact-coding proof obligation; extreme-optimization gate kept the
+  lever to one arithmetic change and checked the exact SciPy-facing vector row.
+- Same-worker RCH `hz1` Criterion proof:
+
+| Workload | N=13/B8 baseline | N=10/B10 current | Internal ratio |
+| --- | ---: | ---: | ---: |
+| scalar loop, 100k `s in [1.1,10]` | 6.8439 ms | 5.4371 ms | 1.26x faster |
+| tensor RealVec, 100k `s in [1.1,10]` | 3.1833 ms | 2.6061 ms | 1.22x faster |
+
+- SciPy comparator: RCH workers still cannot import `scipy.special`, so the
+  same deterministic 100k vector was timed locally with SciPy 1.17.1 at
+  1.933008 ms median. Cross-host ratio: current RCH Rust tensor is 1.35x
+  slower than local SciPy; score vs SciPy `0/1/0`. Internal Rust score:
+  `2/0/0`.
+- Correctness gate: RCH `cargo test -p fsci-special zeta --lib` passed 22/0
+  after replaying the change onto the current `origin/main` gamma layout.
+  Local live-SciPy conformance could not run because the shared checkout has an
+  unrelated dirty `crates/fsci-opt/src/lib.rs` syntax blocker before zeta tests
+  are reached.
+- Retry condition: do not keep shrinking the Euler-Maclaurin direct prefix
+  without a new approximation family. The remaining gap needs a true
+  vector-specialized zeta kernel for `s > 1` (piecewise minimax/table/SIMD
+  polynomial) measured on a host with both Rust and SciPy available.
+
 ## 2026-06-21 - frankenscipy-8l8r1.147 - signal upfirdn direct kept-output dot - REJECT
 
 - Agent: cod-b / BlackThrush.

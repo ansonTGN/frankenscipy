@@ -2550,11 +2550,11 @@ pub(crate) fn zeta_scalar(s: f64) -> f64 {
 ///
 /// Specializes the Hurwitz `a = 1` case by hard-wiring the direct
 /// summation prefix and using `exp(-s ln n)` instead of generic
-/// `powf`. N=12 plus four Bernoulli corrections keeps the existing
-/// near-pole unit-test points below 1e-12 abs while removing ten
-/// transcendental calls per positive Riemann evaluation.
+/// `powf`. N=10 plus five Bernoulli corrections keeps the existing
+/// scalar reduction tests below 1e-13 abs while removing three
+/// transcendental calls per positive Riemann evaluation versus N=13.
 fn zeta_positive(s: f64) -> f64 {
-    const DIRECT_LN: [f64; 11] = [
+    const DIRECT_LN: [f64; 8] = [
         0.693_147_180_559_945_3,
         1.098_612_288_668_109_8,
         1.386_294_361_119_890_6,
@@ -2563,12 +2563,9 @@ fn zeta_positive(s: f64) -> f64 {
         1.945_910_149_055_313_2,
         2.079_441_541_679_835_7,
         2.197_224_577_336_219_6,
-        2.302_585_092_994_046,
-        2.397_895_272_798_370_7,
-        2.484_906_649_788_000_4,
     ];
-    const TAIL_NA: f64 = 13.0;
-    const TAIL_LN: f64 = 2.564_949_357_461_536_7;
+    const TAIL_NA: f64 = 10.0;
+    const TAIL_LN: f64 = 2.302_585_092_994_046;
     const TAIL_INV: f64 = 1.0 / TAIL_NA;
     const TAIL_INV_SQ: f64 = TAIL_INV * TAIL_INV;
 
@@ -2593,6 +2590,9 @@ fn zeta_positive(s: f64) -> f64 {
     term *= TAIL_INV_SQ;
     poch *= (s + 5.0) * (s + 6.0);
     sum -= (1.0 / 1209600.0) * poch * term;
+    term *= TAIL_INV_SQ;
+    poch *= (s + 7.0) * (s + 8.0);
+    sum += (5.0 / 239500800.0) * poch * term;
 
     sum
 }

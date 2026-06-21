@@ -4,6 +4,42 @@ This ledger records every code-first performance attempt, including attempts tha
 are still awaiting the batch benchmark wave. Entries must name the retry
 condition so dead ends are not repeated casually.
 
+## 2026-06-21 - frankenscipy-8l8r1/cod-a-zeta-b10-20260621 - special zeta N=10/B10 tail
+
+- Agent: cod-a / BlackThrush
+- Status: measured keep / residual SciPy loss.
+- Lever: compress the positive Riemann zeta Euler-Maclaurin direct prefix from
+  N=13 with B8 to N=10 with an added B10 correction. This removes three direct
+  logarithm-table exponentials per `s > 1` evaluation while preserving the
+  zeta unit tolerance surface.
+- Alien/artifact route: coefficient-table compression from the
+  Euler-Maclaurin family; proof obligation was bounded by direct comparison
+  against SciPy reference points and the existing zeta tensor/scalar tests.
+
+| Workload | N=13/B8 baseline | N=10/B10 current | Internal ratio |
+| --- | ---: | ---: | ---: |
+| scalar loop, 100k `s in [1.1,10]` | 6.8439 ms | 5.4371 ms | 1.26x faster |
+| tensor RealVec, 100k `s in [1.1,10]` | 3.1833 ms | 2.6061 ms | 1.22x faster |
+
+- Benchmark evidence:
+  `AGENT_NAME=cod-a CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-a
+  rch exec -- cargo bench -p fsci-special --bench special_bench
+  special_zeta_array -- --sample-size 20 --warm-up-time 0.3 --measurement-time
+  1 --noplot` on rch `hz1`. The baseline was taken by restoring the old N=13/B8
+  constants in-place, then the optimized N=10/B10 code was restored and run on
+  the same worker.
+- SciPy comparator: RCH workers could not import `scipy.special`; the same
+  deterministic 100k vector was timed locally with SciPy 1.17.1 at
+  1.933008 ms median. Current-vs-SciPy score is `0/1/0` because the Rust tensor
+  row is 1.35x slower cross-host.
+- Correctness/conformance: RCH `cargo test -p fsci-special zeta --lib` passed
+  22/0 after aligning `gamma.rs` with current `origin/main` outside the zeta
+  block. Local live-SciPy conformance was blocked before zeta by unrelated
+  dirty `crates/fsci-opt/src/lib.rs` syntax drift in the shared checkout.
+- Retry condition: do not continue direct-prefix trimming in the same family.
+  The remaining gap needs a new vector-specialized `s > 1` zeta approximation
+  family, not another generic Hurwitz/Euler-Maclaurin micro-trim.
+
 ## 2026-06-21 - frankenscipy-8l8r1.146 - special erfinv direct ndtri route
 
 - Agent: cod-a / BlackThrush
