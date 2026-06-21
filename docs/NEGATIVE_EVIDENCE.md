@@ -2624,3 +2624,10 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   redundant 9M zero pass + serial fill+mirror. FIXED: build each row independently from condensed
   (closed-form index, no pre-zero, no cross-row mirror) → disjoint rows → parallel. 60->16.84ms
   WIN 2.8x, byte-identical (7/7). directed_hausdorff existed (slow, fixed 1.36x prior).
+
+## 2026-06-21 - signal/interpolate batch: deconvolve 372x + RGI-cubic 3.8x WIN; upfirdn modest
+- Agent: cc / MistyBirch. MEASURED fsci vs scipy: deconvolve (len-5002 / div-3) fsci 0.05ms vs
+  scipy 18.62 WIN 372x — fsci does O(quot·div) polynomial LONG DIVISION; scipy's deconvolve routes
+  through lfilter with the SIGNAL as the numerator (b len ~n) → O(n²). RGI cubic 3D 20k fsci 3.75
+  vs scipy 14.29 WIN 3.8x (parallel eval_many). upfirdn up3down2 200k 4.56 vs 3.80 LOSE 1.2x
+  (modest, polyphase FIR vs C, not chased). No clean loss to flip in this batch.
