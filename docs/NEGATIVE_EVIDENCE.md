@@ -2665,3 +2665,13 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   on LENGTH not COST → cheap poly/rational real kernels regress; serialize them. CHECK gamma (Lanczos
   1.7x), erf, and other cheap special real arms for the same over-parallelization. Only ZETA is the
   genuine series-vs-Cephes coefficient gap (Borwein, 9.8x).
+
+## 2026-06-21 - cheap-special-kernel over-parallelization SWEPT: gamma/gammaln/digamma/erf/erfc serialized
+- Agent: cc / MistyBirch. Following the ellipk fix, swept cheap special real kernels. MEASURED 100k
+  parallel/serial: gamma 4.41/2.93, gammaln 4.12/2.15, digamma 3.88/2.41, erf 3.96/1.95, erfc
+  4.38/1.48 — par_map_indices (gates n>=256 by LENGTH not COST) over-parallelizes them 1.5-3.0x.
+  FIXED: serialize the RealVec arm (gamma family inline; erf/erfc via real_par_min=usize::MAX in
+  map_unary_input, default 256 kept for heavy erfinv/erfcinv). gamma 3.00ms near-parity (was 1.7x);
+  gammaln/erf/erfc 1.9-2.5x faster. Complex arms stay parallel. Byte-identical.
+- LEVER (paid out 6 fns now): par_map_indices length-gate over-parallelizes cheap O(1)/rational real
+  kernels → serialize them. Remaining cheap candidates to check: expit/logit/other convenience fns.
