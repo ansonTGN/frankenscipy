@@ -2631,3 +2631,9 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   through lfilter with the SIGNAL as the numerator (b len ~n) → O(n²). RGI cubic 3D 20k fsci 3.75
   vs scipy 14.29 WIN 3.8x (parallel eval_many). upfirdn up3down2 200k 4.56 vs 3.80 LOSE 1.2x
   (modest, polyphase FIR vs C, not chased). No clean loss to flip in this batch.
+
+## 2026-06-21 - opt linear_sum_assignment parity (1.04-1.14x); clean-flippable-loss vein sparse
+- Agent: cc / MistyBirch. linear_sum_assignment 500²/1000²: fsci 6.56/36.21ms vs scipy 6.29/31.76
+  (parity, ~1.1x) — fsci's LAPJV is competitive, no loss. With deconvolve 372x / RGI-cubic 3.8x
+  (prior) the opt/signal/interpolate surfaces are dominant-or-parity. Clean flippable losses now
+  rare; remaining frontier = the named walls (native-real-FFT, Cephes coeffs, hand-tuned-C).
