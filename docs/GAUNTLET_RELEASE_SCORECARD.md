@@ -1,6 +1,6 @@
 # Gauntlet Release Scorecard
 
-Last updated: 2026-06-21 by cod-b / BlackThrush.
+Last updated: 2026-06-21 by cod-a / BlackThrush.
 
 This scorecard tracks code-first performance work that has been converted into
 measured head-to-head evidence against the SciPy original. The detailed
@@ -10,6 +10,7 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 
 | Bead | Cluster | Realistic workload | Rust result | SciPy result | Ratio | Decision |
 | --- | --- | --- | ---: | ---: | ---: | --- |
+| `frankenscipy-8l8r1.144` | `make_smoothing_spline` GCV selected-inverse + compact/reused scratch + banded X/E input | `scipy.interpolate.make_smoothing_spline(lam=None)` equivalent, n=200/500/1000/2000/5000 | 1.65 / 7.2 / 10.2 / 33.2 / ~184 ms | 36 / 121 / 284 / 550 / 1531 ms | **21.8 / 16.8 / 27.8 / 16.6 / 8.3x faster** | keep - selected inverse closes n trace solves; local dense-input candidate reverted because landed banded-input code is stronger |
 | `frankenscipy-8l8r1.118` | Fused signal coherence | `scipy.signal.coherence`, 65536 samples, Hann window 1024/512 overlap | 2.191980 ms | 18.961613 ms | 8.65x faster | keep |
 | `frankenscipy-8l8r1.119/.121` | BDF streamed scaled RMS norms | `solve_ivp(method=BDF)` stiff diagonal decay, n=64 | 1.959287 ms | 26.351239 ms | 13.45x faster | keep BDF stream helper; 1.040x internal win on same-worker BDF64 |
 | `frankenscipy-8l8r1.119/.121` | BDF streamed scaled RMS norms | `solve_ivp(method=BDF)` stiff diagonal decay, n=128 | 11.052293 ms | 29.334903 ms | 2.65x faster | keep; internal A/B neutral on same-worker BDF128 |

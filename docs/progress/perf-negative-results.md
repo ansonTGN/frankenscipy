@@ -4,6 +4,36 @@ This ledger records every code-first performance attempt, including attempts tha
 are still awaiting the batch benchmark wave. Entries must name the retry
 condition so dead ends are not repeated casually.
 
+## 2026-06-21 - frankenscipy-8l8r1.144 - interpolate smoothing spline GCV stack
+
+- Agent: cod-a / BlackThrush
+- Status: measured landed keep; local weaker dense-input candidate reverted
+  before commit after `origin/main` advanced the same lane.
+- Landed stack: factor-once banded Cholesky trace, Erisman-Tinney/Takahashi
+  selected inverse of the needed inverse band, compact/reused per-eval GCV
+  scratch, extended scaling evidence, and direct banded X/E reads instead of
+  `band_to_full`.
+- RCH/bench note: Cargo bench uses the optimized bench profile; `cargo bench
+  --release` is not a supported spelling in this workspace.
+
+| Stage | n=200 | n=500 | n=1000 | n=2000 | n=5000 | Score |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| selected-inverse trace | 2.35 ms vs 36 ms | 57.1 ms vs 121 ms | 301 ms vs 284 ms | - | - | `2/0/1` |
+| selected-inverse + per-eval alloc elimination | 1.50 ms vs 36 ms | 10.4 ms vs 121 ms | 11.6 ms vs 284 ms | - | - | `3/0/0` |
+| final banded X/E input | 1.65 ms vs 36 ms | 7.2 ms vs 121 ms | 10.2 ms vs 284 ms | 33.2 ms vs 550 ms | ~184 ms vs 1531 ms | `5/0/0` |
+
+- Correctness/conformance: the landed entries in `docs/NEGATIVE_EVIDENCE.md`
+  record interpolate 173/0 verification. This session additionally ran focused
+  selected-inverse substitution proof, smoothing-spline SciPy-lambda parity,
+  `cargo check -p fsci-interpolate --all-targets`, and focused interpolate
+  differential conformance before fast-forwarding to the stronger landed code.
+- Reverts: cod-a's local dense `x_full/e_full` selected-inverse variant was
+  reverted because it would have moved the tree backward from the landed
+  banded-input implementation.
+- Retry condition: do not retry dense GCV inputs, n RHS Cholesky substitutions,
+  or per-eval full-matrix allocation. Only reopen for a true banded `xtwx/xte`
+  and `lhs` storage/read path, which is the remaining large-n memory residual.
+
 ## 2026-06-21 - frankenscipy-8l8r1.143 - ndimage label mean bit decoder
 
 - Agent: cod-b / BlackThrush

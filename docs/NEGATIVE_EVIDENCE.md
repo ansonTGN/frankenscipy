@@ -6,6 +6,29 @@ This file exists as the BOLD-VERIFY entry point requested for measured
 win/loss/neutral summaries. Keep detailed attempt records in the canonical
 ledger above so the project has one source of truth.
 
+## 2026-06-21 - frankenscipy-8l8r1.144 - smoothing spline GCV addendum - LANDED KEEP
+
+- Agent: cod-a / BlackThrush
+- Decision: KEEP the landed `origin/main` implementation, not the local
+  dense-input candidate. While cod-a was validating a Takahashi selected-inverse
+  GCV trace, `origin/main` landed the stronger stack: selected inverse, per-eval
+  allocation removal, extended n=5000 scaling evidence, and `band_to_full`
+  removal for banded X/E input. The local candidate was reverted before commit
+  because it would have regressed that banded-input state.
+- Final ratio-vs-SciPy score from the landed evidence below: `5/0/0` for
+  `make_smoothing_spline(lam=None)` GCV rows n=200/500/1000/2000/5000:
+  `21.8x / 16.8x / 27.8x / 16.6x / 8.3x` faster than SciPy.
+- Additional cod-a gates before the fast-forward: focused selected-inverse
+  substitution proof passed, smoothing-spline SciPy-lambda parity passed,
+  `cargo check -p fsci-interpolate --all-targets` passed with existing
+  interpolate warnings, and focused interpolate differential conformance passed.
+  A post-fast-forward rerun was attempted with `RCH_REQUIRE_REMOTE=1`, but RCH
+  had no admissible worker slots and refused local fallback.
+- Negative routing: do not return to dense `x_full/e_full` GCV inputs or
+  per-column trace solves. The remaining large-n residual is the still-dense
+  `xtwx/xte` and `lhs_buf` memory path; retry only with true band storage for
+  those matrices plus selected-inverse band reads.
+
 ## 2026-06-21 - frankenscipy-8l8r1.143 - ndimage label mean bit decoder - KEEP / RESIDUAL LOSS
 
 - Agent: cod-b / BlackThrush

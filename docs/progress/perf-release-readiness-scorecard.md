@@ -1,5 +1,40 @@
 # Performance Release-Readiness Scorecard
 
+## 2026-06-21 - fsci-interpolate smoothing spline GCV selected-inverse stack
+
+- Agent: cod-a / BlackThrush
+- Bead: `frankenscipy-8l8r1.144`
+- Decision: LANDED KEEP / VERIFIED ADDENDUM. The current `origin/main`
+  implementation dominates SciPy on the measured `make_smoothing_spline(lam=None)`
+  GCV rows. The local cod-a dense-input candidate was reverted because the
+  landed code already had the stronger banded X/E path.
+- Final current SciPy score: `5/0/0`.
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| Triage/claim | PASS | `bv --robot-triage` / `br ready` led to child bead `.144`; closed as superseded by the landed implementation |
+| Radical lever | PASS | Selected inverse computes only the inverse band needed for `tr(lhs^-1 XtWX)`, avoiding n trace RHS solves |
+| Landed perf evidence | PASS | `docs/NEGATIVE_EVIDENCE.md`: n=200/500/1000/2000/5000 final ratios 21.8x / 16.8x / 27.8x / 16.6x / 8.3x faster than SciPy |
+| Focused proof | PASS | cod-a rch selected-inverse substitution proof and smoothing-spline lambda parity passed before fast-forward |
+| Focused conformance | PASS | cod-a rch `fsci-conformance` interpolate differential fixture passed before fast-forward; landed ledger records interpolate 173/0 |
+| Per-crate compile | PASS/WARN | cod-a rch `cargo check -p fsci-interpolate --all-targets` passed with existing interpolate warnings |
+| Post-fast-forward rerun | BLOCKED/INFRA | `RCH_REQUIRE_REMOTE=1` bench rerun refused local fallback because no admissible workers were available |
+| Revert discipline | PASS | Local dense `x_full/e_full` candidate was reverted; no regressing source was committed |
+
+| Workload | Current Rust | SciPy oracle | Ratio | Verdict |
+| --- | ---: | ---: | ---: | --- |
+| `smoothing_spline_gcv/200` | 1.65 ms | 36 ms | 21.8x faster | keep |
+| `smoothing_spline_gcv/500` | 7.2 ms | 121 ms | 16.8x faster | keep |
+| `smoothing_spline_gcv/1000` | 10.2 ms | 284 ms | 27.8x faster | keep |
+| `smoothing_spline_gcv/2000` | 33.2 ms | 550 ms | 16.6x faster | keep |
+| `smoothing_spline_gcv/5000` | ~184 ms | 1531 ms | 8.3x faster | keep |
+
+Readiness notes:
+
+- Release score for this lane is `5/5`: dominance evidence is recorded, focused
+  correctness passed, the weaker local candidate was reverted, and the next
+  large-n target is narrowly defined as banded `xtwx/xte` plus `lhs` storage.
+
 ## 2026-06-21 - fsci-ndimage label mean bit-decoder keep / residual loss
 
 - Agent: cod-b / BlackThrush
