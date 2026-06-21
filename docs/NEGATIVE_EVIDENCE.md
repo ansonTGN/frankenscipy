@@ -6,6 +6,48 @@ This file exists as the BOLD-VERIFY entry point requested for measured
 win/loss/neutral summaries. Keep detailed attempt records in the canonical
 ledger above so the project has one source of truth.
 
+## 2026-06-21 - frankenscipy-8l8r1.145 - ndimage periodic label-mean reducer - REJECT
+
+- Agent: cod-b / BlackThrush
+- Decision: REJECT and restore source. The radical lever detected full-period
+  one-based label permutations and reduced by label order within each period,
+  hoping to trade random sum writes for sequential sum writes while preserving
+  per-label accumulation order. On the public `label_mean` Criterion rows it
+  regressed every same-worker Rust row, so the source patch was removed before
+  commit.
+- Skill route: alien-graveyard vectorized/morsel execution + alien-artifact
+  exact reduction-order proof + extreme one-lever gate. The proof obligation
+  was met during the trial, but the cache/memory tradeoff was wrong: random
+  input reads within each period cost more than the current sequential input
+  scan with random sum writes.
+- Same-worker RCH Criterion command: `AGENT_NAME=BlackThrush
+  CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b
+  RCH_REQUIRE_REMOTE=1 RCH_WORKER=vmi1293453 rch exec -- cargo bench -p
+  fsci-ndimage --bench ndimage_bench --profile release -- label_mean
+  --sample-size 10 --warm-up-time 1 --measurement-time 1 --noplot`.
+- Note: this Cargo does not accept `cargo bench --release`; the command used
+  Cargo's optimized release bench profile via `--profile release`.
+- Live SciPy oracle after the reject: SciPy 1.17.1 / NumPy 2.4.3,
+  `scipy.ndimage.mean` on the same deterministic Criterion labels. The restored
+  current Rust route is faster than this live oracle on all four rows, but the
+  rejected candidate was still strictly worse than current Rust.
+
+| Workload | Restored current Rust | Periodic reducer candidate | Local SciPy oracle | Verdict |
+| --- | ---: | ---: | ---: | --- |
+| `label_mean/one_based/n65536_k512` | 254.99 us | 472.90 us | 2.458477 ms | reject: candidate 1.85x slower than current; both beat live SciPy |
+| `label_mean/one_based/n262144_k1024` | 1.3389 ms | 2.1661 ms | 11.836210 ms | reject: candidate 1.62x slower than current; both beat live SciPy |
+| `label_mean/one_based/n262144_k2048` | 1.0961 ms | 2.4158 ms | 10.864840 ms | reject: candidate 2.20x slower than current; both beat live SciPy |
+| `label_mean/one_based/n589824_k4096` | 3.3692 ms | 5.5890 ms | 29.567025 ms | reject: candidate 1.66x slower than current; both beat live SciPy |
+
+- Win/loss/neutral score: candidate vs restored current Rust `0/4/0`
+  (rejected); restored current Rust vs live SciPy oracle `4/0/0`.
+- Correctness and revert: focused periodic accumulation-order guard passed
+  during the trial, helper-bin had `mism=0/0/0/0/0`, and the regressing source
+  diff was fully removed before this evidence commit.
+- Retry condition: do not retry periodic label-order reducers for this lane.
+  The next credible lever is a streaming SIMD/classifier or data-layout route
+  that preserves sequential input reads, not a period-wise input gather.
+
 ## 2026-06-21 - frankenscipy-8l8r1.144 - smoothing spline GCV addendum - LANDED KEEP
 
 - Agent: cod-a / BlackThrush

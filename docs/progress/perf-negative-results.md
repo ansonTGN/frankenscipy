@@ -4,6 +4,52 @@ This ledger records every code-first performance attempt, including attempts tha
 are still awaiting the batch benchmark wave. Entries must name the retry
 condition so dead ends are not repeated casually.
 
+## 2026-06-21 - frankenscipy-8l8r1.145 - ndimage periodic label-mean reducer
+
+- Agent: cod-b / BlackThrush
+- Status: rejected and restored before commit.
+- Lever tried: detect one-based contiguous indexes whose label array is a
+  repeated full-period permutation, then accumulate one label at a time within
+  each period. The intended win was sequential sum/count writes and a
+  deterministic reduction order; the actual cost was period-local random reads
+  from `input.data`, which dominated the current sequential scan.
+- Graveyard/artifact route: vectorized/morsel execution with an exact
+  accumulation-order proof. The proof held for the trial path, but the
+  profile/bench gate failed.
+- RCH helper-bin after the trial path:
+  `AGENT_NAME=BlackThrush CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b
+  RCH_REQUIRE_REMOTE=1 RCH_WORKER=vmi1293453 rch exec -- cargo run --release -p
+  fsci-ndimage --bin perf_label_stats` on `vmi1293453`.
+- RCH Criterion reject command:
+  `AGENT_NAME=BlackThrush CARGO_TARGET_DIR=/data/projects/.rch-targets/frankenscipy-cod-b
+  RCH_REQUIRE_REMOTE=1 RCH_WORKER=vmi1293453 rch exec -- cargo bench -p
+  fsci-ndimage --bench ndimage_bench --profile release -- label_mean
+  --sample-size 10 --warm-up-time 1 --measurement-time 1 --noplot`.
+- Cargo note: `cargo bench --release` is not a valid spelling in this workspace;
+  `--profile release` was used for the optimized bench profile.
+- Local SciPy oracle: SciPy 1.17.1 / NumPy 2.4.3,
+  `scipy.ndimage.mean` on the same deterministic Criterion label arrays.
+
+| Workload | Restored current Rust | Periodic reducer candidate | Candidate vs current | Local SciPy oracle | Current vs SciPy |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `label_mean/one_based/n65536_k512` | 254.99 us | 472.90 us | 1.85x slower | 2.458477 ms | 9.64x faster |
+| `label_mean/one_based/n262144_k1024` | 1.3389 ms | 2.1661 ms | 1.62x slower | 11.836210 ms | 8.84x faster |
+| `label_mean/one_based/n262144_k2048` | 1.0961 ms | 2.4158 ms | 2.20x slower | 10.864840 ms | 9.91x faster |
+| `label_mean/one_based/n589824_k4096` | 3.3692 ms | 5.5890 ms | 1.66x slower | 29.567025 ms | 8.78x faster |
+
+- Same-worker candidate-vs-current score: `0/4/0`; source reverted.
+- Live restored-current-vs-SciPy score: `4/0/0`. This refreshed oracle differs
+  from the earlier `.143` conservative SciPy timings, so this entry is a new
+  live-oracle score rather than a rewrite of the historical `.143` residual.
+- Correctness during the trial: focused periodic accumulation-order guard
+  passed, and `perf_label_stats` still reported `mism=0/0/0/0/0` against the
+  old linear, bucketed, hashflat, dense-fract, and dense-table routes.
+- Revert discipline: the periodic reducer function, call site, and focused test
+  were removed before committing; no regressing source is shipped.
+- Retry condition: do not retry period-wise label-order reducers for this lane.
+  Future attempts must keep sequential input reads or prove enough vectorized
+  ingestion/classifier speedup to offset input gather locality loss.
+
 ## 2026-06-21 - frankenscipy-8l8r1.144 - interpolate smoothing spline GCV stack
 
 - Agent: cod-a / BlackThrush

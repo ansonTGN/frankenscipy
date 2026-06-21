@@ -1,6 +1,6 @@
 # Gauntlet Release Scorecard
 
-Last updated: 2026-06-21 by cod-a / BlackThrush.
+Last updated: 2026-06-21 by cod-b / BlackThrush.
 
 This scorecard tracks code-first performance work that has been converted into
 measured head-to-head evidence against the SciPy original. The detailed
@@ -99,6 +99,7 @@ win/loss/neutral ledger lives in `docs/progress/perf-negative-results.md`.
 
 | Bead | Rejected lever | Realistic workload | Candidate result | Parent/current result | Decision |
 | --- | --- | --- | ---: | ---: | --- |
+| `frankenscipy-8l8r1.145` | Periodic one-based label-mean reducer that accumulates by label order within each full-period label permutation | `ndimage.mean(labels,index)` public `label_mean` rows N=65536/K512, N=262144/K1024, N=262144/K2048, N=589824/K4096 | 472.90 us / 2.1661 ms / 2.4158 ms / 5.5890 ms | restored current 254.99 us / 1.3389 ms / 1.0961 ms / 3.3692 ms; live SciPy oracle 2.458477 ms / 11.836210 ms / 10.864840 ms / 29.567025 ms | reject and restore source: candidate regressed current Rust `0/4/0`, while restored current Rust wins against refreshed live SciPy `4/0/0` |
 | `frankenscipy-8l8r1.122` | L-BFGS-B mutable Wolfe finite-difference probe scratch | 10D Rosenbrock finite-difference `L-BFGS-B` | 106.440 us | 87.087 us parent | reject and revert |
 | `frankenscipy-8l8r1.122` | L-BFGS-B mutable Wolfe finite-difference probe scratch | 32D quadratic finite-difference `L-BFGS-B` | 6.055 us | 5.246 us parent | reject and revert |
 | `frankenscipy-8l8r1.116` | FFT CSD rfft real-spectrum route | 4096-sample CSD helper | 125.88 us | 112.08 us parent | reject and revert |

@@ -1,5 +1,42 @@
 # Performance Release-Readiness Scorecard
 
+## 2026-06-21 - fsci-ndimage periodic label-mean reducer reject
+
+- Agent: cod-b / BlackThrush
+- Bead: `frankenscipy-8l8r1.145`
+- Decision: REJECT / SOURCE RESTORED. The candidate detected repeated
+  one-based label permutations and accumulated by label within each period, but
+  it regressed all same-worker Rust Criterion rows. The restored current Rust
+  path is faster than the refreshed live SciPy oracle on the same deterministic
+  labels, so the release score for current code is good; the attempted lever is
+  still a clear internal regression.
+- Final scores: candidate vs current Rust `0/4/0`; restored current Rust vs
+  live SciPy oracle `4/0/0`.
+
+| Gate | Result | Notes |
+| --- | --- | --- |
+| Triage/claim | PASS | `br ready` / `bv --robot-triage` selected `.145`, assignee `cod-b`; Bead was claimed in progress before measurement |
+| Radical lever | FAIL/PERF | Periodic label-order reducer preserved exact order but traded sequential input reads for random period-local input gathers |
+| Same-worker Criterion | FAIL/PERF | rch `vmi1293453`: candidate medians 472.90 us / 2.1661 ms / 2.4158 ms / 5.5890 ms versus restored current 254.99 us / 1.3389 ms / 1.0961 ms / 3.3692 ms |
+| Live SciPy oracle | PASS/CURRENT | local SciPy 1.17.1 / NumPy 2.4.3 medians 2.458477 ms / 11.836210 ms / 10.864840 ms / 29.567025 ms; restored current Rust is 8.78x-9.91x faster |
+| Correctness during trial | PASS | focused periodic accumulation-order guard passed and helper-bin reported `mism=0/0/0/0/0` |
+| Revert discipline | PASS | Candidate function, call site, and trial test were removed before commit; source diff is clean for `fsci-ndimage` |
+| Negative ledger | PASS | `docs/NEGATIVE_EVIDENCE.md` and `docs/progress/perf-negative-results.md` record the loss, live SciPy score, and retry predicate |
+
+| Workload | Restored current Rust | Candidate | Live SciPy | Verdict |
+| --- | ---: | ---: | ---: | --- |
+| `label_mean/one_based/n65536_k512` | 254.99 us | 472.90 us | 2.458477 ms | reject candidate; current wins vs SciPy |
+| `label_mean/one_based/n262144_k1024` | 1.3389 ms | 2.1661 ms | 11.836210 ms | reject candidate; current wins vs SciPy |
+| `label_mean/one_based/n262144_k2048` | 1.0961 ms | 2.4158 ms | 10.864840 ms | reject candidate; current wins vs SciPy |
+| `label_mean/one_based/n589824_k4096` | 3.3692 ms | 5.5890 ms | 29.567025 ms | reject candidate; current wins vs SciPy |
+
+Readiness notes:
+
+- Current release evidence for this deterministic Criterion label pattern is
+  `4/4` SciPy wins after the live oracle refresh, but the tried period-wise
+  reducer is excluded. Future `.145`-class attempts should keep the current
+  sequential input scan and attack classifier/vectorization overhead instead.
+
 ## 2026-06-21 - fsci-interpolate smoothing spline GCV selected-inverse stack
 
 - Agent: cod-a / BlackThrush
