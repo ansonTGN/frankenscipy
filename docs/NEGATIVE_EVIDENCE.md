@@ -1785,3 +1785,14 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   reflective) solver — the scipy default — projecting/scaling the LM/dogleg step to the
   feasible box. Verify vs scipy least_squares(method='trf', bounds=...) + curve_fit with
   bounds. Big; deferred.
+
+## 2026-06-20 - SHIPPED: factor-once GCV trace via banded Cholesky (O(n³)→O(n²))
+- Agent: cc / MistyBirch. make_smoothing_spline gcv_optimal_lambda computed tr(lhs⁻¹XtWX)
+  by re-building+re-factoring the COLUMN-INDEPENDENT (4,4)-banded SPD lhs once PER column
+  (n× → residual O(n³)). Now: build+factor lhs ONCE per λ via banded Cholesky (chol_banded),
+  substitute the n trace RHS (chol_subst) → O(n²). lhs is SPD (sum of two Gram matrices,
+  λ≥0) so no pivoting needed. VERIFIED warm: fsci-interpolate cargo test 173/0 (incl.
+  make_smoothing_spline scipy-parity) → tolerance-parity correct (GCV λ shift ≤~1e-12).
+  Speedup is algorithmic (factor 1× vs n×); MEASURED bench pending (no smoothing-spline
+  bench harness). LESSON: the LU getrs factor-once I'd staged was WRONG for physical-swap
+  Vec<Vec> (swaps scatter L); SPD ⇒ Cholesky sidesteps pivoting. 3rd correction to this item.
