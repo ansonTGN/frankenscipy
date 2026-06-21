@@ -47,7 +47,7 @@ sort_unstable (72 sites), kendalltau (Knight), weightedtau (Fenwick), distances
 (wasserstein/energy O(n log n), pdist SIMD), KDE/mvn/mvt (parallel), MGC (prefix-sum),
 rank_max (sort-once), binned-statistic family (accumulate), savgol (coeffs-once),
 RectBivariateSpline (compact-band cascade), RGI, make_interp_spline (compact-band),
-RBF (flat-solve), DE/global-optimizers (callback lever).
+RBF (flat-solve), DE/global-optimizers (callback lever), procrustes (SVD-align, parity+perf-tested), spatial pdist/KDTree/find_simplex/SphericalVoronoi.
 Also confirmed (2026-06-20 audit): Interp1d/CubicSpline (O(n) tridiagonal Thomas
 solve, all BCs), minimize methods present (BFGS/CG/L-BFGS-B/Nelder-Mead/Newton-CG/
 Powell/SLSQP/TNC). Pchip (Fritsch-Carlson interior + scipy-exact endpoint).
