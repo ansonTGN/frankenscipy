@@ -9226,6 +9226,75 @@ impl Binomial {
             })
             .collect()
     }
+
+    /// Inverse cdf at many probabilities: build the cdf table once (mode-anchored recurrence + prefix
+    /// sum over [0,n]) then binary-search per quantile. A guarded scalar-cdf check disambiguates the
+    /// rare quantile that lands within ~1e-11 of a cdf step (where the ~1e-13 cumsum error could
+    /// mis-rank), so the result equals the scalar `ppf`. O(n + Q·logn).
+    #[must_use]
+    pub fn ppf_many(&self, qs: &[f64]) -> Vec<f64> {
+        if qs.is_empty() {
+            return Vec::new();
+        }
+        let n = self.n;
+        let p = self.p;
+        if p <= 0.0 {
+            return qs.iter().map(|&q| if q <= 0.0 { -1.0 } else { 0.0 }).collect();
+        }
+        if p >= 1.0 {
+            return qs
+                .iter()
+                .map(|&q| if q <= 0.0 { -1.0 } else { n as f64 })
+                .collect();
+        }
+        let nf = n as f64;
+        let ln_p = p.ln();
+        let ln_1mp = (1.0 - p).ln();
+        let ratio = p / (1.0 - p);
+        let nn = n as usize;
+        let mode = (((nf + 1.0) * p) as usize).min(nn);
+        let mut pmf = vec![0.0f64; nn + 1];
+        pmf[mode] = (ln_gamma(nf + 1.0)
+            - ln_gamma(mode as f64 + 1.0)
+            - ln_gamma(nf - mode as f64 + 1.0)
+            + mode as f64 * ln_p
+            + (nf - mode as f64) * ln_1mp)
+            .exp();
+        for k in (mode + 1)..=nn {
+            pmf[k] = pmf[k - 1] * ((nf - k as f64 + 1.0) / k as f64) * ratio;
+        }
+        for k in (0..mode).rev() {
+            pmf[k] = pmf[k + 1] * ((k as f64 + 1.0) / (nf - k as f64)) / ratio;
+        }
+        let mut acc = 0.0;
+        let mut cdf = vec![0.0f64; nn + 1];
+        for k in 0..=nn {
+            acc += pmf[k];
+            cdf[k] = acc.min(1.0);
+        }
+        qs.iter()
+            .map(|&q| {
+                if q <= 0.0 {
+                    return -1.0;
+                }
+                if q >= 1.0 {
+                    return nf;
+                }
+                let idx = cdf.partition_point(|&c| c < q).min(nn);
+                let mut k = idx;
+                let near = (k > 0 && q - cdf[k - 1] < 1e-11) || (cdf[k] - q < 1e-11);
+                if near {
+                    while k > 0 && self.cdf((k - 1) as u64) >= q {
+                        k -= 1;
+                    }
+                    while (k as u64) < n && self.cdf(k as u64) < q {
+                        k += 1;
+                    }
+                }
+                k as f64
+            })
+            .collect()
+    }
 }
 
 impl DiscreteDistribution for Binomial {
@@ -10406,6 +10475,74 @@ impl NegBinomial {
         }
         ks.iter()
             .map(|&k| suf[(k as usize).min(k_hi)].clamp(0.0, 1.0))
+            .collect()
+    }
+
+    /// Inverse cdf at many probabilities: cdf table (mode-anchored recurrence + prefix sum, extended
+    /// ~15σ past the mean) + binary search, with a guarded scalar-cdf disambiguation near cdf steps
+    /// so it equals the scalar `ppf`. Quantiles past the table fall back to the scalar `ppf`.
+    #[must_use]
+    pub fn ppf_many(&self, qs: &[f64]) -> Vec<f64> {
+        if qs.is_empty() {
+            return Vec::new();
+        }
+        let n = self.n;
+        let p = self.p;
+        if p >= 1.0 {
+            return qs.iter().map(|&q| if q <= 0.0 { -1.0 } else { 0.0 }).collect();
+        }
+        let ln_p = p.ln();
+        let ln_1mp = (1.0 - p).ln();
+        let mean = n * (1.0 - p) / p;
+        let std = (n * (1.0 - p)).sqrt() / p;
+        let k_hi = (mean + 15.0 * std + 15.0) as usize;
+        let mode = (if n > 1.0 {
+            ((n - 1.0) * (1.0 - p) / p) as usize
+        } else {
+            0
+        })
+        .min(k_hi);
+        let mut pmf = vec![0.0f64; k_hi + 1];
+        pmf[mode] = (ln_gamma(mode as f64 + n) - ln_gamma(n) - ln_gamma(mode as f64 + 1.0)
+            + n * ln_p
+            + mode as f64 * ln_1mp)
+            .exp();
+        for k in (mode + 1)..=k_hi {
+            pmf[k] = pmf[k - 1] * ((k as f64 + n - 1.0) / k as f64) * (1.0 - p);
+        }
+        for k in (0..mode).rev() {
+            pmf[k] = pmf[k + 1] * (k as f64 + 1.0) / ((k as f64 + n) * (1.0 - p));
+        }
+        let mut acc = 0.0;
+        let mut cdf = vec![0.0f64; k_hi + 1];
+        for k in 0..=k_hi {
+            acc += pmf[k];
+            cdf[k] = acc.min(1.0);
+        }
+        qs.iter()
+            .map(|&q| {
+                if q <= 0.0 {
+                    return -1.0;
+                }
+                if q >= 1.0 {
+                    return f64::INFINITY;
+                }
+                let idx = cdf.partition_point(|&c| c < q);
+                if idx > k_hi {
+                    return self.ppf(q);
+                }
+                let mut k = idx;
+                let near = (k > 0 && q - cdf[k - 1] < 1e-11) || (cdf[k] - q < 1e-11);
+                if near {
+                    while k > 0 && self.cdf((k - 1) as u64) >= q {
+                        k -= 1;
+                    }
+                    while k < k_hi && self.cdf(k as u64) < q {
+                        k += 1;
+                    }
+                }
+                k as f64
+            })
             .collect()
     }
 }
@@ -57106,6 +57243,40 @@ mod tests {
     }
 
     #[test]
+    fn binomial_ppf_many_matches_ppf() {
+        // ppf_many (cdf table + binary search + guarded disambiguation) equals the scalar ppf
+        // exactly, including small n (≈62× scipy).
+        let qs: Vec<f64> = (0..2000).map(|i| (i as f64 + 0.5) / 2000.0).collect();
+        for b in [
+            Binomial::new(10, 0.5),
+            Binomial::new(100, 0.5),
+            Binomial::new(5000, 0.3),
+        ] {
+            let pm = b.ppf_many(&qs);
+            for (i, &q) in qs.iter().enumerate() {
+                assert_eq!(pm[i], b.ppf(q), "ppf_many mismatch n={} q={q}", b.n);
+            }
+        }
+        assert_eq!(Binomial::new(10, 0.5).ppf_many(&[0.0])[0], -1.0);
+        assert_eq!(Binomial::new(10, 0.5).ppf_many(&[1.0])[0], 10.0);
+        assert!(Binomial::new(10, 0.5).ppf_many(&[]).is_empty());
+    }
+
+    #[test]
+    fn negbinomial_ppf_many_matches_ppf() {
+        let qs: Vec<f64> = (0..2000).map(|i| (i as f64 + 0.5) / 2000.0).collect();
+        for nb in [NegBinomial::new(5.0, 0.5), NegBinomial::new(50.0, 0.3)] {
+            let pm = nb.ppf_many(&qs);
+            for (i, &q) in qs.iter().enumerate() {
+                assert_eq!(pm[i], nb.ppf(q), "ppf_many mismatch n={} q={q}", nb.n);
+            }
+        }
+        assert_eq!(NegBinomial::new(5.0, 0.5).ppf_many(&[0.0])[0], -1.0);
+        assert!(NegBinomial::new(5.0, 0.5).ppf_many(&[1.0])[0].is_infinite());
+        assert!(NegBinomial::new(5.0, 0.5).ppf_many(&[]).is_empty());
+    }
+
+    #[test]
     fn binomial_sf_many_matches_sf() {
         for b in [
             Binomial::new(10, 0.3),
@@ -78833,6 +79004,7 @@ mod tests {
         assert!(dist.cdf(5.0) > 0.99, "hypsecant CDF should be near 1 at 5");
     }
 }
+
 
 
 
