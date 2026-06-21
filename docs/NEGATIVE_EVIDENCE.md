@@ -1599,3 +1599,22 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   (2) / fsci-ndimage (2) which are OTHER agents' crates (not my files).
 - PENDING compile-verify (no cargo): one-token swaps, near-zero risk; byte-identical so
   no bench needed. cargo check -p {fsci-stats,fsci-cluster} when disk recovers.
+
+## 2026-06-20 - CORRECTION: gcv band-restricts are constant-factor, NOT O(n³)→O(n²) (re-analysis)
+
+- Agent: cc / MistyBirch. Honesty correction of my own disk-window claims (08f79b0e /
+  43eb09b2 / eab4eea3 + the master queue): I OVERSTATED the GCV trace-loop win.
+- The trace loop still does `let mut lhs = vec![vec![0.0; n]; n]` **per column** — an
+  O(n²) ALLOC+ZERO that my band-restricts never touched (they only cut the FILL and the
+  SOLVE). So the trace loop remains **O(n³·iters)** (the per-column n×n alloc+zero
+  dominates); the m/lhs/numer band-restricts are a **constant-factor (~3×)** improvement
+  there, NOT the asymptotic O(n³)→O(n²) I wrote.
+- WHAT IS correct: 033f7bd9 (Gram build O(n³)→O(n), done once per gcv) IS a genuine
+  asymptotic win; the banded SOLVES (08f79b0e) and band-restricted fills are real
+  constant-factor wins. All remain byte-identical. So make_smoothing_spline large-n is
+  faster (~constant) but still O(n³·iters)-bound on the trace loop's lhs alloc+zero.
+- REAL trace fix (NEEDS CARGO — risky blind, deferred): factor lhs ONCE per gcv (banded
+  LU) + solve n RHS by substitution (lhs is loop-invariant), OR reuse one lhs buffer
+  with a TARGETED rezero of solve_banded's touched band (|i-j| ≤ 2·bw) — either gives
+  O(n²·iters). The safe full-rezero reuse only removes malloc calls (the n² zeroing
+  remains), so it is NOT worth a blind commit. Updated framing for the verify queue.
