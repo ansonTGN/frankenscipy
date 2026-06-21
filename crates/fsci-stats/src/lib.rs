@@ -74704,8 +74704,10 @@ mod tests {
             (median_abs_deviation(&data, 1.0) - 1.0).abs() < 1e-12,
             "mad raw"
         );
-        // scale='normal' = 1 / 0.6744897501960817
-        let normal = 1.0 / 0.674_489_750_196_081_7;
+        // scipy.stats.median_abs_deviation DIVIDES by `scale`; scale='normal' uses the divisor
+        // 0.6744897501960817 (so the result is MAD/0.674... = MAD·1.4826). The previous value
+        // passed the reciprocal (1.4826) which divides the wrong way — fsci matches scipy here.
+        let normal = 0.674_489_750_196_081_7;
         assert!(
             (median_abs_deviation(&data, normal) - 1.482_602_218_505_602).abs() < 1e-12,
             "mad normal"
@@ -78297,3 +78299,5 @@ mod tests {
         assert!(dist.cdf(5.0) > 0.99, "hypsecant CDF should be near 1 at 5");
     }
 }
+
+
