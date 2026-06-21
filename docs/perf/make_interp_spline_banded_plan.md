@@ -275,3 +275,24 @@ Trace loop (replaces per-column build+solve): build `lhs` once (band-restricted)
 let z = subst_banded(&lhs,&perm,&mut b,4); tr += z[col]; }`. → O(n·bw² + n²·bw) per λ.
 BYTE-DIFF TEST: factor_banded+subst_banded == solve_banded to_bits on random banded
 systems, before flipping the trace loop.
+
+### Plan 2 — CORRECTION (2026-06-20, cc): factor-once is TOLERANCE-parity, NOT byte-identical
+On re-review of the paste-ready code above: the "byte-identical to n solve_banded calls"
+claim is WRONG. With partial pivoting, a column col's stored L multiplier (a[row][col])
+gets MOVED by a LATER column col'>col row-swap (a.swap(col', max_row') swaps whole rows,
+including the already-stored L of column col). So a factor-once solve that stores L and
+substitutes (LAPACK getrf/getrs style) must either apply the permutation to b FIRST then
+forward-subst (perm-first), or track the moved L — both do the FP ops in a DIFFERENT
+ORDER than solve_banded's INTERLEAVED swap-then-eliminate-b. Same math, but
+TOLERANCE-parity (≤~1e-12), NOT byte-for-byte.
+CONSEQUENCES for the recovery impl:
+- Do NOT gate on a to_bits byte-diff vs solve_banded — it WILL differ. Gate on a
+  TOLERANCE diff (≤1e-10) vs solve_banded AND the make_smoothing_spline scipy-parity test
+  (which is already tolerance-based — so flipping to factor-once is fine if it stays within
+  that tolerance).
+- Safest impl: standard banded getrf (store L + ipiv) + getrs (apply ipiv to b, forward
+  with L, back with U). The subst code above is close but its interleaved swap+L-read is
+  the fragile part — prefer perm-first getrs.
+- This means the factor-once trace win is a (tolerance-parity) numerical change to
+  make_smoothing_spline's GCV-selected lambda — verify the chosen lambda + coefficients
+  stay within scipy tolerance, not that they're unchanged bit-for-bit.
