@@ -2649,3 +2649,8 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
 - The native-real-FFT wall is mostly resolved for composite n (other agent). Remaining: small
   5-smooth overhead (n=10000, 2.5x) + the dct/dct4 extract (AoS-Complex64 SIMD wall) — FFT-kernel
   domain (coordinate with the owning agent, don't duplicate). My DCT twiddle caches stack on top.
+
+## 2026-06-21 - stats binned_statistic family: DOMINANT (2.5-3.6x), no loss
+- Agent: cc / MistyBirch. MEASURED 500k: binned_statistic mean/50 5.53ms vs scipy 19.94 WIN 3.6x;
+  binned_statistic_2d mean/50² 10.86 vs 36.81 WIN 3.4x; 2d std/50² 14.82 vs 37.09 WIN 2.5x.
+  fsci's accumulate-optimized binning dominates scipy's. No loss. Another dominant surface confirmed.
