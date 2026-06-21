@@ -5892,22 +5892,28 @@ fn gcv_optimal_lambda(x_full: &[Vec<f64>], e_full: &[Vec<f64>], y: &[f64], w: &[
             xte[i][j] = se;
         }
     }
+    // lhs scratch reused across every bounded_minimize eval: allocated ONCE (n×n) instead
+    // of vec![vec![0;n];n] per eval. Cholesky writes only the lower (4)-band + diagonal and
+    // does no pivoting/fill, so re-filling |i-j| ≤ 4 each eval fully overwrites the previous
+    // factorization; out-of-band cells are never touched (stay 0). Drops the per-eval alloc
+    // from O(n²) to O(n) → the whole GCV sweep is O(n·iters).
+    let lhs_buf = std::cell::RefCell::new(vec![vec![0.0_f64; n]; n]);
     let gcv = |lam: f64| -> f64 {
-        // c solves (X + λE) c = y.
-        // m = X + λE is (2,2)-banded, so only fill |i-j| ≤ 2; out-of-band entries stay 0
-        // (== the full build — x_full,e_full are 0 there), and solve_banded creates the
-        // LU fill in-place. Byte-identical; O(n²) → O(n).
-        let mut m = vec![vec![0.0_f64; n]; n];
-        for i in 0..n {
-            let jlo = i.saturating_sub(2);
-            let jhi = (i + 2).min(n - 1);
-            for j in jlo..=jhi {
-                m[i][j] = x_full[i][j] + lam * e_full[i][j];
-            }
-        }
+        // c solves (X + λE) c = y. m = X + λE is (2,2)-banded; build it in COMPACT banded
+        // storage (O(n·bw) per eval, not the dense O(n²) alloc) and solve with the same
+        // partial-pivoting banded LU (solve_banded_compact, byte-identical to solve_banded).
+        let mut m: Vec<CompactBandRow> = (0..n)
+            .map(|i| {
+                let jlo = i.saturating_sub(2);
+                let jhi = (i + 2).min(n - 1);
+                let vals: Vec<f64> = (jlo..=jhi)
+                    .map(|j| x_full[i][j] + lam * e_full[i][j])
+                    .collect();
+                CompactBandRow::from_slice(jlo, &vals)
+            })
+            .collect();
         let mut rhs = y.to_vec();
-        // m = X + λE is (2,2)-banded (X, E both |i-j| ≤ 2) → banded solve, byte-identical.
-        let c = match solve_banded(&mut m, &mut rhs, 2) {
+        let c = match solve_banded_compact(&mut m, &mut rhs, 2) {
             Ok(c) => c,
             Err(_) => return f64::INFINITY,
         };
@@ -5934,17 +5940,19 @@ fn gcv_optimal_lambda(x_full: &[Vec<f64>], e_full: &[Vec<f64>], y: &[f64], w: &[
         // The Erisman–Tinney SELECTED INVERSE recovers that band from the Cholesky factor in
         // O(n·bw²) — no n solves → the whole GCV eval is O(n) (matches scipy's Reinsch). The
         // λ chosen by bounded_minimize is the same (tolerance-parity, ≤~1e-12).
-        let mut lhs = vec![vec![0.0_f64; n]; n];
-        for i in 0..n {
-            let jlo = i.saturating_sub(4);
-            let jhi = (i + 4).min(n - 1);
-            for j in jlo..=jhi {
-                lhs[i][j] = xtwx[i][j] + lam * xte[i][j];
+        let tr = {
+            let mut lhs = lhs_buf.borrow_mut();
+            for i in 0..n {
+                let jlo = i.saturating_sub(4);
+                let jhi = (i + 4).min(n - 1);
+                for j in jlo..=jhi {
+                    lhs[i][j] = xtwx[i][j] + lam * xte[i][j];
+                }
             }
-        }
-        let tr = match chol_banded(&mut lhs, 4) {
-            Some(()) => gcv_trace_selinv(&lhs, &xtwx, n, 4),
-            None => return f64::INFINITY,
+            match chol_banded(lhs.as_mut_slice(), 4) {
+                Some(()) => gcv_trace_selinv(lhs.as_slice(), &xtwx, n, 4),
+                None => return f64::INFINITY,
+            }
         };
         let denom = (1.0 - tr / nf).powi(2);
         numer / denom

@@ -1838,3 +1838,22 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   `lhs = vec![vec![0;n];n]` (O(n²)) PER bounded_minimize eval → O(n²·iters) alloc churn
   dominates at large n. Fix: banded lhs storage (O(n·bw)) or a reused scratch buffer →
   truly O(n) per eval. Then n=1000 should also dominate.
+
+## 2026-06-21 - SHIPPED+MEASURED: GCV per-eval alloc elimination — DOMINATES scipy 11.6-24.5x
+- Agent: cc / MistyBirch. After the selected-inverse O(n) trace, the residual large-n cost
+  was the GCV closure's TWO per-eval O(n²) allocs (vec![vec![0;n];n] for m and lhs) ×
+  bounded_minimize iters. Fixed both:
+  - m (X+λE, (2,2)-banded, pivoted): build in COMPACT banded storage (Vec<CompactBandRow>,
+    O(n·bw)) + solve_banded_compact (byte-identical to the dense banded LU).
+  - lhs (SPD, Cholesky): reuse one RefCell scratch allocated ONCE; re-fill |i-j|≤4 each eval
+    (Cholesky has no pivot/fill, so it only touches the re-filled band; off-band stays 0).
+  Per-eval alloc O(n²)→O(n); whole GCV sweep O(n·iters). VERIFIED interpolate 173/0.
+- MEASURED vs scipy make_smoothing_spline (criterion / perf_counter):
+  n=200: 1.50 ms vs 36 ms  → WIN 24.0x
+  n=500: 10.4 ms vs 121 ms → WIN 11.6x
+  n=1000: 11.6 ms vs 284 ms → WIN 24.5x
+  (n=1000 self-speedup 301→11.6 ms = 26x; the O(n²) alloc churn WAS the residual.)
+- JOURNEY (make_smoothing_spline vs scipy): START losing 1.9-3.1x (n≥500) → factor-once
+  subst O(n²) (wins small only) → selected-inverse O(n) trace (2.1-15x, parity n=1000) →
+  alloc elimination (DOMINATES 11.6-24.5x ALL sizes). Lever stack: band-restrict + Cholesky
+  factor-once + Erisman-Tinney selected inverse + compact/reused scratch.
