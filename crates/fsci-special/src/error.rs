@@ -74,22 +74,24 @@ const INV_SQRT_PI: f64 = 0.564_189_583_547_756_3;
 const TWO_INV_SQRT_PI: f64 = 2.0 * INV_SQRT_PI;
 
 pub fn erf(z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
-    map_unary_input(
+    map_unary_input_rp(
         "erf",
         z,
         mode,
         |x| Ok(erf_scalar(x)),
         |value| Ok(erf_complex_scalar(value)),
+        usize::MAX, // cheap O(1) real kernel: serial beats par_map
     )
 }
 
 pub fn erfc(z: &SpecialTensor, mode: RuntimeMode) -> SpecialResult {
-    map_unary_input(
+    map_unary_input_rp(
         "erfc",
         z,
         mode,
         |x| Ok(erfc_scalar(x)),
         |value| Ok(erfc_complex_scalar(value)),
+        usize::MAX, // cheap O(1) real kernel: serial beats par_map
     )
 }
 
@@ -171,10 +173,38 @@ where
     F: Fn(f64) -> Result<f64, SpecialError> + Sync,
     G: Fn(Complex64) -> Result<Complex64, SpecialError> + Sync,
 {
+    map_unary_input_rp(function, input, mode, real_kernel, complex_kernel, 256)
+}
+
+/// `real_par_min` = the RealVec length below which the real arm runs SERIALLY. Cheap O(1) real
+/// kernels (erf/erfc rational ~14ns/call) are slower under par_map_indices at any practical length
+/// (thread overhead >> per-call work); they pass `usize::MAX`. Heavy real kernels (erfinv/erfcinv
+/// iterative) keep the default 256 so they still parallelize.
+fn map_unary_input_rp<F, G>(
+    function: &'static str,
+    input: &SpecialTensor,
+    mode: RuntimeMode,
+    real_kernel: F,
+    complex_kernel: G,
+    real_par_min: usize,
+) -> SpecialResult
+where
+    F: Fn(f64) -> Result<f64, SpecialError> + Sync,
+    G: Fn(Complex64) -> Result<Complex64, SpecialError> + Sync,
+{
     match input {
         SpecialTensor::RealScalar(x) => real_kernel(*x).map(SpecialTensor::RealScalar),
         SpecialTensor::RealVec(values) => {
-            par_map_indices(values.len(), |i| real_kernel(values[i])).map(SpecialTensor::RealVec)
+            if values.len() < real_par_min {
+                values
+                    .iter()
+                    .map(|&x| real_kernel(x))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(SpecialTensor::RealVec)
+            } else {
+                par_map_indices(values.len(), |i| real_kernel(values[i]))
+                    .map(SpecialTensor::RealVec)
+            }
         }
         SpecialTensor::ComplexScalar(value) => {
             complex_kernel(*value).map(SpecialTensor::ComplexScalar)

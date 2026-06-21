@@ -238,7 +238,7 @@ fn gamma_dispatch(function: &'static str, z: &SpecialTensor, mode: RuntimeMode) 
     match z {
         SpecialTensor::RealScalar(x) => gamma_scalar(*x, mode).map(SpecialTensor::RealScalar),
         SpecialTensor::RealVec(values) => {
-            par_map_indices(values.len(), |i| gamma_scalar(values[i], mode))
+            values.iter().map(|&x| gamma_scalar(x, mode)).collect::<Result<Vec<_>, _>>()
                 .map(SpecialTensor::RealVec)
         }
         SpecialTensor::ComplexScalar(z_val) => {
@@ -261,7 +261,7 @@ fn gammaln_dispatch(function: &'static str, z: &SpecialTensor, mode: RuntimeMode
     match z {
         SpecialTensor::RealScalar(x) => gammaln_scalar(*x, mode).map(SpecialTensor::RealScalar),
         SpecialTensor::RealVec(values) => {
-            par_map_indices(values.len(), |i| gammaln_scalar(values[i], mode))
+            values.iter().map(|&x| gammaln_scalar(x, mode)).collect::<Result<Vec<_>, _>>()
                 .map(SpecialTensor::RealVec)
         }
         SpecialTensor::ComplexScalar(z_val) => {
@@ -319,7 +319,7 @@ fn digamma_dispatch(function: &'static str, z: &SpecialTensor, mode: RuntimeMode
     match z {
         SpecialTensor::RealScalar(x) => digamma_scalar(*x, mode).map(SpecialTensor::RealScalar),
         SpecialTensor::RealVec(values) => {
-            par_map_indices(values.len(), |i| digamma_scalar(values[i], mode))
+            values.iter().map(|&x| digamma_scalar(x, mode)).collect::<Result<Vec<_>, _>>()
                 .map(SpecialTensor::RealVec)
         }
         SpecialTensor::ComplexScalar(z_val) => {
