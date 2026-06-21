@@ -2084,3 +2084,15 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   Tolerance-parity (rfft==fft to rounding); full signal suite 648/0.
 - The "route real-data FFT consumers through rfft/irfft" lever is now applied across
   oaconvolve (last cycle) + fftconvolve + hilbert. Remaining FFT-wall residual = pocketfft SIMD.
+
+## 2026-06-21 - GAUNTLET: fsci-spatial vs scipy — optimized (notable distance_matrix WIN 15.3x)
+- Agent: cc / MistyBirch. MEASURED scipy.spatial vs fsci (criterion/perf_counter):
+  - distance_matrix 2000²: fsci 7.73ms vs scipy 118ms → WIN 15.3x (scipy's is pure-numpy
+    broadcasting — a 96MB temp; fsci delegates to the cdist_metric loop). Notable.
+  - cdist euclid 2000²×3: fsci 10.4ms vs 11.6ms → ~parity 1.1x (fsci already SIMD:
+    collect_dim4_points/simd_dot/simd_sqsum, dim-4 + general paths).
+  - KDTree query k=1 (2000 over 5000): fsci 0.818ms vs 1.10ms → WIN 1.34x (fsci lacks k>1 —
+    capability gap, but k=1 wins). build ~parity.
+- fsci-spatial is well-optimized (no loss): cdist SIMD, distance_matrix win, KDTree k=1 win,
+  pdist SIMD (prior), Delaunay 2.2x-faster-than-Qhull (prior), SphericalVoronoi parallel (prior).
+  NEUTRAL/WIN cycle. Capability gap noted: KDTree k>1 nearest neighbors (fsci is k=1 only).
