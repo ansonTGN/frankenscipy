@@ -1369,11 +1369,13 @@ pub fn idct(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError> {
         let m = n / 2;
         let mut half = Vec::with_capacity(m + 1);
         half.push((0.5 * scaled_input[0], 0.0));
+        // e^{+iπk/2N} is the conjugate of the cached DCT-II twiddle e^{-iπk/2N} (bit-identical),
+        // so reuse that cache instead of recomputing cos/sin per coefficient on every idct call.
+        let idct_tw = get_or_compute_dct2_twiddles(n);
         for k in 1..=m {
             let xk = scaled_input[k];
             let xnk = scaled_input[n - k];
-            let angle = PI * k as f64 / (2.0 * nf);
-            let twiddle = (angle.cos(), angle.sin());
+            let twiddle = complex_conj(idct_tw[k]);
             half.push(complex_mul((0.5 * xk, -0.5 * xnk), twiddle));
         }
         // v = N·v_true (unscaled real inverse FFT); un-interleave the forward
@@ -1391,9 +1393,9 @@ pub fn idct(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError> {
     // Odd N: fall back to the 2N-point complex inverse FFT of the Hermitian
     // spectrum (the real-FFT pack needs an even length).
     let mut spectrum = vec![(0.0, 0.0); 2 * n];
+    let idct_tw = get_or_compute_dct2_twiddles(n);
     for k in 0..n {
-        let angle = PI * k as f64 / (2.0 * nf);
-        let twiddle = (angle.cos(), angle.sin());
+        let twiddle = complex_conj(idct_tw[k]);
         spectrum[k] = complex_mul((scaled_input[k], 0.0), twiddle);
     }
     for k in 1..n {
