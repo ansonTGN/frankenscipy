@@ -2741,3 +2741,15 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
     array) — accuracy/value mismatches, not 1-ULP exactness. Need per-failure investigation.
 - These are NOT the cheap fsci-special fixes; deferred as finicky. DON'T retry the pearsonr
   sequential-divide (dead-end, breaks boundary).
+
+## 2026-06-21 - fsci-stats: 3 of 5 standing failures FIXED (margins/NaN/wrong-test); 2 remain (harder)
+- Agent: cc / MistyBirch. Re-diagnosed and FIXED 3 of the 5 (these were NOT finicky after all):
+  (1) contingency_table returned unique LABELS [0,1] not the row/col MARGINS [2,2] — real bug, fixed.
+  (2) gzscore_weighted of constant data returned 0/0=NaN; the analytic answer is 0 — special-cased.
+  (3) zscore_mad: the TEST passed the wrong scale (1/0.6745 instead of the scipy 'normal' divisor
+  0.6745); fsci's median_abs_deviation DIVIDES by scale (VERIFIED scipy-correct) — fixed the test.
+  REMAINING 2 (genuinely harder, deferred): hypergeom pmf(10) off 5.5e-14 (>1e-14 tol) = large-
+  lgamma CANCELLATION in the log-pmf (gammaln is Lanczos-accurate; needs a stable recurrence/betaln
+  pmf, involved); pearsonr_length_two statistic 1-ULP numpy-dot rounding (no clean fix, see prior).
+- LEVER paid out: many "standing conformance failures" are real cheap bugs (wrong return value,
+  unhandled 0/0, buggy TEST) — diagnose each, don't assume finicky. VERIFY against real scipy.
