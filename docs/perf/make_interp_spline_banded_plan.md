@@ -159,3 +159,47 @@ byte-identical to today's parity-verified output.
 // new compact-band make_interp_spline coeffs == current solve_banded(dense) coeffs
 // to_bits, for k in {1,2,3,5}, n in {8,50,200}, random + clustered + repeated-knot x.
 ```
+
+---
+
+## Plan 2: factor-once GCV trace loop (the real O(n³)→O(n²), cargo-needed)
+
+Owner-note (cc): per the 2026-06-20 correction, gcv_optimal_lambda's trace loop is
+STILL O(n³·iters) — each of the n columns does `let lhs = vec![vec![0.0;n];n]`
+(O(n²) alloc+zero) + a fresh `solve_banded` (re-factors the SAME lhs). lhs is
+loop-invariant (= XᵀWX + λ XᵀWE), so factor it ONCE per λ and substitute n RHS.
+
+### Implementation (crates/fsci-interpolate/src/lib.rs)
+Split `solve_banded` (line 2741, the Vec<Vec> variant) into two phases, keeping the
+EXACT same FP order so the result is byte-identical to today's n separate calls:
+- `fn factor_banded(a: &mut [Vec<f64>], bw) -> Result<Vec<usize>, _>` — the
+  pivot/eliminate loop (2741's first half), recording the row-swap permutation
+  `perm[col] = max_row`; leaves a holding L (below diag) + U (band) in place.
+- `fn subst_banded(a: &[Vec<f64>], perm: &[usize], b: &mut [f64], bw)` — apply the
+  same row swaps to b (in col order), forward-substitute with L, back-substitute with
+  U (2741's `b[row] -= factor*b[col]` + the final back-sub block). Returns x.
+
+Trace loop becomes:
+```
+let mut lhs = build_band(xtwx, xte, lam, n);     // O(n·bw) band fill, ONCE per λ
+let perm = factor_banded(&mut lhs, 4)?;          // O(n·bw²), ONCE per λ
+let mut tr = 0.0;
+let mut b = vec![0.0; n];                          // reused
+for col in 0..n {
+    for i in 0..n { b[i] = xtwx[i][col]; }        // O(n) (or band-restrict to |i-col|≤4)
+    let z = subst_banded(&lhs, &perm, &mut b, 4); // O(n·bw)
+    tr += z[col];
+}
+```
+→ per-λ trace cost O(n·bw² + n·n·bw) = O(n²·bw); whole gcv O(n²·iters). The m-solve
+(5826) keeps its single solve_banded.
+
+### Verify (cargo recovery)
+- Byte-identity: factor_banded+subst_banded on a random banded system must equal
+  `solve_banded` to_bits (add a unit test). Then make_smoothing_spline must stay
+  byte-identical → existing scipy-parity + suite 172/0.
+- Bench: make_smoothing_spline at large n (the GCV path) should drop ~n× on the trace.
+- GOTCHA: partial-pivoting row swaps — `subst_banded` must replay `perm` in the SAME
+  order factor_banded applied them (col ascending), and the back-sub window is
+  [i, i+2·bw] (U upper bandwidth grows to 2·bw under pivoting). Keep the zero-skips so
+  it stays bit-identical to solve_banded.
