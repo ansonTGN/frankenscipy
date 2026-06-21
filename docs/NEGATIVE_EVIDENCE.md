@@ -2576,3 +2576,13 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   fsci's Welch-family (parallel segmented FFTs + cached twiddles) dominates scipy's. No loss.
 - Confirms dominance; signal spectral is DONE. (Spectral benefits from the FFT/twiddle caching
   already in place — no per-segment recompute bug, unlike the DCT family had.)
+
+## 2026-06-21 - lombscargle 77x WIN; dctn 3.8x wall; cos/sin recompute hunt (only DCT was cacheable)
+- Agent: cc / MistyBirch. MEASURED: lombscargle 5000pts×10000freqs fsci 52.4ms vs scipy 4030 WIN
+  77x (embarrassingly-parallel O(N·M); fsci parallel over frequencies vs scipy serial C). dctn 512²
+  fsci 7.78ms vs scipy 2.06 LOSE 3.8x (accumulated 1-D dct residual: rfft + AoS-Complex64 extract
+  per axis × N-D + transpose — the native-real-FFT + SIMD wall; twiddle cache already applied).
+- Hunted the DCT "recompute cos/sin per call" lever across signal/stats: all other hits are
+  INHERENT (window functions built once; chirp/von-Mises/lombscargle phases are data-dependent
+  = not cacheable). The DCT family was the only cacheable-twiddle recompute bug (now fully fixed).
+- Net: lombscargle dominant; dctn is the DCT/FFT wall at N-D. No new clean loss.
