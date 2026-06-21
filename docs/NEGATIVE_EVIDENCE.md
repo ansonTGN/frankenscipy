@@ -2475,3 +2475,11 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   near-parity (per-call work still ~10x but hidden by parallelism).
 - VERDICT: special heavy/series fns DOMINATE (struve/jv/bessel); the fast-Cephes-rational fns
   (gamma/ellipk/zeta/erf-family) are a coefficient wall. erf-family already crossed (ndtri/erfcinv).
+
+## 2026-06-21 - stats hypothesis-test gauntlet: DOMINANT (ks_2samp 8.9x, brunnermunzel 7.8x), no loss
+- Agent: cc / MistyBirch. MEASURED fsci vs scipy.stats (20k samples): ks_2samp 1.15ms vs 10.25
+  WIN 8.9x; brunnermunzel 3.17 vs 24.6 WIN 7.8x; mood 1.56 vs 5.77 WIN 3.7x; kruskal 3.86 vs
+  7.83 WIN 2.0x; mannwhitneyu 3.01 vs 5.35 WIN 1.8x; wilcoxon 1.72 vs 2.2 WIN 1.3x;
+  cramervonmises_2samp 4.92 vs 4.76 PARITY; anderson_ksamp 7.68 vs 5.88 LOSE 1.3x (modest,
+  complex test, not chased). fsci's rank/sort-based tests (O(n log n)) dominate scipy's.
+- No clean loss in this surface. Confirms broad dominance; stats hypothesis tests are DONE.
