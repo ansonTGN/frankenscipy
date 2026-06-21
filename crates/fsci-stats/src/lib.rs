@@ -4104,6 +4104,13 @@ impl GammaDist {
             })
             .collect()
     }
+
+    /// Cumulative distribution at many points — parallel map of the per-point regularized gamma
+    /// (costly enough to amortise thread spawn at scale; work-gated). Byte-identical to mapping `cdf`.
+    #[must_use]
+    pub fn cdf_many(&self, xs: &[f64]) -> Vec<f64> {
+        par_continuous_map(xs, |x| self.cdf(x))
+    }
 }
 
 impl ContinuousDistribution for GammaDist {
@@ -30363,6 +30370,36 @@ fn binomial_ppf(binom: &Binomial, q: f64) -> u64 {
 /// incomplete-beta) evaluations across threads in contiguous chunks for large
 /// `xs`. Each value is computed identically and written to its own slot in input
 /// order, so the result is bit-identical to `xs.iter().map(|&v| beta.cdf(v))`.
+fn par_continuous_map<F>(xs: &[f64], f: F) -> Vec<f64>
+where
+    F: Fn(f64) -> f64 + Sync,
+{
+    // Parallel map for an array of costly per-point special functions (gammainc/betainc). Threads
+    // are gated on WORK: at least ~2048 elements per thread, so small arrays stay serial (avoids the
+    // spawn-overhead regression seen over-threading a cheap/small array).
+    let n = xs.len();
+    let avail = std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(1);
+    let nthreads = (n / 2048).clamp(1, avail);
+    if nthreads <= 1 {
+        return xs.iter().map(|&x| f(x)).collect();
+    }
+    let chunk = n.div_ceil(nthreads);
+    let mut out = vec![0.0f64; n];
+    let fref = &f;
+    std::thread::scope(|scope| {
+        for (block, xblock) in out.chunks_mut(chunk).zip(xs.chunks(chunk)) {
+            scope.spawn(move || {
+                for (slot, &x) in block.iter_mut().zip(xblock.iter()) {
+                    *slot = fref(x);
+                }
+            });
+        }
+    });
+    out
+}
+
 fn par_beta_cdf(beta: &BetaDist, xs: &[f64]) -> Vec<f64> {
     let m = xs.len();
     // The incomplete beta is far costlier than a single transcendental, so even a
@@ -49043,6 +49080,21 @@ mod tests {
             assert_eq!(pm[i], g.pdf(x), "pdf_many != pdf at {x}");
             assert_eq!(lpm[i], g.logpdf(x), "logpdf_many != logpdf at {x}");
         }
+    }
+
+    #[test]
+    fn gamma_dist_cdf_many_matches_cdf() {
+        // cdf_many (work-gated parallel map of the regularized gamma) is byte-identical to mapping
+        // cdf, on both a small (serial) and a large (parallel) array.
+        let g = GammaDist::new(2.7, 1.5);
+        for n in [6usize, 20000] {
+            let xs: Vec<f64> = (0..n).map(|i| (i as f64 / n as f64) * 20.0 + 0.01).collect();
+            let cm = g.cdf_many(&xs);
+            for (i, &x) in xs.iter().enumerate() {
+                assert_eq!(cm[i], g.cdf(x), "cdf_many != cdf at {x}");
+            }
+        }
+        assert!(g.cdf_many(&[]).is_empty());
     }
 
     #[test]
@@ -79004,6 +79056,7 @@ mod tests {
         assert!(dist.cdf(5.0) > 0.99, "hypsecant CDF should be near 1 at 5");
     }
 }
+
 
 
 
