@@ -1983,3 +1983,20 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   ~184ms (8.3x, ~unchanged). Mid-n 1.2-1.55x faster + ~2 fewer O(n²) allocs (memory ↓).
 - n=5000 plateau ⇒ the remaining O(n²) is xtwx/xte (still vec![vec![0;n];n] in gcv) +
   lhs_buf. NEXT LEVER: band xtwx/xte (+ selinv banded read) → O(n) memory, n=5000 win.
+
+## 2026-06-21 - SHIPPED+MEASURED: SmoothBivariateSpline sparse build + banded solve (24-165x self)
+- Agent: cc / MistyBirch. smooth_bivariate_solve_coefficients built AᵀA DENSELY (per data
+  point: full n_terms² double loop over a basis that has only (kx+1)(ky+1)≈16 nonzeros)
+  and solved DENSE (solve_dense_system, O(n_terms³)). FIXED: sparse outer product over the
+  nonzero tensor-basis entries (O(m·((kx+1)(ky+1))²)) + banded solve (AᵀA is banded, half-
+  width ky·nx_coeffs+kx; solve_banded byte-identical to dense for a banded matrix).
+  VERIFIED interpolate 173/0 (byte-identical: skipped pairs were 0·0 no-ops; banded pivot
+  search = dense search since out-of-band is 0).
+- MEASURED vs scipy.interpolate.SmoothBivariateSpline (criterion / perf_counter):
+  m=400: 71.7→2.93 ms (24x self), scipy 0.20 ms → LOSE 14.7x (was 358x)
+  m=1000: 1200→17.6 ms (68x self), scipy 0.49 ms → LOSE 36x (was 2450x)
+  m=2500: ~19s→115 ms (~165x self), scipy 1.2 ms → LOSE 96x
+- NET: still a LOSS vs scipy, but a 24-165x improvement turning an unusable function
+  (seconds) into a usable one (ms). Residual gap (grows with m) = FITPACK surfit's
+  ADAPTIVE minimal-knot placement (few coeffs for smooth+large-s data) vs fsci's denser
+  fixed knot grid → larger banded system. NEXT LEVER (harder): adaptive knot selection.

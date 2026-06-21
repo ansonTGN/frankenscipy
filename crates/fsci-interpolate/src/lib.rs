@@ -8567,21 +8567,35 @@ fn smooth_bivariate_solve_coefficients(
     let mut ata = vec![vec![0.0; n_terms]; n_terms];
     let mut atz = vec![0.0; n_terms];
 
+    // The tensor B-spline basis is locally supported: bx is nonzero only in a (kx+1)-wide
+    // window and by in a (ky+1)-wide window, so each data point's basis has just
+    // (kx+1)(ky+1) nonzero terms. Accumulate AᵀA / Aᵀz from only those nonzeros (sparse
+    // outer product) instead of the dense n_terms² double loop. nz is built in ascending
+    // index order (iy then ix), so `row` is ascending and `col ≥ row` — exactly the
+    // original (row, col≥row) accumulation order ⇒ byte-identical (skipped pairs were
+    // 0·0 = +0.0 no-ops). O(m·n_terms²) → O(m·((kx+1)(ky+1))²).
+    let mut nz: Vec<(usize, f64)> = Vec::with_capacity((kx + 1) * (ky + 1));
     for ((&xv, &yv), (&zv, &weight)) in x.iter().zip(y).zip(z.iter().zip(weights)) {
         let bx = eval_basis_all(tx, xv, kx, nx_coeffs);
         let by = eval_basis_all(ty, yv, ky, ny_coeffs);
-        let mut basis = vec![0.0; n_terms];
+        nz.clear();
         for (iy, &by_val) in by.iter().enumerate() {
+            if by_val == 0.0 {
+                continue;
+            }
             for (ix, &bx_val) in bx.iter().enumerate() {
-                basis[iy * nx_coeffs + ix] = bx_val * by_val;
+                if bx_val != 0.0 {
+                    nz.push((iy * nx_coeffs + ix, bx_val * by_val));
+                }
             }
         }
 
         let weight_sq = weight * weight;
-        for row in 0..n_terms {
-            atz[row] += weight_sq * basis[row] * zv;
-            for col in row..n_terms {
-                ata[row][col] += weight_sq * basis[row] * basis[col];
+        for a in 0..nz.len() {
+            let (row, vr) = nz[a];
+            atz[row] += weight_sq * vr * zv;
+            for &(col, vc) in &nz[a..] {
+                ata[row][col] += weight_sq * vr * vc;
                 if row != col {
                     ata[col][row] = ata[row][col];
                 }
@@ -8625,7 +8639,15 @@ fn smooth_bivariate_solve_coefficients(
         }
     }
 
-    solve_dense_system(&mut ata, &mut atz)
+    // AᵀA is banded: a coefficient pair (row, col) is coupled only when their tensor
+    // indices overlap in a data point's support, i.e. |Δix| ≤ kx and |Δiy| ≤ ky; with the
+    // row-major index iy·nx_coeffs+ix that is a band of half-width ky·nx_coeffs + kx. The
+    // eps/penalty terms stay inside it. A banded solve is byte-identical to the dense one
+    // (for a banded matrix the partial pivot search over the full column finds the same
+    // max as over the band — out-of-band entries are 0) and runs in O(n_terms·bw²) instead
+    // of O(n_terms³).
+    let bw = (ky * nx_coeffs + kx).min(n_terms.saturating_sub(1));
+    solve_banded(&mut ata, &mut atz, bw)
 }
 
 #[cfg(test)]
