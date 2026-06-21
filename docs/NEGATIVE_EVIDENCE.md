@@ -1571,3 +1571,17 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
 - PENDING compile-verify (no cargo): one-token swaps so near-zero compile risk;
   byte-identical so no bench needed for correctness. `cargo check -p fsci-stats` +
   suite when disk recovers.
+
+## 2026-06-20 - signal/special/cluster: Vec<f64> sorts → sort_unstable (byte-identical, disk-critical)
+
+- Agent: cc / MistyBirch. CODE-ONLY (no cargo). Extends the byte-identical sort_unstable
+  lever (2893660c, 60 in fsci-stats) to the remaining library crates.
+- 9 `.sort_by(|a, b| a.total_cmp(b))` → unstable: fsci-signal/lib.rs (5: median/peak/
+  spectral), fsci-special/{orthopoly.rs (2: quadrature nodes), elliptic.rs (1)},
+  fsci-cluster/lib.rs (1: offdiag). Byte-identical (Vec<f64>, total_cmp Equal ⟺ identical
+  bits → sorted Vec unchanged). `bin/perf_*` harnesses skipped (not shipped); the
+  cluster pair-sort (a.0) left STABLE.
+- PENDING compile-verify (no cargo): one-token swaps, near-zero compile risk; byte-
+  identical so no bench needed. cargo check -p {fsci-signal,fsci-special,fsci-cluster}
+  + suites when disk recovers. Codebase-wide Vec<f64> sort_unstable lever now complete
+  (stats 60 + here 9 = 69 sites).

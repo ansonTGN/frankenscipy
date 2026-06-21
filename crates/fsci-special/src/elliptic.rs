@@ -2033,7 +2033,7 @@ pub fn elliprj(x: f64, y: f64, z: f64, p: f64) -> f64 {
         // Every recursive argument is non-negative, so the positive-p branch
         // and RC's diagonal handle the corners (e.g. a single zero argument).
         let mut xs = [x, y, z];
-        xs.sort_by(|a, b| a.total_cmp(b));
+        xs.sort_unstable_by(|a, b| a.total_cmp(b));
         let [xt, yt, zt] = xs;
         let q = -p;
         let pmy = (zt - yt) * (yt - xt) / (yt + q);

@@ -3771,7 +3771,7 @@ pub fn order_filter(x: &[f64], window_size: usize, rank: usize) -> Vec<f64> {
         let end = (i + half + 1).min(x.len());
         window.clear();
         window.extend_from_slice(&x[start..end]);
-        window.sort_by(|a, b| a.total_cmp(b));
+        window.sort_unstable_by(|a, b| a.total_cmp(b));
         let idx = rank.min(window.len() - 1);
         result.push(window[idx]);
     }
@@ -5746,7 +5746,7 @@ pub fn medfilt1(x: &[f64], kernel_size: usize) -> Vec<f64> {
             let start = i.saturating_sub(half);
             let end = (i + half + 1).min(n);
             let mut window: Vec<f64> = x[start..end].to_vec();
-            window.sort_by(|a, b| a.total_cmp(b));
+            window.sort_unstable_by(|a, b| a.total_cmp(b));
             window[window.len() / 2]
         })
         .collect()
@@ -8248,7 +8248,7 @@ fn roots_to_sos_factors(re: &[f64], im: &[f64]) -> Vec<(f64, f64, f64)> {
     }
 
     // Pair real roots into biquad sections
-    real_roots.sort_by(|a, b| a.total_cmp(b));
+    real_roots.sort_unstable_by(|a, b| a.total_cmp(b));
     let mut i = 0;
     while i + 1 < real_roots.len() {
         let r1 = real_roots[i];
@@ -23349,7 +23349,7 @@ mod tests {
                 let end = (i + half + 1).min(x.len());
                 w.clear();
                 w.extend_from_slice(&x[start..end]);
-                w.sort_by(|a, b| a.total_cmp(b));
+                w.sort_unstable_by(|a, b| a.total_cmp(b));
                 out.push(w[rank.min(w.len() - 1)]);
             }
             out
@@ -23469,7 +23469,7 @@ mod tests {
                     let start = i.saturating_sub(half);
                     let end = (i + half + 1).min(n);
                     let mut w: Vec<f64> = x[start..end].to_vec();
-                    w.sort_by(|a, b| a.total_cmp(b));
+                    w.sort_unstable_by(|a, b| a.total_cmp(b));
                     w[w.len() / 2]
                 })
                 .collect()

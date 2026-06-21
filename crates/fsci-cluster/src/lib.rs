@@ -6555,7 +6555,7 @@ mod tests {
                 }
             }
         }
-        offdiag.sort_by(|a, b| a.total_cmp(b));
+        offdiag.sort_unstable_by(|a, b| a.total_cmp(b));
         let preference = offdiag[offdiag.len() / 2]; // median similarity
 
         let ap = affinity_propagation(&sim, preference, 0.9, 500, 15).expect("ap");
