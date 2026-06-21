@@ -1312,3 +1312,28 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
 - Closes the loss from 2.9x to 1.33x (near parity). The residual is scipy's blocked +
   multithreaded LAPACK LU (lever (b), a bigger tolerance-parity blocked-LU rewrite) —
   the cheap byte-identical layout win captured the bulk.
+
+## 2026-06-20 - make_interp_spline - MEASURED LOSS 29-175x (dense O(n²) collocation vs banded) - RESUME inline
+
+- Agent: cc / MistyBirch. Added a `make_interp_spline` bench (was uncovered).
+- MEASURED (k=3 cubic B-spline interpolation):
+
+| n | fsci | scipy | result |
+| --- | ---: | ---: | --- |
+| 1000 | 6.81 ms  | 0.23 ms | **29.6x SLOWER** |
+| 3000 | 84.26 ms | 0.48 ms | **175x SLOWER** (grows O(n²)) |
+
+- Root cause: `make_interp_spline` builds the collocation matrix as a DENSE
+  `vec![vec![0.0; n]; n]` (~72 MB at n=3000) — O(n²) alloc + O(n²) basis fill
+  (`eval_basis_all` returns a length-n row per site) — then `solve_dense_system`
+  (zero-skip keeps the *solve* ~O(n·bw) but the O(n²) alloc/fill + O(n²) pivot scan
+  dominate). The B-spline collocation is BANDED (bandwidth ~k: B_j(x_i)≠0 only on k+1
+  knots), so scipy stores+solves it banded in O(n·k). NOTE: the sibling fits
+  make_lsq_spline / make_smoothing_spline already use `solve_banded`; only
+  make_interp_spline was left on the dense path.
+- FIX (deferred, substantial + conformance-critical — next cycle, like the RBF
+  cadence): compact banded storage `ab[2k+1][n]` built from a per-site interval
+  finder + the k+1 de-Boor values (not a length-n row), solved with a compact banded
+  solver — O(n·k) to match scipy. The flat-dense lever does NOT apply here (it drops
+  the zero-skip → O(n³) on a banded matrix). The eval_basis_all memory note already
+  flagged "banded solve" as the next step. Bench tracks the loss.

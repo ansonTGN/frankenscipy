@@ -1,8 +1,9 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use std::hint::black_box;
 use fsci_interpolate::{
     BarycentricInterpolator, CloughTocher2DInterpolator, CubicSplineStandalone, GriddataMethod,
     Interp1d, Interp1dOptions, InterpKind, LinearNDInterpolator, PchipInterpolator,
-    RbfInterpolator, RbfKernel, RectBivariateSpline, RegularGridInterpolator, RegularGridMethod, SplineBc, griddata,
+    RbfInterpolator, RbfKernel, make_interp_spline, RectBivariateSpline, RegularGridInterpolator, RegularGridMethod, SplineBc, griddata,
     interp1d_linear, lagrange, polymul, polyroots,
 };
 use fsci_runtime::RuntimeMode;
@@ -209,6 +210,19 @@ fn bench_scattered(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_make_interp_spline(c: &mut Criterion) {
+    let mut group = c.benchmark_group("make_interp_spline");
+    group.sample_size(10);
+    for &n in &[1000usize, 3000] {
+        let x: Vec<f64> = (0..n).map(|i| i as f64 + ((i * 2654435761usize) % 97) as f64 * 0.001).collect();
+        let y: Vec<f64> = (0..n).map(|i| (i as f64 * 0.01).sin()).collect();
+        group.bench_function(criterion::BenchmarkId::new("k3", n), |b| {
+            b.iter(|| make_interp_spline(black_box(&x), black_box(&y), 3).expect("spline"))
+        });
+    }
+    group.finish();
+}
+
 fn bench_rbf_scattered(c: &mut Criterion) {
     // Scattered RBF (thin-plate-spline) build (O(N^3) dense solve) + eval, matching
     // scipy.interpolate.RBFInterpolator (default kernel) at n=2000 -> 20000 queries
@@ -328,6 +342,7 @@ criterion_group!(
     bench_regular_grid,
     bench_scattered,
     bench_rbf_and_rect,
+    bench_make_interp_spline,
     bench_rbf_scattered,
     bench_batch_eval,
     bench_batch_eval_large
