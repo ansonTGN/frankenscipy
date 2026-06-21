@@ -1216,6 +1216,40 @@ fn rfftn_impl(
 /// DCT-II: `X[k] = 2 * sum_{n=0}^{N-1} x[n] * cos(π*(2n+1)*k / (2N))`
 ///
 /// Computed via FFT of a reordered and mirrored sequence.
+/// Cached DCT-II extract twiddles exp(-iπk/(2N)), k=0..N-1, keyed by N. The factor is identical
+/// across calls of the same length, so computing cos/sin per coefficient on every call (the bulk
+/// of DCT time) is wasteful — scipy caches the plan likewise. Bit-identical to the inline form.
+static DCT2_TWIDDLE_CACHE: OnceLock<RwLock<HashMap<usize, TwiddleTable>>> = OnceLock::new();
+fn get_dct2_cache() -> &'static RwLock<HashMap<usize, TwiddleTable>> {
+    DCT2_TWIDDLE_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+thread_local! {
+    static LOCAL_DCT2_CACHE: std::cell::RefCell<HashMap<usize, TwiddleTable>> =
+        std::cell::RefCell::new(HashMap::new());
+}
+fn get_or_compute_dct2_twiddles(n: usize) -> TwiddleTable {
+    if let Some(t) = LOCAL_DCT2_CACHE.with(|c| c.borrow().get(&n).cloned()) {
+        return t;
+    }
+    let cache = get_dct2_cache();
+    let table = if let Some(t) = cache.read().ok().and_then(|g| g.get(&n).cloned()) {
+        t
+    } else {
+        let mut table = Vec::with_capacity(n);
+        for k in 0..n {
+            let angle = -PI * k as f64 / (2.0 * n as f64);
+            table.push((angle.cos(), angle.sin()));
+        }
+        let table: TwiddleTable = Arc::from(table);
+        if let Ok(mut g) = cache.write() {
+            g.insert(n, Arc::clone(&table));
+        }
+        table
+    };
+    LOCAL_DCT2_CACHE.with(|c| c.borrow_mut().insert(n, Arc::clone(&table)));
+    table
+}
+
 pub fn dct(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError> {
     ensure_non_empty(input.len())?;
     validate_finite_real(input, options)?;
@@ -1242,11 +1276,8 @@ pub fn dct(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError> {
     // V[N-k] = conj(V[k]); odd N falls back to a full N-point complex FFT.
     // Extract DCT coefficients: X[k] = 2·Re(V[k] · exp(-iπk/(2N))).
     let mut result = Vec::with_capacity(n);
-    let extract = |k: usize, vk: Complex64| {
-        let angle = -PI * k as f64 / (2.0 * n as f64);
-        let twiddle = (angle.cos(), angle.sin());
-        2.0 * complex_mul(vk, twiddle).0
-    };
+    let dct_tw = get_or_compute_dct2_twiddles(n);
+    let extract = |k: usize, vk: Complex64| 2.0 * complex_mul(vk, dct_tw[k]).0;
     if n.is_multiple_of(2) {
         let half = real_fft_specialized(&v, backend); // V[0..=N/2]
         for k in 0..n {
