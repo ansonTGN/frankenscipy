@@ -4111,6 +4111,13 @@ impl GammaDist {
     pub fn cdf_many(&self, xs: &[f64]) -> Vec<f64> {
         par_continuous_map(xs, |x| self.cdf(x))
     }
+
+    /// Inverse cdf at many probabilities — work-gated parallel map of the per-point `ppf`
+    /// (gammaincinv + Newton refine, costly enough to amortise spawn). Byte-identical to mapping `ppf`.
+    #[must_use]
+    pub fn ppf_many(&self, qs: &[f64]) -> Vec<f64> {
+        par_continuous_map(qs, |q| self.ppf(q))
+    }
 }
 
 impl ContinuousDistribution for GammaDist {
@@ -49098,6 +49105,20 @@ mod tests {
     }
 
     #[test]
+    fn gamma_dist_ppf_many_matches_ppf() {
+        // ppf_many (work-gated parallel map of the per-point ppf) is byte-identical to mapping ppf.
+        let g = GammaDist::new(2.7, 1.5);
+        for n in [6usize, 20000] {
+            let qs: Vec<f64> = (0..n).map(|i| (i as f64 + 0.5) / n as f64).collect();
+            let pm = g.ppf_many(&qs);
+            for (i, &q) in qs.iter().enumerate() {
+                assert_eq!(pm[i], g.ppf(q), "ppf_many != ppf at {q}");
+            }
+        }
+        assert!(g.ppf_many(&[]).is_empty());
+    }
+
+    #[test]
     fn gamma_dist_mean_var() {
         let g = GammaDist::new(3.0, 2.0);
         assert_close(g.mean(), 6.0, 1e-10, "Gamma(3,2) mean");
@@ -79056,6 +79077,7 @@ mod tests {
         assert!(dist.cdf(5.0) > 0.99, "hypsecant CDF should be near 1 at 5");
     }
 }
+
 
 
 
