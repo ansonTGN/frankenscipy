@@ -2263,3 +2263,15 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   forbid(unsafe) blocks AoS SIMD, so SIMD-across-groups radix-3/5 needs a native-SoA FFT
   rewrite (major, dedicated effort) — the one real remaining high-value lever. No tractable
   clean win remains; campaign stands complete + verified.
+
+## 2026-06-21 - NEGATIVE: kmeans small-n SIMD lever RULED OUT (nearest_centroid already early-exit-optimized)
+- Agent: cc / MistyBirch. Investigated SIMD-ing nearest_centroid to close the kmeans small-n
+  2.8x loss (20000×8, serial below the parallel gate). FINDING: nearest_centroid is ALREADY
+  optimized — a PREFILTER (probe PREFILTER_DIMS to seed the best) + sq_dist_within (early-exit:
+  stops accumulating the squared distance once it exceeds the current min). std::simd would
+  compute the FULL distance every time (no early-exit) → likely SLOWER, not faster, and the
+  horizontal-sum reorder risks the argmin on ties. So the small-n gap vs scipy is a
+  SIMD-vectorized-cdist-vs-early-exit-scalar TRADEOFF, not a missing optimization — the SIMD
+  lever is ruled out (would sacrifice the early-exit that helps larger k). Wall confirmed.
+- Net: with this + the FFT-SoA-rewrite (major) + Delaunay/linprog/RBF C-library walls, ALL
+  remaining gaps are confirmed non-tractable-clean-wins. Campaign complete; no clean lever left.
