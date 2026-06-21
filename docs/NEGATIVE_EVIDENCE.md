@@ -3159,3 +3159,16 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   tests green. REUSABLE: any discrete dist whose cdf is a per-point special fn but whose pmf has a
   cheap ratio recurrence → mode-anchored cumsum cdf_many. (Not byte-id to map(cdf): ~1e-12, so use a
   tolerance test, not assert_eq.)
+
+## 2026-06-21 - MEASURED continuous dists: normal cdf WIN; gamma cdf/ppf LOSSES (kernel walls)
+- Agent: cc / MistyBirch. Measured continuous-dist array ops vs scipy 1.17.1 (n=1e5):
+  - normal cdf: fsci 1463us vs scipy 1814us = 1.24x WIN (Rust erf beats vectorized).
+  - gamma cdf: fsci 14198us vs scipy 9601us = 1.48x LOSS — gammainc per-point kernel vs scipy's
+    vectorized boost. No cumsum lever (continuous). KERNEL WALL.
+  - gamma ppf: fsci 94199us vs scipy 41280us = 2.28x LOSS — scalar ppf = gammaincinv + Newton refine
+    (fsci's gammaincinv needs refining; scipy's boost doesn't). Tried a WARM-START ppf_many (process
+    quantiles ascending, seed each Newton from the previous ppf, skip the per-point gammaincinv):
+    closed it to 43695us = PARITY (1.06x loss), ~2 gammainc/pt vs scipy's 1 gammaincinv. NOT a win
+    (gammaincinv ≈ 2 gammainc, so warm-start reaches parity not domination) + 1.47e-10 vs scalar's
+    1e-14. REVERTED (parity, accuracy loss, new method not worth it). Wall = gammainc/gammaincinv
+    kernel speed. The discrete cumsum lever does NOT transfer to continuous (no pmf recurrence).
