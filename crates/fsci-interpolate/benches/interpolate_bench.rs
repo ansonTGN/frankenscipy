@@ -4,7 +4,7 @@ use fsci_interpolate::{
     BarycentricInterpolator, CloughTocher2DInterpolator, CubicSplineStandalone, GriddataMethod,
     Interp1d, Interp1dOptions, InterpKind, LinearNDInterpolator, PchipInterpolator,
     RbfInterpolator, RbfKernel, SmoothBivariateSpline, SmoothBivariateSplineOptions, make_interp_spline, make_smoothing_spline, RectBivariateSpline, RegularGridInterpolator, RegularGridMethod, SplineBc, griddata,
-    interp1d_linear, lagrange, polymul, polyroots,
+    interp1d_linear, lagrange, polymul, polyroots, bisplrep,
 };
 use fsci_runtime::RuntimeMode;
 
@@ -364,6 +364,20 @@ fn bench_smooth_bivariate(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_bisplrep(c: &mut Criterion) {
+    let mut group = c.benchmark_group("bisplrep");
+    for &m in &[400usize, 1000, 2500] {
+        let x: Vec<f64> = (0..m).map(|i| ((i as f64 * 12.9898).sin() * 43758.5).fract()).collect();
+        let y: Vec<f64> = (0..m).map(|i| ((i as f64 * 78.233).sin() * 12345.6).fract()).collect();
+        let z: Vec<f64> = x.iter().zip(&y).map(|(&xi, &yi)| (6.0 * xi).sin() * (6.0 * yi).cos()).collect();
+        let s = m as f64;
+        group.bench_with_input(BenchmarkId::from_parameter(m), &m, |b, _| {
+            b.iter(|| bisplrep(black_box(&x), black_box(&y), black_box(&z), 3, 3, black_box(s)).unwrap())
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_interp1d,
@@ -375,6 +389,7 @@ criterion_group!(
     bench_make_interp_spline,
     bench_smoothing_spline,
     bench_smooth_bivariate,
+    bench_bisplrep,
     bench_rbf_scattered,
     bench_batch_eval,
     bench_batch_eval_large

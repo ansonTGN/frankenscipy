@@ -2000,3 +2000,19 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   (seconds) into a usable one (ms). Residual gap (grows with m) = FITPACK surfit's
   ADAPTIVE minimal-knot placement (few coeffs for smooth+large-s data) vs fsci's denser
   fixed knot grid → larger banded system. NEXT LEVER (harder): adaptive knot selection.
+
+## 2026-06-21 - MEASURED: bisplrep is scipy-parity-fast (NEUTRAL); SmoothBivariateSpline should route through it
+- fsci bisplrep (surfit.rs FITPACK port: fporde/fprank/Givens, banded) vs scipy.interpolate.bisplrep
+  (criterion / perf_counter, same data): m=400 0.22ms/0.21ms (1.0x); m=1000 0.55ms/0.59ms
+  (WIN 1.07x); m=2500 1.75ms/1.26ms (lose 1.39x). NEUTRAL/parity — the FITPACK port is GOOD,
+  NOT a loss. Has scipy-parity tests (bisplrep_matches_scipy_polynomial / _interior_knots,
+  lsq_bivariate_spline_matches_scipy). Added benches/interpolate_bench.rs `bisplrep` bench.
+- KEY: scipy.SmoothBivariateSpline IS surfit/bisplrep. fsci.SmoothBivariateSpline uses a
+  SEPARATE fixed-knot path (smooth_bivariate_knots + smooth_bivariate_solve_coefficients) that
+  is only PROPERTY-tested (bilinear/piecewise), NOT scipy-value-parity, and (even after this
+  session's 165x sparse+banded fix) still LOSES 14.7-96x to scipy.
+- NEXT LEVER (high value, scoped): route SmoothBivariateSpline::new through the parity-fast
+  bisplrep/surfit (surfit takes weights/bbox/eps; bisplrep is the default-param wrapper) →
+  scipy PARITY (correctness) + ~13-65x further speedup (2.9-115ms → 0.22-1.75ms). Behavior
+  change: re-baseline the piecewise property test to scipy values + recompute `residual` from
+  the fit. Deferred (behavior-changing, deserves a focused cycle — not rushed).
