@@ -2046,3 +2046,18 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   self-speedup). Added benches/interpolate_bench.rs make_lsq_spline bench.
 - LEVER (reused): dense Vec<Vec> banded matrix in a fit → pre-sized CompactBandRow + direct
   index + solve_banded_compact = O(n) memory, byte-identical. (Same as make_smoothing_spline m.)
+
+## 2026-06-21 - fsci-signal gauntlet vs scipy + oaconvolve optimal block (4.1x→2.4x loss)
+- Agent: cc / MistyBirch. MEASURED scipy.signal vs fsci (200k signal, criterion/perf_counter):
+  - detrend(linear): fsci 0.33ms vs 6.44ms → WIN 19.5x
+  - firls(401/1201): fsci 1.70/32.3ms vs 3.10/96.6ms → WIN 1.8-3.0x (dense solve but faster build)
+  - decimate(q5): fsci 3.97ms vs 5.70ms → WIN 1.4x
+  - resample_poly(3/2): fsci 4.03ms vs 3.46ms → ~parity (lose 1.16x)
+  - oaconvolve(200k*512): fsci 8.18ms vs 2.0ms → LOSE 4.1x  ← fixed below
+- SHIPPED oaconvolve fix: fft_len was 2*nh (1024 for nh=512 → ~390 blocks); replaced with a
+  cost-minimizing block search over power-of-two fft_len in [2*nh, full] (min
+  ceil(nx/block)*fft_len*log2(fft_len)) — matches scipy's overlap-add block optimization.
+  8.18ms → 4.80ms (1.7x self), now LOSE 2.4x. Tolerance-parity (oaconvolve test green; block
+  size only changes FFT rounding). Residual 2.4x = the FFT wall (fsci_fft complex-vs-rfft 2x +
+  pocketfft SIMD; native rfft is the open FFT lever). firls T+H O(n²) solver left (fsci already
+  wins firls, not worth the hard Toeplitz+Hankel solver).
