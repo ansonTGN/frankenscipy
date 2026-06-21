@@ -1671,7 +1671,7 @@ fn digamma_core(x: f64) -> f64 {
 
     let mut shifted = x;
     let mut acc = 0.0;
-    while shifted < 8.0 {
+    while shifted < 12.0 {
         acc -= 1.0 / shifted;
         shifted += 1.0;
     }
@@ -1708,7 +1708,7 @@ fn trigamma_core(x: f64) -> f64 {
 
     let mut shifted = x;
     let mut acc = 0.0;
-    while shifted < 8.0 {
+    while shifted < 12.0 {
         acc += 1.0 / (shifted * shifted);
         shifted += 1.0;
     }
@@ -1745,7 +1745,7 @@ fn polygamma_higher_core(order: usize, x: f64) -> f64 {
 
     let mut shifted = x;
     let mut correction = 0.0;
-    while shifted < 8.0 {
+    while shifted < 12.0 {
         correction += sign * factorial / shifted.powf(order_plus_one);
         shifted += 1.0;
     }
@@ -1780,7 +1780,7 @@ fn lngamma_positive(x: f64) -> f64 {
         // Shift upward using recurrence: lnΓ(x) = lnΓ(x+n) - ln(x(x+1)...(x+n-1))
         let mut shifted = x;
         let mut correction = 0.0;
-        while shifted < 8.0 {
+        while shifted < 12.0 {
             correction += shifted.ln();
             shifted += 1.0;
         }
