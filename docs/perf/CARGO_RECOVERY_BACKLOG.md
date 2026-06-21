@@ -48,3 +48,6 @@ sort_unstable (72 sites), kendalltau (Knight), weightedtau (Fenwick), distances
 rank_max (sort-once), binned-statistic family (accumulate), savgol (coeffs-once),
 RectBivariateSpline (compact-band cascade), RGI, make_interp_spline (compact-band),
 RBF (flat-solve), DE/global-optimizers (callback lever).
+Also confirmed (2026-06-20 audit): Interp1d/CubicSpline (O(n) tridiagonal Thomas
+solve, all BCs), minimize methods present (BFGS/CG/L-BFGS-B/Nelder-Mead/Newton-CG/
+Powell/SLSQP/TNC).
