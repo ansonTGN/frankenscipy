@@ -2459,3 +2459,19 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
 - COLLAB: my ndtri Halley stopgap was superseded by another agent's full Cephes ndtri RATIONAL
   (749a13e0); my erfcinv→ndtri route now calls it; they did the erfinv-via-ndtri follow-up I filed.
   All coexist GREEN (special inverse tests + interpolate 173/0; only pre-existing fails remain).
+
+## 2026-06-21 - special-fn gauntlet: struve 102x / jv 11.7x WIN; zeta/ellipk/gamma = Cephes-coefficient wall
+- Agent: cc / MistyBirch. MEASURED fsci vs scipy.special (100k):
+  WINS: struve(1) 7.78ms vs 794.9 WIN 102x (scipy's struve is pathologically slow); jv(2.5) 4.97
+  vs 57.96 WIN 11.7x; iv/kv/yv also win (parallel + fast scalar). gamma 4.41 vs 2.58 LOSE 1.7x;
+  ellipk 3.75 vs 1.44 LOSE 2.6x; zeta 26.7 vs 2.72 LOSE 9.8x (scalar loop, no tensor path).
+- The losses share one cause: fsci uses series/iterative kernels (zeta = Euler-Maclaurin
+  hurwitz_zeta with 20 direct terms; ellipk = AGM-ish; gamma = Lanczos) where scipy uses tuned
+  Cephes RATIONAL/polynomial approximations (~10-30ns/call, no iteration). Same wall the other
+  agent crossed for ndtri (749a13e0, exact Cephes coeffs). Parity needs those coefficients;
+  series-kernel tuning (e.g. zeta adaptive n_direct, cache Borwein weights) only ~1.2-1.3x and
+  risks byte-identity — not worth it. zeta additionally lacks a parallel tensor/array path
+  (scalar only) — a capability gap vs scipy's ufunc; a par_map array entry would give array
+  near-parity (per-call work still ~10x but hidden by parallelism).
+- VERDICT: special heavy/series fns DOMINATE (struve/jv/bessel); the fast-Cephes-rational fns
+  (gamma/ellipk/zeta/erf-family) are a coefficient wall. erf-family already crossed (ndtri/erfcinv).
