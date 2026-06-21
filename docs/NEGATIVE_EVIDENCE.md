@@ -2349,3 +2349,19 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   step → replace with Halley/Newton on a FAST forward fn (here ndtr), formulated on the
   small/well-conditioned argument to avoid cancellation; fix the SHARED inverse so all callers
   (ppf+isf) stay consistent. Self-correcting refinement needs no reference coefficients.
+
+## 2026-06-21 - FIXED: erfcinv 76x -> 7x (10.9x speedup, ndtri-Halley route); erfinv 3.6x follow-up
+- Agent: cc / MistyBirch. Vein opened by the ndtri fix — probed special inverse-CDFs vs scipy:
+  MEASURED 100k: erfcinv fsci 93.7ms vs scipy 1.23 LOSE 76x; erfinv fsci 6.63ms vs scipy 1.82
+  LOSE 3.6x. (gammaincinv/betaincinv/stdtrit/chdtri are iterative in BOTH → parity, not chased:
+  scipy 44/67/35/33ms.)
+- erfcinv FIX (6df91751): the deep tail (y<=0.0625) used erfcx continued-fraction Newton
+  (~15µs/call). Moderate tail (2e-3<=y<=0.0625) = -ndtri(y/2)/√2 with y/2 in ndtri's fast Halley
+  range → route there (reuses today's ndtri fix; no recursion — ndtri only re-enters erfcinv for
+  y<2e-3). erfcinv 93.7->8.6ms (10.9x), now 7x of scipy. Conformance GREEN.
+- erfinv (3.6x, OPEN follow-up): erfinv_scalar = inaccurate inv_norm_cdf seed + 2 Newton iters
+  (erf/erfc) vs scipy's single direct rational. Caps erfcinv-central + ndtri-central. Candidate:
+  replace 2 Newton with 1 HALLEY (cubic) IF the seed is accurate enough (gate on full
+  special+stats suites — erfinv is widely used, regression risk). Not chased this cycle.
+- RESIDUAL: erfcinv 7x / erfinv 3.6x are the Halley/Newton-iteration floor vs scipy's direct
+  Cephes rationals (no iteration). Parity needs the rational coefficients (not on-system).
