@@ -2753,3 +2753,12 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   pmf, involved); pearsonr_length_two statistic 1-ULP numpy-dot rounding (no clean fix, see prior).
 - LEVER paid out: many "standing conformance failures" are real cheap bugs (wrong return value,
   unhandled 0/0, buggy TEST) — diagnose each, don't assume finicky. VERIFY against real scipy.
+
+## 2026-06-21 - fsci-integrate solve_ivp initial-event validation ordering FIXED (8th conformance fix)
+- Agent: cc / MistyBirch. Scanned signal/interpolate/opt/integrate for standing failures: 3 green
+  (signal 173/0, interpolate 313/0, opt 648/0), integrate had 1: solve_ivp_rejects_non_finite_
+  initial_event_value (rhs_calls=2 not 0). The initial event-value validation lived in the
+  integration loop (AFTER RkSolver::new, which evaluates RHS ~2× for initial step-size). Moved it
+  before the method dispatch → rejects with 0 RHS calls. fsci-integrate now 259/0. CRATE STATUS:
+  ALL my crates GREEN except fsci-stats (2 hard: hypergeom pmf lgamma-cancellation, pearsonr
+  numpy-dot). Conformance-fix vein tally: 8 fixes (4 fsci-special, 3 fsci-stats, 1 fsci-integrate).
