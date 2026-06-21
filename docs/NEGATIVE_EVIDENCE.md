@@ -2293,3 +2293,21 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   from cephes/ndtri.c) — a focused careful transcription+verify cycle (typo-risk too high to
   guess from memory). Validate against scipy.special.ndtri at many points + the deep_tail test.
   FLAGGED as a high-value lever (joins mixed-radix-FFT).
+
+## 2026-06-21 - FIXED: norm.ppf/ndtri 25.5x LOSS -> 2.3x (Halley-on-ndtr), 10.9x speedup (9c55ea6e)
+- Agent: cc / MistyBirch. Resolves the loss found earlier today. ndtri_scalar deep tail routed
+  through erfcinv_conv's erfcx CONTINUED-FRACTION Newton (~5.4µs/call). MEASURED root cause:
+  ndtri CENTRAL 26ms/500k (fast, =scipy) but TAIL 2721ms/500k (the erfcx-Newton).
+- FIX: moderate tail (t=min(y,1-y) ∈ [1e-3, 0.03125]) now uses HALLEY on the fast accurate ndtr
+  CDF, solving for the LOWER tail t (key: avoids the y≈1 catastrophic cancellation of ndtr(x)-y,
+  and ndtr stays relatively accurate for t≥1e-3). Self-correcting to ~1e-15, NO magic constants
+  (sidesteps the blocked Cephes-coefficient transcription). Central keeps fast erfinv; extreme
+  tail (t<1e-3) keeps erfcinv for deep-tail accuracy. SHARED inverse → ppf/isf stay consistent.
+- RESULT: tail 2721→296ms (9.2x), norm.ppf 619→57ms (10.9x). Now 2.3x of scipy (was 25.5x) —
+  the residual is the Halley-iteration floor (~6 ndtr evals vs scipy's single Cephes rational;
+  ~2x is unbeatable without the direct rational). Conformance GREEN: fsci-special ndtri tests
+  incl ndtri_erfcinv_deep_tail pass; fsci-stats 1962 pass / 5 pre-existing (isf==ppf now passes).
+- LEVER (reusable): an iterative special-fn inverse that calls an expensive helper (erfcx CF) per
+  step → replace with Halley/Newton on a FAST forward fn (here ndtr), formulated on the
+  small/well-conditioned argument to avoid cancellation; fix the SHARED inverse so all callers
+  (ppf+isf) stay consistent. Self-correcting refinement needs no reference coefficients.
