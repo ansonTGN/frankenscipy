@@ -1383,3 +1383,19 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
 - Retry condition: if compact row growth, pivot swaps, or sparse basis assembly loses
   to the dense-row `solve_banded` baseline on a same-worker run, revert this exact
   compact-row representation and replace it with fixed-width band storage.
+
+## 2026-06-20 - make_interp_spline 175x loss: CLOSED (compact-band landed, 67798376)
+
+- Agent: cc / MistyBirch (bookkeeping; disk-low/no-build).
+- The compact-banded make_interp_spline rewrite I spec'd (docs/perf/
+  make_interp_spline_banded_plan.md, commits 83dd33dd + 1ba51447) was IMPLEMENTED by
+  another agent on origin (67798376): `bspline_find_interval` (2382) + `CompactBandRow`
+  (2621) compact storage + compact banded solve (2668), with the exact verification the
+  plan called for — `make_interp_spline_compact_band_matches_dense_coefficients_bits`
+  (to_bits diff vs the dense path) + `make_interp_spline_matches_scipy_reference_values`
+  + `bspline_find_interval_matches_eval_basis`. The 29-175x loss (filed d049502d) is
+  now CLOSED to O(n·k) — REMOVE from the open-loss list.
+- My in-flight partial alloc-elimination (collect a_mat directly) was correctly
+  ABANDONED: it conflicted with and would have regressed the superior compact-band
+  impl. Confirmed by reading; build verification deferred to the implementing agent /
+  CI (disk-low). Open losses remaining: hilbert (FFT C-SIMD wall).
