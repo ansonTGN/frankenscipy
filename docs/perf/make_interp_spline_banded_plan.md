@@ -74,3 +74,88 @@ to diff against on dense-expanded small systems.
 - Pivoting can be skipped IF the collocation is provably totally-positive
   (Schoenberg-Whitney), but scipy uses general gbsv — keep pivoting to stay
   byte-identical to the current (parity-verified) result.
+
+---
+
+## Reference implementation (paste + `cargo check` + verify when disk recovers)
+
+Authored in a no-build window — TREAT AS UNVERIFIED until `cargo test -p
+fsci-interpolate` passes (esp. the byte-diff test below). Edge cases flagged inline
+must be checked against `eval_basis_all`'s linear scan before trusting.
+
+```rust
+/// Byte-exact binary-search replacement for eval_basis_all's degree-0 linear scan:
+/// returns (lo, hi), the inclusive span of indices i in 0..n where the degree-0
+/// indicator is 1 — i.e. (t[i] <= x < t[i+1]) OR the right-endpoint special case
+/// (x == t[i+1] && i+1 == t.len()-k-1). Returns None if x is outside the knot span.
+/// VERIFY: for random sorted t (incl. repeated interior knots) + x at interior,
+/// both endpoints, and exactly on knots, (lo,hi) must equal the scan's (lo,hi).
+fn bspline_knot_span(t: &[f64], x: f64, k: usize, n: usize) -> Option<(usize, usize)> {
+    if n == 0 { return None; }
+    // largest i with t[i] <= x  (i in 0..t.len())
+    let pp = t.partition_point(|&ti| ti <= x); // count of t[.] <= x
+    if pp == 0 { return None; }                 // x < t[0]
+    let mut hi = pp - 1;                         // candidate: t[hi] <= x
+    // walk back to the first index whose half-open interval is non-empty & holds x.
+    // For the normal case t[i] <= x < t[i+1] with distinct knots, lo == hi == that i.
+    // Repeated knots: skip empty intervals t[i]==t[i+1]; the scan's `lo` is the FIRST
+    // matching index, `hi` the LAST. EDGE: x exactly on an interior knot t[m] makes
+    // pp include it → hi=m, but the scan puts x in interval [t[m], t[m+1]); confirm
+    // hi indexes that interval (clamp hi to n-1 and to t.len()-k-2 for the endpoint).
+    // EDGE: x == right boundary → scan's endpoint case (i+1==t.len()-k-1); map hi to it.
+    if hi >= n { hi = n - 1; }                   // x beyond last data interval
+    // lo: walk back over indices i<hi that ALSO satisfy the predicate (repeated knots
+    // give an empty [t[i],t[i+1]) so they DON'T match — lo stays = hi for distinct x).
+    let mut lo = hi;
+    while lo > 0 && t.get(lo).is_some() && t.get(lo - 1).map_or(false, |&p| p == t[lo]) {
+        // t[lo-1]==t[lo] => interval [t[lo-1],t[lo]) empty => not a match; stop.
+        break; // (placeholder — replicate scan semantics exactly; verify before trust)
+    }
+    Some((lo, hi))
+}
+
+/// Compact de-Boor: the k+1 nonzero B-spline values at columns [lo-k, hi] plus the
+/// column offset (lo-k). Mirrors eval_basis_all's in-place ascending sweep EXACTLY
+/// (same denom>0 guards, same read of basis[i] and basis[i+1], with basis[hi+1]
+/// implicitly 0), but in a local buffer of length (hi - (lo-k) + 2) so the trailing
+/// basis[hi+1]=0 read stays in-bounds. Returns (offset = lo-k, values).
+fn eval_basis_compact(t: &[f64], x: f64, k: usize, n: usize) -> Option<(usize, Vec<f64>)> {
+    let (lo, hi) = bspline_knot_span(t, x, k, n)?;
+    let off = lo.saturating_sub(k);
+    let len = hi + 1 - off + 1; // [off .. hi] inclusive + one trailing slot for basis[hi+1]
+    let mut b = vec![0.0f64; len];
+    // degree-0: global index i in [lo, hi] -> local i-off
+    for i in lo..=hi { b[i - off] = 1.0; }
+    for p in 1..=k {
+        let start = lo.saturating_sub(p);
+        for i in start..=hi {
+            let li = i - off;
+            let mut val = 0.0;
+            if i + p < t.len() {
+                let dl = t[i + p] - t[i];
+                if dl > 0.0 { val += (x - t[i]) / dl * b[li]; }
+            }
+            if i + p + 1 < t.len() && i + 1 < n {
+                let dr = t[i + p + 1] - t[i + 1];
+                if dr > 0.0 { val += (t[i + p + 1] - x) / dr * b[li + 1]; }
+            }
+            b[li] = val;
+        }
+    }
+    b.truncate(hi + 1 - off); // drop the trailing 0 slot -> exactly the k+1 (or hi-off+1) values
+    Some((off, b))
+}
+```
+
+Banded LU on compact storage: port `solve_banded`'s pivot/eliminate/back-sub ORDER
+(it is the byte-identical reference) onto a flat `band: Vec<f64>` of shape
+`(3k+1) * n` with the dgbsv index map `A[i][j] -> band[(2k + i - j) * n + j]`
+(valid for `j-k <= i <= j+2k`). Use `split_at_mut` on the flat buffer per pivot
+column (mirror solve_banded's pivot-row borrow). Keep partial pivoting to stay
+byte-identical to today's parity-verified output.
+
+### Byte-diff test (add before flipping make_interp_spline)
+```rust
+// new compact-band make_interp_spline coeffs == current solve_banded(dense) coeffs
+// to_bits, for k in {1,2,3,5}, n in {8,50,200}, random + clustered + repeated-knot x.
+```
