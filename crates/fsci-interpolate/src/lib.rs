@@ -5972,13 +5972,15 @@ pub fn make_smoothing_spline(
     // Expand the banded design X and penalty E (LAPACK (2,2): A[i][j] =
     // band[2+i-j][j] for |i-j| ≤ 2) into full n×n matrices.
     let band_to_full = |band: &[Vec<f64>]| -> Vec<Vec<f64>> {
+        // Only |i-j| ≤ 2 entries are set (d = 2+i-j ∈ 0..5); iterate just that band
+        // instead of scanning all n² (i,j) — byte-identical (out-of-band stays 0).
         let mut m = vec![vec![0.0_f64; n]; n];
         for i in 0..n {
-            for j in 0..n {
-                let d = 2 + i as isize - j as isize;
-                if (0..5).contains(&d) {
-                    m[i][j] = band[d as usize][j];
-                }
+            let jlo = i.saturating_sub(2);
+            let jhi = (i + 2).min(n - 1);
+            for j in jlo..=jhi {
+                let d = (2 + i - j) as usize; // j ∈ [i-2, i+2] ⇒ d ∈ 0..=4
+                m[i][j] = band[d][j];
             }
         }
         m

@@ -1528,3 +1528,26 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
   `cargo check -p fsci-interpolate` + make_smoothing_spline scipy-parity + suite 172/0
   when disk recovers. Remaining (non-mechanical) win: the trace loop's n identical
   lhs factorizations → factor-once + n banded RHS (O(n²·bw) tr).
+
+## 2026-06-20 - band_to_full fill band-restricted + DISK-WINDOW VERIFY QUEUE
+
+- Agent: cc / MistyBirch. CODE-ONLY (disk-critical, no cargo).
+- band_to_full (make_smoothing_spline) scanned all n² (i,j) to fill only |i-j| ≤ 2;
+  iterate just that band (j ∈ [i-2, i+2], d = (2+i)-j ∈ 0..=4, no underflow since
+  2+i ≥ j). Byte-identical (out-of-band stays 0). The O(n²) scan → O(n); the n×n
+  output alloc is unchanged (eliminating it needs a band-storage refactor — deferred).
+  This is the last safe byte-identical band-restriction in the smoothing-spline path;
+  remaining wins (band storage, factor-once trace LU) are non-mechanical — NOT shipping
+  blind.
+
+### ⚠️ DISK-WINDOW VERIFY QUEUE (UNVERIFIED COMPILE — run when disk recovers, BEFORE trusting)
+All byte-identical-by-construction (band-restrictions / banded-solves of documented
+(2,2)/(4,4)-bandwidth matrices; out-of-band entries provably 0). One `cargo check -p
+fsci-interpolate` covers all; then `cargo test -p fsci-interpolate` (expect 172/0) +
+the make_smoothing_spline + make_interp_spline scipy-parity tests.
+- 08f79b0e  make_smoothing_spline + GCV: dense→banded solves (bw 2/2/4)
+- 033f7bd9  gcv Gram build O(n³)→O(n)
+- 43eb09b2  gcv m/lhs builds O(n²)/O(n³)→O(n)/O(n²)
+- eab4eea3  gcv numer build O(n²)→O(n)
+- (this)    band_to_full fill O(n²)→O(n)
+Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte-identical.
