@@ -1768,3 +1768,20 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   a theoretical cycling risk on highly-degenerate LPs. VERIFY on recovery (degenerate LP
   + a large LP vs scipy); harden the leaving tie-break to strict Bland if it cycles.
 - Not a quick byte-identical fix; HiGHS-parity is a known hard wall. Documented.
+
+## 2026-06-20 - AUDIT: least_squares / curve_fit are LM-only (NO bounds) — capability gap
+
+- Agent: cc / MistyBirch (read-only no-cargo audit, fsci-opt/src/curvefit.rs).
+- fsci least_squares (curvefit.rs:93) is "Equivalent to scipy ... method='lm'" — pure
+  Levenberg-Marquardt, UNBOUNDED. LeastSquaresOptions has NO bounds field (gtol/xtol/
+  ftol/max_nfev/diff_step/mode). curve_fit (373) wraps it via CurveFitOptions (p0,
+  ls_options, absolute_sigma) — also NO bounds.
+- GAP (real, common, "where we LOSE"): scipy.optimize.least_squares DEFAULTS to 'trf'
+  (trust-region reflective, handles `bounds`), and curve_fit accepts `bounds=`. fsci
+  cannot do BOUNDED least-squares / bounded curve fitting — a very common need
+  (non-negative amplitudes, physical-parameter ranges, etc.). For UNBOUNDED problems
+  fsci's LM matches scipy method='lm'.
+- FIX (cargo-needed, substantial): add a `bounds` option + a TRF (trust-region
+  reflective) solver — the scipy default — projecting/scaling the LM/dogleg step to the
+  feasible box. Verify vs scipy least_squares(method='trf', bounds=...) + curve_fit with
+  bounds. Big; deferred.
