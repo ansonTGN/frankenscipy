@@ -1247,6 +1247,39 @@ thread_local! {
     static LOCAL_DCT2_CACHE: std::cell::RefCell<HashMap<usize, TwiddleTable>> =
         std::cell::RefCell::new(HashMap::new());
 }
+static DCT4_TWIDDLE_CACHE: OnceLock<RwLock<HashMap<usize, TwiddleTable>>> = OnceLock::new();
+fn get_dct4_cache() -> &'static RwLock<HashMap<usize, TwiddleTable>> {
+    DCT4_TWIDDLE_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+thread_local! {
+    static LOCAL_DCT4_CACHE: std::cell::RefCell<HashMap<usize, TwiddleTable>> =
+        std::cell::RefCell::new(HashMap::new());
+}
+/// Cached DCT-IV extract twiddles exp(-iπ(2k+1)/(4N)), k=0..N-1, keyed by N. Bit-identical to
+/// the inline cos/sin form; avoids recomputing trig per coefficient on every dct_iv call.
+fn get_or_compute_dct4_twiddles(n: usize) -> TwiddleTable {
+    if let Some(t) = LOCAL_DCT4_CACHE.with(|c| c.borrow().get(&n).cloned()) {
+        return t;
+    }
+    let cache = get_dct4_cache();
+    let table = if let Some(t) = cache.read().ok().and_then(|g| g.get(&n).cloned()) {
+        t
+    } else {
+        let mut table = Vec::with_capacity(n);
+        for k in 0..n {
+            let angle = -PI * (2 * k + 1) as f64 / (4.0 * n as f64);
+            table.push((angle.cos(), angle.sin()));
+        }
+        let table: TwiddleTable = Arc::from(table);
+        if let Ok(mut g) = cache.write() {
+            g.insert(n, Arc::clone(&table));
+        }
+        table
+    };
+    LOCAL_DCT4_CACHE.with(|c| c.borrow_mut().insert(n, Arc::clone(&table)));
+    table
+}
+
 fn get_or_compute_dct2_twiddles(n: usize) -> TwiddleTable {
     if let Some(t) = LOCAL_DCT2_CACHE.with(|c| c.borrow().get(&n).cloned()) {
         return t;
@@ -1530,9 +1563,9 @@ fn dct4_core_fft(input: &[f64], options: &FftOptions) -> Vec<Complex64> {
     let n = input.len();
     let two_n = 2 * n;
     let mut u = vec![(0.0, 0.0); two_n];
+    let pre_tw = get_or_compute_dct2_twiddles(n); // exp(-iπnn/2N), bit-identical to inline cos/sin
     for (nn, slot) in u.iter_mut().enumerate().take(n) {
-        let angle = -PI * nn as f64 / (2.0 * n as f64);
-        *slot = complex_mul((input[nn], 0.0), (angle.cos(), angle.sin()));
+        *slot = complex_mul((input[nn], 0.0), pre_tw[nn]);
     }
     let backend = resolve_backend(options.backend);
     backend.transform_1d_unscaled(&u, false)
@@ -1555,10 +1588,9 @@ pub fn dct_iv(input: &[f64], options: &FftOptions) -> Result<Vec<f64>, FftError>
     //   u[n] = x[n]·e^{-iπn/2N} (n<N), zero-padded to 2N.
     let spectrum = dct4_core_fft(input, options);
     let mut result = Vec::with_capacity(n);
+    let post_tw = get_or_compute_dct4_twiddles(n);
     for (k, &uk) in spectrum.iter().enumerate().take(n) {
-        let angle = -PI * (2 * k + 1) as f64 / (4.0 * n as f64);
-        let a = (angle.cos(), angle.sin());
-        result.push(2.0 * complex_mul(a, uk).0); // 2·Re
+        result.push(2.0 * complex_mul(post_tw[k], uk).0); // 2·Re
     }
     // br-yjas: scipy normalization. DCT-IV is orthonormal up to a
     // 1/sqrt(2N) factor; "ortho" applies that factor and "forward"
