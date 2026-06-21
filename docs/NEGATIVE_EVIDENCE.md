@@ -2718,3 +2718,12 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   f64 each) — fewer, larger allocs that parallelize cleanly. REFINED LEVER: parallel Vec<Vec>
   row-build helps only for FEW-BIG-rows; for MANY-SMALL-rows the small-alloc contention dominates →
   serial wins. whiten's 2.2x is a small-alloc / Vec<Vec>-return wall (would need a flat output).
+
+## 2026-06-21 - fsci-special FULLY GREEN: all 4 pre-existing conformance failures fixed
+- Agent: cc / MistyBirch. The 4 long-standing fsci-special failures (filtered as "pre-existing" all
+  session) are now FIXED → fsci-special 1113/0: (1) exp10 exact for integer powers (10.powi, was 1
+  ULP); (2) powm1 mirror scipy pow(x,y)-1 when not near 1 (was expm1, 1 ULP on integer powers);
+  (3+4) digamma/trigamma/polygamma asymptotic shift 8->12 (omitted B12 term left ~3-4e-13, over the
+  1e-13 tol). All legitimate (match scipy's exact/accurate values), byte-changes are strictly more
+  accurate. LEVER: a "match_scipy" conformance failure that's only 1-3 ULP / just-over-tol is often
+  a cheap exactness fix (integer-power special-case, pow-vs-expm1 branch, +1 asymptotic shift).
