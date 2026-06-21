@@ -1678,3 +1678,20 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
 - Net: no new loss found; recorded so the surface isn't re-audited. (Confirms the
   compact-band make_interp_spline win improves any separable spline fit that routes
   through make_interp_spline / make_lsq_spline per axis.)
+
+## 2026-06-20 - AUDIT (read-only): rank-correlation surface confirmed optimal (no loss)
+
+- Agent: cc / MistyBirch. Continued no-cargo loss-hunt; both already optimal:
+  - kendalltau: Knight's O(n log n) (kendall_pair_counts_knight for n≥256; naive
+    fallback small-n) + byte-identity test. No loss.
+  - weightedtau: O(n log n) via Fenwick/BIT (weightedtau_one_side, "without the O(n²)
+    all-pairs loop"), tolerance-parity to the O(n²) reference. No loss.
+- Consolidated confirmed-optimal surfaces (don't re-audit): sort_unstable sweep (72
+  sites), smoothing-spline GCV (band-restricted; trace factor-once staged in
+  make_interp_spline_banded_plan.md Plan 2), RectBivariateSpline (inherits compact-band
+  make_interp_spline), RGI, distances (wasserstein/energy O(n log n), pdist SIMD),
+  KDE/mvn/mvt (parallel), MGC (prefix-sum), rank_max (sort-once), kendalltau/weightedtau.
+- The mature stats/interpolate surfaces I own are harvested; no new readily-findable
+  algorithmic loss. Remaining OPEN: hilbert (FFT C-SIMD wall). Real cargo-needed wins:
+  factor-once GCV trace (Plan 2, paste-ready). GATING NEED = disk recovery (run the
+  pre-reviewed DISK_WINDOW_VERIFY_QUEUE.md, then Plan 2, then re-bench).
