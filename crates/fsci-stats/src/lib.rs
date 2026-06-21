@@ -10260,17 +10260,34 @@ impl Hypergeometric {
         let m = self.big_m as f64;
         let n = self.n as f64;
         let big_n = self.big_n as f64;
-        let g_n1 = ln_gamma(n + 1.0);
-        let g_mn1 = ln_gamma(m - n + 1.0);
-        let g_m1 = ln_gamma(m + 1.0);
-        let g_bign1 = ln_gamma(big_n + 1.0);
-        let g_mbign1 = ln_gamma(m - big_n + 1.0);
         let k_min = if self.big_n.saturating_add(self.n) > self.big_m {
             (self.big_n + self.n - self.big_m) as f64
         } else {
             0.0
         };
         let k_max = n.min(big_n);
+        // k_min == 0 (N + n <= M): hoist pmf(0) once, then the exact ratio recurrence per k. This is
+        // byte-identical to the single `pmf` (same pmf0, same per-k ratio loop) and ~1 ULP accurate,
+        // vs the ~5e-14 cancellation of the lgamma log-pmf (hypergeometric_sf_tail_match_scipy).
+        if k_min == 0.0 {
+            let p0 = self.pmf0_recurrence();
+            return ks
+                .iter()
+                .map(|&k| {
+                    let kf = k as f64;
+                    if kf < k_min || kf > k_max {
+                        0.0
+                    } else {
+                        self.pmf_from0(p0, k)
+                    }
+                })
+                .collect();
+        }
+        let g_n1 = ln_gamma(n + 1.0);
+        let g_mn1 = ln_gamma(m - n + 1.0);
+        let g_m1 = ln_gamma(m + 1.0);
+        let g_bign1 = ln_gamma(big_n + 1.0);
+        let g_mbign1 = ln_gamma(m - big_n + 1.0);
         ks.iter()
             .map(|&k| {
                 let kf = k as f64;
@@ -10286,6 +10303,34 @@ impl Hypergeometric {
                 ln_pmf.exp()
             })
             .collect()
+    }
+
+    /// pmf(0) = C(M-n, N)/C(M,N) built as a product of N ratios (no large-lgamma cancellation).
+    /// Only valid when k_min == 0 (N + n <= M), where every factor stays positive.
+    fn pmf0_recurrence(&self) -> f64 {
+        let m = self.big_m as f64;
+        let n = self.n as f64;
+        let mut p = 1.0;
+        let mut j = 0u64;
+        while j < self.big_n {
+            p *= (m - n - j as f64) / (m - j as f64);
+            j += 1;
+        }
+        p
+    }
+
+    /// pmf(k) from pmf(0) via the exact ratio recurrence
+    /// pmf(k)/pmf(k-1) = (n-k+1)(N-k+1) / [k (M-n-N+k)].
+    fn pmf_from0(&self, p0: f64, k: u64) -> f64 {
+        let m = self.big_m as f64;
+        let n = self.n as f64;
+        let big_n = self.big_n as f64;
+        let mut p = p0;
+        for i in 1..=k {
+            let fi = i as f64;
+            p *= ((n - fi + 1.0) * (big_n - fi + 1.0)) / (fi * (m - n - big_n + fi));
+        }
+        p
     }
 }
 
@@ -10306,6 +10351,12 @@ impl DiscreteDistribution for Hypergeometric {
         let k_max = n.min(big_n);
         if kf < k_min || kf > k_max {
             return 0.0;
+        }
+
+        // k_min == 0: exact ratio recurrence — byte-identical to pmf_many, ~1 ULP vs the lgamma
+        // log-pmf's ~5e-14 cancellation (hypergeometric_sf_tail_match_scipy).
+        if k_min == 0.0 {
+            return self.pmf_from0(self.pmf0_recurrence(), k);
         }
 
         // ln(C(n,k)) + ln(C(M-n, N-k)) - ln(C(M, N))
