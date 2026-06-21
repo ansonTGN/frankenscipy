@@ -1090,6 +1090,20 @@ impl StudentT {
         par_continuous_map(qs, |q| self.ppf(q))
     }
 
+    /// Survival function at many points — work-gated parallel map of the per-point sf,
+    /// byte-identical to mapping `sf`.
+    #[must_use]
+    pub fn sf_many(&self, xs: &[f64]) -> Vec<f64> {
+        par_continuous_map(xs, |x| self.sf(x))
+    }
+
+    /// Inverse survival function at many points — work-gated parallel map of the per-point isf,
+    /// byte-identical to mapping `isf`.
+    #[must_use]
+    pub fn isf_many(&self, qs: &[f64]) -> Vec<f64> {
+        par_continuous_map(qs, |q| self.isf(q))
+    }
+
 }
 
 impl ContinuousDistribution for StudentT {
@@ -1924,6 +1938,20 @@ impl ChiSquared {
     #[must_use]
     pub fn ppf_many(&self, qs: &[f64]) -> Vec<f64> {
         par_continuous_map(qs, |q| self.ppf(q))
+    }
+
+    /// Survival function at many points — work-gated parallel map of the per-point sf,
+    /// byte-identical to mapping `sf`.
+    #[must_use]
+    pub fn sf_many(&self, xs: &[f64]) -> Vec<f64> {
+        par_continuous_map(xs, |x| self.sf(x))
+    }
+
+    /// Inverse survival function at many points — work-gated parallel map of the per-point isf,
+    /// byte-identical to mapping `isf`.
+    #[must_use]
+    pub fn isf_many(&self, qs: &[f64]) -> Vec<f64> {
+        par_continuous_map(qs, |q| self.isf(q))
     }
 
 }
@@ -2996,6 +3024,20 @@ impl FDistribution {
         par_continuous_map(qs, |q| self.ppf(q))
     }
 
+    /// Survival function at many points — work-gated parallel map of the per-point sf,
+    /// byte-identical to mapping `sf`.
+    #[must_use]
+    pub fn sf_many(&self, xs: &[f64]) -> Vec<f64> {
+        par_continuous_map(xs, |x| self.sf(x))
+    }
+
+    /// Inverse survival function at many points — work-gated parallel map of the per-point isf,
+    /// byte-identical to mapping `isf`.
+    #[must_use]
+    pub fn isf_many(&self, qs: &[f64]) -> Vec<f64> {
+        par_continuous_map(qs, |q| self.isf(q))
+    }
+
 }
 
 impl ContinuousDistribution for FDistribution {
@@ -3680,6 +3722,20 @@ impl BetaDist {
         par_continuous_map(qs, |q| self.ppf(q))
     }
 
+    /// Survival function at many points — work-gated parallel map of the per-point sf,
+    /// byte-identical to mapping `sf`.
+    #[must_use]
+    pub fn sf_many(&self, xs: &[f64]) -> Vec<f64> {
+        par_continuous_map(xs, |x| self.sf(x))
+    }
+
+    /// Inverse survival function at many points — work-gated parallel map of the per-point isf,
+    /// byte-identical to mapping `isf`.
+    #[must_use]
+    pub fn isf_many(&self, qs: &[f64]) -> Vec<f64> {
+        par_continuous_map(qs, |q| self.isf(q))
+    }
+
 }
 
 impl ContinuousDistribution for BetaDist {
@@ -4164,6 +4220,20 @@ impl GammaDist {
     pub fn ppf_many(&self, qs: &[f64]) -> Vec<f64> {
         par_continuous_map(qs, |q| self.ppf(q))
     }
+    /// Survival function at many points — work-gated parallel map of the per-point sf,
+    /// byte-identical to mapping `sf`.
+    #[must_use]
+    pub fn sf_many(&self, xs: &[f64]) -> Vec<f64> {
+        par_continuous_map(xs, |x| self.sf(x))
+    }
+
+    /// Inverse survival function at many points — work-gated parallel map of the per-point isf,
+    /// byte-identical to mapping `isf`.
+    #[must_use]
+    pub fn isf_many(&self, qs: &[f64]) -> Vec<f64> {
+        par_continuous_map(qs, |q| self.isf(q))
+    }
+
 }
 
 impl ContinuousDistribution for GammaDist {
@@ -49183,6 +49253,25 @@ mod tests {
     }
 
     #[test]
+    fn continuous_sf_isf_many_match_scalar() {
+        // Work-gated parallel sf_many/isf_many byte-identical to mapping the scalar (n=6000 > gate).
+        let qs: Vec<f64> = (0..6000).map(|i| (i as f64 + 0.5) / 6000.0).collect();
+        let xs: Vec<f64> = (0..6000).map(|i| (i as f64 / 6000.0) * 20.0 + 0.01).collect();
+        macro_rules! chk {
+            ($d:expr, $pts:expr) => {{
+                let d = $d;
+                assert_eq!(d.sf_many($pts), $pts.iter().map(|&x| d.sf(x)).collect::<Vec<_>>());
+                assert_eq!(d.isf_many(&qs), qs.iter().map(|&q| d.isf(q)).collect::<Vec<_>>());
+            }};
+        }
+        chk!(GammaDist::new(2.5, 1.0), &xs);
+        chk!(StudentT::new(5.0), &xs);
+        chk!(ChiSquared::new(4.0), &xs);
+        chk!(FDistribution::new(5.0, 10.0), &xs);
+        chk!(BetaDist::new(2.0, 3.0), &qs);
+    }
+
+    #[test]
     fn gamma_dist_mean_var() {
         let g = GammaDist::new(3.0, 2.0);
         assert_close(g.mean(), 6.0, 1e-10, "Gamma(3,2) mean");
@@ -79141,6 +79230,7 @@ mod tests {
         assert!(dist.cdf(5.0) > 0.99, "hypsecant CDF should be near 1 at 5");
     }
 }
+
 
 
 
