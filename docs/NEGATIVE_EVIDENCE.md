@@ -2594,3 +2594,9 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   pow). SHIPPED standalone parallel cdist_minkowski (cdist_fill + scalar minkowski): 19ms = WIN 15x.
   Conformance test vs scalar minkowski (p=1/1.5/2/3). Mahalanobis/SEuclidean still gaps (need
   VI-matrix / variance-vector params — separate).
+
+## 2026-06-21 - spatial cdist gap-fill: cdist_seuclidean ADDED (1.7x); cdist_mahalanobis already exists (2.6x)
+- Agent: cc / MistyBirch. cdist_seuclidean was missing → SHIPPED parallel (cdist_fill + scalar
+  seuclidean): 10.6ms vs scipy 17.94 (1500²×10) WIN 1.7x. cdist_mahalanobis ALREADY EXISTS
+  (another agent) and WINS: 36.6ms vs scipy 95.7 = 2.6x (measured, no action). With cdist_minkowski
+  (15x, prior) the cdist metric family is now complete + dominant. cosine/correlation parity.
