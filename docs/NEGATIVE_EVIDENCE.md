@@ -2505,3 +2505,11 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   twiddle cache. Doesn't close the wall. scipy's pocketfft fuses+SIMDs FFT+extract.
 - WALL: DCT/DST parity needs a native real-FFT (big port) + fused SIMD extract. dct_iii/iv/dst
   share the per-k cos/sin pattern (same cache applicable as follow-up).
+
+## 2026-06-21 - fft idct twiddle reuse: near-parity (1.23x), byte-identical
+- Agent: cc / MistyBirch. idct recomputed exp(+iπk/(2N)) cos/sin per coefficient in BOTH paths
+  (even real-FFT + odd fallback). It's the conjugate of the cached DCT-II twiddle → reuse
+  get_or_compute_dct2_twiddles + conj (bit-identical). idct 65536: 1.005ms vs scipy 0.817 (1.23x,
+  near-parity; cos/sin was a bigger fraction here than dct-II so the win is larger). Speeds dct_iii
+  too. fft suite 176/0. Completes the cosine-family twiddle-cache (dct-II + idct/dct_iii); dct_iv/
+  dst remain (separate twiddles, less common, lower value).
