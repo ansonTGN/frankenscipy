@@ -5785,10 +5785,21 @@ fn gcv_optimal_lambda(x_full: &[Vec<f64>], e_full: &[Vec<f64>], y: &[f64], w: &[
     // XtWX = Xᵀ W X, XtE = Xᵀ W E.
     let mut xtwx = vec![vec![0.0_f64; n]; n];
     let mut xte = vec![vec![0.0_f64; n]; n];
+    // X and E are (2,2)-banded (x_full[k][·] ≠ 0 only within |k-·| ≤ 2), so the Gram
+    // products XᵀWX, XᵀWE are (4,4)-banded and each entry's k-sum has nonzero terms
+    // only where BOTH the row factor (|k-i| ≤ 2) and the column factor (|k-j| ≤ 2)
+    // are nonzero, i.e. k ∈ [max(i,j)-2, min(i,j)+2]. Restricting (i,j) to |i-j| ≤ 4
+    // and k to that overlap is byte-identical to the full O(n³) triple loop — the
+    // skipped terms are exactly the +0.0 no-ops and the nonzero terms still
+    // accumulate in ascending-k order; out-of-band entries keep their 0 init. O(n).
     for i in 0..n {
-        for j in 0..n {
+        let jlo = i.saturating_sub(4);
+        let jhi = (i + 4).min(n - 1);
+        for j in jlo..=jhi {
+            let klo = i.max(j).saturating_sub(2);
+            let khi = (i.min(j) + 2).min(n - 1);
             let (mut sx, mut se) = (0.0_f64, 0.0_f64);
-            for k in 0..n {
+            for k in klo..=khi {
                 let xwk = x_full[k][i] * w[k];
                 sx += xwk * x_full[k][j];
                 se += xwk * e_full[k][j];

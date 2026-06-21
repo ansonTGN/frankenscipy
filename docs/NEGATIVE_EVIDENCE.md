@@ -1476,3 +1476,22 @@ interior-direct (boundary-map only the ~window-1 edge cells).**
 - Follow-up (bigger, not byte-identical to ship now): the GCV `tr` loop re-factors the
   SAME `lhs` n times (once per column) — factor-once + n banded RHS would drop it to
   O(n·bw²)+O(n²·bw). Noted for a focused cycle.
+
+## 2026-06-20 - gcv_optimal_lambda Gram build: O(n³)→O(n) band-restricted (byte-identical, disk-critical)
+
+- Agent: cc / MistyBirch. CODE-ONLY (disk-CRITICAL, no cargo at all — incl. check).
+  Byte-identical-by-construction; value provable by complexity. Same smoothing-spline
+  GCV path as the banded-solve change (08f79b0e).
+- The XᵀWX / XᵀWE Gram build in gcv_optimal_lambda was a full O(n³) triple loop over
+  the (2,2)-banded x_full/e_full. Restricted (i,j) to |i-j| ≤ 4 (the Gram band) and the
+  inner k-sum to [max(i,j)-2, min(i,j)+2] (where both the |k-i|≤2 row factor and the
+  |k-j|≤2 column factor are nonzero). Byte-identical: skipped terms are exactly the
+  +0.0 no-ops, the nonzero terms still accumulate in ascending-k order, and out-of-band
+  entries keep their zero init. O(n³) → O(n·bw²). With the banded solves (08f79b0e),
+  make_smoothing_spline's GCV path drops from O(n³)+O(n³·iters) to O(n)+O(n²·iters).
+- PENDING-BENCH (disk-critical, cannot run cargo/bench/check): UNVERIFIED COMPILE.
+  Careful standard Rust (saturating_sub/min bounds), but MUST `cargo check -p
+  fsci-interpolate` + run the make_smoothing_spline scipy-parity test + full suite
+  (172/0) the moment disk recovers, before trusting. Byte-identity is by construction
+  so no new bench needed for correctness; a smoothing-spline bench would quantify the
+  O(n³)→O(n) gain.
