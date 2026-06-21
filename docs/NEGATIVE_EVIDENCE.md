@@ -2383,3 +2383,13 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   Cephes incbi multi-branch initial guess (intricate); erfinv 3.6x (seed+2-Newton vs scipy's
   single rational, caps erfcinv/ndtri-central, conformance-risky). All are the iterate-vs-direct-
   Cephes-rational floor; parity needs the rational coefficients (not on-system).
+
+## 2026-06-21 - signal gauntlet: medfilt 22% (u64-key, byte-id) shipped; rest C-walls / modest
+- Agent: cc / MistyBirch. MEASURED fsci vs scipy (200k unless noted): lfilter(6) 1.64/1.15 (1.4x),
+  filtfilt(6) 6.58/4.21 (1.56x), resample_poly 5.15/3.03 (1.7x), medfilt k=21 100k 15.45/3.0 (5.2x).
+- medfilt (biggest): both fsci paths ~3.8-5x scipy — select_nth(total_cmp) AND the two-multiset
+  O(n log k) (threshold 64; measured no better than select at k<=31, huge constant). scipy's C
+  selection is just tight = C-implementation WALL. SHIPPED a byte-identical 22% (u64 radix-key
+  integer select, no closure): 14.6->11.4ms at k=21. Parity not reachable in safe Rust.
+- lfilter/filtfilt/resample_poly (1.4-1.7x): IIR recursion (sequential, O(n)) / polyphase FIR vs
+  scipy C — modest, no clean lever, not chased.
