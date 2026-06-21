@@ -1695,3 +1695,21 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   algorithmic loss. Remaining OPEN: hilbert (FFT C-SIMD wall). Real cargo-needed wins:
   factor-once GCV trace (Plan 2, paste-ready). GATING NEED = disk recovery (run the
   pre-reviewed DISK_WINDOW_VERIFY_QUEUE.md, then Plan 2, then re-bench).
+
+## 2026-06-20 - AUDIT: CloughTocher2D — perf OK, but possible PARITY gap (gradient method) to verify
+
+- Agent: cc / MistyBirch (read-only no-cargo audit).
+- PERF: estimate_clough_tocher_gradients uses LOCAL per-vertex gradients from neighboring
+  triangles → O(n) (planar). NOT a perf loss (no global dense solve).
+- PARITY (flag for cargo-recovery oracle-diff): scipy.interpolate.CloughTocher2DInterpolator
+  estimates gradients by a GLOBAL curvature-minimizing sparse solve (Nielson/Bell), not
+  local averaging. fsci's local gradients give a different (still C¹) interpolant, so the
+  values likely DIFFER from scipy at non-data interior points. The existing tests only
+  check PROPERTIES (clough_tocher_exact_at_data_points / preserves_affine /
+  matches_vertex_gradients / fill_value_outside_hull) — there is NO
+  clough_tocher_matches_scipy_reference_values test. So scipy-value parity is UNVERIFIED.
+- ACTION ON RECOVERY: oracle-diff fsci vs scipy CloughTocher2DInterpolator at interior
+  query points; if it diverges beyond tolerance, the global gradient solve is the parity
+  fix (the maxiter/tol options are already there "for API parity" but the method is local).
+  Affine surfaces match by construction (gradients exact for linear data), so the gap (if
+  any) shows on curved data.
