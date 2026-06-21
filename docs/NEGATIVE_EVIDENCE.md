@@ -2016,3 +2016,18 @@ Net: make_smoothing_spline GCV O(n³)+O(n³·iters) → O(n)+O(n²·iters), byte
   scipy PARITY (correctness) + ~13-65x further speedup (2.9-115ms → 0.22-1.75ms). Behavior
   change: re-baseline the piecewise property test to scipy values + recompute `residual` from
   the fit. Deferred (behavior-changing, deserves a focused cycle — not rushed).
+
+## 2026-06-21 - SHIPPED: SmoothBivariateSpline routed through FITPACK bisplrep — 358-2450x loss → 1.7-1.8x (near-parity + scipy-correct)
+- Agent: cc / MistyBirch. scipy.SmoothBivariateSpline IS FITPACK surfit (=bisplrep). fsci used
+  a separate fixed-knot dense path (non-scipy-parity + slow). Routed SmoothBivariateSpline::new
+  through the parity-fast bisplrep for the default case (weights None, bbox None); custom
+  weights/bbox keep the fixed-knot path (bisplrep takes neither). Key bug fix: bisplrep returns
+  FITPACK coeff order c[ix*ny+iy]; this struct's eval uses c[iy*nx+ix] → TRANSPOSE c in the
+  route (the earlier 2.1-vs-1.375 was purely this ordering, NOT a bisplrep bug — isolated via
+  bisplrep+bisplev=1.375). VERIFIED interpolate 173/0 (incl. s=0 bilinear exact 1.375 + piecewise).
+- MEASURED vs scipy.SmoothBivariateSpline: m=400 0.34ms/0.20 (1.7x), m=1000 0.89/0.49 (1.8x),
+  m=2500 2.2/1.2 (1.8x). FULL journey: 71.7ms/1.2s/19s (lose 358-2450x, fixed-knot non-parity)
+  → [sparse+banded] 2.9/17.6/115ms (14.7-96x) → [bisplrep route] 0.34/0.89/2.2ms (1.7-1.8x,
+  NOW scipy-PARITY). Residual 1.8x = Rust-vs-Fortran FITPACK constant (wall).
+- LESSON: when fsci has BOTH a bespoke fit AND a proper FITPACK port (bisplrep/surfit), route
+  the bespoke one through the FITPACK port for scipy parity+speed; mind the c index order.

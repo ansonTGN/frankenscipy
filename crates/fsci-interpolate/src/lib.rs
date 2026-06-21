@@ -8160,26 +8160,49 @@ impl SmoothBivariateSpline {
             });
         }
 
-        let fit = smooth_bivariate_fit(SmoothBivariateFit {
-            x,
-            y,
-            z,
-            weights: &weights,
-            bbox,
-            kx: options.kx,
-            ky: options.ky,
-            smoothing_factor,
-            eps: options.eps,
-        })?;
+        // scipy.interpolate.SmoothBivariateSpline IS FITPACK `surfit` (= bisplrep): adaptive
+        // knot placement + banded Givens solve. For the default case (unit weights,
+        // data-extent bbox) route through fsci's parity-fast `bisplrep` — scipy-parity
+        // results AND adaptive-knot speed — instead of the local fixed-knot dense path.
+        // Custom weights/bbox keep the fixed-knot path (bisplrep takes neither).
+        let (tx, ty, coeffs, nx_coeffs, ny_coeffs) =
+            if options.weights.is_none() && options.bbox.is_none() {
+                let (tx, ty, c, _, _) = bisplrep(x, y, z, options.kx, options.ky, smoothing_factor)?;
+                let nxc = tx.len() - options.kx - 1;
+                let nyc = ty.len() - options.ky - 1;
+                // bisplrep returns FITPACK coefficient order c[ix*nyc+iy]; this struct's
+                // eval uses c[iy*nxc+ix] (the smooth_bivariate_solve_coefficients layout).
+                // Transpose so the existing eval/eval_derivative read the routed fit correctly.
+                let mut ct = vec![0.0_f64; nxc * nyc];
+                for ix in 0..nxc {
+                    for iy in 0..nyc {
+                        ct[iy * nxc + ix] = c[ix * nyc + iy];
+                    }
+                }
+                (tx, ty, ct, nxc, nyc)
+            } else {
+                let fit = smooth_bivariate_fit(SmoothBivariateFit {
+                    x,
+                    y,
+                    z,
+                    weights: &weights,
+                    bbox,
+                    kx: options.kx,
+                    ky: options.ky,
+                    smoothing_factor,
+                    eps: options.eps,
+                })?;
+                (fit.tx, fit.ty, fit.coeffs, fit.nx_coeffs, fit.ny_coeffs)
+            };
         let mut spline = Self {
             kx: options.kx,
             ky: options.ky,
             bbox,
-            tx: fit.tx,
-            ty: fit.ty,
-            coeffs: fit.coeffs,
-            nx_coeffs: fit.nx_coeffs,
-            ny_coeffs: fit.ny_coeffs,
+            tx,
+            ty,
+            coeffs,
+            nx_coeffs,
+            ny_coeffs,
             residual: 0.0,
             smoothing_factor,
         };
@@ -11964,3 +11987,4 @@ mod tests {
         );
     }
 }
+
